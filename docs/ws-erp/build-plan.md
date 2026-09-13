@@ -61,9 +61,12 @@ mix samen.abbrev.reserve --host samen_core \
 # 2. First compile runs the migration; the test DB is dropped+migrated by test_helper.
 mix deps.get && mix compile --warnings-as-errors
 mix test --warnings-as-errors
-# 3. Gate + sabotage harness (302 flips the two R1 RED paths, then reverts):
-mix ecto.migrate && mix samen.verify
-MIX_ENV=test bash ci.sh
+# 3. Gates (individual verify tasks — there is NO umbrella `mix samen.verify`):
+mix samen.verify.catalog_parity && mix samen.verify.migrations
+# 4. Sabotage harness (302 flips the two R1 RED paths, then reverts byte-exact):
+bash scripts/sabotage.sh --from 302 --to 302
+# 5. Full CI (resolves its own repo root — run from the checkout root):
+cd .. && MIX_ENV=test bash ci.sh
 ```
 
 ## Phase E2 — AP + AR documents (C1 documents) · opus

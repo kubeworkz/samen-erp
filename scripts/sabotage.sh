@@ -127,9 +127,14 @@ touched_paths() { # touched_paths <patch>
 }
 
 sha_files() { # sha_files <listfile> <outfile>
+  # sha256sum on Linux/Git-Bash for Windows; shasum elsewhere. Same digest format.
   : > "$2"
   while IFS= read -r f; do
-    shasum -a 256 "$REPO_ROOT/$f" >> "$2"
+    if command -v shasum >/dev/null 2>&1; then
+      shasum -a 256 "$REPO_ROOT/$f" >> "$2"
+    else
+      sha256sum "$REPO_ROOT/$f" >> "$2"
+    fi
   done < "$1"
 }
 

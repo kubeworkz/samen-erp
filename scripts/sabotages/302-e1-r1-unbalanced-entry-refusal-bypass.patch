@@ -8,8 +8,8 @@
 # draft-replacement update alike.
 # APP: samen_core
 # TEST_FILES: test/finance_scope_test.exs
-# MUST_FAIL: test an unbalanced create is refused (RED)
-# MUST_FAIL: test a DRAFT replacement that lands unbalanced is refused by the update's R1 check (RED)
+# MUST_FAIL: an unbalanced create is refused (RED)
+# MUST_FAIL: a DRAFT replacement that lands unbalanced is refused by the update's R1 check (RED)
 --- a/samen_core/lib/samen/scopes/finance/unbalanced_entry.ex
 +++ b/samen_core/lib/samen/scopes/finance/unbalanced_entry.ex
 @@ -79,7 +79,9 @@
