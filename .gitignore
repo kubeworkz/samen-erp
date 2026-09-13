@@ -1,0 +1,37 @@
+deps/
+_build/
+*.beam
+.elixir_ls/
+erl_crash.dump
+.pitr_drill_work/
+.antitaut_scratch/
+# Gate-2 F2.4: project-local test-isolation scratch (column_refs linter), never /tmp
+samen_core/tmp/
+gate2_scratch/
+# T5.3: Driftwood LOCAL dev KMS key store (file-backed) — a dev-only secret, never
+# committed. A real deploy uses AWS KMS (OPERATOR TODO). The test suite uses a
+# per-run tmp keystore (test_helper), so this only exists after `MIX_ENV=dev`.
+driftwood/priv/dev_keystore/
+.gstack/
+
+# dev-only key material — never committed (public-release purge 2026-07-18)
+pawchart/priv/dev_keystore/
+
+# generated coverage output
+samen_core/cover/
+cover/
+
+# ExDoc HTML output (mix docs) — dev-only, never committed
+samen_core/doc/
+samen_web/doc/
+
+# UXD-02 Seam B: run-varying provenance sidecars for the T5.4/T5.5 game-day reports
+# (Generated: timestamp, KMS scratch-keystore path, timestamp_utc) — never committed (E-03)
+driftwood/reports/*.sidecar.*
+
+# planning workspace + orchestrator state — never committed
+spec/
+_orch/
+
+# earlier baton runs, moved in from siblings
+_orch-*/

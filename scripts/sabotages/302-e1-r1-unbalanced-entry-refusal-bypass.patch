@@ -1,0 +1,25 @@
+# SABOTAGE: WS-ERP E1 (ADR-049 R1) — the double-entry sum gate. The R1
+# before_action check in Samen.Scopes.Finance.UnbalancedEntry (the write-side
+# half of the Σ debits == Σ credits invariant) is short-circuited to
+# always-pass, so an unbalanced entry sails through :create/:update and lands
+# unbalanced rows (the per-line LineAmounts guard still refuses BOTH-non-zero
+# lines, which is why exactly the sum-gate red paths flip). The R1 red-path
+# suite MUST fail: unbalanced drafts must be refused, on create and on the
+# draft-replacement update alike.
+# APP: samen_core
+# TEST_FILES: test/finance_scope_test.exs
+# MUST_FAIL: test an unbalanced create is refused (RED)
+# MUST_FAIL: test a DRAFT replacement that lands unbalanced is refused by the update's R1 check (RED)
+--- a/samen_core/lib/samen/scopes/finance/unbalanced_entry.ex
++++ b/samen_core/lib/samen/scopes/finance/unbalanced_entry.ex
+@@ -79,7 +79,9 @@
+         %{acc | debits: acc.debits + to_int(debit), credits: acc.credits + to_int(credit)}
+       end)
+ 
+-    if totals.debits == totals.credits do
++    # SABOTAGE (302): the R1 sum gate is short-circuited to always-pass, so an
++    # unbalanced entry sails through create/update and lands unbalanced rows.
++    if true or totals.debits == totals.credits do
+       changeset
+     else
+       Ash.Changeset.add_error(changeset,

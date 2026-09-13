@@ -1,0 +1,7216 @@
+{
+  "tables": [
+    {
+      "fields": [
+        {
+          "column_name": "akl_agent",
+          "logical_name": "agent",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "akl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "akl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "akl_killed_at",
+          "logical_name": "killed_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "akl_killed_by",
+          "logical_name": "killed_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "akl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "akl_rearmed_at",
+          "logical_name": "rearmed_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "akl_rearmed_by",
+          "logical_name": "rearmed_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "akl_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "akl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samen.AI.Agent.Kill",
+      "table_name": "ai_agent_kill"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "arn_agent",
+          "logical_name": "agent",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "arn_agent_module",
+          "logical_name": "agent_module",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "arn_cancel_requested_at",
+          "logical_name": "cancel_requested_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "arn_chain",
+          "logical_name": "chain",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "arn_current_turn",
+          "logical_name": "current_turn",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_deadline_seconds",
+          "logical_name": "deadline_seconds",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_depth",
+          "logical_name": "depth",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_error_kind",
+          "logical_name": "error_kind",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "arn_hooks",
+          "logical_name": "hooks",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "arn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "arn_input_tokens_used",
+          "logical_name": "input_tokens_used",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "arn_max_input_tokens",
+          "logical_name": "max_input_tokens",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_max_output_tokens",
+          "logical_name": "max_output_tokens",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_max_tool_calls",
+          "logical_name": "max_tool_calls",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_max_turns",
+          "logical_name": "max_turns",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_next_turn_at",
+          "logical_name": "next_turn_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "arn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "arn_origin",
+          "logical_name": "origin",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "arn_output_tokens_used",
+          "logical_name": "output_tokens_used",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "arn_started_at",
+          "logical_name": "started_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "arn_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "arn_tool_calls_used",
+          "logical_name": "tool_calls_used",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "arn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_arn_transcript",
+          "logical_name": "transcript",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samen.AI.Agent.Run",
+      "table_name": "ai_agent_run"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "atn_arg_keys",
+          "logical_name": "arg_keys",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "atn_duration_ms",
+          "logical_name": "duration_ms",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "atn_error_kind",
+          "logical_name": "error_kind",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "atn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "atn_input_tokens",
+          "logical_name": "input_tokens",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "atn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "atn_meta",
+          "logical_name": "meta",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "atn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "atn_output_tokens",
+          "logical_name": "output_tokens",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "atn_provider",
+          "logical_name": "provider",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "atn_run_id",
+          "logical_name": "run_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "atn_simulated",
+          "logical_name": "simulated",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "atn_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "atn_tool_kind",
+          "logical_name": "tool_kind",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "atn_turn_index",
+          "logical_name": "turn_index",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "atn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samen.AI.Agent.Turn",
+      "table_name": "ai_agent_turn"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "aip_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "aip_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "aip_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "aip_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "aip_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "aip_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "aip_version",
+          "logical_name": "version",
+          "pii": false,
+          "type": "Integer"
+        }
+      ],
+      "resource": "Samen.AI.Prompt",
+      "table_name": "ai_prompt"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "sas_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sas_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sas_inbound_ref",
+          "logical_name": "inbound_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sas_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sas_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sas_requested_by",
+          "logical_name": "requested_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sas_simulated",
+          "logical_name": "simulated",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "sas_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sas_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sas_to_subscriber_id",
+          "logical_name": "to_subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sas_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samen.AI.SupportReplyDraft",
+      "table_name": "ai_support_reply_draft"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dag_gross_cents",
+          "logical_name": "gross_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dag_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dag_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dag_lane",
+          "logical_name": "lane",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dag_load_count",
+          "logical_name": "load_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dag_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dag_refreshed_at",
+          "logical_name": "refreshed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dag_tenant_count",
+          "logical_name": "tenant_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dag_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Aggregate.LoadVolumeByLane",
+      "table_name": "dag_load_volume_by_lane"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dak_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dak_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dak_minter_role",
+          "logical_name": "minter_role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dak_minter_user_id",
+          "logical_name": "minter_user_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dak_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dak_plane",
+          "logical_name": "plane",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dak_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dak_scopes",
+          "logical_name": "scopes",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dak_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dak_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Freight.ApiKey",
+      "table_name": "dak_api_key"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dcd_expose_identity_to_support",
+          "logical_name": "expose_identity_to_support",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dcd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Chat.ChatDisclosureSetting",
+      "table_name": "dcd_disclosure_setting"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dcm_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dcm_attachments",
+          "logical_name": "attachments",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "dcm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcm_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dcm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcm_participant_id",
+          "logical_name": "participant_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcm_refs",
+          "logical_name": "refs",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "dcm_sender_party",
+          "logical_name": "sender_party",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dcm_thread_id",
+          "logical_name": "thread_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_dcm_body",
+          "logical_name": "body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Chat.ChatMessage",
+      "table_name": "dcm_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dco_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dco_consumed_at",
+          "logical_name": "consumed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dco_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dco_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dco_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dco_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dco_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dco_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dco_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dco_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.CsatSurveyToken",
+      "table_name": "dco_csat_survey_token"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dcp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dcp_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dcp_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dcp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcp_identity_shared",
+          "logical_name": "identity_shared",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dcp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcp_online_at",
+          "logical_name": "online_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcp_party",
+          "logical_name": "party",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dcp_principal_id",
+          "logical_name": "principal_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dcp_principal_kind",
+          "logical_name": "principal_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dcp_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dcp_thread_id",
+          "logical_name": "thread_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Chat.ChatParticipant",
+      "table_name": "dcp_participant"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dcs_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcs_consumed_at",
+          "logical_name": "consumed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcs_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcs_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcs_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcs_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcs_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dcs_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dcs_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dcs_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Support.CsatSurveyToken",
+      "table_name": "dcs_csat_survey_token"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dct_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dct_context_ref",
+          "logical_name": "context_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dct_disclosure_mode",
+          "logical_name": "disclosure_mode",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dct_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dct_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dct_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dct_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dct_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dct_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dct_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Chat.ChatThread",
+      "table_name": "dct_thread"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "des_chain",
+          "logical_name": "chain",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "des_current_step",
+          "logical_name": "current_step",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "des_deadline_at",
+          "logical_name": "deadline_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "des_dedupe_key",
+          "logical_name": "dedupe_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "des_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "des_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "des_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "des_next_action_at",
+          "logical_name": "next_action_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "des_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "des_resolved_at",
+          "logical_name": "resolved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "des_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "des_subject_ref",
+          "logical_name": "subject_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "des_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Automation.Escalation",
+      "table_name": "des_escalation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dls_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dls_company_name",
+          "logical_name": "company_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dls_converted_at",
+          "logical_name": "converted_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dls_converted_opportunity_id",
+          "logical_name": "converted_opportunity_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dls_converted_person_id",
+          "logical_name": "converted_person_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dls_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dls_emails",
+          "logical_name": "emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dls_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dls_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dls_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dls_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dls_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dls_phones",
+          "logical_name": "phones",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dls_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dls_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dls_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dls_value",
+          "logical_name": "value",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        }
+      ],
+      "resource": "Driftwood.SalesOps.Lead",
+      "table_name": "dls_lead"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "doc_email_bidx",
+          "logical_name": "email_bidx",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doc_hash_scheme",
+          "logical_name": "hash_scheme",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doc_password_hash",
+          "logical_name": "password_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doc_totp_enabled_at",
+          "logical_name": "totp_enabled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doc_totp_last_verified_at",
+          "logical_name": "totp_last_verified_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doc_verified_at",
+          "logical_name": "verified_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_doc_recovery_codes",
+          "logical_name": "recovery_codes",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "pii_doc_totp_secret",
+          "logical_name": "totp_secret",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Operator.Credential",
+      "table_name": "doc_credential"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "doi_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doi_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doi_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doi_linked_at",
+          "logical_name": "linked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doi_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doi_provider",
+          "logical_name": "provider",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "doi_provider_uid",
+          "logical_name": "provider_uid",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doi_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.UserIdentity",
+      "table_name": "doi_user_identity"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dok_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dok_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dok_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dok_last_used_at",
+          "logical_name": "last_used_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dok_membership_id",
+          "logical_name": "membership_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dok_minter_role",
+          "logical_name": "minter_role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dok_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dok_plane",
+          "logical_name": "plane",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dok_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dok_scopes",
+          "logical_name": "scopes",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dok_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dok_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.ApiKey",
+      "table_name": "dok_api_key"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dol_failure_count",
+          "logical_name": "failure_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dol_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dol_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dol_key_kind",
+          "logical_name": "key_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dol_key_value",
+          "logical_name": "key_value",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dol_last_failed_at",
+          "logical_name": "last_failed_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dol_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dol_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dol_window_started_at",
+          "logical_name": "window_started_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        }
+      ],
+      "resource": "Driftwood.Operator.LoginFailure",
+      "table_name": "dol_login_failure"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dom_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dom_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dom_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dom_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dom_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dom_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dom_user_id",
+          "logical_name": "user_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Driftwood.Operator.Membership",
+      "table_name": "dom_membership"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "don_accepted_at",
+          "logical_name": "accepted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "don_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "don_email_bidx",
+          "logical_name": "email_bidx",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "don_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "don_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "don_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "don_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "don_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "don_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "don_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "don_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "don_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Invitation",
+      "table_name": "don_invitation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "doo_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doo_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doo_max_concurrent_sessions",
+          "logical_name": "max_concurrent_sessions",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "doo_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doo_onboarded_at",
+          "logical_name": "onboarded_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "doo_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "doo_plan",
+          "logical_name": "plan",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doo_slug",
+          "logical_name": "slug",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "doo_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Org",
+      "table_name": "doo_org"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dor_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dor_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dor_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dor_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dor_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dor_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dor_rank",
+          "logical_name": "rank",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dor_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Role",
+      "table_name": "dor_role"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dos_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dos_device_label",
+          "logical_name": "device_label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dos_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dos_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dos_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dos_last_seen_at",
+          "logical_name": "last_seen_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dos_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dos_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dos_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dos_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Session",
+      "table_name": "dos_session"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dot_consumed_at",
+          "logical_name": "consumed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dot_context",
+          "logical_name": "context",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dot_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dot_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dot_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dot_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dot_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dot_sent_to_bidx",
+          "logical_name": "sent_to_bidx",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dot_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dot_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.AuthToken",
+      "table_name": "dot_auth_token"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dou_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dou_emails",
+          "logical_name": "emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dou_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dou_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dou_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dou_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dou_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dou_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dou_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.User",
+      "table_name": "dou_user"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpc_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpc_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpc_provider_customer_ref",
+          "logical_name": "provider_customer_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_dpc_billing_email",
+          "logical_name": "billing_email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "pii_dpc_billing_name",
+          "logical_name": "billing_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Operator.Customer",
+      "table_name": "dpc_customer"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpe_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpe_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpe_feature",
+          "logical_name": "feature",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpe_granted",
+          "logical_name": "granted",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dpe_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpe_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpe_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpe_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpe_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpe_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Entitlement",
+      "table_name": "dpe_entitlement"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpi_amount_due_cents",
+          "logical_name": "amount_due_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpi_amount_paid_cents",
+          "logical_name": "amount_paid_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpi_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpi_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpi_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpi_due_date",
+          "logical_name": "due_date",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpi_hosted_invoice_url",
+          "logical_name": "hosted_invoice_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpi_hosted_receipt_url",
+          "logical_name": "hosted_receipt_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpi_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpi_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpi_last_event_id",
+          "logical_name": "last_event_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpi_line_items",
+          "logical_name": "line_items",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "dpi_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpi_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpi_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpi_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpi_provider_invoice_ref",
+          "logical_name": "provider_invoice_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpi_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpi_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpi_tax_amount_cents",
+          "logical_name": "tax_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpi_tax_lines",
+          "logical_name": "tax_lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "dpi_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Invoice",
+      "table_name": "dpi_invoice"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dpp_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpp_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpp_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dpp_features",
+          "logical_name": "features",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpp_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpp_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpp_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpp_provider_plan_ref",
+          "logical_name": "provider_plan_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Plan",
+      "table_name": "dpp_plan"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpr_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dpr_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dpr_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpr_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpr_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpr_provider_price_ref",
+          "logical_name": "provider_price_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpr_unit_amount",
+          "logical_name": "unit_amount",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        },
+        {
+          "column_name": "dpr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Price",
+      "table_name": "dpr_price"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dps_cancel_at",
+          "logical_name": "cancel_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dps_cancelled_at",
+          "logical_name": "cancelled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dps_current_period_end",
+          "logical_name": "current_period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dps_current_period_start",
+          "logical_name": "current_period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dps_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dps_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dps_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dps_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dps_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dps_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dps_provider_subscription_ref",
+          "logical_name": "provider_subscription_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dps_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dps_trial_end",
+          "logical_name": "trial_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dps_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Subscription",
+      "table_name": "dps_subscription"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpu_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpu_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpu_metric",
+          "logical_name": "metric",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpu_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpu_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpu_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpu_quantity",
+          "logical_name": "quantity",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpu_reported_at",
+          "logical_name": "reported_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpu_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpu_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Usage",
+      "table_name": "dpu_usage"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpv_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpv_from_plan_id",
+          "logical_name": "from_plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpv_from_status",
+          "logical_name": "from_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpv_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpv_mrr_after_cents",
+          "logical_name": "mrr_after_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpv_mrr_before_cents",
+          "logical_name": "mrr_before_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpv_mrr_delta_cents",
+          "logical_name": "mrr_delta_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpv_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dpv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpv_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpv_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpv_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpv_to_status",
+          "logical_name": "to_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.SubscriptionEvent",
+      "table_name": "dpv_subscription_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dpy_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dpy_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpy_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dpy_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpy_failure_code",
+          "logical_name": "failure_code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpy_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpy_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpy_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpy_last4",
+          "logical_name": "last4",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpy_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dpy_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dpy_payment_method_type",
+          "logical_name": "payment_method_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpy_provider_payment_ref",
+          "logical_name": "provider_payment_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dpy_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dpy_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Payment",
+      "table_name": "dpy_payment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dqc_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dqc_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqc_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqc_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Conversation",
+      "table_name": "dqc_conversation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dqg_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dqg_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dqg_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqg_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dqg_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqg_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqg_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqg_timezone",
+          "logical_name": "timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_dqg_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Operator.Agent",
+      "table_name": "dqg_agent"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dqk_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dqk_breached",
+          "logical_name": "breached",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dqk_closed_at",
+          "logical_name": "closed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqk_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dqk_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqk_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqk_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqk_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqk_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqk_resolved_at",
+          "logical_name": "resolved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqk_sla_breach_at",
+          "logical_name": "sla_breach_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqk_sla_id",
+          "logical_name": "sla_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqk_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqk_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqk_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Ticket",
+      "table_name": "dqk_ticket"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dql_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dql_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dql_first_response_minutes",
+          "logical_name": "first_response_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dql_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dql_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dql_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dql_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dql_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dql_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dql_resolve_minutes",
+          "logical_name": "resolve_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dql_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Sla",
+      "table_name": "dql_sla"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dqm_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqm_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dqm_attachments",
+          "logical_name": "attachments",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "dqm_conversation_id",
+          "logical_name": "conversation_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqm_created_via",
+          "logical_name": "created_via",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqm_message_type",
+          "logical_name": "message_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqm_sender_id",
+          "logical_name": "sender_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqm_sender_type",
+          "logical_name": "sender_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_dqm_body",
+          "logical_name": "body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Operator.Message",
+      "table_name": "dqm_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dqn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dqn_body_template",
+          "logical_name": "body_template",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqn_category",
+          "logical_name": "category",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqn_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqn_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "dqn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqn_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqn_tags",
+          "logical_name": "tags",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "dqn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Macro",
+      "table_name": "dqn_macro"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dqs_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqs_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dqs_comments",
+          "logical_name": "comments",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dqs_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqs_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqs_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqs_responded_at",
+          "logical_name": "responded_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dqs_score",
+          "logical_name": "score",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dqs_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dqs_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Operator.Csat",
+      "table_name": "dqs_csat"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "drm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "drm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "drm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "drm_recipient_id",
+          "logical_name": "recipient_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "drm_remind_at",
+          "logical_name": "remind_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "drm_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "drm_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "drm_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "drm_subject_ref",
+          "logical_name": "subject_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "drm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_drm_note",
+          "logical_name": "note",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Automation.Reminder",
+      "table_name": "drm_reminder"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dru_depth",
+          "logical_name": "depth",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dru_dispatch_key",
+          "logical_name": "dispatch_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dru_duration_ms",
+          "logical_name": "duration_ms",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dru_error_kind",
+          "logical_name": "error_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dru_finished_at",
+          "logical_name": "finished_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dru_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dru_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dru_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dru_outcome",
+          "logical_name": "outcome",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "dru_started_at",
+          "logical_name": "started_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dru_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dru_subject_ref",
+          "logical_name": "subject_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dru_trigger_kind",
+          "logical_name": "trigger_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dru_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dru_workflow_id",
+          "logical_name": "workflow_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Driftwood.Automation.Run",
+      "table_name": "dru_run"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "drv_carrier_id",
+          "logical_name": "carrier_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "drv_cdl_expiry",
+          "logical_name": "cdl_expiry",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "drv_cdl_state",
+          "logical_name": "cdl_state",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "drv_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "drv_eld_provider",
+          "logical_name": "eld_provider",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "drv_emails",
+          "logical_name": "emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "drv_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "drv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "drv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "drv_job_title",
+          "logical_name": "job_title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "drv_medical_card_expiry",
+          "logical_name": "medical_card_expiry",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "drv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "drv_phones",
+          "logical_name": "phones",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "drv_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "drv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_drv_cdl_number",
+          "logical_name": "cdl_number",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Freight.Driver",
+      "table_name": "drv_driver"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dsp_dispatched_at",
+          "logical_name": "dispatched_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dsp_driver_id",
+          "logical_name": "driver_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dsp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dsp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dsp_load_id",
+          "logical_name": "load_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dsp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dsp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dsp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Freight.DispatchEvent",
+      "table_name": "dsp_dispatch_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dtq_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dtq_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dtq_mrr_cents",
+          "logical_name": "mrr_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dtq_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dtq_refreshed_at",
+          "logical_name": "refreshed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dtq_tenant_count",
+          "logical_name": "tenant_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "dtq_tier",
+          "logical_name": "tier",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dtq_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Aggregate.MrrByTier",
+      "table_name": "dtq_mrr_by_tier"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dvs_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dvs_contact_emails",
+          "logical_name": "contact_emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dvs_contact_name",
+          "logical_name": "contact_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dvs_contact_phones",
+          "logical_name": "contact_phones",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "dvs_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dvs_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dvs_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dvs_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dvs_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dvs_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dvs_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dvs_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dvs_website",
+          "logical_name": "website",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Driftwood.SalesOps.Vendor",
+      "table_name": "dvs_vendor"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dwf_actions",
+          "logical_name": "actions",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "dwf_conditions",
+          "logical_name": "conditions",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "dwf_disabled_by_operator_at",
+          "logical_name": "disabled_by_operator_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwf_disabled_reason",
+          "logical_name": "disabled_reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwf_event",
+          "logical_name": "event",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwf_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwf_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwf_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwf_next_fire_at",
+          "logical_name": "next_fire_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwf_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwf_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwf_resource_key",
+          "logical_name": "resource_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwf_schedule_cron",
+          "logical_name": "schedule_cron",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwf_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwf_trigger_kind",
+          "logical_name": "trigger_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwf_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwf_webhook_secret",
+          "logical_name": "webhook_secret",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Driftwood.Automation.Workflow",
+      "table_name": "dwf_workflow"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dwp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dwp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwp_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwp_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Work.Project",
+      "table_name": "dwp_project"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "dwt_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "dwt_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwt_completed_at",
+          "logical_name": "completed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwt_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "dwt_due_at",
+          "logical_name": "due_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "dwt_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwt_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwt_parent_id",
+          "logical_name": "parent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwt_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Samen.Type.Priority"
+        },
+        {
+          "column_name": "dwt_project_id",
+          "logical_name": "project_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwt_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "dwt_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "dwt_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwt_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "dwt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Work.Task",
+      "table_name": "dwt_task"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fae_actor_ref",
+          "logical_name": "actor_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fae_entity_ref",
+          "logical_name": "entity_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fae_event_kind",
+          "logical_name": "event_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fae_event_name",
+          "logical_name": "event_name",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fae_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fae_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fae_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fae_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fae_props",
+          "logical_name": "props",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fae_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Analytics.ProductEvent",
+      "table_name": "fae_product_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fat_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fat_company_id",
+          "logical_name": "company_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fat_content_type",
+          "logical_name": "content_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fat_file_name",
+          "logical_name": "file_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fat_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fat_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fat_opportunity_id",
+          "logical_name": "opportunity_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fat_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fat_person_id",
+          "logical_name": "person_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fat_size_bytes",
+          "logical_name": "size_bytes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fat_storage_key",
+          "logical_name": "storage_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fat_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Crm.Attachment",
+      "table_name": "fat_attachment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbc_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbc_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbc_provider_customer_ref",
+          "logical_name": "provider_customer_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fbc_billing_email",
+          "logical_name": "billing_email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "pii_fbc_billing_name",
+          "logical_name": "billing_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Billing.Customer",
+      "table_name": "fbc_customer"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbe_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbe_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbe_feature",
+          "logical_name": "feature",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbe_granted",
+          "logical_name": "granted",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fbe_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbe_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbe_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbe_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbe_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbe_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Entitlement",
+      "table_name": "fbe_entitlement"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbi_amount_due_cents",
+          "logical_name": "amount_due_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbi_amount_paid_cents",
+          "logical_name": "amount_paid_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbi_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbi_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbi_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbi_due_date",
+          "logical_name": "due_date",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbi_hosted_invoice_url",
+          "logical_name": "hosted_invoice_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbi_hosted_receipt_url",
+          "logical_name": "hosted_receipt_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbi_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbi_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbi_last_event_id",
+          "logical_name": "last_event_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbi_line_items",
+          "logical_name": "line_items",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "fbi_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbi_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbi_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbi_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbi_provider_invoice_ref",
+          "logical_name": "provider_invoice_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbi_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbi_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbi_tax_amount_cents",
+          "logical_name": "tax_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbi_tax_lines",
+          "logical_name": "tax_lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "fbi_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Invoice",
+      "table_name": "fbi_invoice"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fbp_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbp_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbp_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fbp_features",
+          "logical_name": "features",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbp_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbp_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbp_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbp_provider_plan_ref",
+          "logical_name": "provider_plan_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Plan",
+      "table_name": "fbp_plan"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbr_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fbr_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fbr_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbr_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbr_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbr_provider_price_ref",
+          "logical_name": "provider_price_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbr_unit_amount",
+          "logical_name": "unit_amount",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        },
+        {
+          "column_name": "fbr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Price",
+      "table_name": "fbr_price"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbs_cancel_at",
+          "logical_name": "cancel_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbs_cancelled_at",
+          "logical_name": "cancelled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbs_current_period_end",
+          "logical_name": "current_period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbs_current_period_start",
+          "logical_name": "current_period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbs_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fbs_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbs_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbs_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbs_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbs_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbs_provider_subscription_ref",
+          "logical_name": "provider_subscription_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fbs_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbs_trial_end",
+          "logical_name": "trial_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbs_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Subscription",
+      "table_name": "fbs_subscription"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbu_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbu_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbu_metric",
+          "logical_name": "metric",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbu_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbu_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbu_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbu_quantity",
+          "logical_name": "quantity",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbu_reported_at",
+          "logical_name": "reported_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbu_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbu_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Usage",
+      "table_name": "fbu_usage"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fbv_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbv_from_plan_id",
+          "logical_name": "from_plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbv_from_status",
+          "logical_name": "from_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fbv_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbv_mrr_after_cents",
+          "logical_name": "mrr_after_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbv_mrr_before_cents",
+          "logical_name": "mrr_before_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbv_mrr_delta_cents",
+          "logical_name": "mrr_delta_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fbv_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fbv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbv_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbv_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbv_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fbv_to_status",
+          "logical_name": "to_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fbv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.SubscriptionEvent",
+      "table_name": "fbv_subscription_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fby_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fby_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fby_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fby_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fby_failure_code",
+          "logical_name": "failure_code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fby_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fby_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fby_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fby_last4",
+          "logical_name": "last4",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fby_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fby_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fby_payment_method_type",
+          "logical_name": "payment_method_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fby_provider_payment_ref",
+          "logical_name": "provider_payment_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fby_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fby_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Billing.Payment",
+      "table_name": "fby_payment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fce_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fce_attendees",
+          "logical_name": "attendees",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "fce_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fce_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fce_ends_at",
+          "logical_name": "ends_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fce_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fce_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fce_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fce_location",
+          "logical_name": "location",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fce_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fce_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fce_recurrence",
+          "logical_name": "recurrence",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fce_starts_at",
+          "logical_name": "starts_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fce_timezone",
+          "logical_name": "timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fce_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fce_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Calendar.Event",
+      "table_name": "fce_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fcm_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fcm_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fcm_domain",
+          "logical_name": "domain",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fcm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fcm_industry",
+          "logical_name": "industry",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fcm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fcm_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fcm_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fcm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fcm_size",
+          "logical_name": "size",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fcm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fcm_website",
+          "logical_name": "website",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Driftwood.Crm.Company",
+      "table_name": "fcm_company"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fdd_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fdd_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdd_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fdd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fdd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdd_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdd_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdd_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdd_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fdd_secure_body",
+          "logical_name": "secure_body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Docs.Doc",
+      "table_name": "fdd_doc"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fdn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fdn_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdn_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fdn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fdn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdn_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdn_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdn_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fdn_secure_body",
+          "logical_name": "secure_body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Docs.Note",
+      "table_name": "fdn_note"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fff_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fff_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fff_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fff_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fff_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fff_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fff_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fff_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fff_rollout_pct",
+          "logical_name": "rollout_pct",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fff_stage",
+          "logical_name": "stage",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fff_target_rules",
+          "logical_name": "target_rules",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "fff_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fff_variants",
+          "logical_name": "variants",
+          "pii": false,
+          "type": "Map"
+        }
+      ],
+      "resource": "Driftwood.Primitives.FeatureFlag",
+      "table_name": "fff_feature_flag"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ffl_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ffl_content_type",
+          "logical_name": "content_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ffl_filename",
+          "logical_name": "filename",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ffl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ffl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ffl_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ffl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ffl_search_vector",
+          "logical_name": "search_vector",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ffl_size_bytes",
+          "logical_name": "size_bytes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ffl_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ffl_storage_key",
+          "logical_name": "storage_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ffl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ffl_uploaded_by_id",
+          "logical_name": "uploaded_by_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Driftwood.Primitives.File",
+      "table_name": "ffl_file"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fll_address",
+          "logical_name": "address",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "fll_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fll_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fll_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fll_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fll_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fll_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Locations.Location",
+      "table_name": "fll_location"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fmc_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fmc_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fmc_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmc_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmc_scheduled_at",
+          "logical_name": "scheduled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmc_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fmc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.Campaign",
+      "table_name": "fmc_campaign"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fme_event_type",
+          "logical_name": "event_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fme_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fme_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fme_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fme_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fme_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fme_send_id",
+          "logical_name": "send_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fme_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fme_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.EmailEvent",
+      "table_name": "fme_email_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fmg_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fmg_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fmg_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmg_filter_criteria",
+          "logical_name": "filter_criteria",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fmg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmg_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmg_subscriber_count",
+          "logical_name": "subscriber_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fmg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.Segment",
+      "table_name": "fmg_segment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fmn_campaign_id",
+          "logical_name": "campaign_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmn_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fmn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmn_idempotency_key",
+          "logical_name": "idempotency_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmn_provider_message_id",
+          "logical_name": "provider_message_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmn_queued_at",
+          "logical_name": "queued_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmn_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmn_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fmn_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmn_template_id",
+          "logical_name": "template_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.Send",
+      "table_name": "fmn_send"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fmp_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fmp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmp_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmp_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fmp_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmp_suppressed_at",
+          "logical_name": "suppressed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.Suppression",
+      "table_name": "fmp_suppression"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fms_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fms_consent_at",
+          "logical_name": "consent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fms_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fms_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fms_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fms_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fms_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fms_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fms_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fms_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Marketing.Subscriber",
+      "table_name": "fms_subscriber"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fmt_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fmt_body_html",
+          "logical_name": "body_html",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmt_body_text",
+          "logical_name": "body_text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmt_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fmt_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fmt_from_address",
+          "logical_name": "from_address",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmt_from_name",
+          "logical_name": "from_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmt_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmt_subject_line",
+          "logical_name": "subject_line",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.Template",
+      "table_name": "fmt_template"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fmv_event",
+          "logical_name": "event",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fmv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fmv_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fmv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmv_purpose",
+          "logical_name": "purpose",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fmv_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmv_subject_hash",
+          "logical_name": "subject_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fmv_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fmv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Marketing.ConsentEvent",
+      "table_name": "fmv_consent_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fnp_digest_cadence",
+          "logical_name": "digest_cadence",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fnp_digest_last_sent_at",
+          "logical_name": "digest_last_sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fnp_digest_timezone",
+          "logical_name": "digest_timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fnp_email_enabled",
+          "logical_name": "email_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fnp_event_type",
+          "logical_name": "event_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fnp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fnp_in_app_enabled",
+          "logical_name": "in_app_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fnp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fnp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fnp_quiet_hours",
+          "logical_name": "quiet_hours",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fnp_recipient_id",
+          "logical_name": "recipient_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fnp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Primitives.NotificationPreference",
+      "table_name": "fnp_notification_preference"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fnt_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fnt_event_type",
+          "logical_name": "event_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fnt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fnt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fnt_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fnt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fnt_read_at",
+          "logical_name": "read_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fnt_recipient_id",
+          "logical_name": "recipient_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fnt_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fnt_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fnt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fnt_rendered_body",
+          "logical_name": "rendered_body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Primitives.Notification",
+      "table_name": "fnt_notification"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fop_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fop_close_date",
+          "logical_name": "close_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "fop_company_id",
+          "logical_name": "company_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fop_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fop_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fop_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fop_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fop_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fop_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fop_pipeline_id",
+          "logical_name": "pipeline_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fop_probability",
+          "logical_name": "probability",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fop_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fop_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fop_value",
+          "logical_name": "value",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        }
+      ],
+      "resource": "Driftwood.Crm.Opportunity",
+      "table_name": "fop_opportunity"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fpp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fpp_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fpp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fpp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fpp_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fpp_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fpp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fpp_stage_order",
+          "logical_name": "stage_order",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fpp_stage_type",
+          "logical_name": "stage_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fpp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Crm.Pipeline",
+      "table_name": "fpp_pipeline"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fpr_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fpr_company_id",
+          "logical_name": "company_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fpr_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fpr_display_name",
+          "logical_name": "display_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fpr_emails",
+          "logical_name": "emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "fpr_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "fpr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fpr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fpr_job_title",
+          "logical_name": "job_title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fpr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fpr_phones",
+          "logical_name": "phones",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "fpr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Crm.Person",
+      "table_name": "fpr_person"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsa_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fsa_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fsa_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsa_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "fsa_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsa_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsa_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsa_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsa_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsa_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsa_timezone",
+          "logical_name": "timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsa_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fsa_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Support.Agent",
+      "table_name": "fsa_agent"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsc_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fsc_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsc_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsc_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Support.Conversation",
+      "table_name": "fsc_conversation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsh_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsh_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fsh_field_name",
+          "logical_name": "field_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsh_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsh_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsh_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsh_resource_name",
+          "logical_name": "resource_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsh_ts_config",
+          "logical_name": "ts_config",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsh_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsh_vector_column",
+          "logical_name": "vector_column",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Driftwood.Primitives.SearchIndex",
+      "table_name": "fsh_search_index"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsk_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fsk_breached",
+          "logical_name": "breached",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fsk_closed_at",
+          "logical_name": "closed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsk_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fsk_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsk_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsk_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsk_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsk_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsk_resolved_at",
+          "logical_name": "resolved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsk_sla_breach_at",
+          "logical_name": "sla_breach_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsk_sla_id",
+          "logical_name": "sla_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsk_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsk_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsk_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Support.Ticket",
+      "table_name": "fsk_ticket"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsl_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fsl_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fsl_first_response_minutes",
+          "logical_name": "first_response_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fsl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsl_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsl_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsl_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsl_resolve_minutes",
+          "logical_name": "resolve_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fsl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Support.Sla",
+      "table_name": "fsl_sla"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsm_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsm_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fsm_attachments",
+          "logical_name": "attachments",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "fsm_conversation_id",
+          "logical_name": "conversation_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsm_created_via",
+          "logical_name": "created_via",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsm_message_type",
+          "logical_name": "message_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsm_sender_id",
+          "logical_name": "sender_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsm_sender_type",
+          "logical_name": "sender_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fsm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fsm_body",
+          "logical_name": "body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Support.Message",
+      "table_name": "fsm_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fsn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fsn_body_template",
+          "logical_name": "body_template",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsn_category",
+          "logical_name": "category",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsn_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsn_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fsn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fsn_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fsn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fsn_tags",
+          "logical_name": "tags",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "fsn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Support.Macro",
+      "table_name": "fsn_macro"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fss_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fss_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fss_comments",
+          "logical_name": "comments",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fss_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fss_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fss_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fss_responded_at",
+          "logical_name": "responded_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fss_score",
+          "logical_name": "score",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fss_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fss_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Support.Csat",
+      "table_name": "fss_csat"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ftt_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ftt_color",
+          "logical_name": "color",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ftt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ftt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ftt_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ftt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ftt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Tags.Tag",
+      "table_name": "ftt_tag"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fwh_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fwh_event_types",
+          "logical_name": "event_types",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "fwh_failure_count",
+          "logical_name": "failure_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fwh_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fwh_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fwh_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fwh_last_delivered_at",
+          "logical_name": "last_delivered_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fwh_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fwh_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fwh_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fwh_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fwh_url",
+          "logical_name": "url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "pii_fwh_signing_secret",
+          "logical_name": "signing_secret",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Primitives.Webhook",
+      "table_name": "fwh_webhook"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "stl_accessorial_cents",
+          "logical_name": "accessorial_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "stl_advances_cents",
+          "logical_name": "advances_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "stl_carrier_id",
+          "logical_name": "carrier_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stl_claim_deduction_cents",
+          "logical_name": "claim_deduction_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "stl_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "stl_factoring_rate_bps",
+          "logical_name": "factoring_rate_bps",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "stl_fuel_surcharge_cents",
+          "logical_name": "fuel_surcharge_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "stl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "stl_linehaul_cents",
+          "logical_name": "linehaul_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "stl_load_id",
+          "logical_name": "load_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stl_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "stl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Freight.Settlement",
+      "table_name": "stl_settlement"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "tft_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tft_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "tft_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tft_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tft_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "tft_tag_id",
+          "logical_name": "tag_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tft_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Tags.Tagging",
+      "table_name": "tft_tagging"
+    }
+  ]
+}
