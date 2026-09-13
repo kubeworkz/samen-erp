@@ -150,10 +150,17 @@ defmodule SamenCore.TestRepo.Migrations.FinanceScopeFixture do
       END IF;
 
       IF TG_OP = 'UPDATE' THEN
-        IF OLD.sje_status <> 'draft' AND NOT armed THEN
+        -- Keyed on BOTH sides: the draft->posted TRANSITION carries the new
+        -- state in NEW, so a raw-SQL two-step (insert a draft + UPDATE it to
+        -- posted) cannot forge a posted entry without the marker — the
+        -- PostGuard-armed actions are the ONLY route to a non-draft state.
+        IF (OLD.sje_status <> 'draft' OR NEW.sje_status <> 'draft') AND NOT armed THEN
           RAISE EXCEPTION 'sje_journal_entry is append-only once posted: UPDATE of a '
-            'non-draft entry is not permitted (void instead). Entry id: %, status: %',
-            COALESCE(OLD.sje_id::text, '?'), COALESCE(OLD.sje_status, '?');
+            'non-draft entry, or a transition onto one, is not permitted without the '
+            'PostGuard transaction-local marker (samen.finance_posting). Entry id: %, '
+            'old status: %, new status: %',
+            COALESCE(OLD.sje_id::text, '?'), COALESCE(OLD.sje_status, '?'),
+            COALESCE(NEW.sje_status, '?');
         END IF;
       END IF;
 

@@ -15,11 +15,10 @@ defmodule Samen.Scopes.Finance.PostGuard do
 
   DB-level immutability is the migration's trigger (belt over this braces): the
   entry table refuses an INSERT of a non-draft row and an UPDATE/DELETE of a
-  non-draft row UNLESS this change's transaction-local marker
-  (`samen.finance_posting`, set via `set_config(..., true)` — transaction-
-  scoped, auto-cleared at commit/rollback) is present — which only the actions
-  carrying THIS change can set. A raw-SQL posted row is refused; a raw-SQL edit
-  of a posted row is refused.
+  non-draft row UNLESS the transaction-local marker
+  (`Samen.Scopes.Finance.PostingMarker`, shared with the E2 document posting
+  guards) is present — which only the actions carrying THIS change can set. A
+  raw-SQL posted row is refused; a raw-SQL edit of a posted row is refused.
 
   Paired with `Samen.Scopes.Finance.PostBalance` (the persisted-lines R1
   re-check that runs before this write on `:post`/`:void`) and
@@ -27,7 +26,7 @@ defmodule Samen.Scopes.Finance.PostGuard do
   """
   use Ash.Resource.Change
 
-  @guc "samen.finance_posting"
+  alias Samen.Scopes.Finance.PostingMarker
 
   @impl true
   def change(changeset, _opts, _context) do
@@ -40,17 +39,18 @@ defmodule Samen.Scopes.Finance.PostGuard do
       end
 
     now = DateTime.utc_now() |> DateTime.truncate(:second)
-    repo = AshPostgres.DataLayer.Info.repo(changeset.resource, :mutate)
 
     # The marker's PRIOR value, read at changeset-build time and restored after
-    # the write (see the after_action below for why the restore is not a blind
-    # 'off'). At build time no other writer of this GUC can be in flight: the
-    # only nested action (:void's inner :create_reversal) is BUILT during the
-    # outer action's before_action — i.e. after the outer arm — so its own
-    # build-time read sees the armed outer marker and restores it faithfully.
-    prior = guc_value(repo)
-
-    Ash.Changeset.before_action(changeset, fn changeset ->
+    # the write — the shared `PostingMarker` change owns the arm/restore pair
+    # with the nested-posting-safe prior-value semantics (E2's document posting
+    # guards use the same module). At build time no other writer of this GUC
+    # can be in flight: the only nested action (:void's inner
+    # :create_reversal) is BUILT during the outer action's before_action —
+    # i.e. after the outer arm — so its own build-time read sees the armed
+    # outer marker and restores it faithfully.
+    changeset
+    |> PostingMarker.change([], %{})
+    |> Ash.Changeset.before_action(fn changeset ->
       # One-way state machine: :post leaves :draft, :void leaves :posted. A
       # re-post (posted_at would move on an immutable fact) and a
       # void-of-a-void are refused here, before any row is written.
@@ -75,36 +75,9 @@ defmodule Samen.Scopes.Finance.PostGuard do
         )
       end
 
-      # Transaction-local marker: the DB trigger's ONLY escape hatch for a
-      # non-draft INSERT/UPDATE, and it exists solely on the actions carrying
-      # this change. Transaction-scoped (the `true` in set_config).
-      if repo, do: repo.query!("SELECT set_config('#{@guc}', 'on', true)", [])
-
       changeset
       |> Ash.Changeset.force_change_attribute(:status, status)
       |> Ash.Changeset.force_change_attribute(:posted_at, now)
     end)
-    # Restore the PRIOR marker on the success path: production transactions
-    # END the GUC at commit/rollback, but the SQL sandbox runs whole TESTS in
-    # one transaction (no savepoint isolation) — without a restore the marker
-    # would outlive the action and the belt would refuse nothing for the rest
-    # of the test. Restoring the prior value (NOT blindly 'off') is load-
-    # bearing for :void: its inner :create_reversal runs INSIDE the outer arm,
-    # so the inner restore must leave the outer marker armed for the void's
-    # own non-draft UPDATE. ('off' ≡ unset for the belt — it COALESCEs.)
-    |> Ash.Changeset.after_action(fn _changeset, result ->
-      if repo, do: repo.query!("SELECT set_config('#{@guc}', '#{prior}', true)", [])
-
-      {:ok, result}
-    end)
-  end
-
-  defp guc_value(nil), do: "off"
-
-  defp guc_value(repo) do
-    case repo.query!("SELECT current_setting('#{@guc}', true)", []).rows do
-      [[value]] when is_binary(value) -> value
-      _ -> "off"
-    end
   end
 end

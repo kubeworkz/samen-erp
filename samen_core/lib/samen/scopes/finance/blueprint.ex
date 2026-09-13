@@ -451,4 +451,341 @@ defmodule Samen.Scopes.Finance.Blueprint do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # PostingAccount — the named GL posting accounts (E2). Tier-0 config row.
+  # ---------------------------------------------------------------------------
+  defmacro define_posting_account(module, otp_app, domain, repo, abbrev, account_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.PostingAccount — the host's NAMED GL posting accounts (WS-ERP
+        E2): the Tier-0 config row binding a posting MEANING (`ap_clearing`,
+        `ar_clearing`, `cash`, `income`) to the org's actual CoA `account`.
+        Every posting action (E2) resolves its debit/credit targets HERE and
+        refuses fail-honest when a meaning is unmapped — accounts are a host
+        decision, never invented by the scope. One row per `{org, key}` (the
+        migration's unique index); a re-point is an UPDATE of `account_id`,
+        never a duplicate row. No PII (INV-1).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_posting_account")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:key, :atom,
+            public?: true,
+            allow_nil?: false,
+            constraints: [one_of: [:ap_clearing, :ar_clearing, :cash, :income]]
+          )
+        end
+
+        relationships do
+          belongs_to :account, unquote(account_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        changes do
+          # F3.2 same-org FK: a posting account may only name a same-org CoA row.
+          change({Samen.Policy.SameOrgFk, relationships: [:account]})
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :key, :account_id])
+          end
+
+          update :update do
+            accept([:account_id])
+            require_atomic?(false)
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # ApInvoice — the AP vendor bill (E2). :approve rides the ADR-040 engine as
+  # an ApprovalRequired GATE; the approval re-invokes :approve as the requester
+  # INSIDE the decision transaction, where ApPosting lands the expense+
+  # liability entry (source_key: "ap_invoice").
+  # ---------------------------------------------------------------------------
+  defmacro define_ap_invoice(module, otp_app, domain, repo, abbrev, entry_mod, posting_account_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.ApInvoice — a vendor bill (WS-ERP E2; design §2.2).
+        `status ∈ {draft, approved, paid, void}`; `paid`/`void` transitions are
+        E4's payment flow (the base system lands `:approved` only).
+
+        ## The approve discipline (ADR-040)
+
+        `:approve` carries `Samen.Approvals.Gate`: an ungated call is REFUSED
+        with `Samen.Approvals.ApprovalRequired` and opens (or returns) the
+        pending approval `kind: "<this module>:approve"`, `subject_ref` = this
+        bill's object-ref. The DISTINCT approver's `Samen.Approvals.approve/3`
+        re-invokes `:approve` AS THE REQUESTER inside the decision transaction
+        (approval adds second-party consent, never privilege — ADR-040 §4.4),
+        where `Samen.Scopes.Finance.ApPosting` lands the expense+liability
+        JournalEntry anchored `source_key: "ap_invoice"`, `source_id: <id>`.
+        A posting failure rolls the WHOLE decision back — the approval stays
+        `pending` and the bill stays draft: an approval that could not post is
+        not an approval.
+
+        ## No persisted inputs (ADR-040 §4.4, INV-1)
+
+        The approval row is `{org_id, kind, subject_ref, parties, reason,
+        state}` — the posting is re-derived from THIS record's governed state
+        (its own `lines` + the org's `PostingAccount` rows). A bill whose
+        accounts vanished between request and decision fails honest at
+        approval time (the Gate's `{:subject_unavailable, _}` shape rolls the
+        decision back).
+
+        ## No PII (INV-1)
+
+        The vendor's 🔒 contact stays vaulted WHERE IT LIVES (SalesOps.Vendor);
+        this row references `vendor_id` (same-org via the SameOrgFk posture —
+        no cross-scope FK coupling) and carries nothing about a person.
+        `lines` is the design's embedded jsonb shape (account_id + amount +
+        memo; one-row-per-line is the documented P2 promote-if-hot carry).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_ap_invoice")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:vendor_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:number, :string, public?: true, allow_nil?: false)
+          attribute(:bill_date, :date, public?: true, allow_nil?: false)
+          attribute(:due_date, :date, public?: true)
+          attribute(:memo, :string, public?: true)
+
+          attribute(:lines, {:array, :map},
+            public?: true,
+            allow_nil?: false,
+            constraints: [
+              items: [
+                fields: [
+                  account_id: [type: :uuid, allow_nil?: false],
+                  amount_cents: [type: :integer, allow_nil?: false],
+                  memo: [type: :string]
+                ]
+              ]
+            ]
+          )
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :approved, :paid, :void]]
+          )
+
+          attribute(:posted_entry_id, :uuid, public?: true)
+          attribute(:posted_at, :utc_datetime, public?: true)
+        end
+
+        changes do
+          # Line-shape guard on every action that can touch `lines` (and the
+          # only-approved-bills-are-immutable state condition).
+          change(Samen.Scopes.Finance.ApLines)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :vendor_id, :number, :bill_date, :due_date, :memo, :lines])
+
+            # A bill is born a draft — the only route to :approved is :approve.
+            change(set_attribute(:status, :draft))
+          end
+
+          update :update do
+            # Draft edits only: re-pointing the due date/memo/lines of an
+            # UNapproved bill. (ApLines refuses a non-draft data record, and
+            # the migration's trigger refuses the raw-SQL twin.)
+            accept([:due_date, :memo, :lines])
+            require_atomic?(false)
+          end
+
+          # The gated transition: accept([]) — NO caller inputs (the Gate's
+          # contract: a bounded transition on an existing record; freeform
+          # inputs are exactly what must not be deferred, ADR-040 §4.4).
+          # PostingMarker arms the transaction-local belt for the bill's own
+          # draft→approved UPDATE; ApPosting lands the entry in-transaction.
+          update :approve do
+            accept([])
+            require_atomic?(false)
+
+            change({Samen.Approvals.Gate,
+             kind: unquote(Atom.to_string(module)) <> ":approve"})
+
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change({Samen.Scopes.Finance.ApPosting,
+             entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)})
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # PaymentReceipt — the AR intake (E2). :post_receipt creates the anchored
+  # cash+AR-clearing entry in ONE transaction; exactly-once per anchor.
+  # ---------------------------------------------------------------------------
+  defmacro define_payment_receipt(module, otp_app, domain, repo, abbrev, entry_mod, posting_account_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.PaymentReceipt — money actually received against a Billing
+        Invoice (WS-ERP E2; design §2.2 — the SaaS-shaped Billing scope stays
+        the AR document SoT; this row is the GL-side intake).
+
+        `invoice_key`/`invoice_id` is the subledger anchor (the ADR-041 §3.2
+        object-ref shape: the ledger names its upstream without coupling to
+        it — here `"billing_invoice"` + the mirror row's id; the design's
+        multi-invoice allocation is the documented P2 promote-if-hot carry).
+
+        `:post_receipt` creates the cash+AR-clearing JournalEntry in ONE
+        transaction (`Samen.Scopes.Finance.ReceiptPosting`), anchored
+        `source_key: "billing_payment"`, `source_id: <this receipt>` — the
+        GL's name for the cash-receipt event; the settled invoice rides the
+        receipt's own anchor. Exactly-once per anchor: the migration's
+        partial unique index on the draft→posted anchor plus the in-transaction
+        status flip make a double-post structurally impossible at BOTH layers.
+
+        R2 (design §6.3): for any period, Σ(receipt cash postings) == Σ(Billing
+        Payment mirror amounts) — computed by
+        `Samen.Scopes.Finance.ReconcilePayments` as a bare SQL sum over the
+        anchored entries; a divergence is a broken spine (red-path + sabotage
+        303).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_payment_receipt")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:invoice_key, :string, public?: true, allow_nil?: false)
+          attribute(:invoice_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:amount_cents, :integer, public?: true, allow_nil?: false)
+          attribute(:currency, :string, public?: true, allow_nil?: false, default: "USD")
+          attribute(:paid_at, :utc_datetime, public?: true, allow_nil?: false)
+          attribute(:memo, :string, public?: true)
+
+          # status is NEVER caller-supplied (accepted nowhere): the only route
+          # to :posted is :post_receipt (ReceiptPosting stamps it in-transaction).
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :posted]]
+          )
+
+          attribute(:posted_entry_id, :uuid, public?: true)
+          attribute(:posted_at, :utc_datetime, public?: true)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :invoice_key, :invoice_id, :amount_cents, :currency, :paid_at, :memo])
+
+            # The Ash-side shape guard: refuse BEFORE the DB belt so the caller
+            # gets an Invalid, not a wrapped ConstraintError (the DB CHECK is
+            # the belt over THIS brace).
+            validate(numericality(:amount_cents, greater_than: 0))
+          end
+
+          update :post_receipt do
+            accept([])
+            require_atomic?(false)
+
+            # PostingMarker arms the belt for the receipt's own draft→posted
+            # UPDATE; ReceiptPosting lands the entry in-transaction.
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change({Samen.Scopes.Finance.ReceiptPosting,
+             entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)})
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
 end

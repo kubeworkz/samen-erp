@@ -575,8 +575,10 @@ defmodule Samen.AbbrevRegistryTest do
       # (Samen.AI.Agent.{Run,Turn}), allocator-reserved = 410.
       # +3 WS-ERP E1 (ADR-049 §2): samen_core host's Finance scope in-tree pilot
       # fixture (`SamenCore.Support.FinanceFixture` — Account/JournalEntry/
-      # JournalLine), allocator-reserved under the samen_core host namespace = 445.
-      assert map_size(Reg.load()) == 445
+      # JournalLine), allocator-reserved under the samen_core host namespace = 445;
+      # +4 WS-ERP E2 — the Finance fixture's ApInvoice/PaymentReceipt/
+      # PostingAccount/PaymentMirror (sap/prc/fav/sbp) = 449.
+      assert map_size(Reg.load()) == 449
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

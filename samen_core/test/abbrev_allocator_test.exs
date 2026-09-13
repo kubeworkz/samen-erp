@@ -256,9 +256,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # (Samen.AI.Agent.{Run,Turn}) → 410, growing the file to 20_439 bytes.
       # +3 WS-ERP E1 (ADR-049 §2) — samen_core host's Finance scope in-tree pilot
       # fixture (`SamenCore.Support.FinanceFixture`: Account/JournalEntry/JournalLine)
-      # → 445 (the allocator run wrote the registry at 20_848 bytes).
-      assert byte_size(committed) == 20848
-      assert map_size(R.load()) == 445
+      # → 449 incl. the E2 documents (the allocator run wrote the registry at
+      # 21_098 bytes).
+      assert byte_size(committed) == 21098
+      assert map_size(R.load()) == 449
     end
   end
 

@@ -61,8 +61,10 @@ mix samen.abbrev.reserve --host samen_core \
 # 2. First compile runs the migration; the test DB is dropped+migrated by test_helper.
 mix deps.get && mix compile --warnings-as-errors
 mix test --warnings-as-errors
-# 3. Gates (individual verify tasks — there is NO umbrella `mix samen.verify`):
-mix samen.verify.catalog_parity && mix samen.verify.migrations
+# 3. Gates (individual verify tasks — there is NO umbrella `mix samen.verify`).
+#    MUST run under MIX_ENV=test: the tasks connect through the normal repo
+#    config and otherwise target the dev DB (absent on a test-only box):
+MIX_ENV=test mix samen.verify.catalog_parity && MIX_ENV=test mix samen.verify.migrations
 # 4. Sabotage harness (302 flips the two R1 RED paths, then reverts byte-exact):
 bash scripts/sabotage.sh --from 302 --to 302
 # 5. Full CI (resolves its own repo root — run from the checkout root):
@@ -75,6 +77,30 @@ cd .. && MIX_ENV=test bash ci.sh
 sabotage** (receipts reconcile to the Billing Payment mirror per period). Three-way-match
 read helper stubs (R5 completes in E4). Masking: AP list shows vendor contact only through
 the SalesOps vault row — a mask-by-omission red-path on the AP surface.
+
+- **Status: implemented + execution-verified (2026-09-13).** `:approve` rides the ADR-040
+  Gate (`"<resource>:approve"` tenant kind; ungated call fails `ApprovalRequired`, the
+  approver's `Samen.Approvals.approve/3` re-invokes the action as the requester inside the
+  decision transaction, where the AP cascade posts the two-sided expense entry POSTED).
+  `:post_receipt` posts cash+AR-clearing POSTED under the `"billing_payment"` anchor,
+  exactly-once via the partial-unique `prc_anchor_unique` + in-transaction status re-read.
+  The DB belt (E1 hardened + E2 triggers) refuses raw-SQL bypasses; `PostingMarker` is now
+  shared by E1/E2 and restores the PRIOR marker value (safe under nested actions).
+  Suites: 54/54 E1+E2 zero warnings; gates OK; sabotage 303 flips both R2 EQUALITY paths
+  and restores byte-exact.
+
+```bash
+# E2 runbook (mirrors E1's; from the checkout root)
+mix compile --warnings-as-errors   # registry gate fires until the E2 abbrevs are reserved
+# 1. Reserve sbp/prc/sap/fav (fixture rows incl. the R2 PaymentMirror) via the
+#    sanctioned allocator; fai/frr are the scope's demo defaults and stay unclaimed.
+#    Then update the registry byte-goldens in the abbrev tests (445 -> 449 rows).
+mix test test/finance_scope_test.exs test/finance_e2_scope_test.exs --warnings-as-errors
+# 2. Gates — under MIX_ENV=test (see the E1 note; otherwise they hit the dev DB):
+MIX_ENV=test mix samen.verify.catalog_parity && MIX_ENV=test mix samen.verify.migrations
+# 3. Sabotage harness (303 flips the two R2 EQUALITY paths, then reverts byte-exact):
+bash scripts/sabotage.sh --from 303 --to 303
+```
 
 ## Phase E3 — Inventory core (C3 stock half) · opus
 `Item`, `Warehouse` (Address type), append-only `StockLedger` (signed-integer qty,

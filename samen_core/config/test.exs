@@ -143,6 +143,11 @@ config :samen_core, Samen.Approvals,
 # this shape of client in T35). Unregistered kinds are refused at write.
 config :samen_core, Samen.Approvals.Registry,
   kinds: %{
+    # WS-ERP E2: the AP bill's gated `:approve` (the Gate re-invokes the action
+    # as the requester inside the decision transaction; ApPosting lands the
+    # expense+liability entry there).
+    (Atom.to_string(SamenCore.Support.FinanceFixture.ApInvoice) <> ":approve") =>
+      {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.ApprovalsFixture.Document) <> ":publish") =>
       {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.ApprovalsFixture.Document) <> ":lock") =>

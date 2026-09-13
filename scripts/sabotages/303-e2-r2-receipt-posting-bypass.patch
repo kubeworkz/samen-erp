@@ -1,0 +1,44 @@
+# SABOTAGE: WS-ERP E2 (ADR-049 R2) — the Finance↔Billing posting bypass. The
+# `:post_receipt` cascade in Samen.Scopes.Finance.ReceiptPosting skips its
+# journal entry entirely: the receipt flips draft -> posted with NO cash+AR
+# entry, so the intake claims cash the GL never received. The R2 sums
+# (ReconcilePayments.receipts_total vs posted_cash_total) DIVERGE — exactly
+# the reconciliation failure the red-path suite exists to catch. Layered
+# defense note: the exactly-once and shape guards still refuse the paths that
+# reach them (d5's double-post and d6's non-positive refusals stay refusals);
+# only the R2 EQUALITY paths flip.
+# APP: samen_core
+# TEST_FILES: test/finance_e2_scope_test.exs
+# MUST_FAIL: the three sums agree over the whole ledger
+# MUST_FAIL: a bounded period moves all three sums together
+--- a/samen_core/lib/samen/scopes/finance/receipt_posting.ex
++++ b/samen_core/lib/samen/scopes/finance/receipt_posting.ex
+@@ -45,7 +45,27 @@
+     end)
+   end
+ 
+-  defp do_post(changeset, org_id, entry_resource, pa_resource) do
++  # SABOTAGE (303): the R2 posting bypass — a receipt flips to :posted
++  # WITHOUT its journal entry. The intake claims cash the GL never received:
++  # ReconcilePayments' sums DIVERGE and the R2 green paths flip. The
++  # exactly-once and shape guards still hold for the paths that reach them
++  # (layered defense — d5's refusals stay refusals).
++  defp do_post(changeset, _org_id, _entry_resource, _pa_resource) do
++    receipt = changeset.data
++
++    if match?(:draft, receipt.status) do
++      changeset
++      |> Ash.Changeset.force_change_attribute(:status, :posted)
++      |> Ash.Changeset.force_change_attribute(:posted_at, receipt.paid_at)
++    else
++      Ash.Changeset.add_error(changeset,
++        field: :base,
++        message: "the payment receipt cannot be posted: already posted"
++      )
++    end
++  end
++
++  defp real_post(changeset, org_id, entry_resource, pa_resource) do
+     receipt = changeset.data
+ 
+     with :ok <- refuse_posted(changeset),
