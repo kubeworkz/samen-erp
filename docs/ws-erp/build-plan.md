@@ -109,6 +109,34 @@ NegativeStock guard (+ per-warehouse opt-out red-path). **R3-ledger half: rollup
 Σ ledger, value == Σ valued events; sabotage = a hand-edit path that bypasses the ledger.**
 Parallel-safe with E2.
 
+- **Status: implemented + execution-verified (2026-09-13).** `Samen.Scopes.Inventory`
+  (lib: scope macro + blueprint + `NegativeStock` + `LedgerSum` + `StockLevelSync` +
+  `ReconcileStock`; fixture abbrevs `sit`/`swh`/`skl`/`slv`, demo defaults
+  `ini`/`inw`/`inl`/`ins` unclaimed). The level rollup is maintained IN-TRANSACTION by
+  `StockLevelSync` (after_action on `:record`, moving-average over valued events) under a
+  `samen.stock_sync` belt marker whose trigger ALSO re-derives the ledger truth and refuses
+  a diverging armed write — the rollup is derived-by-construction, never asserted.
+  `:hand_edit` exists as the design's own negative proof (admin-gated door, belt-refused).
+  The ledger is DB-append-only; NegativeStock is enforced at BOTH layers (Ash guard +
+  trigger) with the fail-closed `allow_negative` opt-out. Item's Finance account links are
+  plain uuid attributes (the E2 cross-scope posture — no runtime coupling).
+  Suites: 75/75 E1+E2+E3 zero warnings; gates OK; sabotage 304 (the hand-edit bypass:
+  both belt arms removed) flips all three belt red paths and restores byte-exact.
+
+```bash
+# E3 runbook (mirrors E1/E2's; from the checkout root)
+mix compile --warnings-as-errors   # registry gate fires until the E3 abbrevs are reserved
+# 1. Reserve sit/swh/skl/slv (fixture rows) via the sanctioned allocator — the direct
+#    elixir -e Allocator.reserve! route (the mix task's compile step clobbers the
+#    build-tree registry between sequential runs); ini/inw/inl/ins stay unclaimed.
+#    Then update the registry byte-goldens in the abbrev tests (449 -> 453 rows).
+mix test test/inventory_scope_test.exs --warnings-as-errors
+# 2. Gates — under MIX_ENV=test (see the E1 note; otherwise they hit the dev DB):
+MIX_ENV=test mix samen.verify.catalog_parity && MIX_ENV=test mix samen.verify.migrations
+# 3. Sabotage harness (304 flips the three belt RED paths, then reverts byte-exact):
+bash scripts/sabotage.sh --from 304 --to 304
+```
+
 ## Phase E4 — Procurement (C3 SCM half) · opus
 `PurchaseOrder`/`PoLine` (+approvals), `GoodsReceipt` — the ONE-transaction chokepoint:
 stock event + journal entry commit/roll back together. **R3-full + R5 red-paths + sabotage**

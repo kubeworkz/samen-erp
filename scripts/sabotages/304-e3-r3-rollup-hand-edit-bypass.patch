@@ -1,0 +1,60 @@
+# SABOTAGE: WS-ERP E3 (ADR-049 R3) — the rollup hand-edit bypass. BOTH arms of
+# the slv_stock_level belt (the marker gate AND the ledger-divergence check)
+# are removed from the trigger, so the rollup row — the DERIVED cache —
+# becomes freely writable: a hand-edit (or a bug) can land quantities/values
+# the ledger never moved, with nothing at the storage layer to refuse it.
+# StockLevelSync's own writes still run (they compute FROM the ledger), so the
+# R3 green paths keep passing; ONLY the belt red paths flip: a raw write
+# without the marker now lands, an armed DIVERGING write now lands, and the
+# :hand_edit door is OPEN. The ledger stays append-only and NegativeStock
+# stays armed (layered defense); R3's independent divergence read
+# (ReconcileStock.divergences/3) is the second net that still exposes a
+# hand-edited row — exactly the design's "sabotage = a hand-edit path that
+# bypasses the ledger" story.
+# APP: samen_core
+# TEST_FILES: test/inventory_scope_test.exs
+# MUST_FAIL: a write without the marker is refused (RED)
+# MUST_FAIL: a MARKER-ARMED write that DIVERGES from the ledger is still refused (RED)
+# MUST_FAIL: even an admin-gated raw edit of a level row is refused (RED)
+--- a/samen_core/priv/test_repo/migrations/20260912120000_inventory_scope_fixture.exs
++++ b/samen_core/priv/test_repo/migrations/20260912120000_inventory_scope_fixture.exs
+@@ -229,28 +229,17 @@ defmodule SamenCore.TestRepo.Migrations.InventoryScopeFixture do
+                   OLD.slv_id;
+               END IF;
+ 
+-              IF NOT armed THEN
+-                RAISE EXCEPTION 'slv_stock_level: write requires the transaction-local sync marker '
+-                  '(samen.stock_sync) — the rollup is written only by StockLevelSync, inside the '
+-                  'ledger event''s transaction. Operation: %, level id: %',
+-                  TG_OP, COALESCE(NEW.slv_id::text, 'n/a');
+-              END IF;
+-
+-              SELECT COALESCE(SUM(skl.skl_qty), 0),
+-                     COALESCE(SUM(skl.skl_qty * skl.skl_unit_cost_cents), 0)
+-                INTO on_hand, value
+-              FROM skl_stock_ledger skl
+-              WHERE skl.skl_org_id = NEW.slv_org_id
+-                AND skl.skl_item_id = NEW.slv_item_id
+-                AND skl.skl_warehouse_id = NEW.slv_warehouse_id;
+-
+-              IF NEW.slv_qty_on_hand IS DISTINCT FROM on_hand
+-                 OR NEW.slv_stock_value_cents IS DISTINCT FROM value THEN
+-                RAISE EXCEPTION 'slv_stock_level: the rollup write DIVERGES from the ledger '
+-                  '(qty: % vs %, value: % vs %) — the rollup is derived from the ledger, '
+-                  'never asserted over it',
+-                  NEW.slv_qty_on_hand, on_hand, NEW.slv_stock_value_cents, value;
+-              END IF;
++              -- SABOTAGE (304): BOTH belt arms are removed — the marker gate
++              -- AND the divergence check — so the rollup row (the DERIVED
++              -- cache) becomes freely writable: a hand-edit can land
++              -- quantities/values the ledger never moved, with nothing at the
++              -- storage layer to refuse it. StockLevelSync's own writes still
++              -- run (they compute FROM the ledger), so the R3 green paths
++              -- keep passing; ONLY the belt red paths flip. R3's independent
++              -- divergence read (ReconcileStock.divergences/3) is the second
++              -- net that still exposes a hand-edited row — exactly the
++              -- design's "sabotage = a hand-edit path that bypasses the
++              -- ledger" story.
+ 
+               RETURN COALESCE(NEW, OLD);
+             END;
