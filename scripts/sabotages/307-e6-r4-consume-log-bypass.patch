@@ -1,0 +1,37 @@
+# SABOTAGE: WS-ERP E6 (ADR-049 R4) — the log-rows-without-events bypass.
+# The completion cascade in Samen.Scopes.Inventory.ProduceWo lands the
+# StockLedger :production_consume/:production_in events and flips :completed,
+# but SKIPS the consumption-side ProductionLog rows — the ledger events and
+# the log facts no longer agree, so the R4 standing read DIVERGES
+# (consumption_mismatch for every completed WO). The produce row itself is
+# still written, so the no_produce_event/no_produce_log_row shapes do NOT
+# fire; the layered-defense refusals still hold: never-stocked and the
+# oversell-past-NegativeStock run BEFORE any write, the exactly-once
+# pre-state refusal still fires, and the cost roll-up is untouched.
+# APP: samen_core
+# TEST_FILES: test/inventory_manufacturing_test.exs
+# MUST_FAIL: a released WO completes: consume + produce + log + flip land TOGETHER (CONTROL)
+# MUST_FAIL: for every completed WO the ledger and the log agree; divergences/2 is EMPTY (CONTROL)
+# MUST_FAIL: a second :complete is refused exactly-once (RED)
+diff --git a/samen_core/lib/samen/scopes/inventory/produce_wo.ex b/samen_core/lib/samen/scopes/inventory/produce_wo.ex
+--- a/samen_core/lib/samen/scopes/inventory/produce_wo.ex
++++ b/samen_core/lib/samen/scopes/inventory/produce_wo.ex
+@@ -103,17 +103,8 @@ defmodule Samen.Scopes.Inventory.ProduceWo do
+                kind: :production_consume,
+                qty: -qty,
+                unit_cost_cents: cost
+-             }),
+-           {:ok, row} <-
+-             create_log_row(log_resource, org_id, wo, %{
+-               item_id: item_id,
+-               entry_kind: :consume,
+-               qty: -qty,
+-               unit_cost_cents: cost,
+-               adjustment_cents: nil,
+-               ledger_event_id: event.id
+              }) do
+-        {:cont, {:ok, acc ++ [row], cents_acc + value}}
++        {:cont, {:ok, acc, cents_acc + value}}
+       else
+         {:error, reason} -> {:halt, {:error, {:consume_failed, reason}}}
+       end

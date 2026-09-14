@@ -1,0 +1,11 @@
+# Deterministic EOLs (the Windows smudge lesson, WS-ERP E6): the source tree
+# is LF; `core.autocrlf=true` hosts must not smudge it — otherwise git-apply
+# round-trips (the sabotage harness's byte-exact restore) churn CRLF residue
+# into the worktree and templates-parity goldens drift CR-only.
+*.ex   text eol=lf
+*.exs  text eol=lf
+*.eex  text eol=lf
+*.patch text eol=lf
+# The templates-parity golden fixtures (the renderer emits LF; the fixtures
+# must hold it byte-exactly).
+*.golden text eol=lf

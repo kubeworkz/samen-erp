@@ -430,7 +430,12 @@ defmodule Samen.AbbrevRegistryTest do
                  # allocator-reserved.
                  "slo" => "SamenCore.Support.InventoryFixture.SalesOrder",
                  "sol" => "SamenCore.Support.InventoryFixture.SoLine",
-                 "sim" => "SamenCore.Support.FinanceFixture.InvoiceMirror"
+                 "sim" => "SamenCore.Support.FinanceFixture.InvoiceMirror",
+                 # WS-ERP E6: the Manufacturing documents, allocator-reserved.
+                 "sbm" => "SamenCore.Support.InventoryFixture.Bom",
+                 "sbl" => "SamenCore.Support.InventoryFixture.BomLine",
+                 "swk" => "SamenCore.Support.InventoryFixture.WorkOrder",
+                 "spg" => "SamenCore.Support.InventoryFixture.ProductionLog"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -601,7 +606,7 @@ defmodule Samen.AbbrevRegistryTest do
       # +4 WS-ERP E2 — the Finance fixture's ApInvoice/PaymentReceipt/
       # PostingAccount/PaymentMirror (sap/prc/fav/sbp) + the E3 Inventory
       # fixture (sit/swh/skl/slv) = 460.
-      assert map_size(Reg.load()) == 460
+      assert map_size(Reg.load()) == 464
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

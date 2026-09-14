@@ -144,7 +144,11 @@ defmodule Samen.Scopes.Inventory do
     goods_receipt: "igr",
     receipt_line: "ird",
     sales_order: "iso",
-    so_line: "iol"
+    so_line: "iol",
+    bom: "ibo",
+    bom_line: "ibl",
+    work_order: "iwo",
+    production_log: "ipg"
   }
 
   @doc false
@@ -165,6 +169,15 @@ defmodule Samen.Scopes.Inventory do
     warehouse_mod = Module.concat(namespace, Warehouse)
     ledger_mod = Module.concat(namespace, StockLedger)
     level_mod = Module.concat(namespace, StockLevel)
+
+    # The E6 Manufacturing documents ride the BASE mount unconditionally:
+    # manufacturing is a posting FACADE over the scope's own ledger (design
+    # §4 — "zero new quantity mechanisms"), so it needs no cross-scope
+    # modules and every Inventory host carries it.
+    bom_mod = Module.concat(namespace, Bom)
+    bom_line_mod = Module.concat(namespace, BomLine)
+    work_order_mod = Module.concat(namespace, WorkOrder)
+    production_log_mod = Module.concat(namespace, ProductionLog)
 
     # The E4 Procurement documents compile ONLY when the mount wires
     # `finance:` — the chokepoint needs the host's Finance entry +
@@ -288,6 +301,7 @@ defmodule Samen.Scopes.Inventory do
 
     quote do
       require Samen.Scopes.Inventory.Blueprint
+      require Samen.Scopes.Inventory.BlueprintE6
 
       resources do
         resource(unquote(item_mod))
@@ -341,6 +355,61 @@ defmodule Samen.Scopes.Inventory do
       # `billing:` are wired — fulfillment needs the stock machinery AND the
       # host's invoice surface) ──
       unquote(e5_defines)
+
+      # ── E6: Manufacturing — BOM/WorkOrder/ProductionLog, always present
+      # (the posting facade needs only this scope's own machinery) ──
+      resources do
+        resource(unquote(bom_mod))
+        resource(unquote(bom_line_mod))
+        resource(unquote(work_order_mod))
+        resource(unquote(production_log_mod))
+      end
+
+      Samen.Scopes.Inventory.BlueprintE6.define_bom(
+        unquote(bom_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.bom),
+        unquote(item_mod),
+        unquote(bom_line_mod),
+        unquote(work_order_mod)
+      )
+
+      Samen.Scopes.Inventory.BlueprintE6.define_bom_line(
+        unquote(bom_line_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.bom_line),
+        unquote(bom_mod),
+        unquote(item_mod)
+      )
+
+      Samen.Scopes.Inventory.BlueprintE6.define_work_order(
+        unquote(work_order_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.work_order),
+        unquote(item_mod),
+        unquote(bom_mod),
+        unquote(bom_line_mod),
+        unquote(warehouse_mod),
+        unquote(ledger_mod),
+        unquote(level_mod),
+        unquote(production_log_mod)
+      )
+
+      Samen.Scopes.Inventory.BlueprintE6.define_production_log(
+        unquote(production_log_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.production_log),
+        unquote(work_order_mod),
+        unquote(item_mod)
+      )
     end
   end
 

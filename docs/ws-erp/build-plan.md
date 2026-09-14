@@ -206,11 +206,20 @@ Runbook (2026-09-13):
 - Fixture: `billing:` wiring + `SamenCore.Support.FinanceFixture.InvoiceMirror` (the
   PaymentMirror posture for the Billing.Invoice contract).
 
-## Phase E6 — Manufacturing (C6) · opus
-`Bom`/`BomLine` (+BomCycle refusal), `WorkOrder` (BOM snapshot-frozen at release),
-`ProductionLog` append-only over StockLedger `:production_consume`/`:production_in` with
-the cost roll-up. **R4 red-path + sabotage** (a completion whose consumption doesn't match
-BOM×qty → FAIL). No scheduling engine (design §7).
+## Phase E6 — Manufacturing (C6) · opus — LANDED
+`Bom`/`BomLine` (BomCycle refusal: direct + transitive, depth-bounded), `WorkOrder`
+(the BOM snapshot jsonb frozen at `:release` — `ceil(qty_per × (1 + scrap/100) × wo_qty)`
+per line), `ProductionLog` append-only over StockLedger `:production_consume`/
+`:production_in` with the cost roll-up (Σ material + labor/overhead `:adjust` rows, ÷
+wo_qty; a cost carry is not a movement). **R4 red-path suite green (18/18) + sabotage
+307** (the log-rows-without-events bypass: consumption lands, the log rows are skipped →
+R4 diverges; harness-certified, byte-exact). No scheduling engine (design §7).
+
+Infrastructure repaired during E6: root `.gitattributes` pinning LF for `*.ex`/`*.exs`/
+`*.patch`/`*.golden` — `core.autocrlf=true` hosts were smudging git-apply round-trips
+(false "SHA mismatch after revert" in the sabotage harness) and the templates-parity
+golden fixtures (the "CR-only drift" of E5). All tracked sources + goldens normalized LF;
+byte-identical blobs, zero commit churn. (Third pre-existing Windows-host class, diagnosed during E6's full-suite certification: `Path.wildcard` cannot traverse `**` over the backslash paths `System.tmp_dir!/0` returns — the Fleet/Chokepoint/anti-bypass-probe tmp-tree scans find nothing. Environmental; passes on Linux/macOS CI.)
 
 ## Phase E7 — HR (C2) · default (opus reviews masking)
 `Samen.Scopes.Hr`: `Employee`🔒 (FullName/Emails/Phones + `user_id` nullable),

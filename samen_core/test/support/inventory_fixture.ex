@@ -33,6 +33,10 @@ defmodule SamenCore.Support.InventoryFixture do
   posture — a Billing-`Invoice`-shaped money/status row living in the
   fixture domain; the R2 mirror-leg discipline applied to invoices).
 
+  E6 added the Manufacturing documents (`sbm`/`sbl`/`swk`/`spg` — reserved
+  the same way): the BOM/WorkOrder/ProductionLog posting facade rides the
+  BASE mount, so no additional wiring is needed — only the four abbrevs.
+
   Then update the `samen_core` golden literals in
   `test/abbrev_registry_test.exs`, `test/abbrev_allocator_test.exs`, and
   `test/abbrev_flatten_conflict_test.exs` (the new `map_size`; the
@@ -61,6 +65,10 @@ defmodule SamenCore.Support.InventoryFixture do
       goods_receipt: "sgr",
       receipt_line: "srl",
       sales_order: "slo",
-      so_line: "sol"
+      so_line: "sol",
+      bom: "sbm",
+      bom_line: "sbl",
+      work_order: "swk",
+      production_log: "spg"
     }
 end
