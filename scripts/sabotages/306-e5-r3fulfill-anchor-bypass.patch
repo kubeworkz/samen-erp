@@ -1,0 +1,26 @@
+# SABOTAGE: WS-ERP E5 (ADR-049 R3-fulfillment) — the anchor-less fulfillment
+# bypass. The bridge cascade in Samen.Scopes.Inventory.FulfillOrder emits the
+# invoice and lands the StockLedger :sale events and flips :fulfilled, but
+# never STAMPS the SO's invoice anchor (invoice_key/invoice_id stay NULL) —
+# the two legs exist yet share no join, so PaymentReceipt can never intake
+# the order's invoice and the Lead→SO→Invoice→GL chain is silently broken.
+# ReconcileFulfillment's standing read DIVERGES (a :fulfilled SO with no
+# anchor is exactly its first refusal shape) and BOTH R3-fulfillment
+# equality paths flip. The layered-defense refusals still hold: the
+# not-confirmed/never-stocked/oversell refusals and exactly-once run BEFORE
+# any write, and the emission itself still lands (only the join is lost).
+# APP: samen_core
+# TEST_FILES: test/inventory_sales_order_test.exs
+# MUST_FAIL: order/3 reads both legs; divergences/2 is empty over a fulfilled org (green)
+# MUST_FAIL: every link already has a home: the chain closes with the standing reads empty
+--- a/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
++++ b/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
+@@ -76,8 +76,6 @@
+           # before_action hooks return the BARE changeset (Ash re-wraps it).
+           changeset
+           |> Ash.Changeset.force_change_attribute(:status, :fulfilled)
+-          |> Ash.Changeset.force_change_attribute(:invoice_key, @invoice_key)
+-          |> Ash.Changeset.force_change_attribute(:invoice_id, invoice.id)
+           |> Ash.Changeset.force_change_attribute(
+             :fulfilled_at,
+             DateTime.utc_now() |> DateTime.truncate(:second)

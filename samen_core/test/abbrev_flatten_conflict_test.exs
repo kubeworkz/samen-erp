@@ -68,9 +68,9 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # +2 A1 (ADR-047 §4.1/§6): samen_core host's agent-loop cursor pair `arn`/`atn`
       # (Samen.AI.Agent.{Run,Turn}) = 410.
       # +3 WS-ERP E1 (ADR-049 §2): samen_core host's Finance scope in-tree pilot
-      # fixture (`SamenCore.Support.FinanceFixture`) + the E3 Inventory fixture = 457
+      # fixture (`SamenCore.Support.FinanceFixture`) + the E3 Inventory fixture = 460
       # (E1 + the E2 documents + sit/swh/skl/slv).
-      assert map_size(flat) == 457
+      assert map_size(flat) == 460
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

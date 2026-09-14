@@ -45,6 +45,7 @@ defmodule SamenCore.Support.FinanceFixture do
 
   resources do
     resource(SamenCore.Support.FinanceFixture.PaymentMirror)
+    resource(SamenCore.Support.FinanceFixture.InvoiceMirror)
   end
 
   use Samen.Scopes.Finance,
@@ -103,6 +104,82 @@ defmodule SamenCore.Support.FinanceFixture.PaymentMirror do
 
     create :create do
       accept([:org_id, :amount_cents, :status, :currency, :paid_at])
+    end
+  end
+
+  policies do
+    policy action_type(:read) do
+      authorize_if(Samen.Policy.OrgScope)
+    end
+
+    policy action_type(:create) do
+      forbid_unless(Samen.Policy.OrgScope)
+      forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+      authorize_if(always())
+    end
+  end
+end
+
+defmodule SamenCore.Support.FinanceFixture.InvoiceMirror do
+  @moduledoc """
+  The E5 invoice-emission target: a Billing-`Invoice`-shaped row (see the
+  domain moduledoc). Money/status contract copied verbatim from
+  `Samen.Scopes.Billing.Blueprint.define_invoice` (`amount_due_cents` /
+  `amount_paid_cents` integers, `status` enum with `:open` as the emitted
+  state, `line_items` bounded jsonb, `customer_id`); NO provider refs, NO
+  hosted URLs, org-scoped (OrgScope), no PII (the customer is an opaque
+  id). The SalesOrder `:fulfill` cascade creates rows here with
+  `authorize?: false` (the system path) and stamps the row's id as the
+  order's `invoice_id` anchor — the SAME anchor shape `PaymentReceipt`
+  intakes (`invoice_key: "billing_invoice"`).
+  """
+  use Samen.Resource,
+    otp_app: :samen_core,
+    domain: SamenCore.Support.FinanceFixture,
+    data_layer: AshPostgres.DataLayer,
+    authorizers: [Ash.Policy.Authorizer],
+    abbrev: "sim"
+
+  postgres do
+    table("sim_invoice_mirror")
+    repo(SamenCore.TestRepo)
+  end
+
+  attributes do
+    attribute(:customer_id, :uuid, public?: true, allow_nil?: false)
+
+    attribute(:status, :atom,
+      public?: true,
+      allow_nil?: false,
+      default: :draft,
+      constraints: [one_of: [:draft, :open, :paid, :void, :uncollectible]]
+    )
+
+    attribute(:amount_due_cents, :integer, public?: true, default: 0)
+    attribute(:amount_paid_cents, :integer, public?: true, default: 0)
+    attribute(:currency, :string, public?: true, default: "USD")
+
+    # The bounded jsonb line items (the Billing.Invoice shape):
+    # [%{"description" =>, "quantity" =>, "amount_cents" =>}].
+    attribute(:line_items, {:array, :map}, public?: true, default: [])
+  end
+
+  actions do
+    read :read do
+      primary?(true)
+      pagination(keyset?: true, required?: false)
+    end
+
+    create :create do
+      accept([
+        :org_id,
+        :customer_id,
+        :status,
+        :amount_due_cents,
+        :amount_paid_cents,
+        :currency,
+        :line_items
+      ])
     end
   end
 

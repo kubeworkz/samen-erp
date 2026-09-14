@@ -408,7 +408,29 @@ defmodule Samen.AbbrevRegistryTest do
                  # host namespace.
                  "sac" => "SamenCore.Support.FinanceFixture.Account",
                  "sje" => "SamenCore.Support.FinanceFixture.JournalEntry",
-                 "sjl" => "SamenCore.Support.FinanceFixture.JournalLine"
+                 "sjl" => "SamenCore.Support.FinanceFixture.JournalLine",
+                 # WS-ERP E2 (ADR-049 §3): the AP/AR documents + the R2 mirror-leg
+                 # fixture rows, allocator-reserved under the samen_core host.
+                 "sap" => "SamenCore.Support.FinanceFixture.ApInvoice",
+                 "prc" => "SamenCore.Support.FinanceFixture.PaymentReceipt",
+                 "fav" => "SamenCore.Support.FinanceFixture.PostingAccount",
+                 "sbp" => "SamenCore.Support.FinanceFixture.PaymentMirror",
+                 # WS-ERP E3 (ADR-049 §3): the Inventory core's in-tree fixture
+                 # mount, allocator-reserved.
+                 "sit" => "SamenCore.Support.InventoryFixture.Item",
+                 "swh" => "SamenCore.Support.InventoryFixture.Warehouse",
+                 "skl" => "SamenCore.Support.InventoryFixture.StockLedger",
+                 "slv" => "SamenCore.Support.InventoryFixture.StockLevel",
+                 # WS-ERP E4: the Procurement documents, allocator-reserved.
+                 "spo" => "SamenCore.Support.InventoryFixture.PurchaseOrder",
+                 "spl" => "SamenCore.Support.InventoryFixture.PoLine",
+                 "sgr" => "SamenCore.Support.InventoryFixture.GoodsReceipt",
+                 "srl" => "SamenCore.Support.InventoryFixture.ReceiptLine",
+                 # WS-ERP E5: the SalesOrder bridge + the invoice mirror leg,
+                 # allocator-reserved.
+                 "slo" => "SamenCore.Support.InventoryFixture.SalesOrder",
+                 "sol" => "SamenCore.Support.InventoryFixture.SoLine",
+                 "sim" => "SamenCore.Support.FinanceFixture.InvoiceMirror"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -578,8 +600,8 @@ defmodule Samen.AbbrevRegistryTest do
       # JournalLine), allocator-reserved under the samen_core host namespace = 445;
       # +4 WS-ERP E2 — the Finance fixture's ApInvoice/PaymentReceipt/
       # PostingAccount/PaymentMirror (sap/prc/fav/sbp) + the E3 Inventory
-      # fixture (sit/swh/skl/slv) = 457.
-      assert map_size(Reg.load()) == 457
+      # fixture (sit/swh/skl/slv) = 460.
+      assert map_size(Reg.load()) == 460
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

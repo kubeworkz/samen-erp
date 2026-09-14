@@ -176,10 +176,35 @@ Note: the E4 fixture mounts `finance:` with the E1/E2 FinanceFixture modules —
 chokepoint writes real fixture JournalEntry rows. JournalLine lives in FinanceFixture
 (not InventoryFixture) — the R3-full legs pass `line_resource:` explicitly.
 
-## Phase E5 — Sales order bridge (C4 delta) · default
+## Phase E5 — Sales order bridge (C4 delta) · default — LANDED
 `SalesOrder`/`SoLine` in the Inventory scope (design §3.3): stock `:sale` consumption on
 fulfillment, Billing Invoice emission, `PaymentReceipt` intake; Lead→Opportunity→SO→Invoice
 →Receipt→GL documented as the governed chain (a walkthrough test, not new machinery).
+
+Runbook (2026-09-13):
+
+- The bridge (`Samen.Scopes.Inventory.FulfillOrder`, the `:fulfill` action, marker-armed):
+  per frozen line a NEGATIVE-qty `StockLedger :sale` event (cost = the rollup's moving-
+  average snapshot read in-transaction) + the host invoice emission (`authorize?: false`,
+  the system path) + the SO's flip and its `invoice_key`/`invoice_id` anchor — the
+  PaymentReceipt contract shape — ALL in the action's single transaction. Refusals are
+  fail-honest BEFORE any write: not-confirmed, no lines, never-stocked (no moving average
+  to snapshot — inventory cost must be a fact, not an invention), NegativeStock (unless
+  the warehouse opted out), exactly-once. `ReconcileFulfillment` (R3-fulfillment) reads
+  the stock leg and the billing leg as independent bare-SQL sums sharing only the order's
+  id; `divergences/2` refuses the four half-landed shapes (events without an anchor, an
+  anchor without events, events on an unfulfilled SO, an anchor to a missing invoice row).
+  No Gate on `:confirm` — a sale is not a spend (the contrast with the PO's `:approve` is
+  the design's point).
+- E5 suite: `test/inventory_sales_order_test.exs` (f1–f8, 20 tests) — every red paired
+  with a positive control, ending in the governed Lead→Opportunity→SO→Invoice→Receipt→GL
+  walkthrough (f8) with the standing reads empty.
+- Sabotage 306 (the anchor-less fulfillment bypass: emission + stock land, the anchor
+  stamp is dropped) verified through the real harness — both R3-fulfillment paths flip,
+  byte-exact restore. `bash scripts/sabotage.sh --from 306 --to 306` from the repo root.
+- Registry 457 → 460 (`slo`/`sol`/`sim`) via the sanctioned allocator, direct route.
+- Fixture: `billing:` wiring + `SamenCore.Support.FinanceFixture.InvoiceMirror` (the
+  PaymentMirror posture for the Billing.Invoice contract).
 
 ## Phase E6 — Manufacturing (C6) · opus
 `Bom`/`BomLine` (+BomCycle refusal), `WorkOrder` (BOM snapshot-frozen at release),

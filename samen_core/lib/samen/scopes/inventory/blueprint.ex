@@ -854,6 +854,292 @@ defmodule Samen.Scopes.Inventory.Blueprint do
     end
   end
 
+  # ── E5: the SalesOrder bridge (present ONLY when the mount wires BOTH
+  # `finance:` and `billing:`) ─────────────────────────────────────────────────
+
+  defmacro define_sales_order(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             so_line_mod,
+             warehouse_mod,
+             ledger_mod,
+             level_mod,
+             billing_invoice_mod
+           ) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.SalesOrder — stock's DEMAND document (WS-ERP E5; design
+        §3.3): `customer_id` (same-org, plain uuid — the E2/E4 cross-scope
+        posture), optional `opportunity_id` (the CRM anchor: Lead →
+        Opportunity → SO is the governed chain — a walkthrough, not new
+        machinery), `number`, `order_date`, `warehouse_id` (the fulfilling
+        sink), `status ∈ {draft, confirmed, fulfilled, cancelled}`.
+
+        A SO posts NOTHING until `:fulfill` — THE bridge event: per line, a
+        `StockLedger :sale` event (qty NEGATIVE in the item's UOM, cost =
+        the rollup's moving-average snapshot, anchored
+        `source_key: "sales_order"`) AND the emission of the host's Billing
+        invoice (status `:open`, `amount_due` = Σ qty×price, the line items
+        as the bounded jsonb) — stock and billing commit or roll back
+        TOGETHER, the `GoodsReceipt :receive` discipline applied to demand.
+        NegativeStock runs resource-wide on the ledger creates: selling more
+        than on-hand is refused fail-closed (unless the warehouse opted
+        out). `:fulfill` consumes the order's OWN frozen lines — no partial
+        shipments in the base system (the documented P2 carry).
+
+        The SO anchors its emitted invoice with `invoice_key`/`invoice_id`
+        — the SAME ADR-041 §3.2 shape `PaymentReceipt` intakes — so
+        Lead → Opportunity → SO → Invoice → Receipt → GL is one governed
+        chain where every link already has a home.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_sales_order")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:customer_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:opportunity_id, :uuid, public?: true)
+          attribute(:number, :string, public?: true, allow_nil?: false)
+          attribute(:order_date, :date, public?: true, allow_nil?: false)
+          attribute(:memo, :string, public?: true)
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :confirmed, :fulfilled, :cancelled]]
+          )
+
+          # The emitted-invoice anchor (the PaymentReceipt contract shape):
+          # `"billing_invoice"` + the host invoice row's id. Set ONLY by the
+          # `:fulfill` cascade, in-transaction.
+          attribute(:invoice_key, :string, public?: true)
+          attribute(:invoice_id, :uuid, public?: true)
+          attribute(:fulfilled_at, :utc_datetime, public?: true)
+        end
+
+        relationships do
+          belongs_to :warehouse, unquote(warehouse_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          has_many :lines, unquote(so_line_mod) do
+            public?(true)
+            destination_attribute(:sales_order_id)
+          end
+        end
+
+        changes do
+          # F3.2 same-org FK: a SO fulfills from a same-org warehouse.
+          change({Samen.Policy.SameOrgFk, relationships: [:warehouse]})
+
+          # The state machine guard (the PoState shape).
+          change(Samen.Scopes.Inventory.SoState)
+
+          # Materialize the `lines` argument into real SoLine rows on
+          # create/draft-edit (the PoLinesWriter shape).
+          change(Samen.Scopes.Inventory.SoLinesWriter)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([
+              :org_id,
+              :customer_id,
+              :opportunity_id,
+              :number,
+              :order_date,
+              :memo,
+              :warehouse_id
+            ])
+
+            argument(:lines, {:array, :map},
+              allow_nil?: false,
+              constraints: [
+                items: [
+                  fields: [
+                    item_id: [type: :uuid, allow_nil?: false],
+                    qty: [type: :integer, allow_nil?: false],
+                    unit_price_cents: [type: :integer, allow_nil?: false]
+                  ]
+                ]
+              ]
+            )
+
+            # A SO is born a draft — the only route to :confirmed is :confirm.
+            change(set_attribute(:status, :draft))
+          end
+
+          update :update do
+            # Draft edits only (SoState refuses a non-draft record; the belt
+            # is the twin). Line replacement re-materializes.
+            accept([:order_date, :memo, :warehouse_id, :customer_id, :opportunity_id])
+
+            argument(:lines, {:array, :map},
+              allow_nil?: true,
+              constraints: [
+                items: [
+                  fields: [
+                    item_id: [type: :uuid, allow_nil?: false],
+                    qty: [type: :integer, allow_nil?: false],
+                    unit_price_cents: [type: :integer, allow_nil?: false]
+                  ]
+                ]
+              ]
+            )
+
+            require_atomic?(false)
+          end
+
+          # The salesperson's commitment: draft → confirmed. No approval —
+          # a sale is not a spend (no Gate; the contrast with :approve is
+          # the design's point).
+          update :confirm do
+            accept([])
+            require_atomic?(false)
+
+            change(set_attribute(:status, :confirmed))
+          end
+
+          # THE bridge (see the moduledoc). accept([]) — the facts come from
+          # the order's own frozen lines, never caller inputs. The belt
+          # marker arms the SO's own flip; the ledger creates run
+          # NegativeStock + StockLevelSync resource-wide.
+          update :fulfill do
+            accept([])
+            require_atomic?(false)
+
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change({Samen.Scopes.Inventory.FulfillOrder,
+              so_line: unquote(so_line_mod),
+              ledger: unquote(ledger_mod),
+              level: unquote(level_mod),
+              invoice: unquote(billing_invoice_mod)})
+          end
+
+          update :cancel do
+            accept([])
+            require_atomic?(false)
+
+            # SoState guards the pre-state (pre-fulfillment only).
+            change(set_attribute(:status, :cancelled))
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  defmacro define_so_line(module, otp_app, domain, repo, abbrev, so_mod, item_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.SoLine — the SO's line row (WS-ERP E5): `item_id`
+        (same-org), `qty` (positive integer — the DEMAND quantity),
+        `unit_price_cents` (non-negative — the SALE price; the ledger's cost
+        side is the moving average at fulfillment, never the sale price).
+        Immutable once the SO leaves draft — fulfillment consumes the order
+        AS ORDERED (the belt refuses later line edits). Written only through
+        the SO's actions (`SoLinesWriter`); the `:create` remains for system
+        paths, SameOrgFk-guarded. No PII (INV-1).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_so_line")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:qty, :integer, public?: true, allow_nil?: false)
+          attribute(:unit_price_cents, :integer,
+            public?: true,
+            allow_nil?: false,
+            constraints: [min: 0]
+          )
+        end
+
+        relationships do
+          belongs_to :sales_order, unquote(so_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          belongs_to :item, unquote(item_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        changes do
+          # F3.2 same-org FK on both referents.
+          change({Samen.Policy.SameOrgFk, relationships: [:sales_order, :item]})
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :sales_order_id, :item_id, :qty, :unit_price_cents])
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type(:create) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
   defmacro define_stock_level(module, otp_app, domain, repo, abbrev, item_mod, warehouse_mod) do
     quote do
       defmodule unquote(module) do

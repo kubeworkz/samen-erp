@@ -27,6 +27,12 @@ defmodule SamenCore.Support.InventoryFixture do
   fixture `JournalEntry`/`JournalLine` rows and reads the fixture
   `PostingAccount` map.
 
+  E5 added the SalesOrder bridge (`slo`/`sol` — reserved the same way) and
+  the `billing:` wiring: fulfillment emits into
+  `SamenCore.Support.FinanceFixture.InvoiceMirror` (the E2 PaymentMirror
+  posture — a Billing-`Invoice`-shaped money/status row living in the
+  fixture domain; the R2 mirror-leg discipline applied to invoices).
+
   Then update the `samen_core` golden literals in
   `test/abbrev_registry_test.exs`, `test/abbrev_allocator_test.exs`, and
   `test/abbrev_flatten_conflict_test.exs` (the new `map_size`; the
@@ -42,6 +48,9 @@ defmodule SamenCore.Support.InventoryFixture do
       entry: SamenCore.Support.FinanceFixture.JournalEntry,
       posting_account: SamenCore.Support.FinanceFixture.PostingAccount
     ],
+    billing: [
+      invoice: SamenCore.Support.FinanceFixture.InvoiceMirror
+    ],
     abbrevs: %{
       item: "sit",
       warehouse: "swh",
@@ -50,6 +59,8 @@ defmodule SamenCore.Support.InventoryFixture do
       purchase_order: "spo",
       po_line: "spl",
       goods_receipt: "sgr",
-      receipt_line: "srl"
+      receipt_line: "srl",
+      sales_order: "slo",
+      so_line: "sol"
     }
 end

@@ -382,6 +382,7 @@
       "sll": "SamenCore.Support.LocationsFixture.Location",
       "aes": "SamenCore.Support.AutomationFixture.Escalation",
       "sco": "SamenCore.Support.CrmScopeFixture.Opportunity",
+      "slo": "SamenCore.Support.InventoryFixture.SalesOrder",
       "aip": "Samen.AI.Prompt",
       "arn": "Samen.AI.Agent.Run",
       "slv": "SamenCore.Support.InventoryFixture.StockLevel",
@@ -415,6 +416,7 @@
       "sfr": "SamenCore.Support.FleetFixture.Report",
       "apd": "SamenCore.Support.ApprovalsFixture.Document",
       "spo": "SamenCore.Support.InventoryFixture.PurchaseOrder",
+      "sim": "SamenCore.Support.FinanceFixture.InvoiceMirror",
       "sap": "SamenCore.Support.FinanceFixture.ApInvoice",
       "arv": "SamenCore.Support.Archivable.Widget",
       "stt": "SamenCore.Support.TagsFixture.Tag",
@@ -425,7 +427,8 @@
       "sat": "SamenCore.Support.AutomationFixture.Target",
       "sje": "SamenCore.Support.FinanceFixture.JournalEntry",
       "atn": "Samen.AI.Agent.Turn",
-      "sfe": "SamenCore.Support.FleetFixture.EnrollmentToken"
+      "sfe": "SamenCore.Support.FleetFixture.EnrollmentToken",
+      "sol": "SamenCore.Support.InventoryFixture.SoLine"
     },
     "samen_web": {
       "rti": "Samen.WebTest.RichTypes.Item",

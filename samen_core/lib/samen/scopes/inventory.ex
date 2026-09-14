@@ -142,7 +142,9 @@ defmodule Samen.Scopes.Inventory do
     purchase_order: "ipo",
     po_line: "ipl",
     goods_receipt: "igr",
-    receipt_line: "ird"
+    receipt_line: "ird",
+    sales_order: "iso",
+    so_line: "iol"
   }
 
   @doc false
@@ -170,6 +172,11 @@ defmodule Samen.Scopes.Inventory do
     # none of these). Decided OUTSIDE the quote (macro-expansion time), with
     # each branch's modules/abbrevs pre-resolved to expansion-time values.
     finance_opts = Keyword.get(opts, :finance)
+
+    # The E5 SalesOrder bridge compiles ONLY when the mount wires `billing:`
+    # (the host's Billing Invoice surface — or a mirror shaped like its
+    # money/status contract). Fulfillment emits the invoice INTO that module.
+    billing_opts = Keyword.get(opts, :billing)
 
     e4_defines =
       if finance_opts do
@@ -239,6 +246,46 @@ defmodule Samen.Scopes.Inventory do
         :ok
       end
 
+    e5_defines =
+      if finance_opts && billing_opts do
+        sales_order_mod = Module.concat(namespace, SalesOrder)
+        so_line_mod = Module.concat(namespace, SoLine)
+
+        billing_invoice = Keyword.fetch!(billing_opts, :invoice)
+
+        quote do
+          resources do
+            resource(unquote(sales_order_mod))
+            resource(unquote(so_line_mod))
+          end
+
+          Samen.Scopes.Inventory.Blueprint.define_sales_order(
+            unquote(sales_order_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.sales_order),
+            unquote(so_line_mod),
+            unquote(warehouse_mod),
+            unquote(ledger_mod),
+            unquote(level_mod),
+            unquote(billing_invoice)
+          )
+
+          Samen.Scopes.Inventory.Blueprint.define_so_line(
+            unquote(so_line_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.so_line),
+            unquote(sales_order_mod),
+            unquote(item_mod)
+          )
+        end
+      else
+        :ok
+      end
+
     quote do
       require Samen.Scopes.Inventory.Blueprint
 
@@ -289,6 +336,11 @@ defmodule Samen.Scopes.Inventory do
       # ── E4: the Procurement documents (present ONLY when the mount wired
       # `finance:` — see the expansion-time branch above) ──
       unquote(e4_defines)
+
+      # ── E5: the SalesOrder bridge (present ONLY when BOTH `finance:` and
+      # `billing:` are wired — fulfillment needs the stock machinery AND the
+      # host's invoice surface) ──
+      unquote(e5_defines)
     end
   end
 
