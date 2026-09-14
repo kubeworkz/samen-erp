@@ -146,6 +146,12 @@ config :samen_core, Samen.Approvals.Registry,
     # WS-ERP E2: the AP bill's gated `:approve` (the Gate re-invokes the action
     # as the requester inside the decision transaction; ApPosting lands the
     # expense+liability entry there).
+    # WS-ERP E4: the PO's gated `:approve` — the Gate re-invokes the action as
+    # the requester inside the decision transaction. A PO posts NOTHING on
+    # approval (committed-not-realized); realization is the GoodsReceipt
+    # :receive chokepoint.
+    (Atom.to_string(SamenCore.Support.InventoryFixture.PurchaseOrder) <> ":approve") =>
+      {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.FinanceFixture.ApInvoice) <> ":approve") =>
       {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.ApprovalsFixture.Document) <> ":publish") =>

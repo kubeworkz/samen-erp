@@ -1,0 +1,55 @@
+# SABOTAGE: WS-ERP E4 (ADR-049 R3-full) — the GoodsReceipt posting bypass. The
+# chokepoint cascade in Samen.Scopes.Inventory.GoodsPosting skips its journal
+# entry entirely: the receipt lands its ReceiptLine facts + StockLedger events
+# and flips :posted, but NO inventory-asset/AP-clearing entry exists — stock
+# claims value the GL never received. ReconcileProcurement's three legs
+# DIVERGE (gl: 0 vs stock/facts) and BOTH R3-full equality paths flip. The
+# layered-defense refusals still hold (they run BEFORE any write): over-
+# receipt, the unlinked-item fail-honest check, and exactly-once.
+# APP: samen_core
+# TEST_FILES: test/inventory_procurement_test.exs
+# MUST_FAIL: ledger == facts == GL per receipt and org-wide divergences are empty
+# MUST_FAIL: receiving lands lines + stock events + the POSTED GL entry
+diff --git a/samen_core/lib/samen/scopes/inventory/goods_posting.ex b/samen_core/lib/samen/scopes/inventory/goods_posting.ex
+index 4c75ed1..ef90494 100644
+--- a/samen_core/lib/samen/scopes/inventory/goods_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/goods_posting.ex
+@@ -55,7 +55,7 @@ defmodule Samen.Scopes.Inventory.GoodsPosting do
+     po_line_resource = Keyword.fetch!(opts, :po_line)
+     receipt_line_resource = Keyword.fetch!(opts, :receipt_line)
+     ledger_resource = Keyword.fetch!(opts, :ledger)
+-    entry_resource = Keyword.fetch!(opts, :entry)
++    _entry_resource = Keyword.fetch!(opts, :entry)
+     pa_resource = Keyword.fetch!(opts, :posting_account)
+ 
+     receipt = changeset.data
+@@ -66,19 +66,24 @@ defmodule Samen.Scopes.Inventory.GoodsPosting do
+          :ok <- refuse_not_receivable(po),
+          {:ok, expanded} <- expand_lines(po_line_resource, org_id, lines),
+          :ok <- refuse_over_receipt(receipt_line_resource, expanded),
+-         {:ok, ap_clearing} <- posting_account(pa_resource, org_id, :ap_clearing),
++         {:ok, _ap_clearing} <- posting_account(pa_resource, org_id, :ap_clearing),
+          {:ok, valued} <- value_lines(po_line_resource, expanded) do
+       # ── 1. the receipt-line facts (R5's received side, written FIRST so
+       # the over-receipt floor is durable even mid-transaction) ────────────
++      # SABOTAGE (305): the R3-full bypass — the GL leg is SKIPPED. The
++      # receipt lands its line facts + stock events and flips :posted, but
++      # NO journal entry exists: stock claims value the GL never received.
++      # ReconcileProcurement's three legs DIVERGE (gl: 0 vs stock/facts) and
++      # the R3-full green paths flip. The layered-defense refusals (over-
++      # receipt, unlinked item, exactly-once) still hold — they run BEFORE
++      # any write.
+       with {:ok, _} <- write_receipt_lines(receipt_line_resource, org_id, receipt, valued),
+-           # ── 2. the ledger events (stock side) ───────────────────────────
+            {:ok, _} <- write_stock_events(ledger_resource, org_id, receipt, valued),
+-           # ── 3. the GL entry (the chokepoint's other half) ───────────────
+-           {:ok, entry} <- write_entry(entry_resource, org_id, receipt, ap_clearing, valued) do
++           {:ok, _entry} <- {:ok, nil} do
+         # ── 4. the receipt's own flip + the PO's progression ──────────────
+         changeset
+         |> Ash.Changeset.force_change_attribute(:status, :posted)
+-        |> Ash.Changeset.force_change_attribute(:posted_entry_id, entry.id)
++        |> Ash.Changeset.force_change_attribute(:posted_entry_id, nil)
+         |> Ash.Changeset.force_change_attribute(:received_at, now())
+         |> stamp_po(po)
+       else

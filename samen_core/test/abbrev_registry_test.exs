@@ -578,8 +578,8 @@ defmodule Samen.AbbrevRegistryTest do
       # JournalLine), allocator-reserved under the samen_core host namespace = 445;
       # +4 WS-ERP E2 — the Finance fixture's ApInvoice/PaymentReceipt/
       # PostingAccount/PaymentMirror (sap/prc/fav/sbp) + the E3 Inventory
-      # fixture (sit/swh/skl/slv) = 453.
-      assert map_size(Reg.load()) == 453
+      # fixture (sit/swh/skl/slv) = 457.
+      assert map_size(Reg.load()) == 457
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

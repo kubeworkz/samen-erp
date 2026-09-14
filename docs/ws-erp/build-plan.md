@@ -137,10 +137,44 @@ MIX_ENV=test mix samen.verify.catalog_parity && MIX_ENV=test mix samen.verify.mi
 bash scripts/sabotage.sh --from 304 --to 304
 ```
 
-## Phase E4 — Procurement (C3 SCM half) · opus
+## Phase E4 — Procurement (C3 SCM half) · opus — **DONE (2026-09-13)**
 `PurchaseOrder`/`PoLine` (+approvals), `GoodsReceipt` — the ONE-transaction chokepoint:
 stock event + journal entry commit/roll back together. **R3-full + R5 red-paths + sabotage**
-(a receipt that posts stock but not the journal → divergence → FAIL). Receiving UI mounts.
+(a receipt that posts stock but not the journal → divergence → FAIL). Receiving UI mounts
+in E8.
+
+Status: **DONE, execution-verified.** `Samen.Scopes.Inventory` grew the `finance:` mount
+branch (optional — an Inventory-only host mounts none of it): `PurchaseOrder` (the
+ADR-040 Gate's `:approve` posts NOTHING — committed-not-realized; the `→approved`/`→received`
+belt arms require the posting marker), `PoLine` (frozen once the PO leaves draft — the belt
+refuses UPDATE/DELETE on a non-draft PO's lines), `GoodsReceipt` `:receive` (the
+GoodsPosting chokepoint: receipt lines + StockLedger events + the POSTED inventory-asset/
+AP-clearing entry + the receipt flip + the PO `:mark_received` stamp — all in ONE
+transaction, over-receipt and unlinked-item refused fail-honest before any write),
+`ReceiptLine` (append-only received-quantity facts — R5's received side),
+`ReconcileProcurement` (R3-full: per-receipt ledger == facts == GL, standing divergences
+read) and `ThreeWayMatch` (R5: billed vs vendor-received value, variance FLAG at tolerance,
+not a block — the design's documented-tolerance decision).
+
+Suites: 94/94 E1+E2+E3+E4 zero warnings; gates OK under `MIX_ENV=test`; sabotage 305 (the
+GL-leg bypass: a receipt posts stock + facts but skips its journal entry → the three legs
+diverge → both R3-full equality paths flip, refusals hold) certified through the harness
+with byte-exact restore. Registry 453 → 457 via the sanctioned allocator (`spo`/`spl`/`sgr`/
+`srl`), goldens updated.
+
+# E4 runbook (mirrors E1–E3's; from the checkout root)
+mix compile --warnings-as-errors   # registry gate fires until the E4 abbrevs are reserved
+# (reserve via the direct Allocator.reserve! route against BOTH priv/ and the build-tree
+# copy — sequential mix-task runs clobber the build mirror; see the E3 runbook note)
+MIX_ENV=test mix test test/inventory_procurement_test.exs
+MIX_ENV=test mix test test/finance_scope_test.exs test/finance_e2_scope_test.exs \
+  test/inventory_scope_test.exs test/inventory_procurement_test.exs --warnings-as-errors
+MIX_ENV=test mix samen.verify.catalog_parity && MIX_ENV=test mix samen.verify.migrations
+bash scripts/sabotage.sh --from 305 --to 305   # from the repo root
+
+Note: the E4 fixture mounts `finance:` with the E1/E2 FinanceFixture modules — the
+chokepoint writes real fixture JournalEntry rows. JournalLine lives in FinanceFixture
+(not InventoryFixture) — the R3-full legs pass `line_resource:` explicitly.
 
 ## Phase E5 — Sales order bridge (C4 delta) · default
 `SalesOrder`/`SoLine` in the Inventory scope (design §3.3): stock `:sale` consumption on

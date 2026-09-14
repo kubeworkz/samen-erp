@@ -78,6 +78,37 @@ defmodule Samen.Scopes.Inventory do
     * `Demo.InventoryScope.StockLedger`
     * `Demo.InventoryScope.StockLevel`
 
+  ## The Procurement documents (E4 — the Finance↔Inventory chokepoint)
+
+  A mount that ALSO passes `finance:` (the host's Finance entry + posting-
+  account modules, compile-time — design §8's cross-scope posture) gets the
+  design §3.2 document pair, mounted as four more host resources:
+
+    * **`PurchaseOrder`** — `vendor_id`, `number`, `order_date`, embedded-free
+      real `PoLine` rows (`item_id`, `qty`, `unit_cost_cents`), `status ∈
+      {draft, approved, sent, received, closed, void}`. `:approve` rides the
+      ADR-040 Gate exactly like the AP bill's — but a PO posts NOTHING
+      (committed-not-realized): the approval transitions the state machine
+      only. `:sent`/`:closed`/`:void` are later lifecycle states (the base
+      system lands `:approved`/`:received`).
+    * **`PoLine`** — the PO's line rows: `po_id`, `item_id` (same-org), `qty`
+      (positive integer), `unit_cost_cents` (non-negative). Immutable once
+      the PO leaves draft (the belt refuses; draft edits re-materialize).
+    * **`GoodsReceipt`** — receiving against approved PO lines. `:receive`
+      takes the `lines` argument (`po_line_id` + `qty`) and THE ONE-
+      TRANSACTION CHOKEPOINT happens: per line, a `StockLedger :receipt`
+      event (qty in, cost = the PO line's cost, anchored `source_key:
+      "goods_receipt"`) AND the inventory-asset + AP-clearing `JournalEntry`
+      (anchored the same), plus the materialized `ReceiptLine` rows — commit
+      or roll back TOGETHER. Over-receipt (cumulative received > ordered) is
+      refused; the receipt flip is exactly-once.
+    * **`ReceiptLine`** — the materialized received-quantity facts per
+      `{receipt, po_line}` (R5's received side), immutable once written.
+
+  R3-full: for every goods receipt, the ledger events == the receipt lines
+  and the GL entry == the received value (`ReconcileProcurement`). R5: AP
+  bill ≤ PO + GR at tolerance (`ThreeWayMatch`).
+
   ## Abbrevs (permanent, registry-checked)
 
   Each resource carries a permanent 3-letter abbrev, reserved in
@@ -89,6 +120,10 @@ defmodule Samen.Scopes.Inventory do
     * `Demo.InventoryScope.Warehouse`   → `inw` (demo default)
     * `Demo.InventoryScope.StockLedger` → `inl` (demo default)
     * `Demo.InventoryScope.StockLevel`  → `ins` (demo default)
+    * `Demo.InventoryScope.PurchaseOrder` → `ipo` (demo default, E4)
+    * `Demo.InventoryScope.PoLine`      → `ipl` (demo default, E4)
+    * `Demo.InventoryScope.GoodsReceipt` → `igr` (demo default, E4)
+    * `Demo.InventoryScope.ReceiptLine` → `ird` (demo default, E4)
 
   Other hosts pass `abbrevs:` overrides (mirroring
   `Samen.Scopes.Finance`'s `abbrevs:` plumbing) when the defaults are
@@ -103,7 +138,11 @@ defmodule Samen.Scopes.Inventory do
     item: "ini",
     warehouse: "inw",
     stock_ledger: "inl",
-    stock_level: "ins"
+    stock_level: "ins",
+    purchase_order: "ipo",
+    po_line: "ipl",
+    goods_receipt: "igr",
+    receipt_line: "ird"
   }
 
   @doc false
@@ -124,6 +163,81 @@ defmodule Samen.Scopes.Inventory do
     warehouse_mod = Module.concat(namespace, Warehouse)
     ledger_mod = Module.concat(namespace, StockLedger)
     level_mod = Module.concat(namespace, StockLevel)
+
+    # The E4 Procurement documents compile ONLY when the mount wires
+    # `finance:` — the chokepoint needs the host's Finance entry +
+    # posting-account modules at compile time (an Inventory-only host mounts
+    # none of these). Decided OUTSIDE the quote (macro-expansion time), with
+    # each branch's modules/abbrevs pre-resolved to expansion-time values.
+    finance_opts = Keyword.get(opts, :finance)
+
+    e4_defines =
+      if finance_opts do
+        purchase_order_mod = Module.concat(namespace, PurchaseOrder)
+        po_line_mod = Module.concat(namespace, PoLine)
+        goods_receipt_mod = Module.concat(namespace, GoodsReceipt)
+        receipt_line_mod = Module.concat(namespace, ReceiptLine)
+
+        finance_entry = Keyword.fetch!(finance_opts, :entry)
+        finance_posting_account = Keyword.fetch!(finance_opts, :posting_account)
+
+        quote do
+          resources do
+            resource(unquote(purchase_order_mod))
+            resource(unquote(po_line_mod))
+            resource(unquote(goods_receipt_mod))
+            resource(unquote(receipt_line_mod))
+          end
+
+          Samen.Scopes.Inventory.Blueprint.define_purchase_order(
+            unquote(purchase_order_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.purchase_order),
+            unquote(po_line_mod),
+            unquote(warehouse_mod)
+          )
+
+          Samen.Scopes.Inventory.Blueprint.define_po_line(
+            unquote(po_line_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.po_line),
+            unquote(purchase_order_mod),
+            unquote(item_mod)
+          )
+
+          Samen.Scopes.Inventory.Blueprint.define_goods_receipt(
+            unquote(goods_receipt_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.goods_receipt),
+            unquote(purchase_order_mod),
+            unquote(po_line_mod),
+            unquote(receipt_line_mod),
+            unquote(warehouse_mod),
+            unquote(ledger_mod),
+            unquote(level_mod),
+            unquote(finance_entry),
+            unquote(finance_posting_account)
+          )
+
+          Samen.Scopes.Inventory.Blueprint.define_receipt_line(
+            unquote(receipt_line_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.receipt_line),
+            unquote(goods_receipt_mod),
+            unquote(po_line_mod)
+          )
+        end
+      else
+        :ok
+      end
 
     quote do
       require Samen.Scopes.Inventory.Blueprint
@@ -171,6 +285,10 @@ defmodule Samen.Scopes.Inventory do
         unquote(item_mod),
         unquote(warehouse_mod)
       )
+
+      # ── E4: the Procurement documents (present ONLY when the mount wired
+      # `finance:` — see the expansion-time branch above) ──
+      unquote(e4_defines)
     end
   end
 

@@ -21,10 +21,16 @@ defmodule SamenCore.Support.InventoryFixture do
       mix samen.abbrev.reserve --host samen_core \\
         --owner SamenCore.Support.InventoryFixture.StockLevel --abbrev slv
 
-  then update the `samen_core` golden literals in `test/abbrev_registry_test.exs`,
-  `test/abbrev_allocator_test.exs`, and `test/abbrev_flatten_conflict_test.exs`
-  (the new `map_size`; the allocator-emitted `byte_size` recomputes from the
-  actual file).
+  E4 added the Procurement documents (`spo`/`spl`/`sgr`/`srl` — reserved the
+  same way) and the `finance:` wiring: the fixture mounts the E1/E2
+  `FinanceFixture` modules directly, so the chokepoint cascade writes real
+  fixture `JournalEntry`/`JournalLine` rows and reads the fixture
+  `PostingAccount` map.
+
+  Then update the `samen_core` golden literals in
+  `test/abbrev_registry_test.exs`, `test/abbrev_allocator_test.exs`, and
+  `test/abbrev_flatten_conflict_test.exs` (the new `map_size`; the
+  allocator-emitted `byte_size` recomputes from the actual file).
   """
   use Ash.Domain, validate_config_inclusion?: false
 
@@ -32,10 +38,18 @@ defmodule SamenCore.Support.InventoryFixture do
     otp_app: :samen_core,
     repo: SamenCore.TestRepo,
     namespace: SamenCore.Support.InventoryFixture,
+    finance: [
+      entry: SamenCore.Support.FinanceFixture.JournalEntry,
+      posting_account: SamenCore.Support.FinanceFixture.PostingAccount
+    ],
     abbrevs: %{
       item: "sit",
       warehouse: "swh",
       stock_ledger: "skl",
-      stock_level: "slv"
+      stock_level: "slv",
+      purchase_order: "spo",
+      po_line: "spl",
+      goods_receipt: "sgr",
+      receipt_line: "srl"
     }
 end

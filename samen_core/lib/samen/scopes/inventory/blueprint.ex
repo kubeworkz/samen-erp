@@ -365,14 +365,494 @@ defmodule Samen.Scopes.Inventory.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
-  # StockLevel — the derived rollup (design §3.1): (org, item, warehouse) ->
-  # qty_on_hand / avg_unit_cost / stock_value. The ONLY sanctioned writer is
-  # StockLevelSync (in-transaction, ledger-tail recompute). The `:hand_edit`
-  # action exists as the DESIGN'S OWN NEGATIVE PROOF: it is admin-gated AND
-  # belt-refused — a rollup row is a derived cache, and editing it does not
-  # change the ledger, so the R3 sums immediately diverge (sabotage 304 walks
-  # exactly this door). The E3-belt note explains why the belt refuses.
+  # E4 — the Procurement documents (design §3.2). Mounted ONLY with `finance:`
+  # (see the scope macro's expansion-time branch). The PO posts NOTHING
+  # (committed-not-realized); the GoodsReceipt is the ONE-transaction
+  # chokepoint (GoodsPosting); ReceiptLine is R5's received-quantity fact.
   # ---------------------------------------------------------------------------
+
+  defmacro define_purchase_order(module, otp_app, domain, repo, abbrev, po_line_mod, warehouse_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.PurchaseOrder — the SCM document pair's head (WS-ERP E4;
+        design §3.2): `vendor_id` (the SalesOps.Vendor reference, same-org —
+        plain uuid, the E2 cross-scope posture), `number`, `order_date`,
+        `warehouse_id` (the receiving sink for its receipts), `status ∈
+        {draft, approved, sent, received, closed, void}`.
+
+        **A PO posts NOTHING** (committed-not-realized — design §3.2):
+        `:approve` rides the ADR-040 Gate exactly like the AP bill's (the
+        ungated call fails `ApprovalRequired`; the DISTINCT approver's
+        `approve/3` re-invokes the action inside the decision transaction)
+        — but the cascade is the STATE TRANSITION only. No journal entry,
+        no stock event: a PO is an intention, not a fact. Realization
+        happens exclusively through `GoodsReceipt :receive`.
+
+        Lines are REAL rows (`PoLine`, materialized by the `lines` argument
+        in-transaction, the Finance EntryLines shape) and freeze when the PO
+        leaves draft — the belt refuses later line edits (a received
+        quantity must reconcile against the ordered quantity AS ORDERED).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_purchase_order")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:vendor_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:number, :string, public?: true, allow_nil?: false)
+          attribute(:order_date, :date, public?: true, allow_nil?: false)
+          attribute(:memo, :string, public?: true)
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :approved, :sent, :received, :closed, :void]]
+          )
+        end
+
+        relationships do
+          belongs_to :warehouse, unquote(warehouse_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          has_many :lines, unquote(po_line_mod) do
+            public?(true)
+            destination_attribute(:purchase_order_id)
+          end
+        end
+
+        changes do
+          # F3.2 same-org FK: a PO receives into a same-org warehouse.
+          change({Samen.Policy.SameOrgFk, relationships: [:warehouse]})
+
+          # The state machine guard (the ApLines shape): only a draft PO
+          # edits/approves; :close needs :received; :void needs a pre-receipt
+          # state. The belt trigger is the raw-SQL twin.
+          change(Samen.Scopes.Inventory.PoState)
+
+          # Materialize the `lines` argument into real PoLine rows on
+          # create/draft-edit (the EntryLines shape — lines are born with
+          # the PO or not at all).
+          change(Samen.Scopes.Inventory.PoLinesWriter)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :vendor_id, :number, :order_date, :memo, :warehouse_id])
+
+            argument(:lines, {:array, :map},
+              allow_nil?: false,
+              constraints: [
+                items: [
+                  fields: [
+                    item_id: [type: :uuid, allow_nil?: false],
+                    qty: [type: :integer, allow_nil?: false],
+                    unit_cost_cents: [type: :integer, allow_nil?: false]
+                  ]
+                ]
+              ]
+            )
+
+            # A PO is born a draft — the only route to :approved is :approve.
+            change(set_attribute(:status, :draft))
+          end
+
+          update :update do
+            # Draft edits only (PoLines refuses a non-draft record; the belt
+            # is the twin). Line replacement re-materializes.
+            accept([:order_date, :memo, :warehouse_id])
+
+            argument(:lines, {:array, :map},
+              allow_nil?: true,
+              constraints: [
+                items: [
+                  fields: [
+                    item_id: [type: :uuid, allow_nil?: false],
+                    qty: [type: :integer, allow_nil?: false],
+                    unit_cost_cents: [type: :integer, allow_nil?: false]
+                  ]
+                ]
+              ]
+            )
+
+            require_atomic?(false)
+          end
+
+          # The gated transition: accept([]) — NO caller inputs (ADR-040
+          # §4.4). The approval IS the state transition; nothing posts.
+          # The stamp lands through the Gate's re-invocation, INSIDE the
+          # decision transaction, under the posting marker (the belt admits
+          # →approved ONLY under it — a raw-SQL approval cannot land).
+          update :approve do
+            accept([])
+            require_atomic?(false)
+
+            change({Samen.Approvals.Gate,
+             kind: unquote(Atom.to_string(module)) <> ":approve"})
+
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change(set_attribute(:status, :approved))
+          end
+
+          # The cascade's internal transition (the `create_reversal` spirit):
+          # GoodsReceipt :receive stamps :received through THIS action — not
+          # `:update`, whose PoLinesWriter guard owns draft edits only. The
+          # belt trigger admits an →:received transition ONLY under the
+          # posting marker (armed by the :receive action), so the stamp is
+          # exactly-once with the chokepoint. PoState guards the pre-state.
+          update :mark_received do
+            accept([])
+            require_atomic?(false)
+
+            # The transition itself. The DB belt admits →:received ONLY under
+            # the posting marker — so this action alone cannot flip a PO; it
+            # succeeds only inside the :receive chokepoint (which arms the
+            # marker) with GoodsPosting's receivability check behind it.
+            change(set_attribute(:status, :received))
+          end
+
+          # The later lifecycle states (the base system lands :received via
+          # the first GoodsReceipt; :closed/:void are host lifecycle moves —
+          # state-machine-guarded by PoState, never posting anything).
+          update :close do
+            accept([])
+            require_atomic?(false)
+
+            # PoState guards the pre-state (:received only).
+            change(set_attribute(:status, :closed))
+          end
+
+          update :void do
+            accept([])
+            require_atomic?(false)
+
+            # PoState guards the pre-state (pre-receipt only).
+            change(set_attribute(:status, :void))
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  defmacro define_po_line(module, otp_app, domain, repo, abbrev, po_mod, item_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.PoLine — the PO's line row (WS-ERP E4): `item_id` (same-
+        org), `qty` (positive integer), `unit_cost_cents` (non-negative).
+        Immutable once the PO leaves draft — the receiving quantities
+        reconcile against the ordered quantities AS ORDERED (R5's ordered
+        side); the belt refuses UPDATE/DELETE on a non-draft PO's lines.
+        Written only through the PO's actions (`PoLinesWriter`); the `:create`
+        remains for system paths, SameOrgFk-guarded. No PII (INV-1).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_po_line")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:qty, :integer, public?: true, allow_nil?: false)
+          attribute(:unit_cost_cents, :integer,
+            public?: true,
+            allow_nil?: false,
+            constraints: [min: 0]
+          )
+        end
+
+        relationships do
+          belongs_to :purchase_order, unquote(po_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          belongs_to :item, unquote(item_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        changes do
+          # F3.2 same-org FK on both referents.
+          change({Samen.Policy.SameOrgFk, relationships: [:purchase_order, :item]})
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :purchase_order_id, :item_id, :qty, :unit_cost_cents])
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type(:create) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  defmacro define_goods_receipt(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             po_mod,
+             po_line_mod,
+             receipt_line_mod,
+             warehouse_mod,
+             ledger_mod,
+             _level_mod,
+             finance_entry_mod,
+             finance_posting_account_mod
+           ) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.GoodsReceipt — receiving against an approved PO (WS-ERP E4;
+        design §3.2). `:receive` carries the `lines` argument
+        (`po_line_id` + `qty`) and THE ONE-TRANSACTION CHOKEPOINT happens
+        (`Samen.Scopes.Inventory.GoodsPosting`): per line, a `StockLedger
+        :receipt` event AND the inventory-asset + AP-clearing `JournalEntry`
+        (both anchored `source_key: "goods_receipt"`), plus the materialized
+        `ReceiptLine` rows, plus the receipt's own flip to `:posted` and the
+        PO's progression to `:received` — commit or roll back TOGETHER.
+
+        Exactly-once per receipt; over-receipt (cumulative received >
+        ordered, over the ReceiptLine facts) is refused; the inventory
+        account resolves from the ITEM's Finance seam (an unlinked item
+        never posts), `ap_clearing` from the org's PostingAccount map.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_goods_receipt")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:number, :string, public?: true, allow_nil?: false)
+          attribute(:received_date, :date, public?: true, allow_nil?: false)
+          attribute(:memo, :string, public?: true)
+
+          # status is NEVER caller-supplied: the only route to :posted is
+          # :receive (GoodsPosting stamps it in-transaction).
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :posted]]
+          )
+
+          attribute(:posted_entry_id, :uuid, public?: true)
+          attribute(:received_at, :utc_datetime, public?: true)
+        end
+
+        relationships do
+          belongs_to :purchase_order, unquote(po_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          belongs_to :warehouse, unquote(warehouse_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :purchase_order_id, :warehouse_id, :number, :received_date, :memo])
+
+            # A receipt is born a draft — the only route to :posted is :receive.
+            change(set_attribute(:status, :draft))
+          end
+
+          # THE chokepoint (see the moduledoc). accept([]) — the facts come
+          # from the `lines` ARGUMENT, never persisted caller inputs.
+          update :receive do
+            accept([])
+            require_atomic?(false)
+
+            argument(:lines, {:array, :map},
+              allow_nil?: false,
+              constraints: [
+                items: [
+                  fields: [
+                    po_line_id: [type: :uuid, allow_nil?: false],
+                    qty: [type: :integer, allow_nil?: false]
+                  ]
+                ]
+              ]
+            )
+
+            # The belt marker for the receipt's own flip + the PO's stamp.
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change({Samen.Scopes.Inventory.GoodsPosting,
+              po_line: unquote(po_line_mod),
+              receipt_line: unquote(receipt_line_mod),
+              ledger: unquote(ledger_mod),
+              entry: unquote(finance_entry_mod),
+              posting_account: unquote(finance_posting_account_mod)})
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  defmacro define_receipt_line(module, otp_app, domain, repo, abbrev, receipt_mod, po_line_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.ReceiptLine — the materialized received-quantity fact per
+        `{receipt, po_line}` (WS-ERP E4): R5's RECEIVED side, written by
+        `GoodsPosting` inside the chokepoint transaction, immutable once
+        written (no update action; the belt refuses writes outside the
+        chokepoint). `qty` is the received quantity at the PO line's cost —
+        the cumulative sum per po_line is the over-receipt floor and the
+        three-way match's received input. No PII (INV-1).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_receipt_line")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:qty, :integer, public?: true, allow_nil?: false)
+          attribute(:unit_cost_cents, :integer,
+            public?: true,
+            allow_nil?: false,
+            constraints: [min: 0]
+          )
+        end
+
+        relationships do
+          belongs_to :goods_receipt, unquote(receipt_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          belongs_to :po_line, unquote(po_line_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        changes do
+          # F3.2 same-org FK on both referents.
+          change({Samen.Policy.SameOrgFk, relationships: [:goods_receipt, :po_line]})
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :goods_receipt_id, :po_line_id, :qty, :unit_cost_cents])
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type(:create) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
 
   defmacro define_stock_level(module, otp_app, domain, repo, abbrev, item_mod, warehouse_mod) do
     quote do
