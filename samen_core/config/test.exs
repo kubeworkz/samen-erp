@@ -117,6 +117,12 @@ config :samen_core, :vault_declared_parity_allow_list, [
   # non-vacuous. The fixture domain is NOT in :ash_domains — allow-list the pair.
   {"sdd_doc", "pii_sdd_secure_body"},
   {"sdn_note", "pii_sdn_secure_body"},
+  # WS-ERP E7 (test/support/hr_fixture.ex): Employee.dob is vault-routed
+  # (column pii_hem_dob) so the per-plane masking three-proof is non-vacuous
+  # against real HR rows (the composite name/email/phone routes keep the bare
+  # token-column form and are not pii_-prefixed). The fixture domain is NOT in
+  # :ash_domains — allow-list the pair (same posture as sx*/sdd*).
+  {"hem_employee", "pii_hem_dob"},
   # T75 (spec §I2 CRM sequences): a SECOND materialization of the T74 Mailbox
   # scope (test/support/mailbox_fixture.ex) so the sequence reply-detection
   # test can prove Samen.Sequences.MailboxReplyCheck reads REAL MailMessage
@@ -153,6 +159,11 @@ config :samen_core, Samen.Approvals.Registry,
     (Atom.to_string(SamenCore.Support.InventoryFixture.PurchaseOrder) <> ":approve") =>
       {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.FinanceFixture.ApInvoice) <> ":approve") =>
+      {:tenant, Samen.Approvals.Gate},
+    # WS-ERP E7: the LeaveRequest's gated `:approve` — the Gate re-invokes the
+    # action as the requester inside the decision transaction; the governed
+    # decision schedules the employee's leave reminder (fail-soft).
+    (Atom.to_string(SamenCore.Support.HrFixture.LeaveRequest) <> ":approve") =>
       {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.ApprovalsFixture.Document) <> ":publish") =>
       {:tenant, Samen.Approvals.Gate},

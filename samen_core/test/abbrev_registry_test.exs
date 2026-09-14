@@ -435,7 +435,12 @@ defmodule Samen.AbbrevRegistryTest do
                  "sbm" => "SamenCore.Support.InventoryFixture.Bom",
                  "sbl" => "SamenCore.Support.InventoryFixture.BomLine",
                  "swk" => "SamenCore.Support.InventoryFixture.WorkOrder",
-                 "spg" => "SamenCore.Support.InventoryFixture.ProductionLog"
+                 "spg" => "SamenCore.Support.InventoryFixture.ProductionLog",
+                 # WS-ERP E7 (design §5): the samen_core fixture host's HR mount
+                 # (`SamenCore.Support.HrFixture`), allocator-reserved.
+                 "hem" => "SamenCore.Support.HrFixture.Employee",
+                 "hev" => "SamenCore.Support.HrFixture.EmploymentEvent",
+                 "hlv" => "SamenCore.Support.HrFixture.LeaveRequest"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -525,7 +530,13 @@ defmodule Samen.AbbrevRegistryTest do
                  "scw" => "Samen.WebTest.Support.CsatSurveyToken",
                  # T79: the operator-book sibling — the samen_web test host's
                  # OPERATOR Support mount (ADR-010 §8.2), allocator-proposed.
-                 "wco" => "Samen.WebTest.Operator.CsatSurveyToken"
+                 "wco" => "Samen.WebTest.Operator.CsatSurveyToken",
+                 # WS-ERP E7 (design §5): the samen_web test host's HR mount
+                 # (`Samen.WebTest.Hr`, test/support/hr.ex) — feeds the HR roster
+                 # CSV mask-by-omission red-path. Allocator-reserved.
+                 "whe" => "Samen.WebTest.Hr.Employee",
+                 "whv" => "Samen.WebTest.Hr.EmploymentEvent",
+                 "whl" => "Samen.WebTest.Hr.LeaveRequest"
                }
              }
 
@@ -606,7 +617,7 @@ defmodule Samen.AbbrevRegistryTest do
       # +4 WS-ERP E2 — the Finance fixture's ApInvoice/PaymentReceipt/
       # PostingAccount/PaymentMirror (sap/prc/fav/sbp) + the E3 Inventory
       # fixture (sit/swh/skl/slv) = 460.
-      assert map_size(Reg.load()) == 464
+      assert map_size(Reg.load()) == 470
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

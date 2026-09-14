@@ -6,6 +6,9 @@
 *.exs  text eol=lf
 *.eex  text eol=lf
 *.patch text eol=lf
+# The abbrev registry is a BYTE-GOLDEN (the allocator tests assert its exact
+# on-disk size) — EOL must be deterministic on every host.
+samen_core/priv/abbrev_registry.json text eol=lf
 # The templates-parity golden fixtures (the renderer emits LF; the fixtures
 # must hold it byte-exactly).
 *.golden text eol=lf

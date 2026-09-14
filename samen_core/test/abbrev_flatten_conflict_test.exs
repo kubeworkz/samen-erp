@@ -70,7 +70,7 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # +3 WS-ERP E1 (ADR-049 §2): samen_core host's Finance scope in-tree pilot
       # fixture (`SamenCore.Support.FinanceFixture`) + the E3 Inventory fixture = 464
       # (E1 + the E2 documents + sit/swh/skl/slv).
-      assert map_size(flat) == 464
+      assert map_size(flat) == 470
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

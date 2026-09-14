@@ -1,0 +1,28 @@
+# SABOTAGE: WS-ERP E7 — the roster plane-flip bypass (the RP-CSV-1 twin on
+# the HR roster surface). Samen.Web.Hr.Roster.export/2 rewrites the caller's
+# scope to the TENANT plane before handing it to the Csv layer — every
+# export resolves the vaulted full_name CLEAR regardless of the caller's
+# plane, so an operator impersonation export leaks employee plaintext.
+# The three plane-dependent assertions flip (RED mask cell, same-pixel
+# equality, the plane-flip control's refute) while the GREEN export and the
+# structural mask-by-omission proofs (absent columns, refused widening)
+# still hold — those are plane-independent by design.
+# APP: samen_web
+# TEST_FILES: test/samen/web/hr_roster_csv_masking_test.exs
+# MUST_FAIL: RED: operator roster cell is
+# MUST_FAIL: the roster cell EQUALS the UI value on the operator plane
+# MUST_FAIL: ANTI-TAUTOLOGY: the SAME rows on the tenant plane go CLEAR
+diff --git a/samen_web/lib/samen/web/hr/roster.ex b/samen_web/lib/samen/web/hr/roster.ex
+--- a/samen_web/lib/samen/web/hr/roster.ex
++++ b/samen_web/lib/samen/web/hr/roster.ex
+@@ -39,7 +39,9 @@ defmodule Samen.Web.Hr.Roster do
+ 
+     case Enum.reject(requested, &(&1 in @columns)) do
+       [] ->
+-        Csv.export(Samen.WebTest.Hr.Employee, scope, Keyword.put(opts, :columns, requested))
++        # SABOTAGE 308: force the tenant plane — every export resolves CLEAR.
++        leaky = %{scope | actor: %{scope.actor | plane: :tenant}}
++        Csv.export(Samen.WebTest.Hr.Employee, leaky, Keyword.put(opts, :columns, requested))
+ 
+       rejected ->
+         # Fail-closed at the ROSTER layer: a caller's explicit `columns:` may

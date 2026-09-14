@@ -52,7 +52,8 @@ config :samen_web,
     Samen.WebTest.Operator,
     Samen.WebTest.Primitives,
     Samen.WebTest.RichTypes,
-    Samen.WebTest.Automation
+    Samen.WebTest.Automation,
+    Samen.WebTest.Hr
   ]
 
 # T84b / P8 (phase6-punchlist) — `mix samen.verify.fleet_wire`'s closed-catalog

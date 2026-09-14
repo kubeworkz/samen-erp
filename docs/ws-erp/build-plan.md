@@ -221,13 +221,40 @@ Infrastructure repaired during E6: root `.gitattributes` pinning LF for `*.ex`/`
 golden fixtures (the "CR-only drift" of E5). All tracked sources + goldens normalized LF;
 byte-identical blobs, zero commit churn. (Third pre-existing Windows-host class, diagnosed during E6's full-suite certification: `Path.wildcard` cannot traverse `**` over the backslash paths `System.tmp_dir!/0` returns — the Fleet/Chokepoint/anti-bypass-probe tmp-tree scans find nothing. Environmental; passes on Linux/macOS CI.)
 
-## Phase E7 — HR (C2) · default (opus reviews masking)
+## Phase E7 — HR (C2) · default (opus reviews masking) ✅ LANDED (2026-09-14)
 `Samen.Scopes.Hr`: `Employee`🔒 (FullName/Emails/Phones + `user_id` nullable),
 `EmploymentEvent` ledger, `LeaveRequest` (+approvals + Automation reminders), ReviewCycle =
 Work tasks with employee object-ref anchor. `Samen.Hr.PayrollProvider` behaviour +
 `{:error, :not_configured}` default (fail-honest, ADR-014 shape) + a declared-not-built
 test. **Masking watch-list trio on the roster surface + HR CSV export** (mask-by-omission
 red-path mandatory, WS-E discipline). Parallel-safe with E4–E6.
+
+**Status: COMPLETE.** `Employee`/`EmploymentEvent`/`LeaveRequest` mounted in
+`test/support/hr_fixture.ex` (`hem`/`hev`/`hlv`) + `samen_web/test/support/hr.ex`
+(`whe`/`whv`/`whl` — the CSV red-path's host; ReviewCycle = the Work-task anchor as
+designed, no new resource). The first NON-EMPTY PII map: composites route by vault name
+(bare `<abbrev>_full_name` token columns), scalar `dob` the `pii_hem_dob` route
+(allow-listed in both hosts' configs — fixture domains are outside `:ash_domains`);
+all four resolve per-plane through `Samen.Api.PiiResolution` (proven on real rows:
+tenant CLEAR, operator `••••`, plane flip). Comp is NOT a column —
+`EmploymentEvent :comp_changed` rows carry Money-shaped cents; the ledger is
+append-only at the DB (raw UPDATE/DELETE refused) and current state is derived
+latest-event-wins (the Consent mirror). `LeaveRequest :approve` rides the ADR-040 Gate
+(ungated refusal + distinct-approver decision proven; the governed decision schedules
+the employee reminder FAIL-SOFT — an unwired automation module never blocks a
+decision). `PayrollProvider` refuses `{:error, :not_configured}` (fail-honest),
+provider-override seam proven. `Samen.Web.Hr.Roster` is the E7 export surface: a
+bounded column allowlist over `Samen.Web.Csv` — the sensitive trio (dob/emails/phones)
+is structurally ABSENT, narrowing allowed, widening REFUSED at the roster layer (the
+ Csv-layer validation alone would have let a caller widen — caught by the widen red
+path at birth). Sabotage **308** (the roster plane-flip bypass — export resolves the
+tenant plane regardless of caller) flips the three plane-dependent assertions through
+the real harness, byte-exact restore. Suites: core 20/20, web CSV 7/7, E1–E7
+regression 152/152, abbrev goldens 43/43 (470 flat, byte-golden 22320 — the registry
+is now EOL-pinned in `.gitattributes`), catalog+migrations gates OK. Full core
+3214/3248 — the 34 failures are the three known Windows classes (24 Fleet
+NTFS-colon, 5 no-`pg_dump`, 7 tmp-wildcard), zero HR surface; samen_web 1768/1790
+(22 = the same Fleet/J-cockpit class).
 
 ## Phase E8 — Reports, BI, surfaces, host proof, workstream gate · mixed
 Budget/BudgetLine + budget-vs-actual pure read; rollup registrations (TB, WIP, headcount)

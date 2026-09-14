@@ -260,8 +260,8 @@ defmodule Samen.Abbrev.AllocatorTest do
       # (sit/swh/skl/slv) + the E4 Procurement documents (spo/spl/sgr/srl) + the
       # E5 SalesOrder bridge (slo/sol/sim) — the allocator run wrote the registry at
       # 21_773 bytes.
-      assert byte_size(committed) == 22013
-      assert map_size(R.load()) == 464
+      assert byte_size(committed) == 22320
+      assert map_size(R.load()) == 470
     end
   end
 
