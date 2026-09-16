@@ -51,7 +51,7 @@ jobs:
         with:
           elixir-version: "1.20.2"
           otp-version: "29.0"
-          hex-version: latest
+          install-hex: true
           rebar3-version: latest
 
       - name: Prepare PostgreSQL role
@@ -94,7 +94,7 @@ jobs:
         with:
           elixir-version: "1.20.2"
           otp-version: "29.0"
-          hex-version: latest
+          install-hex: true
           rebar3-version: latest
 
       - name: Prepare PostgreSQL role
