@@ -25,6 +25,17 @@ defmodule Samen.Delivery.ProviderTest do
   alias Samen.Delivery.{Api, LocalSink, Message, Provider, Smtp}
   alias Samen.Scopes.Marketing.SendWorker
 
+  setup do
+    # Own sandbox owner: this async:false module performs real DB work (the
+    # blocked-send audit insert inside SendWorker). Without a checkout it
+    # freeloads on whatever {:shared, self()} mode a concurrent async module
+    # leaked — and when that owner exits, our checkout dies with "owner exited"
+    # (seed-dependent flake, seen with seed 287548).
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(SamenCore.TestRepo)
+    Ecto.Adapters.SQL.Sandbox.mode(SamenCore.TestRepo, {:shared, self()})
+    :ok
+  end
+
   # A configured, always-succeeding adapter (for the anti-tautology green).
   defmodule OkAdapter do
     use Provider

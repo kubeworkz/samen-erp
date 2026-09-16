@@ -358,12 +358,14 @@ GATE_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/samen_ci_gates.XXXXXX")"
 
 # --- samen_web framework UI library gate (ADR-009) ---
 gate_samen_web() {
+  export HEX_HOME="$GATE_LOG_DIR/hex-samen_web"
   cd "$REPO_ROOT/samen_web"
   bash ci.sh
 }
 
 # --- demo dogfood gate: warnings-as-errors test suite + the 5-verifier CI gate ---
 gate_demo() {
+  export HEX_HOME="$GATE_LOG_DIR/hex-demo"
   cd "$REPO_ROOT/demo"
   mix deps.get --quiet
   mix test --warnings-as-errors
@@ -372,6 +374,7 @@ gate_demo() {
 
 # --- Driftwood reference-vertical gate (Phase 5, T5.2) ---
 gate_driftwood() {
+  export HEX_HOME="$GATE_LOG_DIR/hex-driftwood"
   cd "$REPO_ROOT/driftwood"
   mix deps.get --quiet
   MIX_ENV=test bash ci.sh
@@ -379,6 +382,7 @@ gate_driftwood() {
 
 # --- PawChart second-vertical thin slice gate (Phase 6, T6.2) ---
 gate_pawchart() {
+  export HEX_HOME="$GATE_LOG_DIR/hex-pawchart"
   cd "$REPO_ROOT/pawchart"
   mix deps.get --quiet
   MIX_ENV=test bash ci.sh

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Windows shim: psql (repo root scripts/win-shims — same class as the
+# sabotage.sh sha256sum fallback, E1).
+#
+# The dev Postgres runs in the `samen-pg` Docker container; hosts without the
+# PG client tools get this shim, which proxies to `docker exec` inside the
+# container. Local socket connections inside the official postgres image are
+# TRUST-authed for POSTGRES_USER, so no password handling is needed.
+#
+# * `-h HOST` is only accepted for localhost targets — anything else must fail
+#   loud rather than silently redirect a remote connection into the container.
+# * `-h`/`-p` are dropped (container-local socket); every other flag is
+#   forwarded verbatim.
+# * `-f FILE` names a HOST-side file the container cannot see, so it is
+#   rewritten to a stdin redirect (`docker exec -i ... < FILE`).
+#
+# Only wired in by callers (pitr_gameday_sim.sh) when no real host psql exists,
+# and only against the local dev container. Set SAMEN_PG_CONTAINER to override.
+
+set -uo pipefail
+
+CONTAINER="${SAMEN_PG_CONTAINER:-samen-pg}"
+
+if ! docker container inspect "$CONTAINER" >/dev/null 2>&1; then
+  echo "psql shim: container '$CONTAINER' not running (install a real psql client for non-docker use)" >&2
+  exit 127
+fi
+
+host=""
+file=""
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h)
+      host="${2:-}"
+      if [[ "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "::1" ]]; then
+        echo "psql shim: non-local -h '$host' unsupported — install a real psql client" >&2
+        exit 127
+      fi
+      shift 2
+      ;;
+    -p) shift 2 ;;
+    -f)
+      file="${2:-}"
+      shift 2
+      ;;
+    --host=*)
+      host="${1#*=}"
+      if [[ "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "::1" ]]; then
+        echo "psql shim: non-local --host '$host' unsupported — install a real psql client" >&2
+        exit 127
+      fi
+      shift
+      ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+
+if [[ -n "$file" ]]; then
+  exec docker exec -i "$CONTAINER" psql "${args[@]}" < "$file"
+else
+  exec docker exec -i "$CONTAINER" psql "${args[@]}"
+fi

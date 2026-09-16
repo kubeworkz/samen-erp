@@ -52,7 +52,7 @@ REPORT="$DW_DIR/reports/T5.5.md"
 
 PGHOST="${DRILL_PGHOST:-localhost}"
 PGPORT="${DRILL_PGPORT:-5432}"
-PGUSER="${USER}"
+PGUSER="${DRILL_PGUSER:-${USER:-${USERNAME:-postgres}}}"
 
 BASE_DB="driftwood_pitr_drill_base"       # the "production" DB the incident happens on
 RESTORE_DB="driftwood_pitr_drill_restore" # the fresh DB we promote the branch into
@@ -117,7 +117,16 @@ fail() { echo "DRILL FAILED: $*" >&2; cleanup; exit 1; }
 # Preflight
 # --------------------------------------------------------------------------
 for bin in pg_dump psql python3; do
-  command -v "$bin" >/dev/null 2>&1 || fail "required binary '$bin' not found on PATH"
+  if ! command -v "$bin" >/dev/null 2>&1 || \
+    { [[ "$bin" == "python3" ]] && ! python3 -c 'import sys' >/dev/null 2>&1; }; then
+    shim_path="$REPO_ROOT/scripts/win-shims/$bin"
+    if [[ -x "$shim_path" ]]; then
+      export PATH="$REPO_ROOT/scripts/win-shims:$PATH"
+      command -v "$bin" >/dev/null 2>&1 || fail "required binary '$bin' not found and no shim available"
+    else
+      fail "required binary '$bin' not found on PATH"
+    fi
+  fi
 done
 
 echo "==> T5.5 PITR game-day #2 LOCAL SIMULATION (probe_corrupt=$PROBE_CORRUPT)"

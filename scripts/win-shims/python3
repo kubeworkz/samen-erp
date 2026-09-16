@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Windows shim: python3 (repo root scripts/win-shims — mirrors psql/pg_dump shims)
+#
+# Forwards python3 calls to the real Windows launcher when the App Execution
+# Alias is only the Microsoft Store stub. The Postgres container intentionally
+# does not ship Python, so routing here through Docker cannot work.
+
+set -uo pipefail
+
+export PYTHONUTF8=1
+
+if command -v py >/dev/null 2>&1; then
+  args=("$@")
+  drive_prefix='C:/'
+  for i in "${!args[@]}"; do
+    args[$i]="${args[$i]//\/c\//$drive_prefix}"
+  done
+  exec py -3 "${args[@]}"
+fi
+
+if [[ -x /c/Python314/python.exe ]]; then
+  exec /c/Python314/python.exe "$@"
+fi
+
+ echo "python3 shim: no working Python 3 launcher found (install Python or disable the Store alias)" >&2
+ exit 127

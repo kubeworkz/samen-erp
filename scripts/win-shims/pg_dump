@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Windows shim: pg_dump (repo root scripts/win-shims — same class as the
+# sabotage.sh sha256sum fallback, E1).
+#
+# Same contract as the psql shim: proxies to the local dev Postgres container
+# (`samen-pg`) when no host client exists. localhost-only (-h is validated and
+# dropped, -p dropped), every other flag forwarded verbatim.
+#
+# NOTE: the dump is produced by the CONTAINER's pg_dump (PG 18.6) against the
+# container-local socket — server/client version skew is impossible.
+
+set -uo pipefail
+
+CONTAINER="${SAMEN_PG_CONTAINER:-samen-pg}"
+
+if ! docker container inspect "$CONTAINER" >/dev/null 2>&1; then
+  echo "pg_dump shim: container '$CONTAINER' not running (install a real pg_dump for non-docker use)" >&2
+  exit 127
+fi
+
+host=""
+file=""
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h)
+      host="${2:-}"
+      if [[ "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "::1" ]]; then
+        echo "pg_dump shim: non-local -h '$host' unsupported — install a real pg_dump" >&2
+        exit 127
+      fi
+      shift 2
+      ;;
+    -p) shift 2 ;;
+    -f)
+      file="${2:-}"
+      shift 2
+      ;;
+    --file=*)
+      file="${1#*=}"
+      shift
+      ;;
+    --host=*)
+      host="${1#*=}"
+      if [[ "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "::1" ]]; then
+        echo "pg_dump shim: non-local --host '$host' unsupported — install a real pg_dump" >&2
+        exit 127
+      fi
+      shift
+      ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+
+if [[ -n "$file" ]]; then
+  exec docker exec "$CONTAINER" pg_dump "${args[@]}" > "$file"
+else
+  exec docker exec "$CONTAINER" pg_dump "${args[@]}"
+fi

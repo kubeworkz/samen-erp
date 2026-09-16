@@ -65,13 +65,16 @@ expand_path = Path.join([File.cwd!(), "priv", "drills", "expand_migrations"])
 # `mix samen.verify.migrations` exercises a real down/0 for Driftwood outside this
 # drill. Since `"migrate"` below applies ALL of migrations_path and `"expand"` then
 # applies ALL of expand_path, applying both back-to-back collides (Postgres 42701
-# duplicate_column). Stage a filtered COPY of migrations_path (symlinks; the real
-# files are never touched) with that one migration excluded, so the drill's OWN
-# expand migration is the one that actually adds/removes the column here — this
-# affects only this drill's throwaway DB, never a real migrate/deploy path.
+# duplicate_column). Stage a filtered COPY of migrations_path (the real files are
+# never touched) with that one migration excluded, so the drill's OWN expand
+# migration is the one that actually adds/removes the column here — this affects
+# only this drill's throwaway DB, never a real migrate/deploy path. A physical copy
+# is intentional: Windows may reject symlinks with `not owner` even when the
+# process owns the source file.
 stage_drill_migrations = fn source_dir, excluded_basenames ->
   staged =
     Path.join(System.tmp_dir!(), "driftwood_drill_migrations_#{System.unique_integer([:positive])}")
+    |> String.replace("\\", "/")
 
   File.mkdir_p!(staged)
 
@@ -79,7 +82,7 @@ stage_drill_migrations = fn source_dir, excluded_basenames ->
   |> Path.join("*.exs")
   |> Path.wildcard()
   |> Enum.reject(fn file -> Path.basename(file) in excluded_basenames end)
-  |> Enum.each(fn file -> File.ln_s!(file, Path.join(staged, Path.basename(file))) end)
+  |> Enum.each(fn file -> File.cp!(file, Path.join(staged, Path.basename(file))) end)
 
   staged
 end
@@ -255,6 +258,7 @@ case phase do
         "20260905090000_expand_add_settlement_note.exs"
       ])
 
+    #("DRILL migration staging: #{drill_migrations_path} files=#{length(Path.wildcard(Path.join(drill_migrations_path, \"*.exs\")))}")
     Ecto.Migrator.run(Repo, drill_migrations_path, :up, all: true, log: false)
     :ok = Driftwood.NonPiiSetup.register_all()
 
