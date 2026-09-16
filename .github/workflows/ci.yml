@@ -60,7 +60,7 @@ jobs:
           PGPASSWORD: postgres
         run: |
           psql -h 127.0.0.1 -U postgres -d postgres \
-            -c 'CREATE ROLE runner LOGIN SUPERUSER CREATEDB;'
+            -c 'CREATE ROLE runner LOGIN SUPERUSER CREATEDB; CREATE ROLE clank LOGIN SUPERUSER CREATEDB;'
 
       - name: Run fast CI tier
         run: bash ./ci-fast.sh
@@ -104,7 +104,7 @@ jobs:
           PGPASSWORD: postgres
         run: |
           psql -h 127.0.0.1 -U postgres -d postgres \
-            -c 'CREATE ROLE runner LOGIN SUPERUSER CREATEDB;'
+            -c 'CREATE ROLE runner LOGIN SUPERUSER CREATEDB; CREATE ROLE clank LOGIN SUPERUSER CREATEDB;'
 
       - name: Run full CI gate
         run: bash ./ci.sh
