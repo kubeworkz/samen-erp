@@ -107,9 +107,7 @@ defmodule Samen.Web.Settings.ApiKeys do
 
     Mount.resource(mount, ApiKey)
     |> Ash.Changeset.for_create(:create, attrs, scope: scope)
-    # SABOTAGE (12-e5): store the RAW key in token_digest (the classic leak) instead
-    # of its SHA-256 digest — the DB now persists the very key material mint returns.
-    |> Ash.Changeset.force_change_attribute(:token_digest, raw)
+    |> Ash.Changeset.force_change_attribute(:token_digest, digest(raw))
     |> Ash.create(scope: scope)
     |> case do
       {:ok, row} -> {:ok, raw, row}
