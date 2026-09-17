@@ -280,7 +280,11 @@ select_patch() {
 # latent bug (patch 67 shipped this way once and silently swallowed patches
 # 68-75). Cheap (milliseconds, no git apply / mix test), so filtering never
 # lowers this protection.
-"$REPO_ROOT/scripts/sabotage_lint.sh" || fail "header preflight failed (see above) — no patch was applied"
+# Invoked via `bash`, never as the bare path: no *.sh in this repo carries the
+# exec bit (the tree is authored on Windows, where core.filemode is false), so a
+# direct invocation dies with "Permission denied" on a POSIX runner. This is the
+# same form ci.sh and sabotage_selection_test.sh already use.
+bash "$REPO_ROOT/scripts/sabotage_lint.sh" || fail "header preflight failed (see above) — no patch was applied"
 
 # ── build the selection ──────────────────────────────────────────────────────
 grand_total=0
