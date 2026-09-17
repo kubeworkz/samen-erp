@@ -148,11 +148,18 @@ defmodule Samen.Backup.VerificationTest do
     @src_db "samen_core_backup_src"
     @scratch_db "samen_core_backup_scratch"
 
+    # pg tooling is a documented prerequisite; when genuinely absent (a machine
+    # with only the Docker Postgres), SKIP LOUDLY with the reason — a raise in
+    # setup fails the whole suite instead of reporting the environmental gap.
+    @pg_present? not is_nil(System.find_executable("pg_dump")) and
+                   not is_nil(System.find_executable("pg_restore")) and
+                   not is_nil(System.find_executable("createdb")) and
+                   not is_nil(System.find_executable("dropdb")) and
+                   not is_nil(System.find_executable("psql"))
+
+    @describetag skip: if(@pg_present?, do: false, else: "pg_dump/pg_restore/createdb/dropdb/psql not on PATH — the L6 restore proof needs the real pg client tools")
+
     setup do
-      unless LocalPgDump.configured?(%{dump_path: "x"}) do
-        # pg tooling is a CLAUDE.md prerequisite; if genuinely absent, skip loudly.
-        raise "pg_dump/pg_restore/createdb not available — required for L6 restore proof"
-      end
 
       user = System.get_env("USER") || "postgres"
       dir = System.tmp_dir!()

@@ -1,0 +1,40 @@
+{
+  "resources": [
+    {
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "Ash.Type.UUID"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "type": "Ash.Type.String"
+        },
+        {
+          "name": "segment",
+          "required": false,
+          "type": "Ash.Type.String"
+        }
+      ],
+      "module": "Samenerp.Vertical.Record",
+      "routes": [
+        {
+          "action": "api_read",
+          "method": "GET",
+          "path": "/records",
+          "required_args": []
+        },
+        {
+          "action": "api_read",
+          "method": "GET",
+          "path": "/records/:id",
+          "required_args": []
+        }
+      ],
+      "type": "record"
+    }
+  ],
+  "version": "v1"
+}

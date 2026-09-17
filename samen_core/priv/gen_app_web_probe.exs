@@ -64,7 +64,13 @@ scratch_parent = Path.join([samen_core_root, "..", "_gen_web_probe_scratch"]) |>
 File.rm_rf!(scratch_parent)
 File.mkdir_p!(scratch_parent)
 
-registry_path = Samen.AbbrevRegistry.path()
+registry_path =
+  # The COMMITTED source registry, not `Samen.AbbrevRegistry.path()`: on Windows
+  # priv/ is not a symlink, so the latter resolves to the _build COPY — the
+  # generated app compiles samen_core fresh from SOURCE and would never see
+  # reservations made there. The root-ci guard snapshots/restores exactly this
+  # source path, so the probe must operate on the same bytes.
+  Path.join(samen_core_root, "priv/abbrev_registry.json")
 registry_backup = File.read!(registry_path)
 
 cleanup = fn ->
@@ -98,7 +104,7 @@ rescue
 end
 
 try do
-  Gen.reserve_abbrevs!(spec)
+  Gen.reserve_abbrevs!(spec, registry_path)
   Gen.write_app!(spec)
   Gen.compile_and_dump!(spec)
 
@@ -339,9 +345,9 @@ try do
   headless_mix = File.read!(Path.join(headless_dir, "mix.exs"))
 
   cond do
-    length(emitted) != 28 ->
+    length(emitted) != 32 ->
       halt.(1, "FAIL: headless emission wrote #{length(emitted)} files (expected the " <>
-                 "original 28): #{inspect(emitted)}")
+                 "original 32): #{inspect(emitted)}")
 
     web_leaks != [] ->
       halt.(1, "FAIL: headless emission leaked web files: #{inspect(web_leaks)}")
@@ -351,7 +357,7 @@ try do
       halt.(1, "FAIL: headless mix.exs carries web/api deps.")
 
     true ->
-      IO.puts("\nheadless red path: 28 data-only files, zero web/api emissions, no web deps — OK")
+      IO.puts("\nheadless red path: 32 data-only files, zero web/api emissions, no web deps — OK")
   end
 
   IO.puts("\nRESULT: PROBE CONFIRMED — the generated --web --api app passed its FULL gate")

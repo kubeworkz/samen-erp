@@ -19,7 +19,7 @@ defmodule Samen.Delivery.OrgReadsTest do
     :ok
   end
 
-  defp record_event(org_id, subscriber_id, kind, suffix) do
+  defp record_event(org_id, subscriber_id, kind, suffix, occurred_at) do
     {:ok, :inserted, row} =
       EmailEvent.record(TestRepo, %{
         provider: "orgreads",
@@ -29,7 +29,7 @@ defmodule Samen.Delivery.OrgReadsTest do
         send_id: Ash.UUID.generate(),
         org_id: org_id,
         subscriber_id: subscriber_id,
-        occurred_at: DateTime.utc_now()
+        occurred_at: occurred_at
       })
 
     row
@@ -41,9 +41,15 @@ defmodule Samen.Delivery.OrgReadsTest do
       sub_a = Ash.UUID.generate()
       sub_b = Ash.UUID.generate()
 
-      e1 = record_event(org_id, sub_a, "delivered", "1")
-      e2 = record_event(org_id, sub_b, "bounce", "2")
-      e3 = record_event(org_id, sub_a, "complaint", "3")
+      # Explicitly separated occurred_at values: the timeline orders by
+      # `desc occurred_at` only, and under full-worker load three naive
+      # DateTime.utc_now()/0 inserts can land in the SAME clock tick, where
+      # Postgres tie order is unspecified (observed once as a CI flake).
+      base = DateTime.utc_now()
+
+      e1 = record_event(org_id, sub_a, "delivered", "1", DateTime.add(base, -2_000, :millisecond))
+      e2 = record_event(org_id, sub_b, "bounce", "2", DateTime.add(base, -1_000, :millisecond))
+      e3 = record_event(org_id, sub_a, "complaint", "3", base)
 
       events = EmailEvent.list_for_org(TestRepo, org_id)
 
@@ -54,8 +60,8 @@ defmodule Samen.Delivery.OrgReadsTest do
       org_a = Ash.UUID.generate()
       org_b = Ash.UUID.generate()
 
-      _mine = record_event(org_a, Ash.UUID.generate(), "delivered", "mine")
-      theirs = record_event(org_b, Ash.UUID.generate(), "delivered", "theirs")
+      _mine = record_event(org_a, Ash.UUID.generate(), "delivered", "mine", DateTime.utc_now())
+      theirs = record_event(org_b, Ash.UUID.generate(), "delivered", "theirs", DateTime.utc_now())
 
       events = EmailEvent.list_for_org(TestRepo, org_a)
 
@@ -68,7 +74,7 @@ defmodule Samen.Delivery.OrgReadsTest do
 
     test "read-bounded: :limit caps the returned row count" do
       org_id = Ash.UUID.generate()
-      for i <- 1..5, do: record_event(org_id, Ash.UUID.generate(), "delivered", "lim#{i}")
+      for i <- 1..5, do: record_event(org_id, Ash.UUID.generate(), "delivered", "lim#{i}", DateTime.utc_now())
 
       assert length(EmailEvent.list_for_org(TestRepo, org_id, limit: 2)) == 2
     end

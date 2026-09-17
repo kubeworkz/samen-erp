@@ -123,10 +123,17 @@ defmodule Samen.Gen.App do
   samen_core SOURCE root, so a generated sibling's `{:samen_core, path: "../samen_core"}`
   resolves.
 
-  `:code.priv_dir(:samen_core)` points at the app's build copy of `priv`, which is a
-  SYMLINK back to the source `priv` — so `Path.expand` on the realpath of that symlink
-  lands in the true source tree (not `_build`). We resolve the symlink explicitly because
-  the naive `priv/../..` would otherwise sit inside `_build/<env>/lib`.
+  On Unix, `:code.priv_dir(:samen_core)` points at the app's build copy of `priv`,
+  which is a SYMLINK back to the source `priv` — `Path.expand` on the symlink's
+  target lands in the true source tree (not `_build`). Windows Mix does NOT
+  symlink (the build copy is a real directory), so the symlink probe fails there
+  and the naive `priv/../..` would sit inside `_build/<env>/lib` — every generated
+  path dep then resolves through a nonexistent `../../samen_web`. In that case the
+  source root is located from `File.cwd!/0` (every sanctioned invocation —
+  `mix run priv/*probe.exs`, `mix samen.gen.app`, `mix test` — executes inside the
+  samen_core checkout), and the resolution is VALIDATED against a committed
+  checkout marker: a wrong root silently breaks every generated path dep, so it
+  fails loud instead of returning a plausible-looking `_build` path.
   """
   def default_target do
     priv = :code.priv_dir(:samen_core) |> to_string()
@@ -134,11 +141,23 @@ defmodule Samen.Gen.App do
     src_priv =
       case File.read_link(priv) do
         {:ok, link_target} -> Path.expand(link_target, Path.dirname(priv))
-        {:error, _} -> priv
+        {:error, _} -> nil
       end
 
-    # src_priv = .../samen_core/priv ; samen_core root = its parent ; target = grandparent.
-    Path.expand(Path.join([src_priv, "..", ".."]))
+    candidates =
+      [src_priv, Path.join(File.cwd!(), "priv")]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&Path.expand(Path.join([&1, "..", ".."])))
+
+    validated =
+      Enum.find(candidates, fn candidate ->
+        File.regular?(Path.join([candidate, "samen_core", "priv", "abbrev_registry.json"]))
+      end)
+
+    validated ||
+      raise ArgumentError,
+            "samen.gen: could not locate the checkout root — no candidate had " <>
+              "samen_core/priv/abbrev_registry.json (candidates: #{inspect(candidates)})"
   end
 
   @doc "Build a fully-derived generation spec from the raw options."

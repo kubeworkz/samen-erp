@@ -149,9 +149,11 @@ defmodule Samen.PiiReads do
   @doc "Scan every `.ex`/`.exs` file under `dir` (recursively)."
   @spec scan_dir(String.t(), Registry.t()) :: {:ok, [finding()]}
   def scan_dir(dir, registry \\ Registry.build()) do
+    # Windows: natively-joined backslash paths make Path.wildcard match NOTHING
+    # (backslash is a literal to the glob engine) — the scan would pass
+    # silently vacuously. Route through the normalized expansion helper.
     dir
-    |> Path.join("**/*.{ex,exs}")
-    |> Path.wildcard()
+    |> Samen.SourceGlob.expand!()
     |> Enum.map(fn path -> {path, File.read!(path)} end)
     |> scan_sources(registry)
   end

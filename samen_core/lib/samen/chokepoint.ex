@@ -53,11 +53,17 @@ defmodule Samen.Chokepoint do
   """
   @spec decrypt_call_sites(Path.t()) :: [{String.t(), String.t(), pos_integer()}]
   def decrypt_call_sites(lib_dir) do
-    for file <- Path.wildcard(Path.join(lib_dir, "**/*.ex")),
+    # Windows: a natively-joined dir carries backslashes that Path.wildcard
+    # treats as LITERAL characters — the scan would silently find nothing and
+    # every red-path probe built on it would pass vacuously. Route the
+    # expansion (and the relative_to base) through the normalized helper.
+    base = Samen.SourceGlob.normalize(lib_dir)
+
+    for file <- Samen.SourceGlob.expand!(lib_dir, "**/*.ex"),
         Path.basename(file) != "chokepoint.ex",
         {line, idx} <- Enum.with_index(File.read!(file) |> String.split("\n"), 1),
         code_call_site?(line) do
-      {Path.relative_to(file, lib_dir), String.trim(line), idx}
+      {Path.relative_to(file, base), String.trim(line), idx}
     end
   end
 

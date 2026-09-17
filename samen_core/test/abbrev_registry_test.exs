@@ -123,6 +123,11 @@ defmodule Samen.AbbrevRegistryTest do
     test "the COMMITTED registry: 263 flat entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
       %{global: global, hosts: hosts} = Reg.load_namespaced()
       assert map_size(global) == 263
+      # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
+      # samen_core 84, samen_web 44, samenerp 68 (the WS-ERP E8 host proof —
+      # `mix samen.gen.app` prefix `er`) = 280 host entries across six hosts.
+      assert hosts["samenerp"] != nil
+      assert map_size(hosts["samenerp"]) == 68
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -303,6 +308,16 @@ defmodule Samen.AbbrevRegistryTest do
                  # path, all allocator-reserved under host `samen_core`.
                  "sos" => "SamenCore.Support.OutreachFixture.Sequence",
                  "soe" => "SamenCore.Support.OutreachFixture.Enrollment",
+                 # WS-ERP E8 (ADR-049 §2): the Budget/BudgetLine blueprint reservations
+                 # (sbg/sbe canonical; sbd/sbj the allocator's earlier candidates,
+                 # idempotently reserved) + the E8 portfolio aggregate (`sea`,
+                 # Samen.E8Aggregate.PortfolioByIndustry — the token-blind operator
+                 # projection's samen_core registration). Allocator-reserved.
+                 "sbd" => "SamenCore.Support.FinanceFixture.Budget",
+                 "sbe" => "SamenCore.Support.FinanceFixture.BudgetLine",
+                 "sbg" => "SamenCore.Support.FinanceFixture.Budget",
+                 "sbj" => "SamenCore.Support.FinanceFixture.BudgetLine",
+                 "sea" => "Samen.E8Aggregate.PortfolioByIndustry",
                  "sso" => "SamenCore.Support.OutreachFixture.StepSend",
                  "scm" => "SamenCore.Support.MailboxFixture.Connection",
                  "smm" => "SamenCore.Support.MailboxFixture.MailMessage",
@@ -537,6 +552,89 @@ defmodule Samen.AbbrevRegistryTest do
                  "whe" => "Samen.WebTest.Hr.Employee",
                  "whv" => "Samen.WebTest.Hr.EmploymentEvent",
                  "whl" => "Samen.WebTest.Hr.LeaveRequest"
+               },
+               # WS-ERP E8 (ADR-049): the samenerp HOST PROOF — `mix samen.gen.app`,
+               # prefix `er`. The full E1–E7 ERP scope set re-materialized under the
+               # host namespace + the host's own kernel/Identity/Operator/Billing/
+               # Aggregate allocations, all allocator-reserved via the sanctioned
+               # allocator (priv/reserve_samenerp_abbrevs.exs + the generator's own
+               # reserve_abbrevs!). 68 entries.
+               "samenerp" => %{
+                 # Samenerp.Aggregate (1):
+                 "era" => "Samenerp.Aggregate.RecordCountBySegment",
+                 # Samenerp.Approvals (1):
+                 "erz" => "Samenerp.Approvals.Approval",
+                 # Samenerp.Billing (9):
+                 "erc" => "Samenerp.Billing.Customer",
+                 "ere" => "Samenerp.Billing.Entitlement",
+                 "eri" => "Samenerp.Billing.Invoice",
+                 "erl" => "Samenerp.Billing.Plan",
+                 "erp" => "Samenerp.Billing.Price",
+                 "ers" => "Samenerp.Billing.Subscription",
+                 "eru" => "Samenerp.Billing.Usage",
+                 "erv" => "Samenerp.Billing.SubscriptionEvent",
+                 "ery" => "Samenerp.Billing.Payment",
+                 # Samenerp.Erp (22):
+                 "ebl" => "Samenerp.Erp.BomLine",
+                 "ebm" => "Samenerp.Erp.Bom",
+                 "eca" => "Samenerp.Erp.Account",
+                 "ecb" => "Samenerp.Erp.Budget",
+                 "ecd" => "Samenerp.Erp.BudgetLine",
+                 "ecf" => "Samenerp.Erp.PostingAccount",
+                 "ecj" => "Samenerp.Erp.JournalEntry",
+                 "ecl" => "Samenerp.Erp.JournalLine",
+                 "ecp" => "Samenerp.Erp.ApInvoice",
+                 "ecr" => "Samenerp.Erp.PaymentReceipt",
+                 "egr" => "Samenerp.Erp.GoodsReceipt",
+                 "eni" => "Samenerp.Erp.Item",
+                 "enl" => "Samenerp.Erp.StockLedger",
+                 "ens" => "Samenerp.Erp.StockLevel",
+                 "enw" => "Samenerp.Erp.Warehouse",
+                 "epg" => "Samenerp.Erp.ProductionLog",
+                 "epl" => "Samenerp.Erp.PoLine",
+                 "epo" => "Samenerp.Erp.PurchaseOrder",
+                 "erd" => "Samenerp.Erp.ReceiptLine",
+                 "esl" => "Samenerp.Erp.SoLine",
+                 "eso" => "Samenerp.Erp.SalesOrder",
+                 "ewo" => "Samenerp.Erp.WorkOrder",
+                 # Samenerp.Operator (28):
+                 "eoc" => "Samenerp.Operator.Credential",
+                 "eoi" => "Samenerp.Operator.UserIdentity",
+                 "eok" => "Samenerp.Operator.ApiKey",
+                 "eol" => "Samenerp.Operator.LoginFailure",
+                 "eom" => "Samenerp.Operator.Membership",
+                 "eon" => "Samenerp.Operator.Invitation",
+                 "eoo" => "Samenerp.Operator.Org",
+                 "eor" => "Samenerp.Operator.Role",
+                 "eos" => "Samenerp.Operator.Session",
+                 "eot" => "Samenerp.Operator.AuthToken",
+                 "eou" => "Samenerp.Operator.User",
+                 "epc" => "Samenerp.Operator.Customer",
+                 "epe" => "Samenerp.Operator.Entitlement",
+                 "epi" => "Samenerp.Operator.Invoice",
+                 "epp" => "Samenerp.Operator.Plan",
+                 "epr" => "Samenerp.Operator.Price",
+                 "eps" => "Samenerp.Operator.Subscription",
+                 "epu" => "Samenerp.Operator.Usage",
+                 "epv" => "Samenerp.Operator.SubscriptionEvent",
+                 "epy" => "Samenerp.Operator.Payment",
+                 "eqc" => "Samenerp.Operator.Conversation",
+                 "eqg" => "Samenerp.Operator.Agent",
+                 "eqk" => "Samenerp.Operator.Ticket",
+                 "eql" => "Samenerp.Operator.Sla",
+                 "eqm" => "Samenerp.Operator.Message",
+                 "eqn" => "Samenerp.Operator.Macro",
+                 "eqs" => "Samenerp.Operator.Csat",
+                 "eqt" => "Samenerp.Operator.CsatSurveyToken",
+                 # Samenerp.Primitives (6):
+                 "eff" => "Samenerp.Primitives.FeatureFlag",
+                 "efl" => "Samenerp.Primitives.File",
+                 "enp" => "Samenerp.Primitives.NotificationPreference",
+                 "ent" => "Samenerp.Primitives.Notification",
+                 "esh" => "Samenerp.Primitives.SearchIndex",
+                 "ewh" => "Samenerp.Primitives.Webhook",
+                 # Samenerp.Vertical (1):
+                 "rne" => "Samenerp.Vertical.Record"
                }
              }
 
@@ -617,7 +715,12 @@ defmodule Samen.AbbrevRegistryTest do
       # +4 WS-ERP E2 — the Finance fixture's ApInvoice/PaymentReceipt/
       # PostingAccount/PaymentMirror (sap/prc/fav/sbp) + the E3 Inventory
       # fixture (sit/swh/skl/slv) = 460.
-      assert map_size(Reg.load()) == 470
+      # +22 WS-ERP E8 — the E8 report reservations (sbg/sbe/sea) + the samenerp
+      # host proof (`mix samen.gen.app`, prefix `er`: the E1–E7 scope set + the
+      # host's kernel/Identity/Operator/Billing/Aggregate allocations) = 543 (the final +73: the E8 report reservations sbg/sbe/sea + the
+#       68-entry samenerp host proof, prefix `er`) global
+      # hosts entries total (263 global + 280 host).
+      assert map_size(Reg.load()) == 543
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

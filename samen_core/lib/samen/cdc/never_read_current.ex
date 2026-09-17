@@ -67,9 +67,11 @@ defmodule Samen.Cdc.NeverReadCurrent do
   @doc "Scan every `.ex`/`.exs` under `dir` for un-marked CDC-repo reads."
   @spec scan_dir(String.t(), module() | nil) :: {:ok, [finding()]}
   def scan_dir(dir, repo \\ cdc_repo()) do
+    # Windows: natively-joined backslash paths make Path.wildcard match NOTHING
+    # (backslash is a literal to the glob engine) — the scan would pass
+    # silently vacuously. Route through the normalized expansion helper.
     dir
-    |> Path.join("**/*.{ex,exs}")
-    |> Path.wildcard()
+    |> Samen.SourceGlob.expand!()
     |> Enum.map(fn path -> {path, File.read!(path)} end)
     |> scan_sources(repo)
   end

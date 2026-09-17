@@ -35,6 +35,13 @@ defmodule Samen.PitrRestoreTest do
     :ok
   end
 
+  @pg_dump_present? not is_nil(System.find_executable("pg_dump"))
+
+  # The PITR proof shells out to the real `pg_dump` client tool (a documented
+  # prerequisite). When it is genuinely absent (e.g. a machine running only the
+  # Docker Postgres server), SKIP LOUDLY with the reason instead of failing on
+  # a tool-not-found ErlangError.
+  @tag skip: if(@pg_dump_present?, do: false, else: "pg_dump not on PATH — the PITR physical proof needs the real pg client tool")
   test "PITR restore of the DB dump cannot decrypt because the key store was never in the dump" do
     subject = "subj-pitr-" <> (:crypto.strong_rand_bytes(6) |> Base.encode16())
     {:ok, person} = Vault.store_email(subject, "Dave", @secret)

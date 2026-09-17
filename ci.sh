@@ -388,14 +388,24 @@ gate_pawchart() {
   MIX_ENV=test bash ci.sh
 }
 
+# --- SamenERP host-proof gate (WS-ERP E8): the E1–E7 scopes mounted AS-IS on
+# one host namespace at ≈0 authored LOC, gated by the FULL verifier suite.
+gate_samenerp() {
+  export HEX_HOME="$GATE_LOG_DIR/hex-samenerp"
+  cd "$REPO_ROOT/samenerp"
+  mix deps.get --quiet
+  MIX_ENV=test bash ci.sh
+}
+
 # Gate registry: name | function | PASSED marker line(s) to emit on success.
-gate_names=(samen_web demo driftwood pawchart)
-gate_fns=(gate_samen_web gate_demo gate_driftwood gate_pawchart)
+gate_names=(samen_web demo driftwood pawchart samenerp)
+gate_fns=(gate_samen_web gate_demo gate_driftwood gate_pawchart gate_samenerp)
 gate_markers=(
   "==> samen_web gate: PASSED"
   $'==> demo tests: PASSED\n==> demo CI gate: PASSED'
   "==> Driftwood CI gate: PASSED"
   "==> PawChart CI gate: PASSED"
+  "==> samenerp CI gate: ALL PASSED"
 )
 
 # Launch all four in the background, each redirected to its own per-app log.
@@ -430,7 +440,7 @@ if [[ "$gate_failed" != 0 ]]; then
   exit 1
 fi
 
-# All four gates confirmed exit 0 — logs no longer needed.
+# All five gates confirmed exit 0 — logs no longer needed.
 rm -rf "$GATE_LOG_DIR"
 
 echo ""

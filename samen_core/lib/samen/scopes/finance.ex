@@ -123,7 +123,9 @@ defmodule Samen.Scopes.Finance do
     journal_line: "fjl",
     ap_invoice: "fai",
     payment_receipt: "frr",
-    posting_account: "fpa"
+    posting_account: "fpa",
+    budget: "fbg",
+    budget_line: "fbl"
   }
 
   @doc false
@@ -146,9 +148,13 @@ defmodule Samen.Scopes.Finance do
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
     receipt_mod = Module.concat(namespace, PaymentReceipt)
     posting_account_mod = Module.concat(namespace, PostingAccount)
+    budget_mod = Module.concat(namespace, Budget)
+    budget_line_mod = Module.concat(namespace, BudgetLine)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
+
+      require Samen.Scopes.Finance.BudgetBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -157,6 +163,8 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(ap_invoice_mod))
         resource(unquote(receipt_mod))
         resource(unquote(posting_account_mod))
+        resource(unquote(budget_mod))
+        resource(unquote(budget_line_mod))
       end
 
       Samen.Scopes.Finance.Blueprint.define_account(
@@ -212,6 +220,27 @@ defmodule Samen.Scopes.Finance do
         unquote(domain),
         unquote(repo),
         unquote(abbrevs.posting_account),
+        unquote(account_mod)
+      )
+
+      # WS-ERP E8: the budget plan (Tier-0 config; budget-vs-actual is the
+      # pure READ over these lines vs posted journal activity).
+      Samen.Scopes.Finance.BudgetBlueprint.define_budget(
+        unquote(budget_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.budget),
+        unquote(budget_line_mod)
+      )
+
+      Samen.Scopes.Finance.BudgetBlueprint.define_budget_line(
+        unquote(budget_line_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.budget_line),
+        unquote(budget_mod),
         unquote(account_mod)
       )
     end

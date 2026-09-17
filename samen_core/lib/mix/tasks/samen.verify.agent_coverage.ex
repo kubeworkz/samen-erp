@@ -675,7 +675,7 @@ defmodule Mix.Tasks.Samen.Verify.AgentCoverage do
     for vertical <- @verticals,
         dir = Path.join([root, vertical, "lib"]),
         File.dir?(dir),
-        path <- Path.wildcard(Path.join(dir, "**/*.ex")),
+        path <- Samen.SourceGlob.expand!(dir, "**/*.ex"),
         File.regular?(path),
         source = File.read!(path),
         not defines_agent?(source),
@@ -758,15 +758,17 @@ defmodule Mix.Tasks.Samen.Verify.AgentCoverage do
   # --- path helpers ----------------------------------------------------------------------
 
   defp lib_paths(root) do
+    # Windows: backslash-carrying paths make Path.wildcard match nothing —
+    # every dir glob goes through the normalized expansion helper.
     @app_lib_globs
-    |> Enum.flat_map(fn glob -> Path.wildcard(Path.join(root, glob)) end)
+    |> Enum.flat_map(fn glob -> Samen.SourceGlob.expand!(root, glob) end)
     |> Enum.filter(&File.dir?/1)
-    |> Enum.flat_map(fn dir -> Path.wildcard(Path.join(dir, "**/*.ex")) end)
+    |> Enum.flat_map(fn dir -> Samen.SourceGlob.expand!(dir, "**/*.ex") end)
   end
 
   defp test_paths(root) do
-    Path.wildcard(Path.join(root, "*/test/**/*.exs")) ++
-      Path.wildcard(Path.join(root, "*/test/**/*.ex"))
+    Samen.SourceGlob.expand!(root, "*/test/**/*.exs") ++
+      Samen.SourceGlob.expand!(root, "*/test/**/*.ex")
   end
 
   # One concatenated blob of every test source in the tree — for the cheap "a test names

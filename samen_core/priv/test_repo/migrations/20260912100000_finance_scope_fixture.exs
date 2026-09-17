@@ -30,7 +30,10 @@ defmodule SamenCore.TestRepo.Migrations.FinanceScopeFixture do
   @resources [
     SamenCore.Support.FinanceFixture.Account,
     SamenCore.Support.FinanceFixture.JournalEntry,
-    SamenCore.Support.FinanceFixture.JournalLine
+    SamenCore.Support.FinanceFixture.JournalLine,
+    # WS-ERP E8: the budget plan (per-account, per-period planned amounts).
+    SamenCore.Support.FinanceFixture.Budget,
+    SamenCore.Support.FinanceFixture.BudgetLine
   ]
 
   def up do
@@ -229,12 +232,77 @@ defmodule SamenCore.TestRepo.Migrations.FinanceScopeFixture do
     FOR EACH ROW EXECUTE FUNCTION sjl_journal_line_enforce_append_only()
     """, "DROP TRIGGER IF EXISTS sjl_journal_line_append_only_tg ON sjl_journal_line"
 
+    # ── Budget — the plan header (WS-ERP E8; design §2.1) ──────────────────
+    create table(:sbg_budget, primary_key: false) do
+      add(:sbg_name, :text, null: false)
+      add(:sbg_period, :integer, null: false)
+      add(:sbg_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:sbg_org_id, :uuid, null: false)
+      add(:sbg_inserted_at, :utc_datetime, null: false)
+      add(:sbg_updated_at, :utc_datetime, null: false)
+      add(:sbg_archived_at, :utc_datetime_usec)
+    end
+
+    create(index(:sbg_budget, [:sbg_org_id]))
+    create(index(:sbg_budget, [:sbg_org_id, :sbg_name, :sbg_period], unique: true))
+
+    execute """
+    ALTER TABLE sbg_budget
+      ADD CONSTRAINT sbg_period_valid CHECK (sbg_period BETWEEN 2000 AND 2999)
+    """,
+    "ALTER TABLE sbg_budget DROP CONSTRAINT sbg_period_valid"
+
+    # ── BudgetLine — one account's planned amount ──────────────────────────
+    create table(:sbj_budget_line, primary_key: false) do
+      add(:sbj_planned_cents, :bigint, null: false)
+      add(:sbj_memo, :text)
+      add(:sbj_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:sbj_org_id, :uuid, null: false)
+      add(:sbj_inserted_at, :utc_datetime, null: false)
+      add(:sbj_updated_at, :utc_datetime, null: false)
+
+      add(
+        :sbj_budget_id,
+        references(:sbg_budget,
+          column: :sbg_id,
+          name: "sbj_budget_line_sbj_budget_id_fkey",
+          type: :uuid
+        )
+      )
+
+      add(
+        :sbj_account_id,
+        references(:sac_account,
+          column: :sac_id,
+          name: "sbj_budget_line_sbj_account_id_fkey",
+          type: :uuid
+        )
+      )
+    end
+
+    create(index(:sbj_budget_line, [:sbj_org_id]))
+    create(index(:sbj_budget_line, [:sbj_budget_id]))
+    create(index(:sbj_budget_line, [:sbj_account_id]))
+    create(
+      index(:sbj_budget_line, [:sbj_org_id, :sbj_budget_id, :sbj_account_id], unique: true)
+    )
+
+    execute """
+    ALTER TABLE sbj_budget_line
+      ADD CONSTRAINT sbj_planned_non_negative CHECK (sbj_planned_cents >= 0)
+    """,
+    "ALTER TABLE sbj_budget_line DROP CONSTRAINT sbj_planned_non_negative"
+
     catalog_sync(@resources)
   end
 
   def down do
     catalog_sync_down(@resources)
 
+    drop(table(:sbj_budget_line))
+    execute "ALTER TABLE sbj_budget_line DROP CONSTRAINT IF EXISTS sbj_planned_non_negative"
+    drop(table(:sbg_budget))
+    execute "ALTER TABLE sbg_budget DROP CONSTRAINT IF EXISTS sbg_period_valid"
     execute "DROP TRIGGER IF EXISTS sjl_journal_line_append_only_tg ON sjl_journal_line"
     execute "DROP FUNCTION IF EXISTS sjl_journal_line_enforce_append_only()"
     execute "DROP TRIGGER IF EXISTS sje_journal_entry_posted_immutable_tg ON sje_journal_entry"

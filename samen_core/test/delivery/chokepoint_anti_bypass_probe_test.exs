@@ -108,14 +108,20 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
   # tests run concurrently races other suites that snapshot/copy the lib
   # directory, e.g. `chokepoint_test.exs`'s sabotage harness).
   defp scan_paths(extra_roots \\ []) do
+    # Windows: natively-joined backslash paths make Path.wildcard match NOTHING
+    # (backslash is a literal to the glob engine) — the rogue-file red proof
+    # would silently find nothing. Every expansion routes through the
+    # normalized helper, and relative_to gets a normalized base too.
+    repo = Samen.SourceGlob.normalize(@repo_root)
+
     (@app_lib_globs ++ @generator_template_globs)
     |> Enum.flat_map(fn rel_glob ->
-      Path.wildcard(Path.join(@repo_root, rel_glob))
+      Samen.SourceGlob.expand!(repo, rel_glob)
     end)
     |> Kernel.++(extra_roots)
     |> Enum.filter(&File.dir?/1)
     |> Enum.flat_map(fn dir ->
-      Path.wildcard(Path.join(dir, "**/*.{ex,eex}"))
+      Samen.SourceGlob.expand!(dir, "**/*.{ex,eex}")
     end)
     |> Enum.reject(&(&1 in @excluded_files))
   end
@@ -127,7 +133,7 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
         [_, receiver] <- [Regex.run(@deliver_call_re, line) || [nil, nil]],
         not is_nil(receiver),
         receiver not in @known_non_adapter_receivers do
-      {Path.relative_to(path, @repo_root), idx, String.trim(line)}
+      {Path.relative_to(path, Samen.SourceGlob.normalize(@repo_root)), idx, String.trim(line)}
     end
   end
 

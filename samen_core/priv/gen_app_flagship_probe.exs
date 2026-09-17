@@ -106,7 +106,15 @@ scratch_root = Path.expand(Path.join(samen_core_root, ".."))
 scratch_parent = String.trim(scratch_parent_out)
 
 # --- REGISTRY SAFETY: snapshot the committed registry to a scratch/tmp copy FIRST -----
-registry_path = Samen.AbbrevRegistry.path()
+registry_path =
+  # The COMMITTED source registry, not `Samen.AbbrevRegistry.path()`: on Windows
+  # priv/ is not a symlink, so the latter resolves to the _build COPY — the
+  # generated app compiles samen_core fresh from SOURCE and would never see
+  # reservations made there (observed: abbrev "gaz" missing at the scratch
+  # app's compile). The root-ci guard snapshots/restores exactly this source
+  # path, so the probe must operate on the same bytes.
+  Path.join(samen_core_root, "priv/abbrev_registry.json")
+
 registry_pristine = File.read!(registry_path)
 
 # T107: real `mktemp` (was a nanosecond-timestamp name) — atomically-created, guaranteed
@@ -185,9 +193,10 @@ rescue
 end
 
 try do
-  # Reserve into the PHYSICAL registry (unavoidable — see the REGISTRY SAFETY note). The
-  # pristine bytes are safe in registry_scratch; cleanup restores byte-exact from it.
-  Gen.reserve_abbrevs!(spec)
+  # Reserve into the PHYSICAL (source) registry — see the registry_path note
+  # above. The pristine bytes are safe in registry_scratch; cleanup restores
+  # byte-exact from it.
+  Gen.reserve_abbrevs!(spec, registry_path)
   Gen.write_app!(spec)
   # deps.get + compile --warnings-as-errors + dump schema.dict + dump api_contract.v1.json.
   Gen.compile_and_dump!(spec)

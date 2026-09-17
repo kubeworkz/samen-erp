@@ -1,0 +1,8 @@
+defmodule SamenerpWeb.ErrorHTML do
+  @moduledoc "Minimal error renderer for Samenerp."
+  use Phoenix.Component
+
+  def render(template, _assigns) do
+    Phoenix.Controller.status_message_from_template(template)
+  end
+end

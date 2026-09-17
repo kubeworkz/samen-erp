@@ -190,18 +190,25 @@ defmodule Samen.AI.ChokepointAntiBypassProbeTest do
   # File / tree scan
 
   defp scan_paths(extra_roots \\ []) do
+    # Windows: natively-joined backslash paths make Path.wildcard match NOTHING
+    # (backslash is a literal to the glob engine) — the forge red proof would
+    # silently find nothing. Every expansion routes through the normalized
+    # helper, and relative_to gets a normalized base too.
+    repo = Samen.SourceGlob.normalize(@repo_root)
+
     (@app_lib_globs ++ @generator_template_globs)
-    |> Enum.flat_map(fn rel_glob -> Path.wildcard(Path.join(@repo_root, rel_glob)) end)
+    |> Enum.flat_map(fn rel_glob -> Samen.SourceGlob.expand!(repo, rel_glob) end)
     |> Kernel.++(extra_roots)
     |> Enum.filter(&File.dir?/1)
-    |> Enum.flat_map(fn dir -> Path.wildcard(Path.join(dir, "**/*.{ex,eex}")) end)
+    |> Enum.flat_map(fn dir -> Samen.SourceGlob.expand!(dir, "**/*.{ex,eex}") end)
     |> Enum.reject(&(&1 in @allowed_files))
   end
 
   defp all_offenders(paths) do
     for path <- paths,
         File.regular?(path),
-        offender <- offenders_in_source(File.read!(path), Path.relative_to(path, @repo_root)) do
+        offender <-
+          offenders_in_source(File.read!(path), Path.relative_to(path, Samen.SourceGlob.normalize(@repo_root))) do
       offender
     end
   end

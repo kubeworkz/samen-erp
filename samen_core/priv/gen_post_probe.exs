@@ -97,7 +97,13 @@ scratch_root = Path.expand(Path.join(samen_core_root, ".."))
 scratch_parent = String.trim(scratch_parent_out)
 
 # --- REGISTRY SAFETY: snapshot the committed registry FIRST ----------------------------
-registry_path = Samen.AbbrevRegistry.path()
+registry_path =
+  # The COMMITTED source registry, not `Samen.AbbrevRegistry.path()`: on Windows
+  # priv/ is not a symlink, so the latter resolves to the _build COPY — the
+  # generated app compiles samen_core fresh from SOURCE and would never see
+  # reservations made there. The root-ci guard snapshots/restores exactly this
+  # source path, so the probe must operate on the same bytes.
+  Path.join(samen_core_root, "priv/abbrev_registry.json")
 registry_pristine = File.read!(registry_path)
 
 # T107: real `mktemp` (was a nanosecond-timestamp name) — atomically-created, guaranteed
@@ -166,7 +172,7 @@ spec =
 
 try do
   Gen.validate!(spec)
-  Gen.reserve_abbrevs!(spec)
+  Gen.reserve_abbrevs!(spec, registry_path)
   Gen.write_app!(spec)
   Gen.compile_and_dump!(spec)
 
@@ -242,6 +248,10 @@ try do
     IO.puts(res_out)
     halt.(1, "FAIL: `mix samen.gen.resource` did not succeed.")
   end
+
+  # NOTE: the in-app gen.resource's abbrev reservation lands directly in the
+  # SOURCE registry (via AbbrevRegistry.path/0 engine fix), so no sync is needed.
+  # On Unix priv/ is a symlink and both paths are the same file.
 
   four_files = [
     "test/crm_widget_policy_matrix_test.exs",
@@ -493,7 +503,15 @@ try do
   IO.puts("ARCHIVE_CYCLE: OK — archive -> hidden -> restore -> visible again, full round trip")
   """
 
-  {cycle_out, cycle_code} = mix.(app_dir, ["run", "-e", archive_cycle_script])
+  # Written to a FILE and run as `mix run <path>` — NOT passed as `mix run -e`:
+  # a multiline `-e` argument is mangled crossing cmd.exe on Windows (observed:
+  # the script vanished — neither raised nor printed). The flagship probe's
+  # `_flagship_boot_probe.exs` precedent (same probe family, proven on Windows).
+  archive_cycle_path = Path.join(app_dir, "_post_archive_cycle.exs")
+  File.write!(archive_cycle_path, archive_cycle_script)
+
+  {cycle_out, cycle_code} = mix.(app_dir, ["run", archive_cycle_path])
+  File.rm(archive_cycle_path)
 
   unless cycle_code == 0 and String.contains?(cycle_out, "ARCHIVE_CYCLE: OK") do
     IO.puts(cycle_out)

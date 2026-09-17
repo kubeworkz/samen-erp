@@ -73,7 +73,16 @@ defmodule Samen.VaultPitrTest do
     :ok
   end
 
+  # The pg tools are a documented prerequisite (CLAUDE.md); when genuinely
+  # absent (e.g. a Windows machine with only the Docker Postgres), SKIP LOUDLY
+  # with the reason instead of running into a tool-not-found failure. The
+  # previous setup-callback atoms (`:skip_no_pg_dump`) were inert — ExUnit
+  # ignores unknown setup returns, so the tests still ran and failed.
+  @pg_tools_present? not is_nil(System.find_executable("pg_dump")) and
+                       not is_nil(System.find_executable("psql"))
+
   @tag timeout: 120_000
+  @tag skip: if(@pg_tools_present?, do: false, else: "pg_dump/psql not on PATH — the PITR physical proof needs the real pg client tools")
   test "PITR restore cannot decrypt because the key store was never in the dump" do
     subject_id = "subj-pitr-#{System.unique_integer([:positive])}"
 
@@ -157,6 +166,8 @@ defmodule Samen.VaultPitrTest do
     File.rm(dump_path)
   end
 
+  @tag timeout: 120_000
+  @tag skip: if(@pg_tools_present?, do: false, else: "pg_dump/psql not on PATH — the PITR physical proof needs the real pg client tools")
   test "sanity guard: with key store intact (no shred), restore DOES decrypt (proves non-vacuousness)" do
     # This test proves the red-path test above is non-vacuous: with the key
     # store intact (no shred), the same pipeline DOES decrypt. So the difference

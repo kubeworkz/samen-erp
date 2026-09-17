@@ -24,7 +24,7 @@ defmodule Samen.AbbrevFlattenConflictTest do
       assert Reg.flatten_conflicts(Reg.load_namespaced()) == []
     end
 
-    test "load/0 does not raise and returns the full lossless union (263 global + 176 host)" do
+    test "load/0 does not raise and returns the full lossless union (263 global + 280 host)" do
       flat = Reg.load()
       # + 3 T109 (ADR-038 §6.4) host reservations (dil/dol/wol — the durable
       # brute-force failure counter, allocator-proposed) = 355; +7 in T119 = 362;
@@ -70,7 +70,12 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # +3 WS-ERP E1 (ADR-049 §2): samen_core host's Finance scope in-tree pilot
       # fixture (`SamenCore.Support.FinanceFixture`) + the E3 Inventory fixture = 464
       # (E1 + the E2 documents + sit/swh/skl/slv).
-      assert map_size(flat) == 470
+      # +22 WS-ERP E8: the E8 report reservations (sbg/sbe Budget/BudgetLine, sea — the
+      # token-blind portfolio aggregate) + the samenerp HOST PROOF (`mix samen.gen.app`,
+      # prefix `er`): the full E1–E7 scope set re-materialized under the host namespace
+      # (eca/ecl/ecj …) + the host's own kernel/Identity/Operator/Billing/Aggregate
+      # allocations (eou/eoi/eri/eby …) = 543.
+      assert map_size(flat) == 543
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

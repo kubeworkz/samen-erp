@@ -718,6 +718,12 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           end
         end
 
+        changes do
+          # F3.2 same-org FK: a receipt receives against a same-org PO into
+          # a same-org warehouse (the blueprint-level guard).
+          change({Samen.Policy.SameOrgFk, relationships: [:purchase_order, :warehouse]})
+        end
+
         actions do
           read :read do
             primary?(true)
@@ -1212,6 +1218,13 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             attribute_type(:uuid)
             allow_nil?(false)
           end
+        end
+
+        changes do
+          # F3.2 same-org FK: the rollup row may only name same-org item +
+          # warehouse (the blueprint-level guard — the samenerp host gate's
+          # F3.5 sweep caught its omission).
+          change({Samen.Policy.SameOrgFk, relationships: [:item, :warehouse]})
         end
 
         actions do

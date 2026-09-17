@@ -76,6 +76,7 @@ defmodule Samen.Scopes.Inventory.BomLinesWriter do
             require Ash.Query
 
             wo_resource
+            # authz-scope: internal guard — bom_id is org-bounded via BOM FK
             |> Ash.Query.filter(bom_id == ^bom_id and status in [:released, :completed])
             |> Ash.read_one(authorize?: false)
             |> case do

@@ -78,13 +78,65 @@ defmodule Samen.AbbrevRegistry do
   and an abbrev listed for resource A cannot be handed to resource B.
   """
 
-  @registry_path Path.join([:code.priv_dir(:samen_core) |> to_string(), "abbrev_registry.json"])
-
   @abbrev_pattern ~r/\A[a-z]{3}\z/
 
-  @doc "Absolute path to the committed registry file."
+  @doc """
+  Absolute path to the committed registry file — the SOURCE file, never a build copy.
+
+  On Unix, `:code.priv_dir(:samen_core)` in a dev/test build is a SYMLINK to the
+  source `priv/`, so priv_dir already addresses the committed file. Windows Mix
+  does not symlink (the build copy is a real directory), and the correct source
+  root differs by invocation context, so candidates are tried in order and each
+  must actually hold the registry file before it wins:
+
+    1. symlink-resolved priv_dir (Unix dev/test — authoritative),
+    2. `Mix.Project.deps_paths()[:samen_core]` — compiling/running when
+       samen_core is a PATH DEP of a generated app (its macro expansions fire
+       with the host project alive); the naive priv_dir there sits under the
+       HOST app's `_build`, not samen_core's,
+    3. `File.cwd!/0` — a dep-compile (Mix cd's into the dep) or any sanctioned
+       in-checkout invocation,
+    4. the priv_dir with its `_build` segment stripped — compiling samen_core
+       in its own checkout on Windows,
+    5. the bare priv_dir — an OTP release (bundled priv, no source tree).
+
+  A reservation written to a `_build` COPY is silently lost when samen_core
+  re-copies `priv/` over the build mirror, while a fresh from-source compile
+  reads the stale copy — generated resources then fail their own registry
+  validation (observed in the D6/D7a gen probes: abbrevs "gaz" and "xiz" "not
+  in the registry"). Every candidate is existence-checked; none matches →
+  raise (a guessed path would silently break abbrev enforcement).
+  """
   @spec path() :: String.t()
-  def path, do: @registry_path
+  def path do
+    priv = :code.priv_dir(:samen_core) |> to_string()
+
+    symlink_priv =
+      case File.read_link(priv) do
+        {:ok, link_target} -> Path.expand(link_target, Path.dirname(priv))
+        {:error, _} -> nil
+      end
+
+    deps_path =
+      if function_exported?(Mix.Project, :config, 0) do
+        case Mix.Project.deps_paths()[:samen_core] do
+          nil -> nil
+          p -> Path.join(p, "priv/abbrev_registry.json")
+        end
+      else
+        nil
+      end
+
+    stripped_priv =
+      case priv |> Samen.SourceGlob.normalize() |> String.split("/_build/", parts: 2) do
+        [checkout, _rest] -> Path.join([checkout, "priv", "abbrev_registry.json"])
+        _ -> nil
+      end
+
+    [symlink_priv, deps_path, Path.join(File.cwd!(), "priv/abbrev_registry.json"), stripped_priv]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.find(priv <> "/abbrev_registry.json", &File.regular?/1)
+  end
 
   @doc "The 3-letter-lowercase pattern every abbrev must match."
   @spec pattern() :: Regex.t()
@@ -99,7 +151,7 @@ defmodule Samen.AbbrevRegistry do
   """
   @spec load() :: %{optional(String.t()) => String.t()}
   def load do
-    load(@registry_path)
+    load(path())
   end
 
   @doc """
@@ -171,7 +223,7 @@ defmodule Samen.AbbrevRegistry do
   The `"hosts"` key is optional; a legacy flat file yields `hosts: %{}`.
   """
   @spec load_namespaced() :: %{global: map(), hosts: map()}
-  def load_namespaced, do: load_namespaced(@registry_path)
+  def load_namespaced, do: load_namespaced(path())
 
   @spec load_namespaced(String.t()) :: %{global: map(), hosts: map()}
   def load_namespaced(registry_path) do
@@ -329,7 +381,7 @@ defmodule Samen.AbbrevRegistry do
       not Map.has_key?(registry, abbrev) ->
         {:error,
          "abbrev #{inspect(abbrev)} for #{resource} is not in the abbrev registry " <>
-           "(#{@registry_path}). Abbrevs are permanent and must be reserved: add " <>
+           "(#{path()}). Abbrevs are permanent and must be reserved: add " <>
            "\"#{abbrev}\": \"#{resource}\" to the \"abbrevs\" map and commit it. " <>
            "This prevents two resources ever racing for the same prefix."}
 
@@ -430,7 +482,7 @@ defmodule Samen.AbbrevRegistry do
 
         {:error,
          "abbrev #{inspect(abbrev)} is already owned by #{other} in the GLOBAL cross-host net " <>
-           "(#{@registry_path}), not #{owner}. Two hosts sharing physical infrastructure cannot " <>
+           "(#{path()}), not #{owner}. Two hosts sharing physical infrastructure cannot " <>
            "silently clash on a 3-letter prefix — pick a new, unused abbrev."}
 
       cross_host != nil and not allow_cross_host_reuse? ->

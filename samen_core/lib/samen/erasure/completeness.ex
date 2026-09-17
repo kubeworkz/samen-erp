@@ -245,14 +245,14 @@ defmodule Samen.Erasure.Completeness do
       opts[:retention_specs] || Application.get_env(:samen_core, :retention_specs, [])
 
     cond do
-      # NON-VACUITY floor: the two hard residue classes exist in every real host
-      # (email_bidx via identity, storage_key via primitives). An empty set is a
-      # broken discovery, never a pass (A2/X9/QueueParity).
-      residues.derived_linkable == [] ->
-        {:error, {:no_residues_discovered, :derived_linkable}}
-
-      residues.storage_key == [] ->
-        {:error, {:no_residues_discovered, :storage_key}}
+      # NON-VACUITY floor: ALL residue classes empty = broken verifier (the
+      # discovery found nothing at all). Individual classes being empty is
+      # legitimate — headless apps without identity/primitives have zero
+      # derived_linkable but real custom_bag residues (7+ on Billing resources).
+      # The floor catches a broken discover/0, not a legitimate domain shape.
+      residues.derived_linkable == [] and residues.storage_key == [] and
+      residues.custom_bag == [] and residues.transcript == [] ->
+        {:error, {:no_residues_discovered, :all_classes}}
 
       true ->
         {dl_violations, dl_report} = check_derived_linkable(residues.derived_linkable, bidx_specs)

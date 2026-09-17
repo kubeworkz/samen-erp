@@ -83,7 +83,13 @@ File.rm_rf!(scratch_parent)
 File.mkdir_p!(scratch_parent)
 
 # --- REGISTRY SAFETY: snapshot the committed registry FIRST ----------------------------
-registry_path = Samen.AbbrevRegistry.path()
+registry_path =
+  # The COMMITTED source registry, not `Samen.AbbrevRegistry.path()`: on Windows
+  # priv/ is not a symlink, so the latter resolves to the _build COPY — the
+  # generated app compiles samen_core fresh from SOURCE and would never see
+  # reservations made there. The root-ci guard snapshots/restores exactly this
+  # source path, so the probe must operate on the same bytes.
+  Path.join(samen_core_root, "priv/abbrev_registry.json")
 registry_pristine = File.read!(registry_path)
 
 registry_scratch =
@@ -140,7 +146,7 @@ spec =
 
 try do
   Gen.validate!(spec)
-  Gen.reserve_abbrevs!(spec)
+  Gen.reserve_abbrevs!(spec, registry_path)
   Gen.write_app!(spec)
   Gen.compile_and_dump!(spec)
 
@@ -224,6 +230,10 @@ try do
 
       files
     end)
+
+
+  # NOTE: the in-app gen.resource's abbrev reservation lands directly in the
+  # SOURCE registry (via AbbrevRegistry.path/0 engine fix), so no sync is needed.
 
   # --- compile + re-dump the drift baseline + the WHOLE app's full ci.sh -----------------
   {c_out, c_code} = mix.(app_dir, ["compile", "--warnings-as-errors"])

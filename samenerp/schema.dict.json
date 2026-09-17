@@ -1,0 +1,4954 @@
+{
+  "tables": [
+    {
+      "fields": [
+        {
+          "column_name": "ebl_bom_id",
+          "logical_name": "bom_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ebl_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebl_qty_per",
+          "logical_name": "qty_per",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ebl_scrap_pct",
+          "logical_name": "scrap_pct",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ebl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.BomLine",
+      "table_name": "ebl_bom_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ebm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ebm_is_active",
+          "logical_name": "is_active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ebm_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebm_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ebm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ebm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ebm_version",
+          "logical_name": "version",
+          "pii": false,
+          "type": "Integer"
+        }
+      ],
+      "resource": "Samenerp.Erp.Bom",
+      "table_name": "ebm_bom"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eca_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eca_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eca_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eca_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eca_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eca_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eca_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eca_normal_side",
+          "logical_name": "normal_side",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eca_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eca_parent_id",
+          "logical_name": "parent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eca_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Account",
+      "table_name": "eca_account"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecb_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ecb_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecb_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecb_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecb_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecb_period",
+          "logical_name": "period",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecb_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Budget",
+      "table_name": "ecb_budget"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecd_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecd_budget_id",
+          "logical_name": "budget_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecd_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecd_planned_cents",
+          "logical_name": "planned_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.BudgetLine",
+      "table_name": "ecd_budget_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecf_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecf_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecf_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecf_key",
+          "logical_name": "key",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecf_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecf_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PostingAccount",
+      "table_name": "ecf_posting_account"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecj_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ecj_entry_date",
+          "logical_name": "entry_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecj_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecj_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecj_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecj_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecj_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecj_source_id",
+          "logical_name": "source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecj_source_key",
+          "logical_name": "source_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecj_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecj_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecj_voided_entry_id",
+          "logical_name": "voided_entry_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.JournalEntry",
+      "table_name": "ecj_journal_entry"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecl_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecl_credit_cents",
+          "logical_name": "credit_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecl_debit_cents",
+          "logical_name": "debit_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecl_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecl_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.JournalLine",
+      "table_name": "ecl_journal_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecp_bill_date",
+          "logical_name": "bill_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecp_due_date",
+          "logical_name": "due_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecp_lines",
+          "logical_name": "lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "ecp_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecp_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecp_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecp_posted_entry_id",
+          "logical_name": "posted_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecp_vendor_id",
+          "logical_name": "vendor_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.ApInvoice",
+      "table_name": "ecp_ap_invoice"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecr_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecr_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecr_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecr_invoice_key",
+          "logical_name": "invoice_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecr_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecr_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecr_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecr_posted_entry_id",
+          "logical_name": "posted_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecr_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PaymentReceipt",
+      "table_name": "ecr_payment_receipt"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eff_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eff_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eff_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "eff_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eff_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eff_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "eff_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eff_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eff_rollout_pct",
+          "logical_name": "rollout_pct",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eff_stage",
+          "logical_name": "stage",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eff_target_rules",
+          "logical_name": "target_rules",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "eff_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eff_variants",
+          "logical_name": "variants",
+          "pii": false,
+          "type": "Map"
+        }
+      ],
+      "resource": "Samenerp.Primitives.FeatureFlag",
+      "table_name": "eff_feature_flag"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "efl_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "efl_content_type",
+          "logical_name": "content_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efl_filename",
+          "logical_name": "filename",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efl_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "efl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efl_search_vector",
+          "logical_name": "search_vector",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efl_size_bytes",
+          "logical_name": "size_bytes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "efl_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efl_storage_key",
+          "logical_name": "storage_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efl_uploaded_by_id",
+          "logical_name": "uploaded_by_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Primitives.File",
+      "table_name": "efl_file"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "egr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egr_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "egr_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "egr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egr_posted_entry_id",
+          "logical_name": "posted_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egr_purchase_order_id",
+          "logical_name": "purchase_order_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egr_received_at",
+          "logical_name": "received_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egr_received_date",
+          "logical_name": "received_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egr_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "egr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egr_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.GoodsReceipt",
+      "table_name": "egr_goods_receipt"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eni_default_expense_account_id",
+          "logical_name": "default_expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eni_default_income_account_id",
+          "logical_name": "default_income_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eni_default_inventory_account_id",
+          "logical_name": "default_inventory_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eni_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eni_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eni_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eni_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eni_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eni_reorder_point",
+          "logical_name": "reorder_point",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eni_sku",
+          "logical_name": "sku",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eni_uom",
+          "logical_name": "uom",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eni_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Item",
+      "table_name": "eni_item"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "enl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "enl_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enl_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "enl_note",
+          "logical_name": "note",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "enl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enl_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "enl_source_id",
+          "logical_name": "source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enl_source_key",
+          "logical_name": "source_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "enl_unit_cost_cents",
+          "logical_name": "unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "enl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "enl_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.StockLedger",
+      "table_name": "enl_stock_ledger"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "enp_digest_cadence",
+          "logical_name": "digest_cadence",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "enp_digest_last_sent_at",
+          "logical_name": "digest_last_sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "enp_digest_timezone",
+          "logical_name": "digest_timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "enp_email_enabled",
+          "logical_name": "email_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "enp_event_type",
+          "logical_name": "event_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "enp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enp_in_app_enabled",
+          "logical_name": "in_app_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "enp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "enp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enp_quiet_hours",
+          "logical_name": "quiet_hours",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "enp_recipient_id",
+          "logical_name": "recipient_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Primitives.NotificationPreference",
+      "table_name": "enp_notification_preference"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ens_avg_unit_cost_cents",
+          "logical_name": "avg_unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ens_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ens_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ens_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ens_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ens_qty_on_hand",
+          "logical_name": "qty_on_hand",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ens_qty_on_order",
+          "logical_name": "qty_on_order",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ens_stock_value_cents",
+          "logical_name": "stock_value_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ens_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ens_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.StockLevel",
+      "table_name": "ens_stock_level"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ent_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ent_event_type",
+          "logical_name": "event_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ent_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ent_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ent_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ent_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ent_read_at",
+          "logical_name": "read_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ent_recipient_id",
+          "logical_name": "recipient_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ent_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ent_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ent_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_ent_rendered_body",
+          "logical_name": "rendered_body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Primitives.Notification",
+      "table_name": "ent_notification"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "enw_address",
+          "logical_name": "address",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "enw_allow_negative",
+          "logical_name": "allow_negative",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "enw_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "enw_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enw_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "enw_is_sellable",
+          "logical_name": "is_sellable",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "enw_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "enw_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "enw_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Warehouse",
+      "table_name": "enw_warehouse"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eoc_email_bidx",
+          "logical_name": "email_bidx",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoc_hash_scheme",
+          "logical_name": "hash_scheme",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoc_password_hash",
+          "logical_name": "password_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoc_totp_enabled_at",
+          "logical_name": "totp_enabled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoc_totp_last_verified_at",
+          "logical_name": "totp_last_verified_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoc_verified_at",
+          "logical_name": "verified_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_eoc_recovery_codes",
+          "logical_name": "recovery_codes",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "pii_eoc_totp_secret",
+          "logical_name": "totp_secret",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Operator.Credential",
+      "table_name": "eoc_credential"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eoi_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoi_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoi_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoi_linked_at",
+          "logical_name": "linked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoi_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoi_provider",
+          "logical_name": "provider",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eoi_provider_uid",
+          "logical_name": "provider_uid",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoi_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.UserIdentity",
+      "table_name": "eoi_user_identity"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eok_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eok_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eok_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eok_last_used_at",
+          "logical_name": "last_used_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eok_membership_id",
+          "logical_name": "membership_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eok_minter_role",
+          "logical_name": "minter_role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eok_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eok_plane",
+          "logical_name": "plane",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eok_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eok_scopes",
+          "logical_name": "scopes",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "eok_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eok_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.ApiKey",
+      "table_name": "eok_api_key"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eol_failure_count",
+          "logical_name": "failure_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eol_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eol_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eol_key_kind",
+          "logical_name": "key_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eol_key_value",
+          "logical_name": "key_value",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eol_last_failed_at",
+          "logical_name": "last_failed_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eol_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eol_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eol_window_started_at",
+          "logical_name": "window_started_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        }
+      ],
+      "resource": "Samenerp.Operator.LoginFailure",
+      "table_name": "eol_login_failure"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eom_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eom_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eom_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eom_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eom_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eom_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eom_user_id",
+          "logical_name": "user_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Operator.Membership",
+      "table_name": "eom_membership"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eon_accepted_at",
+          "logical_name": "accepted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eon_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "eon_email_bidx",
+          "logical_name": "email_bidx",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eon_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eon_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eon_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eon_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eon_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eon_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eon_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eon_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eon_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Invitation",
+      "table_name": "eon_invitation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eoo_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoo_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoo_max_concurrent_sessions",
+          "logical_name": "max_concurrent_sessions",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eoo_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoo_onboarded_at",
+          "logical_name": "onboarded_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eoo_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eoo_plan",
+          "logical_name": "plan",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoo_slug",
+          "logical_name": "slug",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eoo_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Org",
+      "table_name": "eoo_org"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eor_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "eor_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eor_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eor_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eor_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eor_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eor_rank",
+          "logical_name": "rank",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eor_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Role",
+      "table_name": "eor_role"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eos_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eos_device_label",
+          "logical_name": "device_label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eos_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eos_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eos_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eos_last_seen_at",
+          "logical_name": "last_seen_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eos_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eos_revoked_at",
+          "logical_name": "revoked_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eos_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eos_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Session",
+      "table_name": "eos_session"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eot_consumed_at",
+          "logical_name": "consumed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eot_context",
+          "logical_name": "context",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eot_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eot_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eot_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eot_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eot_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eot_sent_to_bidx",
+          "logical_name": "sent_to_bidx",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eot_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eot_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.AuthToken",
+      "table_name": "eot_auth_token"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eou_credential_id",
+          "logical_name": "credential_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eou_emails",
+          "logical_name": "emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "eou_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "eou_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eou_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eou_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eou_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eou_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eou_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.User",
+      "table_name": "eou_user"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epc_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epc_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epc_provider_customer_ref",
+          "logical_name": "provider_customer_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_epc_billing_email",
+          "logical_name": "billing_email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "pii_epc_billing_name",
+          "logical_name": "billing_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Operator.Customer",
+      "table_name": "epc_customer"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epe_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epe_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epe_feature",
+          "logical_name": "feature",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epe_granted",
+          "logical_name": "granted",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "epe_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epe_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epe_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epe_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epe_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epe_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Entitlement",
+      "table_name": "epe_entitlement"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epg_adjustment_cents",
+          "logical_name": "adjustment_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epg_entry_kind",
+          "logical_name": "entry_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epg_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epg_ledger_event_id",
+          "logical_name": "ledger_event_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epg_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epg_unit_cost_cents",
+          "logical_name": "unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epg_work_order_id",
+          "logical_name": "work_order_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.ProductionLog",
+      "table_name": "epg_production_log"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epi_amount_due_cents",
+          "logical_name": "amount_due_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epi_amount_paid_cents",
+          "logical_name": "amount_paid_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epi_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epi_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epi_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epi_due_date",
+          "logical_name": "due_date",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epi_hosted_invoice_url",
+          "logical_name": "hosted_invoice_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epi_hosted_receipt_url",
+          "logical_name": "hosted_receipt_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epi_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epi_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epi_last_event_id",
+          "logical_name": "last_event_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epi_line_items",
+          "logical_name": "line_items",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "epi_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epi_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epi_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epi_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epi_provider_invoice_ref",
+          "logical_name": "provider_invoice_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epi_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epi_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epi_tax_amount_cents",
+          "logical_name": "tax_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epi_tax_lines",
+          "logical_name": "tax_lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "epi_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Invoice",
+      "table_name": "epi_invoice"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epl_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epl_purchase_order_id",
+          "logical_name": "purchase_order_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epl_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epl_unit_cost_cents",
+          "logical_name": "unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PoLine",
+      "table_name": "epl_po_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epo_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epo_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epo_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epo_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epo_order_date",
+          "logical_name": "order_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "epo_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epo_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epo_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epo_vendor_id",
+          "logical_name": "vendor_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epo_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.PurchaseOrder",
+      "table_name": "epo_purchase_order"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "epp_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epp_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epp_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "epp_features",
+          "logical_name": "features",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epp_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epp_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epp_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epp_provider_plan_ref",
+          "logical_name": "provider_plan_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Plan",
+      "table_name": "epp_plan"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epr_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "epr_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "epr_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epr_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epr_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epr_provider_price_ref",
+          "logical_name": "provider_price_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epr_unit_amount",
+          "logical_name": "unit_amount",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        },
+        {
+          "column_name": "epr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Price",
+      "table_name": "epr_price"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eps_cancel_at",
+          "logical_name": "cancel_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eps_cancelled_at",
+          "logical_name": "cancelled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eps_current_period_end",
+          "logical_name": "current_period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eps_current_period_start",
+          "logical_name": "current_period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eps_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "eps_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eps_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eps_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eps_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eps_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eps_provider_subscription_ref",
+          "logical_name": "provider_subscription_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eps_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eps_trial_end",
+          "logical_name": "trial_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eps_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Subscription",
+      "table_name": "eps_subscription"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epu_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epu_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epu_metric",
+          "logical_name": "metric",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epu_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epu_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epu_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epu_quantity",
+          "logical_name": "quantity",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epu_reported_at",
+          "logical_name": "reported_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epu_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epu_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Usage",
+      "table_name": "epu_usage"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epv_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epv_from_plan_id",
+          "logical_name": "from_plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epv_from_status",
+          "logical_name": "from_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epv_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epv_mrr_after_cents",
+          "logical_name": "mrr_after_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epv_mrr_before_cents",
+          "logical_name": "mrr_before_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epv_mrr_delta_cents",
+          "logical_name": "mrr_delta_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epv_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "epv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epv_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epv_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epv_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epv_to_status",
+          "logical_name": "to_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.SubscriptionEvent",
+      "table_name": "epv_subscription_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "epy_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "epy_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epy_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "epy_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epy_failure_code",
+          "logical_name": "failure_code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epy_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epy_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epy_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epy_last4",
+          "logical_name": "last4",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epy_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "epy_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "epy_payment_method_type",
+          "logical_name": "payment_method_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epy_provider_payment_ref",
+          "logical_name": "provider_payment_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "epy_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "epy_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Payment",
+      "table_name": "epy_payment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqc_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eqc_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqc_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqc_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Conversation",
+      "table_name": "eqc_conversation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqg_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eqg_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "eqg_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqg_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "eqg_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqg_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqg_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqg_timezone",
+          "logical_name": "timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_eqg_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Operator.Agent",
+      "table_name": "eqg_agent"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqk_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eqk_breached",
+          "logical_name": "breached",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "eqk_closed_at",
+          "logical_name": "closed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqk_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "eqk_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqk_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqk_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqk_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqk_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqk_resolved_at",
+          "logical_name": "resolved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqk_sla_breach_at",
+          "logical_name": "sla_breach_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqk_sla_id",
+          "logical_name": "sla_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqk_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqk_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqk_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Ticket",
+      "table_name": "eqk_ticket"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eql_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eql_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "eql_first_response_minutes",
+          "logical_name": "first_response_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eql_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eql_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eql_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eql_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eql_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eql_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eql_resolve_minutes",
+          "logical_name": "resolve_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eql_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Sla",
+      "table_name": "eql_sla"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqm_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqm_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eqm_attachments",
+          "logical_name": "attachments",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "eqm_conversation_id",
+          "logical_name": "conversation_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqm_created_via",
+          "logical_name": "created_via",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqm_message_type",
+          "logical_name": "message_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqm_sender_id",
+          "logical_name": "sender_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqm_sender_type",
+          "logical_name": "sender_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_eqm_body",
+          "logical_name": "body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Operator.Message",
+      "table_name": "eqm_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eqn_body_template",
+          "logical_name": "body_template",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqn_category",
+          "logical_name": "category",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqn_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqn_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "eqn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqn_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqn_tags",
+          "logical_name": "tags",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "eqn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Macro",
+      "table_name": "eqn_macro"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqs_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqs_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eqs_comments",
+          "logical_name": "comments",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqs_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqs_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqs_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqs_responded_at",
+          "logical_name": "responded_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqs_score",
+          "logical_name": "score",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eqs_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqs_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.Csat",
+      "table_name": "eqs_csat"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eqt_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqt_consumed_at",
+          "logical_name": "consumed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqt_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqt_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eqt_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eqt_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eqt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Operator.CsatSurveyToken",
+      "table_name": "eqt_csat_survey_token"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "era_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "era_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "era_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "era_record_count",
+          "logical_name": "record_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "era_refreshed_at",
+          "logical_name": "refreshed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "era_segment",
+          "logical_name": "segment",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "era_tenant_count",
+          "logical_name": "tenant_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "era_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Aggregate.RecordCountBySegment",
+      "table_name": "era_record_count"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "erc_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erc_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "erc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "erc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erc_provider_customer_ref",
+          "logical_name": "provider_customer_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_erc_billing_email",
+          "logical_name": "billing_email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "pii_erc_billing_name",
+          "logical_name": "billing_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Billing.Customer",
+      "table_name": "erc_customer"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "erd_goods_receipt_id",
+          "logical_name": "goods_receipt_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "erd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erd_po_line_id",
+          "logical_name": "po_line_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erd_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "erd_unit_cost_cents",
+          "logical_name": "unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "erd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ReceiptLine",
+      "table_name": "erd_receipt_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ere_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ere_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ere_feature",
+          "logical_name": "feature",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ere_granted",
+          "logical_name": "granted",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ere_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ere_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ere_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ere_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ere_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ere_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Entitlement",
+      "table_name": "ere_entitlement"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eri_amount_due_cents",
+          "logical_name": "amount_due_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eri_amount_paid_cents",
+          "logical_name": "amount_paid_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eri_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eri_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "eri_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eri_due_date",
+          "logical_name": "due_date",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eri_hosted_invoice_url",
+          "logical_name": "hosted_invoice_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eri_hosted_receipt_url",
+          "logical_name": "hosted_receipt_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eri_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eri_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eri_last_event_id",
+          "logical_name": "last_event_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eri_line_items",
+          "logical_name": "line_items",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "eri_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eri_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eri_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eri_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eri_provider_invoice_ref",
+          "logical_name": "provider_invoice_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eri_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eri_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eri_tax_amount_cents",
+          "logical_name": "tax_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eri_tax_lines",
+          "logical_name": "tax_lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "eri_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Invoice",
+      "table_name": "eri_invoice"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "erl_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "erl_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "erl_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erl_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "erl_features",
+          "logical_name": "features",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "erl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "erl_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erl_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erl_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erl_provider_plan_ref",
+          "logical_name": "provider_plan_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Plan",
+      "table_name": "erl_plan"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "erp_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "erp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "erp_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "erp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "erp_interval",
+          "logical_name": "interval",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erp_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erp_provider_price_ref",
+          "logical_name": "provider_price_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "erp_unit_amount",
+          "logical_name": "unit_amount",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        },
+        {
+          "column_name": "erp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Price",
+      "table_name": "erp_price"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ers_cancel_at",
+          "logical_name": "cancel_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ers_cancelled_at",
+          "logical_name": "cancelled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ers_current_period_end",
+          "logical_name": "current_period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ers_current_period_start",
+          "logical_name": "current_period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ers_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ers_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ers_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ers_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ers_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ers_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ers_provider_subscription_ref",
+          "logical_name": "provider_subscription_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ers_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ers_trial_end",
+          "logical_name": "trial_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ers_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Subscription",
+      "table_name": "ers_subscription"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eru_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eru_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eru_metric",
+          "logical_name": "metric",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eru_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eru_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eru_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eru_quantity",
+          "logical_name": "quantity",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eru_reported_at",
+          "logical_name": "reported_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eru_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eru_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Usage",
+      "table_name": "eru_usage"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "erv_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erv_from_plan_id",
+          "logical_name": "from_plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erv_from_status",
+          "logical_name": "from_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "erv_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erv_mrr_after_cents",
+          "logical_name": "mrr_after_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "erv_mrr_before_cents",
+          "logical_name": "mrr_before_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "erv_mrr_delta_cents",
+          "logical_name": "mrr_delta_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "erv_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "erv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erv_plan_id",
+          "logical_name": "plan_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erv_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erv_subscription_id",
+          "logical_name": "subscription_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "erv_to_status",
+          "logical_name": "to_status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "erv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.SubscriptionEvent",
+      "table_name": "erv_subscription_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ery_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ery_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ery_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ery_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ery_failure_code",
+          "logical_name": "failure_code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ery_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ery_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ery_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ery_last4",
+          "logical_name": "last4",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ery_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ery_paid_at",
+          "logical_name": "paid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ery_payment_method_type",
+          "logical_name": "payment_method_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ery_provider_payment_ref",
+          "logical_name": "provider_payment_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ery_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ery_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Billing.Payment",
+      "table_name": "ery_payment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "esh_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esh_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "esh_field_name",
+          "logical_name": "field_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esh_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esh_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esh_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esh_resource_name",
+          "logical_name": "resource_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esh_ts_config",
+          "logical_name": "ts_config",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esh_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esh_vector_column",
+          "logical_name": "vector_column",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Samenerp.Primitives.SearchIndex",
+      "table_name": "esh_search_index"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "esl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esl_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esl_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esl_sales_order_id",
+          "logical_name": "sales_order_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esl_unit_price_cents",
+          "logical_name": "unit_price_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.SoLine",
+      "table_name": "esl_so_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eso_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eso_fulfilled_at",
+          "logical_name": "fulfilled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eso_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eso_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eso_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eso_invoice_key",
+          "logical_name": "invoice_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eso_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eso_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eso_opportunity_id",
+          "logical_name": "opportunity_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eso_order_date",
+          "logical_name": "order_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "eso_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eso_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eso_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eso_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.SalesOrder",
+      "table_name": "eso_sales_order"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ewh_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ewh_event_types",
+          "logical_name": "event_types",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "ewh_failure_count",
+          "logical_name": "failure_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewh_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ewh_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewh_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ewh_last_delivered_at",
+          "logical_name": "last_delivered_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewh_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ewh_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ewh_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ewh_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewh_url",
+          "logical_name": "url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "pii_ewh_signing_secret",
+          "logical_name": "signing_secret",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Primitives.Webhook",
+      "table_name": "ewh_webhook"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ewo_actual_material_cents",
+          "logical_name": "actual_material_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewo_actual_unit_cost_cents",
+          "logical_name": "actual_unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewo_bom_id",
+          "logical_name": "bom_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ewo_bom_snapshot",
+          "logical_name": "bom_snapshot",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "ewo_bom_version",
+          "logical_name": "bom_version",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewo_completed_at",
+          "logical_name": "completed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewo_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ewo_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewo_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ewo_labor_cents",
+          "logical_name": "labor_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewo_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ewo_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ewo_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ewo_overhead_cents",
+          "logical_name": "overhead_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewo_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ewo_released_at",
+          "logical_name": "released_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewo_scheduled_for",
+          "logical_name": "scheduled_for",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ewo_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ewo_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ewo_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.WorkOrder",
+      "table_name": "ewo_work_order"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "pii_rne_secret",
+          "logical_name": "secret",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "rne_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "rne_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "rne_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "rne_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "rne_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "rne_segment",
+          "logical_name": "segment",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "rne_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Vertical.Record",
+      "table_name": "rne_record"
+    }
+  ]
+}

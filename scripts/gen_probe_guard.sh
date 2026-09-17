@@ -34,6 +34,18 @@
 
 : "${REPO_ROOT:?gen_probe_guard.sh: REPO_ROOT must be set before sourcing}"
 
+# Portable SHA-256: Git Bash on Windows ships coreutils' sha256sum but not the
+# Perl-based shasum, so prefer sha256sum and fall back to shasum (the sabotage.sh
+# E1 precedent — a missing hasher must fail the gate, not silently empty the SHA
+# and void the byte-exact restore assertion).
+gen_probe_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 GEN_PROBE_REGISTRY="$REPO_ROOT/samen_core/priv/abbrev_registry.json"
 GEN_PROBE_SNAP=""
 GEN_PROBE_PRISTINE_SHA=""
@@ -48,7 +60,7 @@ gen_probe_restore() {
 
   cp "$GEN_PROBE_SNAP" "$GEN_PROBE_REGISTRY"
   local post_sha
-  post_sha="$(shasum -a 256 "$GEN_PROBE_REGISTRY" | awk '{print $1}')"
+  post_sha="$(gen_probe_sha256 "$GEN_PROBE_REGISTRY")"
   rm -f "$GEN_PROBE_SNAP"
 
   # Sweep scratch residue: legacy fixed-name dirs AND mktemp'd unique-per-run dirs
@@ -75,7 +87,7 @@ run_gen_probe() {
 
   GEN_PROBE_SNAP="$(mktemp "${TMPDIR:-/tmp}/samen_ci_registry_snapshot.XXXXXX")"
   cp "$GEN_PROBE_REGISTRY" "$GEN_PROBE_SNAP"
-  GEN_PROBE_PRISTINE_SHA="$(shasum -a 256 "$GEN_PROBE_REGISTRY" | awk '{print $1}')"
+  GEN_PROBE_PRISTINE_SHA="$(gen_probe_sha256 "$GEN_PROBE_REGISTRY")"
   GEN_PROBE_LABEL="$label"
   GEN_PROBE_RESTORED=0
 

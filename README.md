@@ -57,6 +57,7 @@ grant that a second party approved and the tenant can audit.
 | **Lifecycle substrate** — a generalized approve/reject engine (requester≠approver DB CHECK; reveal grants are a client), blueprint-wide **soft-delete/archival** on `ash_archival` with composition-cascade + microsecond `archived_at`, and **audit-on-write** where impersonation-context writes are the mandatory first client (an impersonated write with no audit row is impossible) plus a `versioned` opt-in on `ash_paper_trail` with token-only vaulted diffs | `samen_core/test/{approvals,lifecycle,audit}/*`; sabotages 32–34 (ADR-040) |
 | **Canonical work objects** — a canonical Work Task/Project/Subtask (the CRM `Activity` table was **destructively migrated** into it and removed), Calendar (recurrence + masked ICS), Docs, polymorphic Tags, Location, Vendor, and Sales Lead — all archival + vault-aware from birth | `samen_core/lib/samen/scopes/work/*`; `samen_core/test/scopes/*` (ADR-041) |
 | **LiveView client with progressive enhancement** — a real LiveSocket bundle in the shared root layout (inherited by every host + gen.app) makes `phx-click` writes browser-real, proven in headless Chromium; the auth arc still completes **JS-off** (Class-A floor), and the socket carries no `vt_`/plaintext to a no-grant operator | `T113` headless-browser regression; sabotage 32 (ADR-042) |
+| **ERP base system** — the seven-component core as reusable scopes: the double-entry GL (R1: an unbalanced entry is refused by construction), AP/AR documents posting via source anchors, the append-only stock ledger + derived rollup (R3: negative stock fail-closed), Procurement's one-transaction chokepoint (R5: a GoodsReceipt receive posts stock AND GL together, the three-way match enforced), the SalesOrder bridge (Lead → SO → stock + REAL Billing invoice), Manufacturing (R4: BOM cycle refusal, consume/produce/log agree exactly-once), and HR (the first scope with a non-empty PII map — INV-1 masking, reveal-gated fields) — every ledger guarded by its reconciliation red-path suite + committed sabotage | `samen_core/test/{finance,inventory,hr}*_test.exs` + `e8_reports_test.exs` (Budget/BudgetLine + budget-vs-actual + the TB/WIP/headcount Rollup specs + the k-anon operator aggregate); `samen_web/lib/samen/web/erp/` (the six-surface closed allowlist + ONE generic read-only LiveView mounted by one router line); the `samenerp/` host mounts ALL scopes at ≈0 authored LOC and passes the full 19-step verifier gate; sabotages **302–308** (docs/ws-erp/ — ADR-049) |
 
 Full mapping: [docs/claim-evidence.md](docs/claim-evidence.md) (Phase-1 identity spine + rich
 types are section J; Phase-2 billing + ESP + rate-limiting are section K; Phase-3 automation +
@@ -200,9 +201,10 @@ command in this README and that tutorial is verified against the CI probes' exec
 | `demo/` | The API-only dogfood host — canonical Identity policy-matrix / red-path references |
 | `driftwood/` | Reference vertical: freight — the deepest gate, including the crypto-shred game-day |
 | `pawchart/` | Reference vertical: veterinary — thin scope mounts (~188 lines) plus a real, hand-authored clinic UI on top |
+| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, the E1–E7 walkthrough, and the full 19-step verifier gate |
 | `spikes/` | The mechanism spikes (s00–s07) that de-risked the kernel; still run by root `ci.sh` |
 | `docs/` | ADRs (`docs/adr/`), guides (`docs/guides/`), the gate reports (`docs/gate-*.md`), the roadmap (`docs/saas-gap-roadmap.md`), and an archived long-form design variant (`docs/archive/samen-foundry.html`) |
-| `scripts/` | `sabotage.sh` + every committed sabotage patch (285 today, growing every phase) |
+| `scripts/` | `sabotage.sh` + every committed sabotage patch (308 today, growing every phase) |
 | `ci.sh` | The root gate: everything above, in sequence, fail-fast |
 
 ## Docs

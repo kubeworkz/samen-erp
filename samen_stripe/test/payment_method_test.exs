@@ -287,7 +287,14 @@ defmodule SamenStripe.PaymentMethodTest do
       assert Enum.any?(offenders, fn {_file, ids} -> "card_number" in ids end)
       assert Enum.any?(offenders, fn {_file, ids} -> "cvc" in ids end)
     after
-      scratch_dirs = Path.wildcard(Path.join(System.tmp_dir!(), "pan_template_probe_*"))
+      # Samen.SourceGlob.normalize: on Windows System.tmp_dir!() carries
+      # backslashes, which Path.wildcard treats as literal characters — the
+      # cleanup would silently match nothing and leak scratch dirs.
+      scratch_dirs =
+        Path.wildcard(
+          Samen.SourceGlob.normalize(Path.join(System.tmp_dir!(), "pan_template_probe_*"))
+        )
+
       Enum.each(scratch_dirs, &File.rm_rf!/1)
     end
   end
@@ -297,10 +304,14 @@ defmodule SamenStripe.PaymentMethodTest do
   # `[{path, [pan_shaped_identifier, ...]}]` for files with a hit — empty means
   # clean. Reuses `Samen.Verifiers.NoPanColumns.pan_shaped?/1`, the SAME shape
   # rule the schema probe uses (one rule, two surfaces, no drift).
+  # expansion is routed through `Samen.SourceGlob.normalize/1` — a natively
+  # joined dir (backslashes on Windows) would otherwise expand to nothing and
+  # make BOTH the green and the red probe vacuous.
   defp scan_dir_for_pan_shaped_template_identifiers(dir) do
     heex_sigil = ~r/~H"""(.*?)"""/s
 
-    (Path.wildcard(Path.join(dir, "**/*.ex")) ++ Path.wildcard(Path.join(dir, "**/*.heex")))
+    (Path.wildcard(Samen.SourceGlob.normalize(Path.join(dir, "**/*.ex"))) ++
+       Path.wildcard(Samen.SourceGlob.normalize(Path.join(dir, "**/*.heex"))))
     |> Enum.map(fn path ->
       content = File.read!(path)
 

@@ -150,7 +150,10 @@ defmodule Samen.Gen.DocCommands do
     # the tutorial's generate command" honest rather than asserted.
     gen_pipeline = [
       "Gen.build_spec(",
-      "Gen.reserve_abbrevs!(spec)",
+      # Call STEM only: the task uses the 1-arity default (the _build registry),
+      # the probes pass the committed SOURCE registry path explicitly (Windows
+      # priv/ is not a symlink) — same engine call, surface-appropriate target.
+      "Gen.reserve_abbrevs!(spec",
       "Gen.write_app!(spec)",
       "Gen.compile_and_dump!(spec)"
     ]

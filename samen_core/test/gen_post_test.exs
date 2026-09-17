@@ -490,8 +490,10 @@ defmodule Samen.Gen.PostTest do
       # One scalar vault field so vault-routing is non-vacuous.
       assert res =~ "pii_attribute(:secret, :string, vault: :pii_secret)"
 
-      # Migration with catalog_sync.
-      mig = Path.wildcard(Path.join(dir, "priv/repo/migrations/*_add_widget.exs"))
+      # Migration with catalog_sync (Windows: the natively-joined dir carries
+      # backslashes that Path.wildcard treats as literals — route through the
+      # normalized helper).
+      mig = Samen.SourceGlob.expand!(dir, "priv/repo/migrations/*_add_widget.exs")
       assert length(mig) == 1
       migsrc = File.read!(hd(mig))
       assert migsrc =~ "create table(:wdg_widget"

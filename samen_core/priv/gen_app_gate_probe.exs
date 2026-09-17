@@ -47,7 +47,13 @@ scratch_parent = Path.join([samen_core_root, "..", "_gen_probe_scratch"]) |> Pat
 File.rm_rf!(scratch_parent)
 File.mkdir_p!(scratch_parent)
 
-registry_path = Samen.AbbrevRegistry.path()
+registry_path =
+  # The COMMITTED source registry, not `Samen.AbbrevRegistry.path()`: on Windows
+  # priv/ is not a symlink, so the latter resolves to the _build COPY — the
+  # generated app compiles samen_core fresh from SOURCE and would never see
+  # reservations made there. The root-ci guard snapshots/restores exactly this
+  # source path, so the probe must operate on the same bytes.
+  Path.join(samen_core_root, "priv/abbrev_registry.json")
 registry_backup = File.read!(registry_path)
 
 cleanup = fn ->
@@ -87,7 +93,7 @@ end
 # From here on the registry has been mutated and files written — ANY failure (including a
 # raised exception from compile_and_dump!) must still clean up. Wrap the whole flow.
 try do
-  Gen.reserve_abbrevs!(spec)
+  Gen.reserve_abbrevs!(spec, registry_path)
   Gen.write_app!(spec)
   Gen.compile_and_dump!(spec)
 

@@ -65,18 +65,19 @@ defmodule Mix.Tasks.Samen.Verify.ErasureCompleteness do
         report_transcripts(report.transcript)
         report_org_assets(report.org_asset_residuals)
 
-      {:error, {:no_residues_discovered, class}} ->
+      {:error, {:no_residues_discovered, :all_classes}} ->
         Mix.shell().error(
-          "[erasure-completeness] FAIL: discovered ZERO #{class} residues."
+          "[erasure-completeness] FAIL: discovered ZERO residues across all classes."
         )
 
         Mix.shell().error(
           "A completeness check that discovers nothing verifies nothing — this is a FAILURE, not a pass. " <>
-            "Every host that mounts identity + primitives has email_bidx + storage_key columns; an empty " <>
-            "#{class} discovery is a broken verifier (fail-closed, ADR-046 §6 non-vacuity floor)."
+            "Real hosts mount identity + primitives with email_bidx + storage_key columns; " <>
+            "a discovery of zero across ALL residue classes is a broken verifier (fail-closed, " <>
+            "ADR-046 §6 non-vacuity floor)."
         )
 
-        Mix.raise("erasure-completeness: empty #{class} discovery — exit 1")
+        Mix.raise("erasure-completeness: zero residues across all classes — exit 1")
 
       {:error, {:incomplete, violations, report}} ->
         Mix.shell().error("[erasure-completeness] FAIL: out-of-envelope residues with NO erasure arm:")

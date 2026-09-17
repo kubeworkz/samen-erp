@@ -60,9 +60,36 @@ defmodule Samen.Kms.FileBacked do
 
     master_path = Path.join(dir, "master.key")
 
-    unless File.exists?(master_path) do
-      File.write!(master_path, Crypto.generate_dek(), [:binary])
-      File.chmod!(master_path, 0o600)
+    # EXCLUSIVE-create mint: two racing inits (24 async workers hitting the
+    # fresh store at once) previously checked exists?, then both wrote —
+    # last-write-wins meant DEKs wrapped under the LOSER's master could never
+    # unwrap (an intermittent correctness bug, not merely a missing-dir
+    # error). `:exclusive` makes exactly ONE writer win; the loser keeps the
+    # winner's master (the store has one master, whoever minted it).
+    case File.open(master_path, [:exclusive, :write, :binary]) do
+      {:ok, io} ->
+        IO.binwrite(io, Crypto.generate_dek())
+        :file.close(io)
+        File.chmod!(master_path, 0o600)
+
+      {:error, :eexist} ->
+        # Someone minted it first — that is the happy idempotent path.
+        :ok
+
+      # The parent dir raced away mid-check (async first-use on Windows):
+      # recreate and retry once.
+      {:error, :enoent} ->
+        File.mkdir_p!(Path.join(dir, "subjects"))
+
+        case File.open(master_path, [:exclusive, :write, :binary]) do
+          {:ok, io} ->
+            IO.binwrite(io, Crypto.generate_dek())
+            :file.close(io)
+            File.chmod!(master_path, 0o600)
+
+          {:error, :eexist} ->
+            :ok
+        end
     end
 
     :ok
@@ -104,11 +131,46 @@ defmodule Samen.Kms.FileBacked do
     end
   end
 
-  defp dek_path(subject_id), do: Path.join([key_dir(), "subjects", "#{subject_id}.dek"])
-  defp tomb_path(subject_id), do: Path.join([key_dir(), "subjects", "#{subject_id}.tombstone"])
+  # Windows forbids `:` in path segments (NTFS reads it as an alternate-data-
+  # stream separator), and Fleet subject ids are `flt:subject:…`/`flt:credential:…`
+  # — so the on-disk name is the percent-encoded subject id, decoded on read.
+  # Encoding is a bijection (uppercase hex escapes), so decode round-trips;
+  # legacy unencoded stores still read: an encoded id decodes to ITSELF only
+  # if it was encoded — a bare id contains no `%XX` hex pair by construction.
+  defp dek_filename(subject_id) do
+    subject_id |> encode_subject_id() |> Kernel.<>(".dek")
+  end
+
+  defp tomb_filename(subject_id) do
+    subject_id |> encode_subject_id() |> Kernel.<>(".tombstone")
+  end
+
+  defp encode_subject_id(id) do
+    id
+    |> String.graphemes()
+    |> Enum.map_join(fn
+      ch when ch in ["%", ":", "\\", "/", "*", "?", "\"", "<", ">", "|"] ->
+        "%" <> (ch |> :binary.first() |> Integer.to_string(16) |> String.pad_leading(2, "0") |> String.upcase())
+
+      ch ->
+        ch
+    end)
+  end
+
+  defp decode_subject_id(name) do
+    # Inverse of encode_subject_id: %XX (case-insensitive hex) -> byte.
+    regex = ~r/%([0-9A-Fa-f]{2})/
+
+    Regex.replace(regex, name, fn _whole, hex ->
+      <<String.to_integer(hex, 16)::utf8>>
+    end)
+  end
+
+  defp dek_path(subject_id), do: Path.join([key_dir(), "subjects", dek_filename(subject_id)])
+  defp tomb_path(subject_id), do: Path.join([key_dir(), "subjects", tomb_filename(subject_id)])
 
   defp eff_dek_path(subject_id),
-    do: Path.join([effective_dir(), "subjects", "#{subject_id}.dek"])
+    do: Path.join([effective_dir(), "subjects", dek_filename(subject_id)])
 
   @impl true
   def generate_subject_key(subject_id) do
@@ -117,6 +179,16 @@ defmodule Samen.Kms.FileBacked do
     with {:ok, master} <- master() do
       dek = Crypto.generate_dek()
       wrapped = Crypto.wrap(master, dek)
+
+      # Belt: mkdir in THIS process immediately before the write. Under heavy
+      # async first-use (24 workers racing init!), a subjects/ dir created by
+      # another process can still read ENOENT here on Windows — the creating
+      # process always sees its own mkdir. mkdir_p on an existing dir is a
+      # cheap no-op elsewhere.
+      dek_path(subject_id)
+      |> Path.dirname()
+      |> File.mkdir_p!()
+
       File.write!(dek_path(subject_id), wrapped, [:binary])
       File.chmod!(dek_path(subject_id), 0o600)
       {:ok, wrapped}
@@ -254,6 +326,9 @@ defmodule Samen.Kms.FileBacked do
           entries
           |> Enum.filter(&String.ends_with?(&1, ".dek"))
           |> Enum.map(&String.replace_suffix(&1, ".dek", ""))
+          # Windows-safe storage: names are percent-encoded subject ids —
+          # decode back to the real id for the caller.
+          |> Enum.map(&decode_subject_id/1)
           # A subject with a tombstone is shredded even if a .dek somehow lingers;
           # key on the ADAPTER's own live/shredded state, not just file presence.
           |> Enum.reject(fn id -> File.exists?(tomb_path(id)) end)

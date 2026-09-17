@@ -56,7 +56,8 @@ defmodule Samen.Web.Mount do
             | :auth
             | :automation
             | :ai
-            | :analytics
+            |            :analytics
+            | :erp
             | :kb,
           namespace: module(),
           repo: module(),
@@ -139,6 +140,7 @@ defmodule Samen.Web.Mount do
   defp scope_kind("csv"), do: :csv
   defp scope_kind("search"), do: :search
   defp scope_kind("settings"), do: :settings
+  defp scope_kind("erp"), do: :erp
   # ADR-035 — the pre-actor identity-spine surfaces (signup/login/verify/reset/…,
   # §6 "pre-actor public" plane row). No org actor exists yet at this scope.
   defp scope_kind("auth"), do: :auth

@@ -168,3 +168,22 @@ defmodule SamenCore.Support.Completeness.RogueBidx do
     defaults([:read])
   end
 end
+
+defmodule SamenCore.Support.Completeness.EmptyResource do
+  @moduledoc "A resource with NO string attributes — zero derived_linkable, zero storage_key, zero custom_bag. Used to test the non-vacuity floor when ALL residue classes are empty."
+  use Ash.Resource, domain: SamenCore.Support.Completeness.Domain, data_layer: AshPostgres.DataLayer
+
+  postgres do
+    table("emp_empty")
+    repo(SamenCore.TestRepo)
+  end
+
+  attributes do
+    attribute(:id, :uuid, primary_key?: true, allow_nil?: false, writable?: true, source: :emp_id)
+    attribute(:count, :integer, public?: false, source: :emp_count)
+  end
+
+  actions do
+    defaults([:read])
+  end
+end

@@ -37,7 +37,8 @@ defmodule Samen.Erasure.CompletenessTest do
     Attachment,
     OrgAsset,
     Bag,
-    RogueBidx
+    RogueBidx,
+    EmptyResource
   }
 
   # The clean, fully-coverable residue population (no unregistered rogue column).
@@ -206,15 +207,23 @@ defmodule Samen.Erasure.CompletenessTest do
   # FAILS CLOSED on empty discovery (non-vacuity floor)
   # ======================================================================
 
-  test "empty derived-linkable discovery fails closed" do
-    # Only a storage_key + bag resource, no _bidx column.
-    assert {:error, {:no_residues_discovered, :derived_linkable}} =
-             check([File, Bag])
+  test "empty derived-linkable is OK when other classes have residues" do
+    # Only a storage_key + bag resource, no _bidx column — legitimate for
+    # headless apps without identity/primitives modules.
+    assert {:ok, _report} = check([File, Bag])
   end
 
-  test "empty storage_key discovery fails closed" do
-    # Only a bidx resource, no storage_key column.
-    assert {:error, {:no_residues_discovered, :storage_key}} = check([Credential])
+  test "empty storage_key is OK when other classes have residues" do
+    # Only a bidx resource, no storage_key column — legitimate for apps
+    # without primitives/file storage.
+    assert {:ok, _report} = check([Credential])
+  end
+
+  test "ALL empty classes fails closed (broken discovery)" do
+    # Resources exist but NONE produce any residues — the verifier is broken.
+    # An empty residue set across ALL classes means discovery found nothing.
+    assert {:error, {:no_residues_discovered, :all_classes}} =
+             check([EmptyResource])
   end
 
   # ======================================================================

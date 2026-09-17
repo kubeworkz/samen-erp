@@ -830,6 +830,70 @@ defmodule Samen.Web.Router do
   end
 
   @doc """
+  Mount the WS-ERP E8 TENANT SURFACES in ONE line (design §6.4) — the six
+  read-only ERP surfaces (Chart of Accounts, Journal, AP inbox, Stock, Purchase
+  Orders, Work Orders) over the host's mounted ERP namespace.
+
+      import Samen.Web.Router
+
+      scope "/" do
+        pipe_through :browser
+        samen_erp_routes(:erp, MyHost.Erp, repo: MyHost.Repo)
+      end
+
+  `namespace` is the host's mounted ERP namespace (a domain that mounted the
+  Finance + Inventory scopes — their resources materialize under it by the
+  ADR-004 `Module.concat(namespace, name)` convention). The route table IS the
+  boundary: the six paths map onto the CLOSED `Samen.Web.Erp` allowlist, the
+  generic `Samen.Web.Erp.SurfaceLive` resolves the surface name through it,
+  derives the resource from the mount (never caller input), renders only the
+  registry's bounded column lists, and reads through `Samen.Web.Reads.page!/3`
+  with the org-pinned scope — no host-authored LiveView exists to mis-wire, and
+  no surface carries a write affordance or an export path. Options as
+  `samen_module_routes/3` (`:repo` required; `:domain`, `:plane`, `:path`,
+  `:labels`, `:session_name`).
+  """
+  defmacro samen_erp_routes(kind, namespace, opts \\ []) do
+    kind = Macro.expand(kind, __CALLER__)
+    path = Keyword.get(opts, :path, "/erp")
+    session_name = Keyword.get(opts, :session_name, session_name(:erp, path))
+
+    quote bind_quoted: [
+            kind: kind,
+            namespace: namespace,
+            opts: opts,
+            path: path,
+            session_name: session_name
+          ] do
+      _ = kind
+
+      mount =
+        Samen.Web.Mount.new(
+          :erp,
+          namespace,
+          Keyword.fetch!(opts, :repo),
+          domain: Keyword.get(opts, :domain, namespace),
+          plane: Samen.Web.Router.__plane__(opts),
+          labels: Keyword.get(opts, :labels)
+        )
+
+      # B-SEC / S1 — the TENANT authz gate, the SAME on_mount every tenant
+      # surface carries: the halt preempts the initial DEAD RENDER and the
+      # hook pins the org authority (a client ?org= can only select among the
+      # authenticated principal's authorized orgs).
+      live_session session_name,
+        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        # One parameterized route feeds the closed surface allowlist. The LiveView
+        # validates `:surface` through `Samen.Web.Erp.surface/1`; expanding the
+        # six literal paths here would bypass the LiveView's `%{"surface" => ...}`
+        # contract and make the generic surface unable to mount.
+        live("#{path}/:surface", Samen.Web.Erp.SurfaceLive)
+      end
+    end
+  end
+
+  @doc """
   Mount the framework `.ics` (iCalendar) export surface (F2; spec §F2/§F8 c8) —
   ONE line, on either plane. `namespace` is the host's mounted Calendar-scope
   namespace (`use Samen.Scopes.Calendar, namespace: ...` — its materialized

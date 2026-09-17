@@ -260,8 +260,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # (sit/swh/skl/slv) + the E4 Procurement documents (spo/spl/sgr/srl) + the
       # E5 SalesOrder bridge (slo/sol/sim) — the allocator run wrote the registry at
       # 21_773 bytes.
-      assert byte_size(committed) == 22320
-      assert map_size(R.load()) == 470
+      # +22 WS-ERP E8 — the E8 report reservations (sbg/sbe/sea) + the samenerp host
+      # proof (`mix samen.gen.app`, prefix `er`): the E1–E7 scope set + the host's
+      # kernel/Identity/Operator/Billing/Aggregate allocations — the registry grew to
+      # 25_509 bytes.
+      assert byte_size(committed) == 25509
+      assert map_size(R.load()) == 543
     end
   end
 

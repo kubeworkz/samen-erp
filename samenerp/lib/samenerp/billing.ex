@@ -1,0 +1,31 @@
+defmodule Samenerp.Billing do
+  @moduledoc """
+  Samenerp's Billing domain — the samen_core Billing scope MOUNTED AS-IS.
+
+  ONE `use Samen.Scopes.Billing` expands into the eight host-owned Billing resources
+  (Customer🔒 → Subscription → Plan/Price → Invoice → Payment → Usage → Entitlement)
+  with ZERO vertical billing code and ZERO reshape — the doc's EASY ADDITIVE case.
+
+  The `abbrevs:` override takes FRESH abbrevs derived from this app's 2-letter prefix,
+  reserved in the GLOBAL registry (samen_core/priv/abbrev_registry.json) by the
+  generator. The scope defaults (bcu/bsb/…) are already owned by the demo mount — the
+  global-registry reality every mount documents.
+  """
+  use Ash.Domain, validate_config_inclusion?: false
+
+  use Samen.Scopes.Billing,
+    otp_app: :samenerp,
+    repo: Samenerp.Repo,
+    namespace: Samenerp.Billing,
+    abbrevs: %{
+      customer: "erc",
+      subscription: "ers",
+      plan: "erl",
+      price: "erp",
+      invoice: "eri",
+      payment: "ery",
+      usage: "eru",
+      entitlement: "ere",
+      subscription_event: "erv"
+    }
+end

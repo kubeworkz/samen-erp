@@ -1,0 +1,58 @@
+defmodule SamenerpWeb.Endpoint do
+  @moduledoc """
+  The Samenerp Phoenix Endpoint — serves the tenant + operator LiveView planes
+  over localhost. Mirrors pawchart/driftwood (ADR-009).
+
+  THIN and EMITTED, not macro-hidden (ADR-022): the builder owns the session key,
+  signing salt, secret_key_base and port. The values wired here + in config are LOCAL
+  DEV/DOGFOOD constants — a real deployment replaces them (config/runtime.exs).
+  """
+  use Phoenix.Endpoint, otp_app: :samenerp
+
+  @session_options [
+    store: :cookie,
+    key: "_samenerp_key",
+    signing_salt: "samenerp_sess_salt",
+    same_site: "Lax"
+  ]
+
+  socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
+
+  # ADR-009 + ADR-042 C3: serve the samen_web UI kit stylesheet AND the vendored Phoenix
+  # LiveView JS client at `/assets/*`, all from dependency priv (same files as every
+  # vertical — zero duplication). Framework bundles come from the deps' OWN priv so
+  # client/server versions cannot skew; each clause is a scoped `only:` allowlist.
+  plug(Plug.Static, at: "/assets", from: {:phoenix, "priv/static"}, only: ~w(phoenix.min.js))
+
+  plug(Plug.Static,
+    at: "/assets",
+    from: {:phoenix_live_view, "priv/static"},
+    only: ~w(phoenix_live_view.min.js)
+  )
+
+  plug(Plug.Static,
+    at: "/assets",
+    from: {:samen_web, "priv/static/assets"},
+    only: ~w(samen_ui.css app.js fonts)
+  )
+
+  plug(Plug.RequestId)
+  plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
+
+  plug(Plug.Parsers,
+    parsers: [:urlencoded, :multipart, :json],
+    pass: ["*/*"],
+    json_decoder: Phoenix.json_library(),
+    # ADR-044 (WS-J J1): required for POST /fleet/directive's signature
+    # verification (Samen.Web.Fleet.Ingress needs the EXACT signed bytes,
+    # which Plug.Parsers otherwise discards after decoding) — same
+    # body_reader every samen_webhook_routes/1 host wires; harmless for every
+    # other route (it only caches bytes alongside the normal parse).
+    body_reader: {Samen.Web.Webhook.RawBodyReader, :read_body, []}
+  )
+
+  plug(Plug.MethodOverride)
+  plug(Plug.Head)
+  plug(Plug.Session, @session_options)
+  plug(SamenerpWeb.Router)
+end

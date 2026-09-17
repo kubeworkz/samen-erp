@@ -684,3 +684,38 @@ two transition conjuncts mutually redundant, is recorded), **P15** (SUM renders 
 assertion). **P8/P9/P10/P13/P14** verified-closed (guarantees live). **P12** (gen/app.ex 4-place
 Support-scope list) / **P17** (tenant-own-org analytics) / **P18** (codemunch convention) filed as
 explicitly deferred (convention/product, not defects). Full accounting: `_orch/tasks/T85/work/gate-report.md`.
+
+---
+
+## P. WS-ERP — the ERP base system (ADR-049; INV-6, INV-1, INV-7)
+
+The seven-component ERP core (Finance/GL, AP/AR, Inventory, Procurement, Sales bridge,
+Manufacturing, HR) as REUSABLE scopes in `samen_core`, six mountable tenant surfaces in
+`samen_web`, and the `samenerp` host as the ≈0-authored-LOC proof. Design:
+`docs/ws-erp/design.md`; build plan + per-phase status: `docs/ws-erp/build-plan.md`.
+Every ledger ships with its reconciliation red-path suite (design §6.3) and a committed
+sabotage patch; every phase was adversarially gated.
+
+| Phase | Claim | Proof | Status |
+|---|---|---|---|
+| E1 | **The double-entry invariant is structural, not procedural** — a `JournalEntry` whose lines do not sum to zero is refused by construction (R1); the entry is the event, the line is the posting, balances are derived sums (never stored); posting/void ride a state machine with the belt as the second net; the CoA tree refuses cycles | `samen_core/test/finance_scope_test.exs` (R1 red + control); sabotage **302** | **MET** |
+| E2 | **AP/AR documents post through source anchors** — `ApInvoice :approve` rides the ADR-040 Gate (distinct-party, ungated call fails `ApprovalRequired`), `PaymentReceipt` intake anchors `billing_invoice` → GL; R2: a receipt's posting cannot be bypassed or double-applied | `samen_core/test/finance_e2_scope_test.exs`; sabotage **303** | **MET** |
+| E3 | **The stock ledger is append-only and the rollup is derived-by-construction** — NegativeStock fail-closed in-transaction live-sum; R3: a hand-edited level row is refused by the DB belt and the divergence check is the second net; the divergence check itself is NOT hand-editable | `samen_core/test/inventory_scope_test.exs`; sabotage **304** | **MET** |
+| E4 | **The Finance↔Inventory chokepoint commits stock AND GL in ONE transaction** — GoodsReceipt `:receive` posts the receipt event + inventory-asset/AP-clearing entry + line rows + both flips together; over-receipt refused (three-way match); the PO approve is Gate-gated; R5: the GL leg cannot be skipped while the stock leg lands | `samen_core/test/inventory_procurement_test.exs`; sabotage **305** | **MET** |
+| E5 | **The Sales bridge emits the host's REAL Billing invoice** — Lead → Opportunity → SO → `:fulfill` consumes stock (moving-average cost) + emits the invoice + flips the order, commit-or-rollback together, anchored `source_key: "sales_order"` | `samen_core/test/inventory_sales_order_test.exs`; sabotage **306** | **MET** |
+| E6 | **Manufacturing reconciles exactly-once** — BOM cycle refused at write; the BOM snapshot freezes at WO release (later BOM edits never mutate released orders); R4: `:complete` lands consume + produce + production log + flip TOGETHER; `divergences/2` is empty for every completed WO and is itself append-only | `samen_core/test/inventory_manufacturing_test.exs`; sabotage **307** | **MET** |
+| E7 | **HR is the first scope with a non-empty PII map** — `full_name`/`national_id` vault-routed (INV-1): masked by default on EVERY plane, reveal-gated, crypto-shred erasure applies; the roster CSV export masks by OMISSION (no vault field is renderable); leave approval schedules the fail-soft reminder | `samen_core/test/hr_scope_test.exs`; `samen_web/test/samen/web/hr_roster_csv_masking_test.exs` (green/red/sabotage trio); sabotage **308** | **MET** |
+| E8 | **Reports ride the EXISTING machinery, never a new mechanism** — Budget/BudgetLine (admin-gated, dup-account refusal) + `budget_vs_actual/2` as a pure read over posted GL facts; TB/WIP/headcount as `source: :domain` Rollup specs refreshed by the standing cron (ADR-018 generalization); the operator aggregate is token-blind with CohortSpec k-anon floors (`%Suppressed{}` under k, red-proven); the six tenant surfaces are a CLOSED allowlist whose registry is the boundary — one router line mounts all six over ONE generic read-only LiveView; the `samenerp` host mounts ALL E1–E7 scopes at ≈0 authored LOC and passes the full 19-step verifier gate | `samen_core/test/e8_reports_test.exs`; `samen_web/lib/samen/web/erp/`; `samenerp/test/erp_walkthrough_test.exs` (5 blocks incl. the REAL-Billing emission); `samenerp/ci.sh` ALL PASSED; root `ci.sh` now five gates | **MET** |
+
+**Honest scope (the design §7 list is binding):** payroll/tax computation, multi-currency,
+lot costing, scheduling, accruals, forecasting, and depreciation are adapter-or-P2/P3 —
+WS-ERP ships the LEDGER + DOCUMENT spine and refuses to fake the rest; the payroll
+adapter boundary is a behaviour with NO engine. Every aggregate/freshness claim is
+documented as refresh-served reads, not real-time. The keyless-lane posture of the
+platform applies unchanged (no ERP surface requires a live vendor integration).
+
+**Defect the host gate caught (E8):** the F3.5 sweep on `samenerp` found `BudgetLine`,
+`StockLevel`, and `GoodsReceipt` carrying org-scoped `belongs_to` FKs with NO
+`SameOrgFk` guard in the SHARED blueprints (the fixture test resources had their own;
+the shared blueprints did not — a cross-org FK write would have stored a dangling
+cross-tenant reference). Fixed at blueprint level; samen_core suites re-run green.
