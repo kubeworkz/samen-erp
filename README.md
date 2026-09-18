@@ -101,8 +101,8 @@ Two apps are the substrate; three are proof; one command spins up new ones.
   capability lands in `samen_core` / `samen_web`; a vertical adopts it with a router/macro
   call at roughly zero authored LOC.
 
-The full design story lives in [index.html](index.html) (open it in
-a browser) and in the 49 ADRs under [docs/adr/](docs/adr/) (indexed in
+The full design story lives at [ckluis.github.io/samen](https://ckluis.github.io/samen/) (open it in
+a browser; source is [index.html](index.html)) and in the 49 ADRs under [docs/adr/](docs/adr/) (indexed in
 [docs/adr/README.md](docs/adr/README.md); the count grows with every load-bearing decision —
 `ls docs/adr/*.md | wc -l` for the live total).
 
@@ -224,7 +224,7 @@ command in this README and that tutorial is verified against the CI probes' exec
 - [Compliance & GDPR/SOC 2 story](docs/compliance-story.md) — the honest control-posture split (day-one-from-Samen vs operator responsibility); **not** a certification
 - [Outward-claim sweep](docs/claim-sweep.md) — the claim→evidence audit of the landing page, README, and compliance docs
 - [ADRs](docs/adr/) — every load-bearing decision
-- [The full design story](index.html) — open in a browser
+- [**The full design story**](https://ckluis.github.io/samen/) — the interactive landing page, hosted on GitHub Pages (also available as [index.html](index.html))
 
 ## Status & caveats
 
