@@ -1,4 +1,4 @@
-# Samen
+# Samen ERP
 
 **An Elixir · Ash · Phoenix SaaS foundry.** Samen is a substrate for one builder — or a
 small studio — to launch *many* SaaS products fast without re-solving the hard parts each
