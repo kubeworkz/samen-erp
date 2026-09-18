@@ -113,10 +113,15 @@ red-path proof, and a sabotage that proves the test can actually fail.** A test 
 fail is treated as a bug.
 
 - **Committed sabotage harness.** `scripts/sabotage.sh` replays **every committed sabotage
-  patch** (`scripts/sabotages/*.patch` — 285 today, and growing every phase: count it live
-  rather than trusting this number). For each: SHA-256 the touched files → apply the
-  patch → the *named* tests **must** fail (not "something broke") → revert → verify a
-  byte-exact restore. Run it with:
+  patch** (`scripts/sabotages/*.patch` — 308 today, and growing every phase: count it live
+  rather than trusting this number). Every patch runs inside a **throwaway git worktree**
+  (`.sabotage/tree`), so the main checkout is never written — a hard kill (SIGKILL) cannot
+  leave sabotage behind. For each: SHA-256 the touched files → apply the patch in the
+  shadow tree → the *named* tests **must** fail (not "something broke") → revert → verify
+  a byte-exact restore, then assert every touched path in the main checkout is
+  sha-256-identical. A residue guard (`scripts/sabotage_residue.sh`) runs at the top of
+  every CI gate and detects any patch that reached the working tree by any route. Run it
+  with:
 
   ```
   SAMEN_SABOTAGE=1 ./ci.sh
@@ -149,7 +154,7 @@ re-run this pass), `--warnings-as-errors` clean; treat exact counts as direction
 | `demo` | 465 |
 | `driftwood` | 123 |
 | `pawchart` | 49 |
-| sabotage harness | 285/285 sabotages flipped their named tests; byte-exact restores |
+| sabotage harness | 308/308 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
 
 ## Getting started
 
@@ -201,7 +206,7 @@ command in this README and that tutorial is verified against the CI probes' exec
 | `demo/` | The API-only dogfood host — canonical Identity policy-matrix / red-path references |
 | `driftwood/` | Reference vertical: freight — the deepest gate, including the crypto-shred game-day |
 | `pawchart/` | Reference vertical: veterinary — thin scope mounts (~188 lines) plus a real, hand-authored clinic UI on top |
-| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, the E1–E7 walkthrough, and the full 19-step verifier gate |
+| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, Budget/BudgetLine, TB/WIP/headcount rollups, the E1–E8 walkthrough, and the full 19-step verifier gate |
 | `spikes/` | The mechanism spikes (s00–s07) that de-risked the kernel; still run by root `ci.sh` |
 | `docs/` | ADRs (`docs/adr/`), guides (`docs/guides/`), the gate reports (`docs/gate-*.md`), the roadmap (`docs/saas-gap-roadmap.md`), and an archived long-form design variant (`docs/archive/samen-foundry.html`) |
 | `scripts/` | `sabotage.sh` + every committed sabotage patch (308 today, growing every phase) |
