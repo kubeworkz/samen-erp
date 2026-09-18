@@ -1,0 +1,20 @@
+# SABOTAGE: E10 FX conversion guard bypass
+# (Samen.Scopes.Finance.FxConversionGuard). Removes the fail-closed guard
+# that refuses posting in a non-base currency without a stored exchange rate.
+# After this patch, a transaction in EUR will post even when no EUR→USD rate
+# exists — the GL records an FX conversion with an unknown rate.
+# APP: samen_core
+# TEST_FILES: test/multi_currency_test.exs
+# MUST_FAIL: the FX conversion guard should refuse posting without a rate
+diff --git a/samen_core/lib/samen/scopes/finance/fx_conversion_guard.ex b/samen_core/lib/samen/scopes/finance/fx_conversion_guard.ex
+--- a/samen_core/lib/samen/scopes/finance/fx_conversion_guard.ex
++++ b/samen_core/lib/samen/scopes/finance/fx_conversion_guard.ex
+@@ -36,7 +36,7 @@ defmodule Samen.Scopes.Finance.FxConversionGuard do
+           entry_date = get_entry_date(changeset)
+ 
+           case check_rate_exists(changeset, org_id, currency, base_currency, entry_date) do
+-            :ok ->
++            _ ->
+               changeset
+ 
+             {:error, :rate_not_found} ->

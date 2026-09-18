@@ -1,0 +1,21 @@
+# SABOTAGE: E12 credit note state machine bypass
+# (Samen.Scopes.Finance.CreditNoteGuard). Removes the guard that requires
+# an invoice or bill reference when applying a credit note. After this
+# patch, a credit note can be marked :applied without being linked to any
+# invoice — creating an orphaned credit with no audit trail.
+# APP: samen_core
+# TEST_FILES: test/credit_notes_tax_test.exs
+# MUST_FAIL: credit note apply should require invoice or bill reference
+diff --git a/samen_core/lib/samen/scopes/finance/credit_note_guard.ex b/samen_core/lib/samen/scopes/finance/credit_note_guard.ex
+--- a/samen_core/lib/samen/scopes/finance/credit_note_guard.ex
++++ b/samen_core/lib/samen/scopes/finance/credit_note_guard.ex
+@@ -45,7 +45,7 @@ defmodule Samen.Scopes.Finance.CreditNoteGuard do
+   defp validate_transition(changeset, :open, :applied) do
+     invoice_id = Ash.Changeset.get_attribute(changeset, :invoice_id)
+     bill_id = Ash.Changeset.get_attribute(changeset, :bill_id)
+ 
+-    if is_nil(invoice_id) and is_nil(bill_id) do
++    if false do
+       Ash.Changeset.add_error(changeset,
+         field: :status,
+         message: "Cannot apply credit note without an invoice or bill reference"

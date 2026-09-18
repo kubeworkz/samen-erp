@@ -1,0 +1,21 @@
+# SABOTAGE: E14 balance guard bypass
+# (Samen.Scopes.Inventory.LandedCostAllocator). Removes the allocation
+# balance guard. After this patch, landed cost allocations can sum to
+# more or less than the landed cost amount — the inventory valuation
+# is silently wrong.
+# APP: samen_core
+# TEST_FILES: test/landed_costs_test.exs
+# MUST_FAIL: allocations must sum exactly to landed cost
+diff --git a/samen_core/lib/samen/scopes/inventory/landed_cost_allocator.ex b/samen_core/lib/samen/scopes/inventory/landed_cost_allocator.ex
+--- a/samen_core/lib/samen/scopes/inventory/landed_cost_allocator.ex
++++ b/samen_core/lib/samen/scopes/inventory/landed_cost_allocator.ex
+@@ -131,7 +131,7 @@ defmodule Samen.Scopes.Inventory.LandedCostAllocator do
+   defp balance_allocations(allocations, target) do
+     actual_sum = Enum.reduce(allocations, 0, fn a, acc -> acc + a.allocated_cents end)
+     diff = target - actual_sum
+ 
+-    if diff == 0 do
++    if true do
+       allocations
+     else
+       # Find the index of the largest allocation

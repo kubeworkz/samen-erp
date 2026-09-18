@@ -1,0 +1,19 @@
+# SABOTAGE: E9 double-match guard bypass
+# (Samen.Scopes.Banking.ReconcileGuard). Removes the guard that prevents
+# matching the same statement line to multiple GL entries. After this patch,
+# a bank line for $100 could be matched to two $100 invoices — double-counting.
+# APP: samen_core
+# TEST_FILES: test/banking_scope_test.exs
+# MUST_FAIL: double-match guard should prevent matching an already-matched line
+diff --git a/samen_core/lib/samen/scopes/banking/reconcile_guard.ex b/samen_core/lib/samen/scopes/banking/reconcile_guard.ex
+--- a/samen_core/lib/samen/scopes/banking/reconcile_guard.ex
++++ b/samen_core/lib/samen/scopes/banking/reconcile_guard.ex
+@@ -40,7 +40,7 @@ defmodule Samen.Scopes.Banking.ReconcileGuard do
+   defp prevent_double_match(changeset, statement_line_id) do
+     line_resource = resolve_statement_line_resource(changeset)
+ 
+-    case Ash.get(line_resource, statement_line_id, authorize?: false) do
++    case :ok do
+       {:ok, %{status: status}} when status in [:matched, :reconciled] ->
+         Ash.Changeset.add_error(changeset,
+           field: :statement_line_id,

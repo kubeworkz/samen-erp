@@ -1,0 +1,21 @@
+# SABOTAGE: E13 stock check bypass
+# (Samen.Scopes.Inventory.TransferGuard). Removes the stock availability
+# check on transfer post. After this patch, a warehouse can transfer out
+# more stock than it has — creating negative inventory without the
+# NegativeStock guard catching it.
+# APP: samen_core
+# TEST_FILES: test/warehouse_transfers_test.exs
+# MUST_FAIL: stock check should prevent transfer when insufficient stock
+diff --git a/samen_core/lib/samen/scopes/inventory/transfer_guard.ex b/samen_core/lib/samen/scopes/inventory/transfer_guard.ex
+--- a/samen_core/lib/samen/scopes/inventory/transfer_guard.ex
++++ b/samen_core/lib/samen/scopes/inventory/transfer_guard.ex
+@@ -41,7 +41,7 @@ defmodule Samen.Scopes.Inventory.TransferGuard do
+       with :ok <- validate_positive_qty(changeset, qty),
+            :ok <- validate_different_warehouses(changeset, source, dest),
+            :ok <- validate_warehouses_exist(changeset, source, dest) do
+         # Stock check is only on :post
+-        if Ash.Changeset.get_attribute(changeset, :status) == :posted do
++        if false do
+           validate_stock(changeset, source, qty)
+         else
+           changeset
