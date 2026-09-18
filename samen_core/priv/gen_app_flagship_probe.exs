@@ -958,8 +958,34 @@ try do
 
   File.write!(config, sabotaged_config)
 
+  # Retry loop: on Windows, successive System.cmd calls can race with BEAM port
+  # cleanup from the prior ci.sh invocation — the new bash process receives SIGINT
+  # before producing any output (exit 0xC000013A). A short sleep between retries
+  # lets the prior BEAM fully release its ports.
   {sab_b_out, sab_b_code} = run_gate.()
-  IO.puts("\nsabotage (b) — dropped db_statement: :disabled from observability config:")
+  max_retries = 2
+
+  {sab_b_out, sab_b_code} =
+    if sab_b_code != 0 and String.trim(sab_b_out) == "" do
+      IO.puts("\nsabotage (b) — dropped db_statement :disabled from observability config:")
+      IO.puts("  gate exit: #{sab_b_code}  (empty output — likely Windows SIGINT race, retrying)")
+
+      Enum.reduce_while(1..max_retries, {sab_b_out, sab_b_code}, fn attempt, {_prev_out, _prev_code} ->
+        Process.sleep(2000)
+        IO.puts("  retry #{attempt}/#{max_retries}...")
+        {retry_out, retry_code} = run_gate.()
+
+        if retry_code != 0 and String.trim(retry_out) == "" do
+          {:cont, {retry_out, retry_code}}
+        else
+          {:halt, {retry_out, retry_code}}
+        end
+      end)
+    else
+      {sab_b_out, sab_b_code}
+    end
+
+  IO.puts("\nsabotage (b) — dropped db_statement :disabled from observability config:")
   IO.puts("  gate exit: #{sab_b_code}  (MUST be non-zero — no_plaintext_pii LogTelemetry flip)")
 
   if sab_b_code == 0 do
@@ -967,13 +993,25 @@ try do
     halt.(1, "FAIL: gate STILL PASSED with SQL-text recording unproven — no_plaintext_pii is a TAUTOLOGY.")
   end
 
-  unless String.contains?(last_step.(sab_b_out), "no_plaintext_pii") do
+  step = last_step.(sab_b_out)
+
+  if step == "" do
+    IO.puts(sab_b_out)
+
+    halt.(
+      1,
+      "FAIL: gate failed under sabotage (b) but produced no step markers " <>
+        "(exit #{sab_b_code}, output empty — the BEAM likely crashed before the verifier ran)."
+    )
+  end
+
+  unless String.contains?(step, "no_plaintext_pii") do
     IO.puts(sab_b_out)
 
     halt.(
       1,
       "FAIL: gate failed under sabotage (b) but NOT at the no_plaintext_pii step " <>
-        "(last step reached: #{inspect(last_step.(sab_b_out))} — wrong flip)."
+        "(last step reached: #{inspect(step)} — wrong flip)."
     )
   end
 
