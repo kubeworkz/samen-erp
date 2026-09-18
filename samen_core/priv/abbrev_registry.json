@@ -264,15 +264,19 @@
     "wmg": "Samen.WebTest.Marketing.Segment",
     "fmg": "Driftwood.Marketing.Segment",
     "dpc": "Driftwood.Operator.Customer",
-    "fxr": "Samen.Scopes.Finance.ExchangeRate",
-    "fxf": "Samen.Scopes.Finance.OrgFxSettings",
     "bka": "BankAccount",
     "bkl": "StatementLine",
     "bki": "StatementImport",
     "bkm": "Match",
     "bkr": "Rule",
-    "trn": "Samen.Scopes.Inventory.TransferOrder",
-    "lcd": "Samen.Scopes.Inventory.LandedCost"
+    "trn": "SamenCore.Support.InventoryFixture.TransferOrder",
+    "lcd": "SamenCore.Support.InventoryFixture.LandedCost",
+    "fxr": "SamenCore.Support.FinanceFixture.ExchangeRate",
+    "fxf": "SamenCore.Support.FinanceFixture.OrgFxSettings",
+    "efx": "Samenerp.Erp.ExchangeRate",
+    "efs": "Samenerp.Erp.OrgFxSettings",
+    "etn": "Samenerp.Erp.TransferOrder",
+    "eld": "Samenerp.Erp.LandedCost"
   },
   "hosts": {
     "demo": {

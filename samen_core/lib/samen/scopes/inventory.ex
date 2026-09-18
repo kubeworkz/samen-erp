@@ -148,7 +148,9 @@ defmodule Samen.Scopes.Inventory do
     bom: "ibo",
     bom_line: "ibl",
     work_order: "iwo",
-    production_log: "ipg"
+    production_log: "ipg",
+    transfer_order: "trn",
+    landed_cost: "lcd"
   }
 
   @doc false
@@ -178,6 +180,8 @@ defmodule Samen.Scopes.Inventory do
     bom_line_mod = Module.concat(namespace, BomLine)
     work_order_mod = Module.concat(namespace, WorkOrder)
     production_log_mod = Module.concat(namespace, ProductionLog)
+    transfer_order_mod = Module.concat(namespace, TransferOrder)
+    landed_cost_mod = Module.concat(namespace, LandedCost)
 
     # The E4 Procurement documents compile ONLY when the mount wires
     # `finance:` — the chokepoint needs the host's Finance entry +
@@ -409,6 +413,32 @@ defmodule Samen.Scopes.Inventory do
         unquote(abbrevs.production_log),
         unquote(work_order_mod),
         unquote(item_mod)
+      )
+
+      # ── E13: Warehouse Transfers ──
+      resources do
+        resource(unquote(transfer_order_mod))
+      end
+
+      Samen.Scopes.Inventory.Blueprint.define_transfer_order(
+        unquote(transfer_order_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.transfer_order)
+      )
+
+      # ── E14: Landed Costs ──
+      resources do
+        resource(unquote(landed_cost_mod))
+      end
+
+      Samen.Scopes.Inventory.Blueprint.define_landed_cost(
+        unquote(landed_cost_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.landed_cost)
       )
     end
   end

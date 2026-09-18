@@ -1280,4 +1280,121 @@ defmodule Samen.Scopes.Inventory.Blueprint do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # TransferOrder — multi-warehouse transfer (WS-ERP E13)
+  # ---------------------------------------------------------------------------
+  defmacro define_transfer_order(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.TransferOrder — multi-warehouse transfer (WS-ERP E13).
+        Coordinates transfer_out + transfer_in in one transaction.
+        No PII (INV-1). Archivable.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev),
+          archivable: true
+
+        postgres do
+          table("#{unquote(abbrev)}_transfer_order")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:item_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:source_warehouse_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:dest_warehouse_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:qty, :integer, public?: true, allow_nil?: false)
+          attribute(:status, :atom, public?: true, allow_nil?: false, default: :draft,
+            constraints: [one_of: [:draft, :posted]])
+          attribute(:note, :string, public?: true)
+          attribute(:posted_at, :utc_datetime, public?: true)
+        end
+
+        actions do
+          defaults([:read])
+          create :create do
+            accept([:org_id, :item_id, :source_warehouse_id, :dest_warehouse_id, :qty, :note])
+          end
+          update :post do
+            accept([])
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # LandedCost — additional costs on inventory imports (WS-ERP E14)
+  # ---------------------------------------------------------------------------
+  defmacro define_landed_cost(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.LandedCost — additional costs on inventory imports (WS-ERP E14).
+        Freight, duties, insurance allocated to item cost. No PII. Archivable.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev),
+          archivable: true
+
+        postgres do
+          table("#{unquote(abbrev)}_landed_cost")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:bill_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:amount_cents, :integer, public?: true, allow_nil?: false)
+          attribute(:allocation_method, :atom, public?: true, allow_nil?: false, default: :value,
+            constraints: [one_of: [:value, :quantity]])
+          attribute(:status, :atom, public?: true, allow_nil?: false, default: :draft,
+            constraints: [one_of: [:draft, :allocated]])
+          attribute(:cost_account_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:description, :string, public?: true)
+        end
+
+        actions do
+          defaults([:read])
+          create :create do
+            accept([:org_id, :bill_id, :amount_cents, :allocation_method, :cost_account_id, :description])
+          end
+          update :allocate do
+            accept([])
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
 end

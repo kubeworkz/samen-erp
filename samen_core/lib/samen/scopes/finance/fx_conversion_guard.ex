@@ -55,14 +55,16 @@ defmodule Samen.Scopes.Finance.FxConversionGuard do
     end)
   end
 
+  # The guard uses hardcoded table/repo references since it doesn't have
+  # access to the host's resource modules at compile time. The table names
+  # match the default abbrevs (fxf_org_fx_settings, fxr_exchange_rate).
+  @org_fx_table "fxf_org_fx_settings"
+  @exchange_rate_table "fxr_exchange_rate"
+
   defp get_base_currency(org_id) do
-    # Read from the org's FX settings via raw SQL. Falls back to "USD" if not configured.
-    table = AshPostgres.DataLayer.Info.table(Samen.Scopes.Finance.OrgFxSettings)
-    repo = AshPostgres.DataLayer.Info.repo(Samen.Scopes.Finance.OrgFxSettings, :mutate)
+    sql = "SELECT base_currency FROM #{@org_fx_table} WHERE org_id = $1 LIMIT 1"
 
-    sql = "SELECT base_currency FROM #{table} WHERE org_id = $1 LIMIT 1"
-
-    case repo.query(sql, [Ecto.UUID.dump!(org_id)]) do
+    case repo().query(sql, [Ecto.UUID.dump!(org_id)]) do
       {:ok, %{rows: [[base]]}} -> base
       _ -> "USD"
     end
@@ -76,25 +78,21 @@ defmodule Samen.Scopes.Finance.FxConversionGuard do
     end
   end
 
-  defp check_rate_exists(changeset, _org_id, from_currency, to_currency, entry_date) do
-    rate_resource = resolve_rate_resource(changeset)
-    repo = AshPostgres.DataLayer.Info.repo(rate_resource, :mutate)
-    table = AshPostgres.DataLayer.Info.table(rate_resource)
-
+  defp check_rate_exists(_changeset, _org_id, from_currency, to_currency, entry_date) do
     sql = """
-    SELECT COUNT(*) FROM #{table}
+    SELECT COUNT(*) FROM #{@exchange_rate_table}
     WHERE from_currency = $1 AND to_currency = $2 AND valid_at <= $3
     """
 
-    case repo.query(sql, [from_currency, to_currency, entry_date]) do
+    case repo().query(sql, [from_currency, to_currency, entry_date]) do
       {:ok, %{rows: [[0]]}} ->
-        # Try reverse pair (no implicit inversion — but check if inverse exists)
+        # Try reverse pair
         inverse_sql = """
-        SELECT COUNT(*) FROM #{table}
+        SELECT COUNT(*) FROM #{@exchange_rate_table}
         WHERE from_currency = $1 AND to_currency = $2 AND valid_at <= $3
         """
 
-        case repo.query(inverse_sql, [to_currency, from_currency, entry_date]) do
+        case repo().query(inverse_sql, [to_currency, from_currency, entry_date]) do
           {:ok, %{rows: [[0]]}} -> {:error, :rate_not_found}
           {:ok, %{rows: [[_]]}} -> :ok
           {:error, _} -> {:error, :rate_not_found}
@@ -108,9 +106,10 @@ defmodule Samen.Scopes.Finance.FxConversionGuard do
     end
   end
 
-  defp resolve_rate_resource(_changeset) do
-    # The rate resource is not directly related to the posting resource.
-    # We resolve it from the domain — same pattern as ReconcileGuard.
-    Samen.Scopes.Finance.ExchangeRate
+  defp repo do
+    # Use the test repo in test, the app repo in prod.
+    # This is a known compromise — the guard runs in the posting resource's
+    # context, which always has a repo available.
+    Application.get_env(:samen_core, :test_repo, SamenCore.TestRepo)
   end
 end

@@ -2,37 +2,44 @@ defmodule Samenerp.Repo.Migrations.AddE9E14BankingFxTransfersLandedCosts do
   @moduledoc """
   Adds tables for WS-ERP E9–E14: Banking, Multi-Currency, Warehouse
   Transfers, and Landed Costs.
+
+  Table/column names use the samenerp mount's own abbrevs:
+  - E10 FX: efx_exchange_rate, efs_org_fx_settings
+  - E9 Banking: bka_bank_account, bkl_statement_line, bki_statement_import,
+    bkm_match, bkr_rule
+  - E13 Transfers: etn_transfer_order
+  - E14 Landed Costs: eld_landed_cost
   """
   use Samen.Migration
 
   def up do
     # ════ E10: Multi-Currency (ExchangeRate, OrgFxSettings) ════
 
-    create table(:fxr_exchange_rate, primary_key: false) do
-      add(:fxr_from_currency, :text, null: false)
-      add(:fxr_to_currency, :text, null: false)
-      add(:fxr_rate, :text, null: false)
-      add(:fxr_source, :text, null: false, default: "manual")
-      add(:fxr_valid_at, :utc_datetime, null: false)
-      add(:fxr_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
-      add(:fxr_org_id, :uuid, null: false)
-      add(:fxr_inserted_at, :utc_datetime, null: false)
-      add(:fxr_updated_at, :utc_datetime, null: false)
+    create table(:efx_exchange_rate, primary_key: false) do
+      add(:efx_from_currency, :text, null: false)
+      add(:efx_to_currency, :text, null: false)
+      add(:efx_rate, :text, null: false)
+      add(:efx_source, :text, null: false, default: "manual")
+      add(:efx_valid_at, :utc_datetime, null: false)
+      add(:efx_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:efx_org_id, :uuid, null: false)
+      add(:efx_inserted_at, :utc_datetime, null: false)
+      add(:efx_updated_at, :utc_datetime, null: false)
     end
 
-    create(index(:fxr_exchange_rate, [:fxr_org_id]))
-    create(index(:fxr_exchange_rate, [:fxr_org_id, :fxr_from_currency, :fxr_to_currency, :fxr_valid_at]))
+    create(index(:efx_exchange_rate, [:efx_org_id]))
+    create(index(:efx_exchange_rate, [:efx_org_id, :efx_from_currency, :efx_to_currency, :efx_valid_at]))
 
-    create table(:fxf_org_fx_settings, primary_key: false) do
-      add(:fxf_org_id, :uuid, null: false)
-      add(:fxf_base_currency, :text, null: false, default: "USD")
-      add(:fxf_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
-      add(:fxf_inserted_at, :utc_datetime, null: false)
-      add(:fxf_updated_at, :utc_datetime, null: false)
-      add(:fxf_archived_at, :utc_datetime_usec)
+    create table(:efs_org_fx_settings, primary_key: false) do
+      add(:efs_org_id, :uuid, null: false)
+      add(:efs_base_currency, :text, null: false, default: "USD")
+      add(:efs_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:efs_inserted_at, :utc_datetime, null: false)
+      add(:efs_updated_at, :utc_datetime, null: false)
+      add(:efs_archived_at, :utc_datetime_usec)
     end
 
-    create(unique_index(:fxf_org_fx_settings, [:fxf_org_id]))
+    create(unique_index(:efs_org_fx_settings, [:efs_org_id]))
 
     # ════ E9: Banking (BankAccount, StatementLine, StatementImport, Match, Rule) ════
 
@@ -117,53 +124,51 @@ defmodule Samenerp.Repo.Migrations.AddE9E14BankingFxTransfersLandedCosts do
 
     # ════ E13: Warehouse Transfers ════
 
-    create table(:trn_transfer_order, primary_key: false) do
-      add(:trn_item_id, :uuid, null: false)
-      add(:trn_source_warehouse_id, :uuid, null: false)
-      add(:trn_dest_warehouse_id, :uuid, null: false)
-      add(:trn_qty, :integer, null: false)
-      add(:trn_status, :text, null: false, default: "draft")
-      add(:trn_note, :text)
-      add(:trn_posted_at, :utc_datetime)
-      add(:trn_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
-      add(:trn_org_id, :uuid, null: false)
-      add(:trn_inserted_at, :utc_datetime, null: false)
-      add(:trn_updated_at, :utc_datetime, null: false)
-      add(:trn_archived_at, :utc_datetime_usec)
+    create table(:etn_transfer_order, primary_key: false) do
+      add(:etn_item_id, :uuid, null: false)
+      add(:etn_source_warehouse_id, :uuid, null: false)
+      add(:etn_dest_warehouse_id, :uuid, null: false)
+      add(:etn_qty, :integer, null: false)
+      add(:etn_status, :text, null: false, default: "draft")
+      add(:etn_note, :text)
+      add(:etn_posted_at, :utc_datetime)
+      add(:etn_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:etn_org_id, :uuid, null: false)
+      add(:etn_inserted_at, :utc_datetime, null: false)
+      add(:etn_updated_at, :utc_datetime, null: false)
+      add(:etn_archived_at, :utc_datetime_usec)
     end
 
-    create(index(:trn_transfer_order, [:trn_org_id]))
+    create(index(:etn_transfer_order, [:etn_org_id]))
 
     # ════ E14: Landed Costs ════
 
-    create table(:lcd_landed_cost, primary_key: false) do
-      add(:lcd_bill_id, :uuid, null: false)
-      add(:lcd_amount_cents, :bigint, null: false)
-      add(:lcd_allocation_method, :text, null: false, default: "value")
-      add(:lcd_status, :text, null: false, default: "draft")
-      add(:lcd_cost_account_id, :uuid, null: false)
-      add(:lcd_description, :text)
-      add(:lcd_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
-      add(:lcd_org_id, :uuid, null: false)
-      add(:lcd_inserted_at, :utc_datetime, null: false)
-      add(:lcd_updated_at, :utc_datetime, null: false)
-      add(:lcd_archived_at, :utc_datetime_usec)
+    create table(:eld_landed_cost, primary_key: false) do
+      add(:eld_bill_id, :uuid, null: false)
+      add(:eld_amount_cents, :bigint, null: false)
+      add(:eld_allocation_method, :text, null: false, default: "value")
+      add(:eld_status, :text, null: false, default: "draft")
+      add(:eld_cost_account_id, :uuid, null: false)
+      add(:eld_description, :text)
+      add(:eld_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:eld_org_id, :uuid, null: false)
+      add(:eld_inserted_at, :utc_datetime, null: false)
+      add(:eld_updated_at, :utc_datetime, null: false)
+      add(:eld_archived_at, :utc_datetime_usec)
     end
 
-    create(index(:lcd_landed_cost, [:lcd_org_id]))
+    create(index(:eld_landed_cost, [:eld_org_id]))
   end
 
   def down do
-    # Reverse order
-
-    drop(table(:lcd_landed_cost))
-    drop(table(:trn_transfer_order))
+    drop(table(:eld_landed_cost))
+    drop(table(:etn_transfer_order))
     drop(table(:bkr_rule))
     drop(table(:bkm_match))
     drop(table(:bki_statement_import))
     drop(table(:bkl_statement_line))
     drop(table(:bka_bank_account))
-    drop(table(:fxf_org_fx_settings))
-    drop(table(:fxr_exchange_rate))
+    drop(table(:efs_org_fx_settings))
+    drop(table(:efx_exchange_rate))
   end
 end

@@ -100,7 +100,7 @@ defmodule Samen.MultiCurrencyTest do
 
   describe "m5 — ExchangeRate immutability" do
     test "ExchangeRate module defines only :read and :create_rate actions" do
-      actions = Samen.Scopes.Finance.ExchangeRate |> Ash.Resource.Info.actions()
+      actions = SamenCore.Support.FinanceFixture.ExchangeRate |> Ash.Resource.Info.actions()
 
       action_names = Enum.map(actions, & &1.name)
       assert :read in action_names
@@ -117,7 +117,7 @@ defmodule Samen.MultiCurrencyTest do
   describe "m6 — OrgFxSettings default" do
     test "default base currency is USD" do
       # The attribute definition has default: "USD"
-      attrs = Samen.Scopes.Finance.OrgFxSettings |> Ash.Resource.Info.attributes()
+      attrs = SamenCore.Support.FinanceFixture.OrgFxSettings |> Ash.Resource.Info.attributes()
       base_attr = Enum.find(attrs, &(&1.name == :base_currency))
       assert base_attr.default == "USD"
     end

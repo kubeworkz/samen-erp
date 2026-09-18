@@ -36,7 +36,9 @@ defmodule Samenerp.Erp do
       payment_receipt: "ecr",
       posting_account: "ecf",
       budget: "ecb",
-      budget_line: "ecd"
+      budget_line: "ecd",
+      exchange_rate: "efx",
+      org_fx_settings: "efs"
     }
 
   use Samen.Scopes.Inventory,
@@ -57,7 +59,9 @@ defmodule Samenerp.Erp do
       bom: "ebm",
       bom_line: "ebl",
       work_order: "ewo",
-      production_log: "epg"
+      production_log: "epg",
+      transfer_order: "etn",
+      landed_cost: "eld"
     },
     finance: [
       entry: Samenerp.Erp.JournalEntry,
@@ -90,5 +94,9 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.BomLine)
     resource(Samenerp.Erp.WorkOrder)
     resource(Samenerp.Erp.ProductionLog)
+    resource(Samenerp.Erp.ExchangeRate)
+    resource(Samenerp.Erp.OrgFxSettings)
+    resource(Samenerp.Erp.TransferOrder)
+    resource(Samenerp.Erp.LandedCost)
   end
 end

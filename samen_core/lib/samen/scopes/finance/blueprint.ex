@@ -788,4 +788,102 @@ defmodule Samen.Scopes.Finance.Blueprint do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # ExchangeRate — immutable FX rate storage per currency pair (WS-ERP E10)
+  # ---------------------------------------------------------------------------
+  defmacro define_exchange_rate(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.ExchangeRate — immutable FX rate storage (WS-ERP E10).
+        One row per rate per currency pair per timestamp. No PII.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_exchange_rate")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:from_currency, :string, public?: true, allow_nil?: false)
+          attribute(:to_currency, :string, public?: true, allow_nil?: false)
+          attribute(:rate, :string, public?: true, allow_nil?: false)
+          attribute(:source, :atom, public?: true, allow_nil?: false, default: :manual,
+            constraints: [one_of: [:manual, :api, :import]])
+          attribute(:valid_at, :utc_datetime, public?: true, allow_nil?: false)
+        end
+
+        actions do
+          defaults([:read])
+          create :create_rate do
+            accept([:from_currency, :to_currency, :rate, :source, :valid_at, :org_id])
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+          policy action_type(:create) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # OrgFxSettings — base currency per org (WS-ERP E10)
+  # ---------------------------------------------------------------------------
+  defmacro define_org_fx_settings(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.OrgFxSettings — base currency per org (WS-ERP E10).
+        Tier-0 config row, admin-editable. No PII. Archivable.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev),
+          archivable: true
+
+        postgres do
+          table("#{unquote(abbrev)}_org_fx_settings")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:org_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:base_currency, :string, public?: true, allow_nil?: false, default: "USD")
+        end
+
+        actions do
+          defaults([:read, create: :*, update: :*])
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
 end

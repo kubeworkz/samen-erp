@@ -125,7 +125,9 @@ defmodule Samen.Scopes.Finance do
     payment_receipt: "frr",
     posting_account: "fpa",
     budget: "fbg",
-    budget_line: "fbl"
+    budget_line: "fbl",
+    exchange_rate: "fxr",
+    org_fx_settings: "fxf"
   }
 
   @doc false
@@ -150,6 +152,8 @@ defmodule Samen.Scopes.Finance do
     posting_account_mod = Module.concat(namespace, PostingAccount)
     budget_mod = Module.concat(namespace, Budget)
     budget_line_mod = Module.concat(namespace, BudgetLine)
+    exchange_rate_mod = Module.concat(namespace, ExchangeRate)
+    org_fx_settings_mod = Module.concat(namespace, OrgFxSettings)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -165,6 +169,8 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(posting_account_mod))
         resource(unquote(budget_mod))
         resource(unquote(budget_line_mod))
+        resource(unquote(exchange_rate_mod))
+        resource(unquote(org_fx_settings_mod))
       end
 
       Samen.Scopes.Finance.Blueprint.define_account(
@@ -242,6 +248,22 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.budget_line),
         unquote(budget_mod),
         unquote(account_mod)
+      )
+
+      Samen.Scopes.Finance.Blueprint.define_exchange_rate(
+        unquote(exchange_rate_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.exchange_rate)
+      )
+
+      Samen.Scopes.Finance.Blueprint.define_org_fx_settings(
+        unquote(org_fx_settings_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.org_fx_settings)
       )
     end
   end
