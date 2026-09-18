@@ -271,7 +271,8 @@
     "bki": "StatementImport",
     "bkm": "Match",
     "bkr": "Rule",
-    "trn": "Samen.Scopes.Inventory.TransferOrder"
+    "trn": "Samen.Scopes.Inventory.TransferOrder",
+    "lcd": "Samen.Scopes.Inventory.LandedCost"
   },
   "hosts": {
     "demo": {
