@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # scripts/sabotage_residue.sh — fail-closed RESIDUE preflight for scripts/sabotages/*.patch.
 #
-# WHY THIS EXISTS. The harness applies a REAL patch to the working tree and reverts it in
-# `trap cleanup EXIT`. That trap covers a normal exit and SIGINT/SIGTERM (verified by
-# hand: bash runs an EXIT trap on both), but NOT SIGKILL — an OS-level hard kill (a
-# `timeout`/tool timeout that escalates, a closed terminal, a killed gate step) leaves the
-# in-flight patch APPLIED. The tree then looks like a legitimate edit: the very tests the
-# sabotage targets start failing, far from the cause — and `git add -A` commits the
-# sabotage as if it were a fix. That is not hypothetical: patch 12-e5
-# (apikey-store-raw) reached main that way and failed the samen_web + driftwood gates on
-# the next push, ~46 minutes into the run. scripts/gen_probe_guard.sh covers this same
-# hazard on the abbrev registry — see its SAFETY note, where a hard kill recurred 4+ times.
+# WHY THIS EXISTS. An applied sabotage in the working tree does not look like a bug: it
+# looks like a legitimate edit whose targeted tests fail far from the cause — and a
+# `git add -A` then commits the sabotage as if it were a fix. That is not hypothetical:
+# patch 12-e5 (apikey-store-raw) reached main that way and failed the samen_web +
+# driftwood gates on the next push, ~46 minutes into the run. The harness no longer CAUSES
+# this (it replays every patch in a throwaway worktree — see the ISOLATED REPLAY TREE
+# section of scripts/sabotage.sh — so its own residue cannot reach the shared checkout),
+# but the state itself still arrives by other routes: a checkout left behind by a
+# pre-isolation run or a hard kill (SIGKILL skips every trap, including the harness's),
+# a patch someone applied by hand, or a committed sweep like 12-e5. Hard kills recurred 4+
+# times on the abbrev registry, so this guard covers them exactly rather than hopefully;
+# scripts/gen_probe_guard.sh covers the same hazard for that registry (see its SAFETY
+# note). Its value is unchanged by the isolation and is now purely defence in depth.
 #
 # The detector is exact and READ-ONLY: `git apply --reverse --check <patch>` succeeds iff
 # that patch is currently applied to the tree. Nothing is modified — recovery is reported,

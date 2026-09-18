@@ -6,13 +6,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- RESIDUE PREFLIGHT (fail closed, seconds) ------------------------------------------
-# `scripts/sabotage.sh` breaks the tree on purpose (that is the point of a sabotage) and
-# reverts in a `trap cleanup EXIT`. That trap covers a normal exit and SIGINT/SIGTERM, but
-# NOT an OS-level hard kill — so a killed harness run leaves its in-flight patch APPLIED.
-# The tree then fails exactly the tests the sabotage targets, which is a confusing red
-# ~50 minutes into this gate and far from the cause; worse, `git add -A` commits the
-# sabotage as if it were a fix (patch 12-e5 reached main that way). Check the tree BEFORE
-# spending the gate on it. Read-only — it reverts nothing and prints nothing when clean.
+# An applied sabotage in the working tree is not obvious breakage: it fails exactly the tests
+# the sabotage targets — a confusing red ~50 minutes into this gate, far from the cause — and
+# `git add -A` commits it as if it were a fix (patch 12-e5 reached main that way, and that is
+# why the harness now replays every patch in a throwaway worktree instead of this checkout).
+# The state still arrives by other routes, so it is still checked here: a checkout left behind
+# by a pre-isolation run, a hard kill (SIGKILL skips every trap, including the harness's), a
+# patch applied by hand, or a committed sweep. Check the tree BEFORE spending the gate on it.
+# Read-only — it reverts nothing and prints nothing when clean.
 echo "==> Preflight: the working tree must carry no applied sabotage patch"
 bash "$REPO_ROOT/scripts/sabotage_residue.sh" || {
   echo ""

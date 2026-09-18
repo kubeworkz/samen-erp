@@ -371,6 +371,21 @@ Everything in the `--deploy` scaffold that a *boot* would find and no test does.
 > guarantees per worker), so it is deferred until the serial chunked mode stops being sufficient. Tooling
 > note only — no sabotage/verifier semantics change; each patch still applies → flips → reverts byte-exact,
 > just concurrently.
+>
+> **ISOLATION LANDED (2026-09-17) — the safety half of #3, serially.** Patch 12-e5 reached main because a
+> hard-killed harness run left its in-flight patch applied in the SHARED checkout, where `git add -A`
+> swept it in as if it were a fix. The harness no longer mutates the shared checkout at all: every patch
+> is applied to, and reverted from, a throwaway `git worktree` (`.sabotage/tree`, detached at the main
+> checkout's HEAD, reset + `clean -fdx` at the start of every run), the targeted suites run from there
+> against the main checkout's `deps/` (`MIX_DEPS_PATH`) and a per-app build cache (`MIX_BUILD_PATH`), the
+> main checkout's working state is replicated in first (tracked diff + untracked files) so `--changed`
+> still certifies an uncommitted batch, a stale lock fails closed with its own recovery command, and the
+> run asserts at the end that every touched path in the MAIN checkout is sha-256-identical. A kill can now
+> only dirty the REPLAY tree — self-healing, since the next run resets it. **Cost, measured:** the first
+> run pays a one-time cold compile per app (~4 min for `samen_core`, ~5 min for `samen_web`; the 7 apps the
+> 308 patches target), then runs are warm (~20-40 s per patch). `rm -rf .sabotage && git worktree prune`
+> reclaims the space. **Still deferred:** sharding the replay across N workers with per-worker test DBs
+> (§4.2 #3's parallelism) — this lands the worktree isolation that step needs, but no worker pool yet.
 
 | ID | Sev | One-line | Disposition | Fix sketch |
 |---|---|---|---|---|

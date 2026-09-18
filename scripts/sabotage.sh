@@ -4,7 +4,9 @@
 # Replays every SHIPPED gate sabotage as a committed patch and proves each still
 # FLIPS its named tests — the standing anti-tautology ritual of the E1.4/E2.3
 # (and every earlier) adversarial gate, converted from by-hand judgment into
-# permanent infrastructure. For each scripts/sabotages/*.patch:
+# permanent infrastructure. Every patch is applied to, and reverted from, a
+# THROWAWAY GIT WORKTREE — never the main checkout (see ISOLATED REPLAY TREE
+# below). For each scripts/sabotages/*.patch:
 #
 #   1. SHA-256 every file the patch touches (the byte-exact baseline),
 #   2. apply the patch (git apply),
@@ -12,6 +14,48 @@
 #   4. every MUST_FAIL substring MUST appear among the failed-test headers
 #      (the named tests flipped — not just "something broke"),
 #   5. revert (git apply -R) and re-SHA — byte-exact restore, zero residue.
+#
+# ── ISOLATED REPLAY TREE (why the main checkout can never be left dirty) ──────
+# The harness used to apply a real patch to the SHARED checkout and revert it from
+# `trap cleanup EXIT`. That trap survives a normal exit and SIGINT/SIGTERM, but NOT
+# SIGKILL (a tool/`timeout` escalation, a closed terminal, a killed gate step) — and
+# that is exactly how a sabotage reached main: patch 12-e5 (apikey-store-raw) was
+# left applied in the working tree, where it looked like a legitimate edit, and
+# `git add -A` committed it as if it were a fix. scripts/sabotage_residue.sh reports
+# that state, but only once it exists. So the mutation no longer happens in the main
+# checkout at all:
+#
+#   * every patch is applied to, and reverted from, a detached throwaway worktree of
+#     the same repository at $SHADOW ($SAMEN_SABOTAGE_ROOT/tree, default
+#     .sabotage/tree) — a SEPARATE working tree, so a hard kill can only ever leave
+#     THAT dirty, and the main checkout keeps the bytes it had;
+#   * that worktree is RESET at the start of every run (`reset --hard <main HEAD>` +
+#     `clean -fdx`), so a killed run costs nothing and needs no manual recovery;
+#   * the tests run FROM the worktree, sharing the main checkout's per-app `deps/`
+#     via MIX_DEPS_PATH (re-fetching ~200 packages per app would be absurd) and using
+#     a per-app mix build cache under $SAMEN_SABOTAGE_ROOT/build — which is what
+#     keeps repeat runs as fast as the old in-place ones;
+#   * the main checkout's WORKING STATE is replicated into it before the first patch
+#     (tracked modifications as one `git diff HEAD` patch, untracked-but-not-ignored
+#     files copied), so a filtered `--changed` run still certifies an in-flight batch
+#     whose files are not committed yet; and per patch, every touched path is pinned
+#     byte-for-byte to the main checkout's copy, so `git apply` sees exactly what it
+#     would have seen in place;
+#   * ignored local files (dev keystores, secrets) are deliberately NOT copied into the
+#     replay tree — the targeted suites use per-run tmp keystores, and a future test that
+#     needed an ignored fixture would fail LOUDLY rather than silently pass;
+#   * a fingerprint of every touched path in the MAIN checkout is taken before the
+#     replay and re-checked after it — the invariant this buys, asserted instead of
+#     assumed;
+#   * concurrent runs are excluded by a lock ($SAMEN_SABOTAGE_ROOT/lock); the failure
+#     message names the recovery command.
+#
+# COST. The FIRST run compiles each app's deps and code into the isolated cache
+# (measured on the reference box: ~5 min for samen_core, ~3 min for a small adapter
+# app; the 7 apps the 308 patches target pay that once). Later runs are warm — a
+# sabotaged `mix test` costs what it costs in place. Reclaim the space with
+# `rm -rf .sabotage && git worktree prune`; the next run pays the cold compile again.
+# `--list`/`--dry-run` creates none of it.
 #
 # Patch metadata lives in `# KEY: value` header lines inside each .patch
 # (git apply ignores everything before the first `diff --git`):
@@ -50,6 +94,7 @@
 #                             and the count) and EXIT — no patch is applied and
 #                             no test runs. Fast proof of what a filter will run.
 #
+# ── HEADER PREFLIGHT, WIRING, AND REQUIREMENTS ────────────────────────────────
 # The header preflight (scripts/sabotage_lint.sh) ALWAYS runs over ALL patches,
 # even on a filtered run: a missing APP/TEST_FILES/MUST_FAIL header anywhere is
 # a latent bug (the "patch 67 missing header aborts silently" class), so it is
@@ -63,37 +108,52 @@
 #
 # Wiring: a permanent OPT-IN root ci.sh step, gated by SAMEN_SABOTAGE=1 (the
 # WS-D generative probes run unconditionally; this one deliberately breaks the
-# tree and re-runs targeted suites, so it is opt-in — gates run it explicitly).
-# ci.sh invokes it with NO flags → the full run, unchanged. Direct invocation
-# runs regardless of the env var.
+# replay tree and re-runs targeted suites, so it is opt-in — gates run it
+# explicitly). ci.sh invokes it with NO flags → the full run, unchanged. Direct
+# invocation runs regardless of the env var.
 #
 # Later gates: add the new sabotage as a .patch here (headers + git diff),
 # re-run this harness, and spend gate judgment ONLY on new vacuity hunting.
 #
-# Needs: local Postgres (the targeted suites are DB-backed). Exits non-zero on
-# the first sabotage that fails to flip, fails to name its tests, or leaves
-# residue — and on an unknown flag or an empty selection.
+# Needs: local Postgres (the targeted suites are DB-backed) and a `mix deps.get`
+# in each patched app's directory (the replay tree shares those deps). Exits
+# non-zero on the first sabotage that fails to flip, fails to name its tests, or
+# leaves residue — and on an unknown flag, an empty selection, or a replay tree it
+# cannot isolate.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SABOTAGE_DIR="$REPO_ROOT/scripts/sabotages"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/samen_sabotage.XXXXXX")"
 
+# The isolated replay tree + its per-app mix build cache (see ISOLATED REPLAY TREE
+# above). Both PERSIST on purpose — the worktree is reset per run, and the build
+# cache is what keeps repeat runs warm — so a killed run leaves nothing worse than
+# a dirty REPLAY tree, which the next run resets.
+SABOTAGE_ROOT="${SAMEN_SABOTAGE_ROOT:-$REPO_ROOT/.sabotage}"
+SHADOW="$SABOTAGE_ROOT/tree"
+BUILD_ROOT="$SABOTAGE_ROOT/build"
+LOCK="$SABOTAGE_ROOT/lock"
+LOCK_HELD=0
+
 APPLIED_PATCH=""
 
 cleanup() {
-  # Never leave a sabotaged tree behind — revert the in-flight patch on ANY exit.
-  if [[ -n "$APPLIED_PATCH" ]]; then
-    echo "!! cleanup: reverting in-flight patch $APPLIED_PATCH"
-    (cd "$REPO_ROOT" && git apply -R "$APPLIED_PATCH") || true
+  # Never leave a sabotaged tree behind. The tree in question is the ISOLATED
+  # worktree — the main checkout is never written — and even this revert is a
+  # courtesy, since every run resets the replay tree before applying anything.
+  if [[ -n "$APPLIED_PATCH" && -e "$SHADOW/.git" ]]; then
+    echo "!! cleanup: reverting in-flight patch $APPLIED_PATCH in the replay tree"
+    (cd "$SHADOW" && git apply -R "$APPLIED_PATCH") || true
   fi
+  [[ "$LOCK_HELD" == "1" ]] && rm -rf "$LOCK"
   rm -rf "$WORK"
 }
 trap cleanup EXIT
 
 fail() {
   echo ""
-  echo "SABOTAGE HARNESS: FAILED — $1"
+  echo "SABOTAGE HARNESS: FAILED — $*"
   exit 1
 }
 
@@ -102,7 +162,10 @@ usage() {
   echo "                   [--touching <path>... | --touching-file <file> | --changed [<ref>]]"
   echo "                   [--list | --dry-run]"
   echo ""
-  sed -n '22,44p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Marker-delimited (not line-numbered) so editing the header cannot silently
+  # desynchronize the help text from the flags it documents.
+  sed -n '/^# ── SELECTION \/ FILTER MODES/,/^# ── HEADER PREFLIGHT/p' "${BASH_SOURCE[0]}" \
+    | sed '1d;$d;s/^# \{0,1\}//'
 }
 
 arg_err() {
@@ -126,16 +189,27 @@ touched_paths() { # touched_paths <patch>
   sed -n 's|^+++ b/||p' "$1" | sed 's/\t.*//'
 }
 
-sha_files() { # sha_files <listfile> <outfile>
-  # sha256sum on Linux/Git-Bash for Windows; shasum elsewhere. Same digest format.
-  : > "$2"
+# sha_files <root> <listfile> <outfile> — one "<digest|ABSENT>  <path>" line per path.
+# sha256sum on Linux/Git-Bash for Windows; shasum elsewhere. Same digest format.
+# A path that does not exist is recorded as ABSENT rather than skipped: a patch that
+# CREATES a file must leave it absent again after the revert, and silently skipping a
+# missing path would make that half of the residue check vacuous.
+sha_files() { # sha_files <root> <listfile> <outfile>
+  : > "$3"
+  local f digest
   while IFS= read -r f; do
-    if command -v shasum >/dev/null 2>&1; then
-      shasum -a 256 "$REPO_ROOT/$f" >> "$2"
-    else
-      sha256sum "$REPO_ROOT/$f" >> "$2"
+    [[ -n "$f" ]] || continue
+    if [[ ! -e "$1/$f" ]]; then
+      printf 'ABSENT  %s\n' "$f" >> "$3"
+      continue
     fi
-  done < "$1"
+    if command -v shasum >/dev/null 2>&1; then
+      digest="$(shasum -a 256 "$1/$f")"
+    else
+      digest="$(sha256sum "$1/$f")"
+    fi
+    printf '%s  %s\n' "${digest%% *}" "$f" >> "$3"
+  done < "$2"
 }
 
 # ── argument parsing ─────────────────────────────────────────────────────────
@@ -275,6 +349,121 @@ select_patch() {
   return 0
 }
 
+# ── the isolated replay tree ─────────────────────────────────────────────────
+# Nothing below ever runs `git apply`, `checkout`, `clean` or a test against
+# $REPO_ROOT: the main checkout is read (diff/ls-files/hash) and never written.
+
+# acquire_lock — fail closed when another run holds the replay tree. The lock can
+# only survive a hard kill (the EXIT trap releases it), so the message also names
+# the recovery; two runs sharing one worktree would corrupt each other silently.
+acquire_lock() {
+  mkdir -p "$SABOTAGE_ROOT" || fail "cannot create the replay root $SABOTAGE_ROOT"
+  if mkdir "$LOCK" 2>/dev/null; then
+    LOCK_HELD=1
+    {
+      printf 'pid:     %s\n' "$$"
+      printf 'host:    %s\n' "$(hostname 2>/dev/null || echo unknown)"
+      printf 'started: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)"
+      printf 'script:  %s\n' "${BASH_SOURCE[0]}"
+    } > "$LOCK/holder" 2>/dev/null || true
+    return 0
+  fi
+  echo ""
+  echo "!! the isolated replay tree is in use by another run:"
+  sed 's/^/!!   /' "$LOCK/holder" 2>/dev/null || echo "!!   (no holder information)"
+  echo "!!   tree: $SHADOW"
+  fail "another sabotage run holds the replay tree at $SABOTAGE_ROOT. If no run is" \
+       "active (a run killed mid-flight leaves the lock behind), remove $LOCK and re-run."
+}
+
+# shadow_reset <head-sha> — bring the replay tree to a pristine detached checkout of
+# the main checkout's HEAD. Re-using the existing tree when it is still a worktree of
+# this repository matters for SPEED, not just hygiene: `reset --hard` rewrites only the
+# files that differ, so mix's cached compilation of unchanged sources stays valid (a
+# fresh checkout would restamp every source mtime and recompile everything).
+shadow_reset() { # shadow_reset <head-sha>
+  if [[ -e "$SHADOW/.git" ]] && git -C "$SHADOW" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git -C "$SHADOW" reset --hard --quiet "$1" 2>/dev/null \
+       && git -C "$SHADOW" clean -fdxq 2>/dev/null; then
+      return 0
+    fi
+    echo "    replay tree: existing tree is unusable — recreating it"
+  fi
+  git -C "$REPO_ROOT" worktree prune 2>/dev/null || true
+  rm -rf "$SHADOW"
+  git -C "$REPO_ROOT" worktree add --detach --quiet "$SHADOW" "$1" \
+    || fail "could not create the isolated replay tree at $SHADOW ('git worktree add' failed)"
+  return 0
+}
+
+# replicate_working_state — the harness certifies the code a verifier is ABOUT to
+# commit, not merely the last commit, so the main checkout's working state is copied
+# into the replay tree: tracked modifications (staged and unstaged, one `git diff HEAD`
+# patch) then untracked-but-not-ignored files. That union is exactly what `--changed`
+# selects from, so a filtered run over an uncommitted batch still applies those
+# patches to the bytes they were written against.
+replicate_working_state() {
+  local f
+  git -C "$REPO_ROOT" diff HEAD --binary > "$WORK/main_state.patch"
+  if [[ -s "$WORK/main_state.patch" ]]; then
+    (cd "$SHADOW" && git apply --binary "$WORK/main_state.patch") \
+      || fail "could not replicate the main checkout's tracked changes into $SHADOW"
+  fi
+  git -C "$REPO_ROOT" ls-files --others --exclude-standard > "$WORK/main_untracked"
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    [[ -f "$REPO_ROOT/$f" ]] || continue
+    mkdir -p "$SHADOW/$(dirname "$f")" && cp -f "$REPO_ROOT/$f" "$SHADOW/$f" \
+      || fail "could not replicate untracked file $f into $SHADOW"
+  done < "$WORK/main_untracked"
+}
+
+# sync_touched_into_shadow <listfile> — pin the replay tree's copy of every touched
+# path to the MAIN checkout's bytes (and delete it when the main checkout does not have
+# it), so `git apply` inside the replay tree sees precisely what it would have seen in
+# place — including ignored/untracked paths, and including a path a probe patch expects
+# to be ABSENT.
+sync_touched_into_shadow() { # sync_touched_into_shadow <listfile>
+  local f
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    if [[ -e "$REPO_ROOT/$f" ]]; then
+      mkdir -p "$SHADOW/$(dirname "$f")" && cp -f "$REPO_ROOT/$f" "$SHADOW/$f" \
+        || fail "could not sync $f into the replay tree"
+    else
+      rm -f "$SHADOW/$f"
+    fi
+  done < "$1"
+}
+
+prepare_replay_tree() {
+  acquire_lock
+  local head_sha leftover_only
+  head_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)" || fail "cannot resolve HEAD in $REPO_ROOT"
+
+  # What the replay tree held BEFORE this run reset it. A previous run that was hard-
+  # killed mid-patch leaves that patch applied HERE — a fact worth reporting, since it is
+  # exactly the residue the main checkout used to be stuck with. It is compared below
+  # against what working-state replication is expected to produce, so the harness's own
+  # replicated state is never misreported as residue.
+  : > "$WORK/shadow_before"
+  if [[ -e "$SHADOW/.git" ]] && git -C "$SHADOW" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$SHADOW" status --porcelain 2>/dev/null > "$WORK/shadow_before" || true
+  fi
+
+  shadow_reset "$head_sha"
+  replicate_working_state
+
+  git -C "$SHADOW" status --porcelain 2>/dev/null | cut -c4- | sort -u > "$WORK/shadow_after" || true
+  leftover_only="$(cut -c4- "$WORK/shadow_before" | sort -u \
+    | grep -vxF -f "$WORK/shadow_after" | grep -v '^$' || true)"
+  if [[ -n "$leftover_only" ]]; then
+    echo "    replay tree: recovered residue from an interrupted run (reset before replay;"
+    echo "                 the MAIN checkout was never written by it):"
+    printf '%s\n' "$leftover_only" | head -5 | sed 's/^/                   /'
+  fi
+}
+
 # ── header preflight ─────────────────────────────────────────────────────────
 # ALWAYS lint ALL patches, even under a filter: a missing header anywhere is a
 # latent bug (patch 67 shipped this way once and silently swallowed patches
@@ -328,6 +517,17 @@ if [[ $FILTER_ACTIVE -eq 1 ]]; then
   echo "  (a filtered run certifies ONLY this subset; full coverage needs an unfiltered/background run)"
 fi
 
+# ── the invariant, recorded before anything can touch the main checkout ──────
+# Every path ANY selected patch touches, fingerprinted as the main checkout holds
+# it right now, and re-fingerprinted after the replay. This is the whole point of
+# the isolated tree, so it is asserted rather than argued.
+for patch in "${selected[@]}"; do touched_paths "$patch"; done | sort -u > "$WORK/selected_paths"
+[[ -s "$WORK/selected_paths" ]] || fail "could not parse the selected patches' touched paths"
+sha_files "$REPO_ROOT" "$WORK/selected_paths" "$WORK/main_before"
+
+# ── isolate the replay: throwaway worktree + per-app build cache ─────────────
+prepare_replay_tree
+
 # ── replay the selected patches ──────────────────────────────────────────────
 total=0
 
@@ -342,23 +542,32 @@ for patch in "${selected[@]}"; do
   echo ""
   echo "==> sabotage $name (app: $app)"
 
-  # 1. Byte-exact baseline of every file the patch touches.
+  # 0. The patch acts on the replay tree only. Pin every path it touches to the
+  #    main checkout's bytes first, so the apply sees exactly what it would have
+  #    seen in place, then baseline those bytes.
   touched_paths "$patch" > "$WORK/touched"
   [[ -s "$WORK/touched" ]] || fail "$name: could not parse touched files"
-  sha_files "$WORK/touched" "$WORK/sha_before"
+  sync_touched_into_shadow "$WORK/touched"
+  [[ -d "$REPO_ROOT/$app/deps" ]] || fail "$name: no deps/ in $REPO_ROOT/$app — run 'mix deps.get' there first (the replay tree runs against those deps)"
+  [[ -d "$BUILD_ROOT/$app" ]] || echo "    replay tree: first run for $app — compiling its deps and code into $BUILD_ROOT/$app (one-time; later runs are warm)"
 
-  # 2. Apply.
-  (cd "$REPO_ROOT" && git apply "$patch") || fail "$name: patch did not apply"
+  # 1. Byte-exact baseline of every file the patch touches.
+  sha_files "$SHADOW" "$WORK/touched" "$WORK/sha_before"
+
+  # 2. Apply — inside the replay tree, never in the main checkout.
+  (cd "$SHADOW" && git apply "$patch") || fail "$name: patch did not apply in the replay tree"
   APPLIED_PATCH="$patch"
 
   # 3. The targeted suite MUST fail under sabotage.
   out="$WORK/${name%.patch}.out"
   # shellcheck disable=SC2086
-  (cd "$REPO_ROOT/$app" && mix test $test_files) > "$out" 2>&1
+  (cd "$SHADOW/$app" && MIX_DEPS_PATH="$REPO_ROOT/$app/deps" \
+     MIX_BUILD_PATH="$BUILD_ROOT/$app" mix test $test_files) > "$out" 2>&1
   status=$?
 
   # 5a. Revert before judging, so a failed assertion never strands a dirty tree.
-  (cd "$REPO_ROOT" && git apply -R "$patch") || fail "$name: revert failed — TREE MAY BE DIRTY"
+  (cd "$SHADOW" && git apply -R "$patch") \
+    || fail "$name: revert failed — the REPLAY tree is dirty (the next run resets it; the main checkout was never touched)"
   APPLIED_PATCH=""
 
   if [[ $status -eq 0 ]]; then
@@ -381,8 +590,8 @@ for patch in "${selected[@]}"; do
     fi
   done < "$WORK/must_fail"
 
-  # 5b. Byte-exact restore — zero residue.
-  sha_files "$WORK/touched" "$WORK/sha_after"
+  # 5b. Byte-exact restore — zero residue in the replay tree.
+  sha_files "$SHADOW" "$WORK/touched" "$WORK/sha_after"
   diff -q "$WORK/sha_before" "$WORK/sha_after" > /dev/null ||
     fail "$name: SHA mismatch after revert — residue left behind"
   echo "    restore: byte-exact (sha-256 verified)"
@@ -392,9 +601,19 @@ done
 
 [[ $total -gt 0 ]] || fail "no patches replayed"
 
+# ── the invariant, checked: the main checkout is byte-for-byte as we found it ─
+sha_files "$REPO_ROOT" "$WORK/selected_paths" "$WORK/main_after"
+if ! diff -q "$WORK/main_before" "$WORK/main_after" > /dev/null; then
+  diff "$WORK/main_before" "$WORK/main_after" | head -20
+  fail "the MAIN checkout changed while the replay ran — the isolation leaked"
+fi
+echo ""
+echo "    main checkout: byte-exact ($(wc -l < "$WORK/selected_paths" | tr -d ' ') touched paths sha-256-unchanged) — every patch acted on the replay tree only"
+
 echo ""
 if [[ $FILTER_ACTIVE -eq 1 ]]; then
   echo "SABOTAGE HARNESS: ALL PASSED ($total of $grand_total sabotages — FILTERED: $(filter_label))"
 else
   echo "SABOTAGE HARNESS: ALL PASSED ($total sabotages flipped their named tests; byte-exact restores)"
 fi
+echo "  replay tree + build cache kept warm at $SABOTAGE_ROOT (reclaim: rm -rf \"$SABOTAGE_ROOT\" && git -C \"$REPO_ROOT\" worktree prune)"

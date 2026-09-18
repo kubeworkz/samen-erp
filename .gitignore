@@ -35,3 +35,8 @@ _orch/
 
 # earlier baton runs, moved in from siblings
 _orch-*/
+
+# WS-E sabotage harness (scripts/sabotage.sh): the throwaway replay worktree + its
+# per-app mix build cache. The harness applies every sabotage patch THERE, never in
+# the main checkout, so this is a scratch build cache — never committed.
+.sabotage/
