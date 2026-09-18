@@ -263,7 +263,14 @@
     "nen": "SamenCore.Support.NotificationFixture.Notification",
     "wmg": "Samen.WebTest.Marketing.Segment",
     "fmg": "Driftwood.Marketing.Segment",
-    "dpc": "Driftwood.Operator.Customer"
+    "dpc": "Driftwood.Operator.Customer",
+    "fxr": "Samen.Scopes.Finance.ExchangeRate",
+    "fxf": "Samen.Scopes.Finance.OrgFxSettings",
+    "bka": "BankAccount",
+    "bkl": "StatementLine",
+    "bki": "StatementImport",
+    "bkm": "Match",
+    "bkr": "Rule"
   },
   "hosts": {
     "demo": {
