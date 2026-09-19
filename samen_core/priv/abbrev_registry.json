@@ -150,7 +150,7 @@
     "smc": "Demo.SupportScope.Macro",
     "wmc": "Samen.WebTest.Marketing.Campaign",
     "swp": "Samen.WebTest.Crm.Person",
-    "cmp": "Demo.CrmScope.Company",
+    "cmp": "Samen.Scopes.Community.ForumPost",
     "bpy": "Demo.BillingScope.Payment",
     "dsp": "Driftwood.Freight.DispatchEvent",
     "fat": "Driftwood.Crm.Attachment",
@@ -323,7 +323,12 @@
     "ccg": "Samen.Scopes.Consolidation.CompanyGroup",
     "ccm": "Samen.Scopes.Consolidation.CompanyMapping",
     "cit": "Samen.Scopes.Consolidation.IntercompanyTx",
-    "ccr": "Samen.Scopes.Consolidation.ConsolidationRule"
+    "ccr": "Samen.Scopes.Consolidation.ConsolidationRule",
+    "cmf": "Samen.Scopes.Community.Forum",
+    "cmc": "Samen.Scopes.Community.ForumComment",
+    "cmb": "Samen.Scopes.Community.Blog",
+    "cbp": "Samen.Scopes.Community.BlogPost",
+    "bcc": "Samen.Scopes.Community.BlogComment"
   },
   "hosts": {
     "demo": {
