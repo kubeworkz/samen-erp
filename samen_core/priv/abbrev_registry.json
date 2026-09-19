@@ -370,7 +370,11 @@
     "apo": "Samen.Scopes.Approvals.Step",
     "iot": "Samen.Scopes.IoT.Device",
     "ioc": "Samen.Scopes.IoT.Channel",
-    "iop": "Samen.Scopes.IoT.DataPoint"
+    "iop": "Samen.Scopes.IoT.DataPoint",
+    "cms": "Samen.Scopes.Cms.Page",
+    "cmn": "Samen.Scopes.Cms.Template",
+    "cml": "Samen.Scopes.Cms.Theme",
+    "cfv": "Samen.Scopes.CustomFields.FieldValue"
   },
   "hosts": {
     "demo": {
