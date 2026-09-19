@@ -17,7 +17,7 @@ defmodule Samen.Scopes.Finance.CreditNoteGuard do
   @impl true
   def change(changeset, _opts, _context) do
     Ash.Changeset.before_action(changeset, fn changeset ->
-      current_status = Ash.Changeset.get_attribute(changeset, :data, :status)
+      current_status = Ash.Changeset.get_attribute(changeset, :status)
       new_status = Ash.Changeset.get_attribute(changeset, :status)
 
       # If status is not being changed, allow through

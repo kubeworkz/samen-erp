@@ -45,7 +45,7 @@ defmodule Samen.Scopes.Inventory.TransferGuard do
     end)
   end
 
-  defp validate_positive_qty(changeset, qty) when is_integer(qty) and qty > 0, do: :ok
+  defp validate_positive_qty(_changeset, qty) when is_integer(qty) and qty > 0, do: :ok
 
   defp validate_positive_qty(changeset, _qty_val) do
     Ash.Changeset.add_error(changeset,

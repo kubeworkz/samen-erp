@@ -322,7 +322,7 @@ defmodule Samen.Scopes.Banking.Blueprint do
   # ---------------------------------------------------------------------------
   # Rule — auto-categorization pattern
   # ---------------------------------------------------------------------------
-  defmacro define_rule(module, otp_app, domain, repo, abbrev, bank_account_mod) do
+  defmacro define_rule(module, otp_app, domain, repo, abbrev, _bank_account_mod) do
     quote do
       defmodule unquote(module) do
         @moduledoc """

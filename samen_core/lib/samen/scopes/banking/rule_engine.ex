@@ -62,7 +62,7 @@ defmodule Samen.Scopes.Banking.RuleEngine do
   defp matches_pattern?(%{pattern: pattern}, description) do
     desc_lower = String.downcase(description)
 
-    if Regex.regex?(pattern) do
+    if is_struct(pattern, Regex) do
       Regex.match?(pattern, desc_lower)
     else
       String.contains?(desc_lower, String.downcase(pattern))

@@ -44,8 +44,6 @@ defmodule Samen.Scopes.Banking do
   `pii_classify` backstop ensures nothing vaulted leaks into bank data.
   """
 
-  alias __MODULE__
-
   defmacro __using__(opts) do
     otp_app = Keyword.fetch!(opts, :otp_app)
     repo = Keyword.fetch!(opts, :repo)

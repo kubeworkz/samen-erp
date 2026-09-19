@@ -34,6 +34,7 @@ defmodule Samen.Scopes.Banking.BankReconcile do
     entry_resource = Keyword.fetch!(opts, :entry_resource)
     repo = Keyword.fetch!(opts, :repo)
     reconcile_resource = Keyword.fetch!(opts, :reconcile_resource)
+    org_id = Keyword.get(opts, :org_id)
 
     with :ok <- validate_not_already_reconciled(reconcile_resource, bank_account_id, from_date, to_date, repo),
          {:ok, lines} <- get_lines_in_period(line_resource, bank_account_id, from_date, to_date, repo),
@@ -44,19 +45,9 @@ defmodule Samen.Scopes.Banking.BankReconcile do
       mark_lines_reconciled(line_resource, lines, repo)
 
       # Create the reconciliation record
-      create_reconcile_record(
-        reconcile_resource,
-        %{
-          bank_account_id: bank_account_id,
-          from_date: from_date,
-          to_date: to_date,
-          statement_balance_cents: statement_balance_cents,
-          book_balance_cents: book_balance,
-          line_count: length(lines),
-          reconciled_at: DateTime.utc_now()
-        },
-        repo
-      )
+      book_int = book_balance + 0
+      attrs = %{bank_account_id: bank_account_id, from_date: from_date, to_date: to_date, statement_balance_cents: statement_balance_cents, book_balance_cents: book_int, line_count: length(lines), reconciled_at: DateTime.utc_now(), org_id: org_id}
+      create_reconcile_record(reconcile_resource, attrs, repo)
     end
   end
 

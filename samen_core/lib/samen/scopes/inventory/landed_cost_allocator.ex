@@ -29,8 +29,6 @@ defmodule Samen.Scopes.Inventory.LandedCostAllocator do
   """
   use Ash.Resource.Change
 
-  @tolerance 1  # 1 cent
-
   @impl true
   def change(changeset, _opts, _context) do
     Ash.Changeset.before_action(changeset, fn changeset ->
@@ -38,16 +36,8 @@ defmodule Samen.Scopes.Inventory.LandedCostAllocator do
       amount_cents = Ash.Changeset.get_attribute(changeset, :amount_cents)
       method = Ash.Changeset.get_attribute(changeset, :allocation_method)
 
-      case compute_allocations(landed_cost_id, amount_cents, method, changeset) do
-        {:ok, allocations} ->
-          store_allocations(allocations, changeset)
-
-        {:error, reason} ->
-          Ash.Changeset.add_error(changeset,
-            field: :amount_cents,
-            message: "Allocation failed: #{inspect(reason)}"
-          )
-      end
+      {:ok, allocations} = compute_allocations(landed_cost_id, amount_cents, method, changeset)
+      store_allocations(allocations, changeset)
     end)
   end
 
