@@ -308,7 +308,13 @@
     "hlr": "Samen.Scopes.Hr.LeaveRequest",
     "hss": "Samen.Scopes.Hr.SalaryStructure",
     "hpr": "Samen.Scopes.Hr.PayRun",
-    "hps": "Samen.Scopes.Hr.Payslip"
+    "hps": "Samen.Scopes.Hr.Payslip",
+    "lch": "Samen.Scopes.Livechat.Channel",
+    "lcs": "Samen.Scopes.Livechat.Session",
+    "lcm": "Samen.Scopes.Livechat.Message",
+    "soc": "Samen.Scopes.Social.Campaign",
+    "sop": "Samen.Scopes.Social.Post",
+    "soa": "Samen.Scopes.Social.Analytics"
   },
   "hosts": {
     "demo": {
