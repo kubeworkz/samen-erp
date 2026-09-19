@@ -367,7 +367,10 @@
     "pln": "Samen.Scopes.Planning.Template",
     "apq": "Samen.Scopes.Approvals.Request",
     "apx": "Samen.Scopes.Approvals.Rule",
-    "apo": "Samen.Scopes.Approvals.Step"
+    "apo": "Samen.Scopes.Approvals.Step",
+    "iot": "Samen.Scopes.IoT.Device",
+    "ioc": "Samen.Scopes.IoT.Channel",
+    "iop": "Samen.Scopes.IoT.DataPoint"
   },
   "hosts": {
     "demo": {
