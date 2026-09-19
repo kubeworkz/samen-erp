@@ -336,7 +336,11 @@
     "apt": "Samen.Scopes.Appointments.Type",
     "aps": "Samen.Scopes.Appointments.Slot",
     "apn": "Samen.Scopes.Appointments.Appointment",
-    "apr": "Samen.Scopes.Appointments.Participant"
+    "apr": "Samen.Scopes.Appointments.Participant",
+    "mcn": "Samen.Scopes.MarketingAutomation.Campaign",
+    "mwf": "Samen.Scopes.MarketingAutomation.Workflow",
+    "mtr": "Samen.Scopes.MarketingAutomation.Trigger",
+    "mac": "Samen.Scopes.MarketingAutomation.Action"
   },
   "hosts": {
     "demo": {
