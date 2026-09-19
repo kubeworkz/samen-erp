@@ -344,7 +344,11 @@
     "stc": "Samen.Scopes.SmsMarketing.Campaign",
     "smt": "Samen.Scopes.SmsMarketing.Template",
     "sms": "Samen.Scopes.SmsMarketing.Subscriber",
-    "sme": "Samen.Scopes.SmsMarketing.Message"
+    "sme": "Samen.Scopes.SmsMarketing.Message",
+    "sak": "Samen.Scopes.SocialMarketing.Account",
+    "son": "Samen.Scopes.SocialMarketing.Campaign",
+    "seu": "Samen.Scopes.SocialMarketing.Engagement",
+    "soj": "Samen.Scopes.SocialMarketing.Post"
   },
   "hosts": {
     "demo": {
