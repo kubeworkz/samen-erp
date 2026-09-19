@@ -360,7 +360,11 @@
     "emc": "Samen.Scopes.EmailMarketing.Campaign",
     "emt": "Samen.Scopes.EmailMarketing.Template",
     "ems": "Samen.Scopes.EmailMarketing.Subscriber",
-    "eml": "Samen.Scopes.EmailMarketing.SendLog"
+    "eml": "Samen.Scopes.EmailMarketing.SendLog",
+    "plr": "Samen.Scopes.Planning.Resource",
+    "plt": "Samen.Scopes.Planning.Shift",
+    "pls": "Samen.Scopes.Planning.Slot",
+    "pln": "Samen.Scopes.Planning.Template"
   },
   "hosts": {
     "demo": {
