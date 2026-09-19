@@ -276,7 +276,8 @@
     "efx": "Samenerp.Erp.ExchangeRate",
     "efs": "Samenerp.Erp.OrgFxSettings",
     "etn": "Samenerp.Erp.TransferOrder",
-    "eld": "Samenerp.Erp.LandedCost"
+    "eld": "Samenerp.Erp.LandedCost",
+    "tse": "Samen.Scopes.Work.TimesheetEntry"
   },
   "hosts": {
     "demo": {
