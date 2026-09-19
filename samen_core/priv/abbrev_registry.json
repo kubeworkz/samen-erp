@@ -292,7 +292,17 @@
     "qso": "Samen.Scopes.Ecommerce.StoreOrder",
     "qcp": "Samen.Scopes.Quality.ControlPoint",
     "qck": "Samen.Scopes.Quality.Check",
-    "qal": "Samen.Scopes.Quality.Alert"
+    "qal": "Samen.Scopes.Quality.Alert",
+    "svy": "Samen.Scopes.Survey.Survey",
+    "svq": "Samen.Scopes.Survey.Question",
+    "svr": "Samen.Scopes.Survey.Response",
+    "sva": "Samen.Scopes.Survey.Answer",
+    "ecs": "Samen.Scopes.Elearning.Course",
+    "ece": "Samen.Scopes.Elearning.Enrollment",
+    "elc": "Samen.Scopes.Elearning.Course",
+    "ell": "Samen.Scopes.Elearning.Lesson",
+    "elp": "Samen.Scopes.Elearning.Progress",
+    "evl": "Samen.Scopes.Elearning.Enrollment"
   },
   "hosts": {
     "demo": {
