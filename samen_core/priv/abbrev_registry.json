@@ -364,7 +364,10 @@
     "plr": "Samen.Scopes.Planning.Resource",
     "plt": "Samen.Scopes.Planning.Shift",
     "pls": "Samen.Scopes.Planning.Slot",
-    "pln": "Samen.Scopes.Planning.Template"
+    "pln": "Samen.Scopes.Planning.Template",
+    "apq": "Samen.Scopes.Approvals.Request",
+    "apx": "Samen.Scopes.Approvals.Rule",
+    "apo": "Samen.Scopes.Approvals.Step"
   },
   "hosts": {
     "demo": {
