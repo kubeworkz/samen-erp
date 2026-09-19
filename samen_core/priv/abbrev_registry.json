@@ -332,7 +332,11 @@
     "est": "Samen.Scopes.Esign.Template",
     "esr": "Samen.Scopes.Esign.Request",
     "esn": "Samen.Scopes.Esign.Recipient",
-    "esa": "Samen.Scopes.Esign.Audit"
+    "esa": "Samen.Scopes.Esign.Audit",
+    "apt": "Samen.Scopes.Appointments.Type",
+    "aps": "Samen.Scopes.Appointments.Slot",
+    "apn": "Samen.Scopes.Appointments.Appointment",
+    "apr": "Samen.Scopes.Appointments.Participant"
   },
   "hosts": {
     "demo": {
