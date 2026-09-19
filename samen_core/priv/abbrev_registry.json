@@ -233,7 +233,7 @@
     "sfu": "SamenCore.Support.SameOrgFkFixture.Unguarded",
     "sxp": "SamenCore.Support.SuppressionFixture.Suppression",
     "swa": "Samen.WebTest.Crm.Activity",
-    "dcm": "Driftwood.Chat.ChatMessage",
+    "dcm": "Samen.Scopes.Dataclean.Merge",
     "fmp": "Driftwood.Marketing.Suppression",
     "pbc": "PawChart.Billing.Customer",
     "vsa": "PawChart.Support.Ticket",
@@ -314,7 +314,12 @@
     "lcm": "Samen.Scopes.Livechat.Message",
     "soc": "Samen.Scopes.Social.Campaign",
     "sop": "Samen.Scopes.Social.Post",
-    "soa": "Samen.Scopes.Social.Analytics"
+    "soa": "Samen.Scopes.Social.Analytics",
+    "fvh": "Samen.Scopes.Fleet.Vehicle",
+    "fvm": "Samen.Scopes.Fleet.Maintenance",
+    "fvf": "Samen.Scopes.Fleet.Fuel",
+    "fvi": "Samen.Scopes.Fleet.Inspection",
+    "dcr": "Samen.Scopes.Dataclean.Rule"
   },
   "hosts": {
     "demo": {
