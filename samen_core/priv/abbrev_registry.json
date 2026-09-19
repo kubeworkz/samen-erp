@@ -319,7 +319,11 @@
     "fvm": "Samen.Scopes.Fleet.Maintenance",
     "fvf": "Samen.Scopes.Fleet.Fuel",
     "fvi": "Samen.Scopes.Fleet.Inspection",
-    "dcr": "Samen.Scopes.Dataclean.Rule"
+    "dcr": "Samen.Scopes.Dataclean.Rule",
+    "ccg": "Samen.Scopes.Consolidation.CompanyGroup",
+    "ccm": "Samen.Scopes.Consolidation.CompanyMapping",
+    "cit": "Samen.Scopes.Consolidation.IntercompanyTx",
+    "ccr": "Samen.Scopes.Consolidation.ConsolidationRule"
   },
   "hosts": {
     "demo": {
