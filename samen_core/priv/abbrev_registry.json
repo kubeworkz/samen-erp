@@ -352,7 +352,11 @@
     "exp": "Samen.Scopes.Expenses.Expense",
     "exc": "Samen.Scopes.Expenses.ExpenseCategory",
     "exs": "Samen.Scopes.Expenses.Sheet",
-    "exa": "Samen.Scopes.Expenses.Approver"
+    "exa": "Samen.Scopes.Expenses.Approver",
+    "dcf": "Samen.Scopes.Documents.Folder",
+    "dcv": "Samen.Scopes.Documents.Version",
+    "dca": "Samen.Scopes.Documents.Access",
+    "dcn": "Samen.Scopes.Documents.Document"
   },
   "hosts": {
     "demo": {
