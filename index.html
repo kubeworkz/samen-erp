@@ -2665,16 +2665,16 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div>
 <pre class="term"><span class="c"># emit a new vertical from the substrate</span>
 <span class="p">$</span> cd samen_core
-<span class="p">$</span> mix samen.gen.app <span class="hl">--module Harbor --prefix hb --abbrev hrb</span>
+<span class="p">$</span> mix samen.gen.app <span class="hl">--module Lighthouse --prefix lh --abbrev lht</span>
 
 <span class="c"># run the generated app's own gate. nothing hand-edited.</span>
-<span class="p">$</span> cd ../harbor
+<span class="p">$</span> cd ../lighthouse
 <span class="p">$</span> MIX_ENV=test bash ci.sh
 <span class="ok">19/19 steps  ALL PASSED</span>
 
 <span class="c"># now boot the thing</span>
 <span class="p">$</span> mix ecto.create &amp;&amp; mix ecto.migrate
-<span class="p">$</span> mix harbor.seed
+<span class="p">$</span> mix lighthouse.seed
 <span class="p">$</span> mix phx.server
 <span class="c">→ open</span> <span class="hl">http://localhost:4050</span></pre>
         <p class="tiny" style="margin-top:12px">
@@ -3581,10 +3581,10 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 # local PostgreSQL trusting $USER on localhost</span>
 
 <span class="p">$</span> cd samen_core
-<span class="p">$</span> <span class="hl">mix samen.gen.app --module Harbor \
-      --prefix hb --abbrev hrb</span>
+<span class="p">$</span> <span class="hl">mix samen.gen.app --module Lighthouse \
+      --prefix lh --abbrev lht</span>
 
-<span class="p">$</span> cd ../harbor
+<span class="p">$</span> cd ../lighthouse
 <span class="p">$</span> <span class="hl">MIX_ENV=test bash ci.sh</span>
 <span class="c">...</span>
 <span class="ok">19/19 verifier steps passed</span> <span class="c"># zero hand-edits</span></pre>
@@ -3594,7 +3594,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           fix from you to go green, the generator is broken — not your setup.</p>
 
         <div class="pills">
-          <span class="pill"><b>--module</b> Harbor</span>
+          <span class="pill"><b>--module</b> Lighthouse</span>
           <span class="pill"><b>--prefix</b> hb</span>
           <span class="pill"><b>--abbrev</b> hrb</span>
           <span class="pill pill--lit">abbrevs are permanent</span>

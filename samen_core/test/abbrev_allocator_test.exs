@@ -42,8 +42,8 @@ defmodule Samen.Abbrev.AllocatorTest do
         %{global: g, hosts: h} = R.load_namespaced(path)
 
         assert get_in(h, ["widgetco", "wid"]) == "Widgetco.Vertical.Widget"
-        # global net unchanged (still the committed 263 rows).
-        assert map_size(g) == 263
+        # global net unchanged (still the committed 328 rows).
+        assert map_size(g) == 328
       after
         File.rm(path)
       end
@@ -264,8 +264,8 @@ defmodule Samen.Abbrev.AllocatorTest do
       # proof (`mix samen.gen.app`, prefix `er`): the E1–E7 scope set + the host's
       # kernel/Identity/Operator/Billing/Aggregate allocations — the registry grew to
       # 25_509 bytes.
-      assert byte_size(committed) == 25509
-      assert map_size(R.load()) == 543
+      assert byte_size(committed) == 28391
+      assert map_size(R.load()) == 608
     end
   end
 

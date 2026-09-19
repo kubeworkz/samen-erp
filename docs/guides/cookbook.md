@@ -8,7 +8,7 @@ through the D9a doc-command extractor (`samen_core/test/doc_commands_test.exs`):
 not in CI's executed set fails the build.
 
 Prerequisite: an app scaffolded by `mix samen.gen.app` (see
-[getting-started](getting-started.md)). Recipes below use the tutorial's `Harbor` app; swap
+[getting-started](getting-started.md)). Recipes below use the tutorial's `Lighthouse` app; swap
 in your module/abbrevs.
 
 ---
@@ -60,14 +60,14 @@ idiom (fresh `f`-prefixed abbrevs, because the scope defaults are already owned 
 mount in the global registry):
 
 ```elixir
-# lib/harbor/billing.ex — mirrors driftwood/lib/driftwood/billing.ex
-defmodule Harbor.Billing do
+# lib/lighthouse/billing.ex — mirrors driftwood/lib/driftwood/billing.ex
+defmodule Lighthouse.Billing do
   use Ash.Domain, validate_config_inclusion?: false
 
   use Samen.Scopes.Billing,
-    otp_app: :harbor,
-    repo: Harbor.Repo,
-    namespace: Harbor.Billing,
+    otp_app: :lighthouse,
+    repo: Lighthouse.Repo,
+    namespace: Lighthouse.Billing,
     abbrevs: %{
       customer: "hbc", subscription: "hbs", plan: "hbp",
       price: "hbr", invoice: "hbi", payment: "hby",
@@ -76,7 +76,7 @@ defmodule Harbor.Billing do
 end
 ```
 
-Then bend: seed/edit `Harbor.Billing.Plan` and `Harbor.Billing.Price` rows per org (bounded
+Then bend: seed/edit `Lighthouse.Billing.Plan` and `Lighthouse.Billing.Price` rows per org (bounded
 enums, admin-gated `RoleAtLeast` writes). `mix samen.gen.app` already emits this mount for
 you — this recipe is for adding it to a hand-rolled host or re-abbreviating a second mount.
 No samen_core code changes; only the data-file registry gains your reserved rows
@@ -99,7 +99,7 @@ does this too), then gate your code path:
 
 ```elixir
 # 1. The flag row (Tier-0 config; admin-gated writes; NonPiiTargeting enforced at write)
-Samen.Factory.create!(Harbor.Primitives.FeatureFlag, %{
+Samen.Factory.create!(Lighthouse.Primitives.FeatureFlag, %{
   org_id: org_id,
   name: "billing.invoice_pdf",
   enabled: true,
@@ -137,22 +137,22 @@ One macro call mounts Accounts (+ the per-account health drill-down), Platform b
 Revenue, the platform Flag admin, Analytics and the Desk — zero authored LiveView modules:
 
 ```elixir
-# lib/harbor_web/router.ex — mirrors driftwood/lib/driftwood_web/router.ex
+# lib/lighthouse_web/router.ex — mirrors driftwood/lib/driftwood_web/router.ex
 import Samen.Web.Router
 
 scope "/" do
   pipe_through(:browser)
 
-  samen_operator_routes(Harbor.Operator,
-    repo: Harbor.Repo,
+  samen_operator_routes(Lighthouse.Operator,
+    repo: Lighthouse.Repo,
     operator_org_id: "<your operator org uuid>",
     include_aggregate: false,
     labels: %{
-      operator_workspace: "Harbor Ops",
+      operator_workspace: "Lighthouse Ops",
       operator_glyph: "H",
       tenant_landing: "/billing",              # where clear act-as lands
       impersonate_path: "/operator/impersonate",
-      flags_namespace: Harbor.Primitives       # activates /operator/flags (Recipe 3)
+      flags_namespace: Lighthouse.Primitives       # activates /operator/flags (Recipe 3)
     }
   )
 end
@@ -193,7 +193,7 @@ enforce the consequences.
 **The masking test** — do not hand-roll it; use the emitted `Samen.RedPath` shapes:
 
 ```elixir
-use Samen.RedPath, repo: Harbor.Repo
+use Samen.RedPath, repo: Lighthouse.Repo
 
 # 1. vt_* at rest, plaintext NOWHERE, last-line VaultField guard refuses a raw write
 vault_routing(
@@ -287,7 +287,7 @@ and wires four routes into the router the same alias-relative way the generated 
 already mounts its browser surfaces:
 
 ```elixir
-scope "/", HarborWeb do
+scope "/", LighthouseWeb do
   pipe_through(:browser)
 
   live("/crm/widget", Crm.WidgetIndexLive, :index)
@@ -325,7 +325,7 @@ Trigger a shred for a subject — any resource's `id` that owns vaulted fields (
 
 ```elixir
 {:ok, %{attestation: attestation, report: report}} =
-  Samen.Erasure.shred(subject_id, repo: Harbor.Repo, actor_id: "operator:dpo")
+  Samen.Erasure.shred(subject_id, repo: Lighthouse.Repo, actor_id: "operator:dpo")
 
 attestation.state       # :shredded — the KMS tombstone is positive
 report.outcome          # "shredded" (first call) | "already_shredded" (idempotent re-run)
@@ -343,7 +343,7 @@ by construction (see the moduledoc's "Idempotence" section).
 **Test it worked** two ways. Cheaply, in-process:
 
 ```elixir
-Samen.Erasure.erased?(subject_id, repo: Harbor.Repo)   # => true
+Samen.Erasure.erased?(subject_id, repo: Lighthouse.Repo)   # => true
 ```
 
 `erased?/2` requires ALL of: a positive `:shredded` KMS tombstone, the wrapped key material
@@ -437,7 +437,7 @@ and the two shipped mounts that prove it: `driftwood/lib/driftwood_web/router.ex
 Scaffold a base app the normal way (Recipe-1-adjacent — the flagship 3-flag shape):
 
 ```bash
-mix samen.gen.app --module Harbor --prefix hb --abbrev hrb
+mix samen.gen.app --module Lighthouse --prefix hb --abbrev hrb
 ```
 
 `mix samen.gen.app` also accepts a `--modules files,search,csv,settings` flag that mounts

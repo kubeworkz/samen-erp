@@ -20,19 +20,19 @@ local PostgreSQL trusting `$USER` on localhost. All commands start from the repo
 
 ```bash
 cd samen_core
-mix samen.gen.app --module Harbor --prefix hb --abbrev hrb
+mix samen.gen.app --module Lighthouse --prefix lh --abbrev lht
 ```
 
 Three inputs, one running product:
 
-- `--module Harbor` — the app's base module (otp_app `:harbor`, emitted as a sibling
-  directory `harbor/` next to `samen_core/`).
-- `--prefix hb` — the 2-letter app prefix. It derives the app's *permanent* storage
-  abbrevs: the nine Billing-scope resources (`hbc/hbs/hbl/hbp/hbi/hby/hbu/hbe/hbv`),
-  the aggregate plane (`hba`), the Primitives mount (`hnt/hnp/hfl/hsh/hwh/hff`) and the
-  operator namespace (`ho*/hp*/hq*`).
-- `--abbrev hrb` — the 3-letter abbrev for your first authored resource
-  (`Harbor.Vertical.Record`, table `hrb_record`).
+- `--module Lighthouse` — the app's base module (otp_app `:lighthouse`, emitted as a sibling
+  directory `lighthouse/` next to `samen_core/`).
+- `--prefix lh` — the 2-letter app prefix. It derives the app's *permanent* storage
+  abbrevs: the nine Billing-scope resources (`lbc/lbs/lbl/lbp/lbi/lby/lbu/lbe/lbv`),
+  the aggregate plane (`lba`), the Primitives mount (`lnt/lnp/lfl/lsh/lwh/lff`) and the
+  operator namespace (`lo*/lp*/lq*`).
+- `--abbrev lht` — the 3-letter abbrev for your first authored resource
+  (`Lighthouse.Vertical.Record`, table `lht_record`).
 
 The generator **fails closed**: a malformed prefix/abbrev, or a collision with any
 abbrev already owned in `samen_core/priv/abbrev_registry.json`, refuses to generate.
@@ -44,7 +44,7 @@ drift check) and `api_contract.v1.json` (the API structural-break snapshot).
 ## 2 · Run the gate
 
 ```bash
-cd ../harbor
+cd ../lighthouse
 MIX_ENV=test bash ci.sh
 ```
 
@@ -60,21 +60,21 @@ vault-routing red path) → the per-app anti-tautology probe.
 ## 3 · Tour what you got
 
 ```text
-harbor/
+lighthouse/
   mix.exs                        # deps: samen_core + samen_web/phoenix/bandit + ash_json_api
   config/{config,dev,test}.exs   # endpoint, pubsub, :ash_domains, db_statement: :disabled
-  lib/harbor/
+  lib/lighthouse/
     application.ex               # Repo + Oban + PubSub + endpoint supervision
     repo.ex  billing.ex          # Billing scope mounted AS-IS (9 resources, zero code)
     vertical.ex                  # YOUR resource: pii do … end vault field + json_api allowlist
     aggregate.ex                 # token-blind cross-tenant projection
     primitives.ex  operator.ex   # notifications/flags + the ADR-010 operator plane
     seeds.ex                     # vault-aware dev seeds via Samen.Factory
-  lib/harbor_web/                # 5 thin files: endpoint, router (framework macro
+  lib/lighthouse_web/                # 5 thin files: endpoint, router (framework macro
                                  #   mounts ONLY — zero authored LiveViews), layouts,
                                  #   page_controller (/healthz), error_html
-  lib/harbor_web/api/            # /api/v1 JSON:API: router, endpoint, key_auth_plug
-  lib/mix/tasks/harbor.seed.ex   # `mix harbor.seed`
+  lib/lighthouse_web/api/            # /api/v1 JSON:API: router, endpoint, key_auth_plug
+  lib/mix/tasks/lighthouse.seed.ex   # `mix lighthouse.seed`
   priv/repo/migrations/          # substrate + catalog-in-tx resource migrations
   priv/{ci_bootstrap,anti_tautology_probe}.exs
   test/                          # record_vault, record_api, seeds_vault + support
@@ -91,11 +91,11 @@ only the thin authored surface — the same shape as `pawchart`.
 ```bash
 mix deps.get
 MIX_ENV=dev mix ecto.create && MIX_ENV=dev mix ecto.migrate
-MIX_ENV=dev mix harbor.seed
+MIX_ENV=dev mix lighthouse.seed
 mix phx.server
 ```
 
-`mix harbor.seed` prints the seeded dev tenant's org id — the seeded 🔒 secrets are at
+`mix lighthouse.seed` prints the seeded dev tenant's org id — the seeded 🔒 secrets are at
 rest as `vt_*` vault tokens, never plaintext (the gate's `seeds_vault_test` proves it).
 Open `http://localhost:4050`:
 
@@ -112,18 +112,18 @@ assertions) by the flagship probe on every root CI run.
 
 ## 5 · Add your second scope + resource
 
-Every resource after the first is scaffolded, not hand-copied. From `harbor/`:
+Every resource after the first is scaffolded, not hand-copied. From `lighthouse/`:
 
 ```bash
 mix samen.gen.scope --scope Marina
-mix samen.gen.resource --scope Marina --resource Slip --abbrev hsl
+mix samen.gen.resource --scope Marina --resource Slip --abbrev lsl
 ```
 
-`gen.scope` emits the empty `Harbor.Marina` domain and registers it in both
+`gen.scope` emits the empty `Lighthouse.Marina` domain and registers it in both
 `:ash_domains` lists. `gen.resource` emits a Tier-0 config resource
-(`Harbor.Marina.Slip`, table `hsl_slip`: org-scoped reads, admin-gated writes, a
+(`Lighthouse.Marina.Slip`, table `lsl_slip`: org-scoped reads, admin-gated writes, a
 bounded-enum `status`, one `pii do` vault field), its `Samen.Migration`, the permanent
-`hsl` registry reservation — and the **four mandated red-path test files** plus a
+`lsl` registry reservation — and the **four mandated red-path test files** plus a
 per-resource anti-tautology probe:
 
 - `test/marina_slip_policy_matrix_test.exs` — cross-org denied, org-less fail-closed,
@@ -156,7 +156,7 @@ mix test test/marina_slip_policy_matrix_test.exs test/marina_slip_rbac_red_path_
 ## 6 · Bend one thing — and watch the gate flip
 
 The gate is not a formality; prove it to yourself. De-allowlist a field from your API in
-`lib/harbor/vertical.ex`:
+`lib/lighthouse/vertical.ex`:
 
 ```diff
 -        show_fields([:id, :name, :segment])

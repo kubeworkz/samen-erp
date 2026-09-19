@@ -120,9 +120,9 @@ defmodule Samen.AbbrevRegistryTest do
       path
     end
 
-    test "the COMMITTED registry: 263 flat entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
+    test "the COMMITTED registry: 328 flat entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
       %{global: global, hosts: hosts} = Reg.load_namespaced()
-      assert map_size(global) == 263
+      assert map_size(global) == 328
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
       # samen_core 84, samen_web 44, samenerp 68 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er`) = 280 host entries across six hosts.
@@ -719,8 +719,8 @@ defmodule Samen.AbbrevRegistryTest do
       # host proof (`mix samen.gen.app`, prefix `er`: the E1–E7 scope set + the
       # host's kernel/Identity/Operator/Billing/Aggregate allocations) = 543 (the final +73: the E8 report reservations sbg/sbe/sea + the
 #       68-entry samenerp host proof, prefix `er`) global
-      # hosts entries total (263 global + 280 host).
-      assert map_size(Reg.load()) == 543
+      # hosts entries total (328 global + 280 host).
+      assert map_size(Reg.load()) == 608
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do
