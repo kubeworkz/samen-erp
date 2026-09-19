@@ -340,7 +340,11 @@
     "mcn": "Samen.Scopes.MarketingAutomation.Campaign",
     "mwf": "Samen.Scopes.MarketingAutomation.Workflow",
     "mtr": "Samen.Scopes.MarketingAutomation.Trigger",
-    "mac": "Samen.Scopes.MarketingAutomation.Action"
+    "mac": "Samen.Scopes.MarketingAutomation.Action",
+    "stc": "Samen.Scopes.SmsMarketing.Campaign",
+    "smt": "Samen.Scopes.SmsMarketing.Template",
+    "sms": "Samen.Scopes.SmsMarketing.Subscriber",
+    "sme": "Samen.Scopes.SmsMarketing.Message"
   },
   "hosts": {
     "demo": {
