@@ -283,7 +283,13 @@
     "zcf": "Samen.Scopes.Pos.PosConfig",
     "zso": "Samen.Scopes.Pos.PosOrder",
     "zsl": "Samen.Scopes.Pos.PosOrderLine",
-    "zpy": "Samen.Scopes.Pos.PosPayment"
+    "zpy": "Samen.Scopes.Pos.PosPayment",
+    "qst": "Samen.Scopes.Ecommerce.Store",
+    "qpd": "Samen.Scopes.Ecommerce.Product",
+    "qva": "Samen.Scopes.Ecommerce.ProductVariant",
+    "qcr": "Samen.Scopes.Ecommerce.ShoppingCart",
+    "qci": "Samen.Scopes.Ecommerce.CartItem",
+    "qso": "Samen.Scopes.Ecommerce.StoreOrder"
   },
   "hosts": {
     "demo": {
