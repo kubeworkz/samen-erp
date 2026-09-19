@@ -348,7 +348,11 @@
     "sak": "Samen.Scopes.SocialMarketing.Account",
     "son": "Samen.Scopes.SocialMarketing.Campaign",
     "seu": "Samen.Scopes.SocialMarketing.Engagement",
-    "soj": "Samen.Scopes.SocialMarketing.Post"
+    "soj": "Samen.Scopes.SocialMarketing.Post",
+    "exp": "Samen.Scopes.Expenses.Expense",
+    "exc": "Samen.Scopes.Expenses.ExpenseCategory",
+    "exs": "Samen.Scopes.Expenses.Sheet",
+    "exa": "Samen.Scopes.Expenses.Approver"
   },
   "hosts": {
     "demo": {
@@ -643,5 +647,6 @@
       "ewh": "Samenerp.Primitives.Webhook",
       "eql": "Samenerp.Operator.Sla"
     }
-  }
+  },
+  "global": {}
 }
