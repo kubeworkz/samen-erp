@@ -277,7 +277,9 @@
     "efs": "Samenerp.Erp.OrgFxSettings",
     "etn": "Samenerp.Erp.TransferOrder",
     "eld": "Samenerp.Erp.LandedCost",
-    "tse": "Samen.Scopes.Work.TimesheetEntry"
+    "tse": "Samen.Scopes.Work.TimesheetEntry",
+    "tct": "Samen.Scopes.Support.TicketCategory",
+    "tes": "Samen.Scopes.Support.TicketEscalation"
   },
   "hosts": {
     "demo": {
