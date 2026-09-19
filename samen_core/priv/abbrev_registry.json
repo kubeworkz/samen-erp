@@ -289,7 +289,10 @@
     "qva": "Samen.Scopes.Ecommerce.ProductVariant",
     "qcr": "Samen.Scopes.Ecommerce.ShoppingCart",
     "qci": "Samen.Scopes.Ecommerce.CartItem",
-    "qso": "Samen.Scopes.Ecommerce.StoreOrder"
+    "qso": "Samen.Scopes.Ecommerce.StoreOrder",
+    "qcp": "Samen.Scopes.Quality.ControlPoint",
+    "qck": "Samen.Scopes.Quality.Check",
+    "qal": "Samen.Scopes.Quality.Alert"
   },
   "hosts": {
     "demo": {
