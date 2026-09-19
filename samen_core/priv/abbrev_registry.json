@@ -302,7 +302,13 @@
     "elc": "Samen.Scopes.Elearning.Course",
     "ell": "Samen.Scopes.Elearning.Lesson",
     "elp": "Samen.Scopes.Elearning.Progress",
-    "evl": "Samen.Scopes.Elearning.Enrollment"
+    "evl": "Samen.Scopes.Elearning.Enrollment",
+    "hlt": "Samen.Scopes.Hr.LeaveType",
+    "hlb": "Samen.Scopes.Hr.LeaveBalance",
+    "hlr": "Samen.Scopes.Hr.LeaveRequest",
+    "hss": "Samen.Scopes.Hr.SalaryStructure",
+    "hpr": "Samen.Scopes.Hr.PayRun",
+    "hps": "Samen.Scopes.Hr.Payslip"
   },
   "hosts": {
     "demo": {
