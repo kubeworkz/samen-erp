@@ -279,7 +279,11 @@
     "eld": "Samenerp.Erp.LandedCost",
     "tse": "Samen.Scopes.Work.TimesheetEntry",
     "tct": "Samen.Scopes.Support.TicketCategory",
-    "tes": "Samen.Scopes.Support.TicketEscalation"
+    "tes": "Samen.Scopes.Support.TicketEscalation",
+    "zcf": "Samen.Scopes.Pos.PosConfig",
+    "zso": "Samen.Scopes.Pos.PosOrder",
+    "zsl": "Samen.Scopes.Pos.PosOrderLine",
+    "zpy": "Samen.Scopes.Pos.PosPayment"
   },
   "hosts": {
     "demo": {
