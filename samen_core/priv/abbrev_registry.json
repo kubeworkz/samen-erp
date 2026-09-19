@@ -328,7 +328,11 @@
     "cmc": "Samen.Scopes.Community.ForumComment",
     "cmb": "Samen.Scopes.Community.Blog",
     "cbp": "Samen.Scopes.Community.BlogPost",
-    "bcc": "Samen.Scopes.Community.BlogComment"
+    "bcc": "Samen.Scopes.Community.BlogComment",
+    "est": "Samen.Scopes.Esign.Template",
+    "esr": "Samen.Scopes.Esign.Request",
+    "esn": "Samen.Scopes.Esign.Recipient",
+    "esa": "Samen.Scopes.Esign.Audit"
   },
   "hosts": {
     "demo": {
