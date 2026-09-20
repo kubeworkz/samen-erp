@@ -161,6 +161,17 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           attribute(:code, :string, public?: true, allow_nil?: false)
           attribute(:name, :string, public?: true, allow_nil?: false)
 
+          # The warehouse address — vaulted composite (ADR-036 H4).
+          # Declared as a plain VaultField attribute here so it exists even if the
+          # MaterializePii transformer hasn't run yet (Docker-build ordering).
+          # MaterializePii is idempotent: it skips adding a duplicate.
+          attribute(:address, Samen.Type.VaultField,
+            public?: true,
+            allow_nil?: true,
+            writable?: true,
+            sensitive?: true
+          )
+
           # The per-warehouse NegativeStock opt-out — cycle-count realities.
           # Fail-closed: the default warehouse NEVER goes below zero.
           attribute(:allow_negative, :boolean,

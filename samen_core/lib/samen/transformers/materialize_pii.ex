@@ -138,18 +138,28 @@ defmodule Samen.Transformers.MaterializePii do
     # column that holds a `vt_*` token — NEVER plaintext. On read it presents
     # %Masked{}; on write Samen.Vault.Change replaces the plaintext with the token
     # before dump, and VaultField.dump_to_native refuses to write non-tokens.
-    attribute = %Ash.Resource.Attribute{
-      name: name,
-      type: Samen.Type.VaultField,
-      source: source_for(pii_attr, abbrev),
-      allow_nil?: true,
-      public?: true,
-      writable?: true,
-      sensitive?: true,
-      constraints: []
-    }
+    #
+    # Idempotent: if the attribute already exists (e.g. declared as a plain
+    # `attribute` in the blueprint for Docker-build compatibility), skip adding
+    # a duplicate.
+    existing = Transformer.get_entities(dsl_state, [:attributes]) |> Enum.any?(fn a -> a.name == name end)
 
-    Transformer.add_entity(dsl_state, [:attributes], attribute, type: :append)
+    if existing do
+      dsl_state
+    else
+      attribute = %Ash.Resource.Attribute{
+        name: name,
+        type: Samen.Type.VaultField,
+        source: source_for(pii_attr, abbrev),
+        allow_nil?: true,
+        public?: true,
+        writable?: true,
+        sensitive?: true,
+        constraints: []
+      }
+
+      Transformer.add_entity(dsl_state, [:attributes], attribute, type: :append)
+    end
   end
 
   # Composite PII types route by vault name → NO pii_ prefix → let AbbrevStorage
