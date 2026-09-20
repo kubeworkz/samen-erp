@@ -8,6 +8,7 @@ defmodule Samen.Delivery.AuthRecipient do
   user and revealing the vaulted email address.
   """
 
+  alias Samen.Masked
   require Logger
 
   @doc """
