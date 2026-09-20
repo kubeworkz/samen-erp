@@ -22,7 +22,14 @@ defmodule Samenerp.MixProject do
       aliases: aliases(),
       name: "samenerp",
       source_url: "https://github.com/kubeworkz/samen-erp",
-      docs: docs()
+      docs: docs(),
+      releases: [
+        samenerp: [
+          include_executables: false,
+          applications: [:runtime_tools],
+          steps: [:assemble, :tar]
+        ]
+      ]
     ]
   end
 

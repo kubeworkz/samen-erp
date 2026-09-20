@@ -225,7 +225,7 @@ defmodule Samenerp.WhiteLabel do
         #{render_template(template_name, assigns)}
       </div>
       <div class="footer">
-        #{if branding.custom_domain, do: branding.custom_domain, else: "samenerp.com"}
+        #{branding.custom_domain || "samenerp.com"}
       </div>
     </body>
     </html>
