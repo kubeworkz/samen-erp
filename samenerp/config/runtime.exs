@@ -114,7 +114,7 @@ if config_env() == :prod do
     "resend" ->
       config :samen_resend, :api_key, System.get_env("SAMEN_RESEND_API_KEY")
 
-    nil ->
+    provider when provider in [nil, "", " "] ->
       # No ESP configured — fail-honest (returns {:error, :not_configured})
       :ok
 
