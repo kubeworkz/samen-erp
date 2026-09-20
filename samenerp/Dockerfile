@@ -13,20 +13,22 @@ RUN mix local.hex --force && mix local.rebar --force
 
 WORKDIR /app
 
-# Copy all three packages
-COPY samen_core/ ./samen_core/
-COPY samen_web/ ./samen_web/
-COPY samenerp/ ./samenerp/
+# Copy the full monorepo
+COPY . .
 
-# Fetch + compile in dependency order
-#   samen_core has no local deps — compile it first
-#   samen_web depends on samen_core (path dep)
-#   samenerp depends on both (path deps)
+# Build顺序 matters: each package compiles its own _build, then the next
+# package picks it up via path deps.
+
+# 1. samen_core (no local deps)
 RUN cd samen_core && mix deps.get --only prod && mix compile
+
+# 2. samen_web (depends on samen_core via path)
 RUN cd samen_web && mix deps.get --only prod && mix compile
+
+# 3. samenerp (depends on both via path)
 RUN cd samenerp && mix deps.get --only prod && mix compile
 
-# Build the OTP release for samenerp
+# Build the OTP release
 RUN cd samenerp && mix release samenerp
 
 # ─── Stage 2: Runtime ───────────────────────────────────────────────────────
