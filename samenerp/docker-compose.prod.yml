@@ -55,8 +55,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       
-      # Node name for clustering
+      # Node distribution (single-node — disabled)
       RELEASE_NODE: ${RELEASE_NODE:-samenerp@127.0.0.1}
+      RELEASE_DISTRIBUTION: none
     depends_on:
       db:
         condition: service_healthy
