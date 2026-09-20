@@ -64,10 +64,38 @@ grant that a second party approved and the tenant can audit.
 | **Credit notes + tax rates (E12)** — CreditNote/VendorCredit with draft → open → applied → void state machine, TaxRate config per org (percentage as string), TaxCalculator for per-line tax computation, CreditNoteGuard enforcing valid transitions | `samen_core/lib/samen/scopes/finance/{credit_note_blueprint,credit_note_guard,tax_calculator}.ex`; `samen_core/test/credit_notes_tax_test.exs` (16 tests) |
 | **Warehouse transfers (E13)** — TransferOrder coordinating transfer_out + transfer_in in one transaction (same cross-row-cascade discipline as GoodsReceipt), TransferGuard validates positive qty, source ≠ destination, stock check, same-item constraint | `samen_core/lib/samen/scopes/inventory/{transfer_order,transfer_guard}.ex`; `samen_core/test/warehouse_transfers_test.exs` (14 tests) |
 | **Landed costs (E14)** — additional costs (freight, duties, insurance) allocated to inventory items on import; value-proportional or quantity-proportional allocation; balance guard ensures allocations sum exactly to landed cost; increases effective unit cost | `samen_core/lib/samen/scopes/inventory/{landed_cost,landed_cost_allocator}.ex`; `samen_core/test/landed_costs_test.exs` (9 tests) |
+| **Timesheets (E15)** — time tracking entries with project/task association, duration calculation, approval workflow | `samen_core/lib/samen/scopes/work/timesheet_entry.ex`; `samen_core/test/timesheets_test.exs` |
+| **Helpdesk (E16)** — ticket management with SLAs, escalation, CSAT surveys, canned responses | `samen_core/lib/samen/scopes/support/`; `samen_core/test/helpdesk_test.exs` |
+| **POS (E17)** — point-of-sale terminals, orders, payments, receipt generation | `samen_core/lib/samen/scopes/pos/`; `samen_core/test/pos_test.exs` |
+| **eCommerce (E18)** — storefronts, product catalogs, shopping carts, checkout flow | `samen_core/lib/samen/scopes/ecommerce/`; `samen_core/test/ecommerce_test.exs` |
+| **Quality Control (E19)** — inspection points, quality checks, non-conformance tracking | `samen_core/lib/samen/scopes/quality/`; `samen_core/test/quality_test.exs` |
+| **Survey/eLearning (E20)** — surveys with questions/answers, courses with lessons/quizzes, enrollment/progress tracking | `samen_core/lib/samen/scopes/{survey,elearning}/`; `samen_core/test/{survey,elearning}_test.exs` |
+| **Payroll/Leave (E21)** — payslips, leave types/balances/requests, salary structures | `samen_core/lib/samen/scopes/hr/`; `samen_core/test/payroll_leave_test.exs` |
+| **Livechat/Social (E22)** — live chat sessions/channels, social media conversations | `samen_core/lib/samen/scopes/{livechat,social}/`; `samen_core/test/livechat_social_test.exs` |
+| **Fleet/Dataclean (E23)** — vehicle management, maintenance, fuel tracking; data deduplication rules/merges | `samen_core/lib/samen/scopes/{fleet,dataclean}/`; `samen_core/test/fleet_dataclean_test.exs` |
+| **Consolidation (E24)** — multi-entity rollups, intercompany transactions, company group mappings | `samen_core/lib/samen/scopes/consolidation/`; `samen_core/test/consolidation_test.exs` |
+| **Forum/Blog (E25)** — community forums with posts/comments, blog with articles/comments | `samen_core/lib/samen/scopes/community/`; `samen_core/test/forum_blog_test.exs` |
+| **E-Signatures (E26)** — document signing templates, signature requests, recipient management, audit trail | `samen_core/lib/samen/scopes/esign/`; `samen_core/test/esign_test.exs` |
+| **Appointments (E27)** — meeting types, available slots, booking lifecycle, participant RSVP | `samen_core/lib/samen/scopes/appointments/`; `samen_core/test/appointments_test.exs` |
+| **Marketing Automation (E28)** — campaign workflows, triggers, actions (email/SMS/wait/condition), lead nurturing | `samen_core/lib/samen/scopes/marketing_automation/`; `samen_core/test/marketing_automation_test.exs` |
+| **SMS Marketing (E29)** — SMS campaigns, templates with variables, message delivery tracking, subscriber consent | `samen_core/lib/samen/scopes/sms_marketing/`; `samen_core/test/sms_marketing_test.exs` |
+| **Social Marketing UI (E30)** — connected social accounts, post scheduling, campaign management, engagement metrics | `samen_core/lib/samen/scopes/social_marketing/`; `samen_core/test/social_marketing_ui_test.exs` |
+| **Expenses (E31)** — expense categories/policies, individual expenses with receipts, expense sheets with multi-level approval | `samen_core/lib/samen/scopes/expenses/`; `samen_core/test/expenses_test.exs` |
+| **Document Management (E32)** — folder hierarchy, document lifecycle (draft→review→approved), version control, access permissions | `samen_core/lib/samen/scopes/documents/`; `samen_core/test/documents_test.exs` |
+| **Email Marketing (E33)** — email campaigns with A/B testing, templates, subscriber engagement, delivery logs | `samen_core/lib/samen/scopes/email_marketing/`; `samen_core/test/email_marketing_test.exs` |
+| **Planning/Scheduling (E34)** — resources (employees/equipment), shifts with recurrence, time slot availability, schedule templates | `samen_core/lib/samen/scopes/planning/`; `samen_core/test/planning_test.exs` |
+| **Approvals (E35)** — approval rules with thresholds, request lifecycle, multi-step chains (sequential/parallel) | `samen_core/lib/samen/scopes/approvals/`; `samen_core/test/approvals_test.exs` |
+| **IoT (E36)** — device registry, communication channels, sensor data points with quality levels | `samen_core/lib/samen/scopes/iot/`; `samen_core/test/iot_test.exs` |
+| **CMS-light (E37)** — content pages with SEO, page templates, visual themes | `samen_core/lib/samen/scopes/cms/`; `samen_core/test/cms_test.exs` |
+| **Custom Fields (E38)** — dynamic key-value fields on any resource (string/integer/float/boolean/date/JSON types) | `samen_core/lib/samen/scopes/custom_fields/`; `samen_core/test/custom_fields_test.exs` |
+| **HuggingFace AI Integration** — BYOK (Bring Your Own Key) architecture with AES-256-GCM encryption, SSE streaming, token validation, usage analytics, and background key validation sweeps | `samen_core/lib/samen/scopes/ai/`; `samen_core/test/ai_test.exs` (59 tests) + `ai_streaming_integration_test.exs` (50 tests) |
+| **HuggingFace Key Management UI** — Phoenix LiveView for connecting, validating, revoking API keys with usage dashboard | `samen_web/lib/samen/web/settings/huggingface_live.ex` |
+| **HuggingFace Key Validation Worker** — Oban background worker for daily key validation sweeps with revocation detection | `samen_core/lib/samen/scopes/ai/verify_credentials_worker.ex` |
 
 Full mapping: [docs/claim-evidence.md](docs/claim-evidence.md) (Phase-1 identity spine + rich
 types are section J; Phase-2 billing + ESP + rate-limiting are section K; Phase-3 automation +
-lifecycle substrate + work objects + the LiveView client are **section L**). **Honest scope:**
+lifecycle substrate + work objects + the LiveView client are **section L**). **Flectra parity:**
+~30/30 modules covered (E9–E38), plus HuggingFace AI integration. **Honest scope:**
 the identity spine, its auth-surface rate-limiting, and the Stripe/ESP adapters are complete and
 verified — **but everything runs on the keyless lane.** Billing/ESP dispatch is proven against
 hermetic fakes + injected-transport cassettes; **no host wires a live provider** (every generated
@@ -83,8 +111,10 @@ Two apps are the substrate; three are proof; one command spins up new ones.
 - **`samen_core` — the kernel (web-dependency-free).** The PII vault and crypto-shred
   erasure, field masking and per-plane PII resolution, policies/RBAC and org-scoping, the
   machine-readable catalog (schema dictionary for LLM/tooling grounding), the hash-chained
-  audit log, the `samen.verify.*` verifier tiers, and the generators
-  (`mix samen.gen.app` / `gen.scope` / `gen.resource`).
+  audit log, the `samen.verify.*` verifier tiers, the generators
+  (`mix samen.gen.app` / `gen.scope` / `gen.resource`), and the **HuggingFace AI integration**
+  (BYOK architecture with AES-256-GCM encryption, SSE streaming, token validation, usage
+  analytics, and background key validation sweeps).
 - **`samen_web` — the UI kit and product surfaces.** Router mount macros for the tenant and
   operator planes, masked rendering, the **self-serve identity spine** (signup / login /
   email verification / password reset / sessions / team invites / OIDC with TOTP step-up /
@@ -155,18 +185,31 @@ re-run this pass), `--warnings-as-errors` clean; treat exact counts as direction
 
 | Suite | Passing |
 |---|---|
-| `samen_core` | 2606 |
+| `samen_core` | 2715 |
 | `samen_web` | 1711 |
 | `demo` | 465 |
 | `driftwood` | 123 |
 | `pawchart` | 49 |
 | sabotage harness | 308/308 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
-| E9–E14 (BigCapital-inspired) | 72 tests across banking, multi-currency, financial statements, credit notes, transfers, landed costs |
+| E9–E38 (Flectra-inspired) | 588 tests across 30 ERP modules |
+| HuggingFace AI Integration | 109 tests (59 unit + 50 streaming integration) |
 
 ## Getting started
 
 Prerequisites: Elixir 1.20 / OTP 29, and a local PostgreSQL that trusts `$USER` on
 localhost. All commands start from the repo root.
+
+### AI Integration (HuggingFace BYOK)
+
+Samen supports Bring Your Own Key (BYOK) integration with HuggingFace for AI features:
+
+1. **Connect your HuggingFace API key** at `/settings/huggingface`
+2. **Your key is encrypted** with AES-256-GCM and never exposed to the frontend
+3. **Use AI features** — text generation, embeddings, and more through the HuggingFace API
+4. **Usage is tracked** — view API calls, token consumption, and costs in the dashboard
+5. **Keys are validated daily** — background worker detects revoked/expired keys
+
+For details, see [docs/ai-integration.md](docs/ai-integration.md).
 
 Generate a new vertical app and run its gate:
 
@@ -208,7 +251,7 @@ command in this README and that tutorial is verified against the CI probes' exec
 
 | Path | What it is |
 |---|---|
-| `samen_core/` | The kernel: vault + crypto-shred, masking, policies/RBAC, catalog, audit, `samen.verify.*` verifier tiers, and the generators |
+| `samen_core/` | The kernel: vault + crypto-shred, masking, policies/RBAC, catalog, audit, `samen.verify.*` verifier tiers, generators, and the **HuggingFace AI integration** (BYOK with AES-256-GCM, SSE streaming, token validation, usage analytics) |
 | `samen_web/` | The framework web layer: tenant + operator plane mount macros, the UI kit, masked rendering, and the mountable product surfaces (CRM/Billing/Support/Marketing/Files/CSV/Search/Settings/chat) |
 | `demo/` | The API-only dogfood host — canonical Identity policy-matrix / red-path references |
 | `driftwood/` | Reference vertical: freight — the deepest gate, including the crypto-shred game-day |
