@@ -104,16 +104,15 @@ defmodule Samenerp.WhiteLabel do
     Logger.info("[WhiteLabel] Updating branding for tenant #{tenant_id}")
 
     # Validate colors
-    if attrs[:primary_color] && !valid_color?(attrs[:primary_color]) do
-      return {:error, :invalid_primary_color}
+    cond do
+      attrs[:primary_color] && !valid_color?(attrs[:primary_color]) ->
+        {:error, :invalid_primary_color}
+      attrs[:secondary_color] && !valid_color?(attrs[:secondary_color]) ->
+        {:error, :invalid_secondary_color}
+      true ->
+        # In production, this would update the database
+        :ok
     end
-
-    if attrs[:secondary_color] && !valid_color?(attrs[:secondary_color]) do
-      return {:error, :invalid_secondary_color}
-    end
-
-    # In production, this would update the database
-    :ok
   end
 
   @doc """
@@ -142,20 +141,18 @@ defmodule Samenerp.WhiteLabel do
   def set_custom_domain(tenant_id, domain) do
     Logger.info("[WhiteLabel] Setting custom domain for tenant #{tenant_id}: #{domain}")
 
-    unless valid_domain?(domain) do
-      return {:error, :invalid_domain}
+    cond do
+      !valid_domain?(domain) ->
+        {:error, :invalid_domain}
+      !custom_domains_enabled?() ->
+        {:error, :custom_domains_disabled}
+      true ->
+        # In production, this would:
+        # 1. Verify domain ownership (DNS TXT record)
+        # 2. Provision SSL certificate
+        # 3. Update routing configuration
+        :ok
     end
-
-    unless custom_domains_enabled?() do
-      return {:error, :custom_domains_disabled}
-    end
-
-    # In production, this would:
-    # 1. Verify domain ownership (DNS TXT record)
-    # 2. Provision SSL certificate
-    # 3. Update routing configuration
-
-    :ok
   end
 
   @doc """
@@ -193,13 +190,13 @@ defmodule Samenerp.WhiteLabel do
   def upload_logo(tenant_id, file_data, filename) do
     Logger.info("[WhiteLabel] Uploading logo for tenant #{tenant_id}")
 
-    unless valid_logo?(filename, byte_size(file_data)) do
-      return {:error, :invalid_logo}
+    if !valid_logo?(filename, byte_size(file_data)) do
+      {:error, :invalid_logo}
+    else
+      # In production, this would upload to S3/storage
+      # For now, return mock URL
+      {:ok, "https://storage.samenerp.com/logos/#{tenant_id}/#{filename}"}
     end
-
-    # In production, this would upload to S3/storage
-    # For now, return mock URL
-    {:ok, "https://storage.samenerp.com/logos/#{tenant_id}/#{filename}"}
   end
 
   @doc """

@@ -115,10 +115,9 @@ defmodule Samenerp.SSO do
   """
   @spec initiate_sso(String.t()) :: {:ok, String.t()} | {:error, term()}
   def initiate_sso(return_url \\ "/") do
-    unless enabled?() do
-      return {:error, :sso_not_enabled}
-    end
-
+    if !enabled?() do
+      {:error, :sso_not_enabled}
+    else
     config = get_config()
 
     # Generate SAML request
@@ -152,6 +151,7 @@ defmodule Samenerp.SSO do
     redirect_url = "#{config.idp_metadata_url}?SAMLRequest=#{encoded_request}"
 
     {:ok, redirect_url}
+    end
   end
 
   @doc """
@@ -159,9 +159,9 @@ defmodule Samenerp.SSO do
   """
   @spec validate_response(String.t()) :: {:ok, map()} | {:error, term()}
   def validate_response(saml_response) do
-    unless enabled?() do
-      return {:error, :sso_not_enabled}
-    end
+    if !enabled?() do
+      {:error, :sso_not_enabled}
+    else
 
     Logger.info("[SSO] Validating SAML response")
 
@@ -181,6 +181,7 @@ defmodule Samenerp.SSO do
        roles: ["user"],
        session_index: generate_session_index()
      }}
+    end
   end
 
   @doc """
@@ -197,10 +198,9 @@ defmodule Samenerp.SSO do
   """
   @spec single_logout(String.t()) :: {:ok, String.t()} | {:error, term()}
   def single_logout(session_index) do
-    unless enabled?() do
-      return {:error, :sso_not_enabled}
-    end
-
+    if !enabled?() do
+      {:error, :sso_not_enabled}
+    else
     config = get_config()
 
     # Generate logout request
@@ -232,6 +232,7 @@ defmodule Samenerp.SSO do
     redirect_url = "#{config.single_logout_service_url}?SAMLRequest=#{encoded_request}"
 
     {:ok, redirect_url}
+    end
   end
 
   @doc """

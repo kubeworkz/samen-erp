@@ -125,18 +125,19 @@ defmodule Samenerp.DataResidency do
   """
   @spec set_region(String.t(), region()) :: :ok | {:error, term()}
   def set_region(tenant_id, region_id) do
-    unless valid_region?(region_id) do
-      return {:error, :invalid_region}
+    if !valid_region?(region_id) do
+      {:error, :invalid_region}
+    else
+
+      Logger.info("[DataResidency] Setting region for tenant #{tenant_id}: #{region_id}")
+
+      # In production, this would:
+      # 1. Update tenant's region setting
+      # 2. Migrate data to new region if needed
+      # 3. Update routing configuration
+
+      :ok
     end
-
-    Logger.info("[DataResidency] Setting region for tenant #{tenant_id}: #{region_id}")
-
-    # In production, this would:
-    # 1. Update tenant's region setting
-    # 2. Migrate data to new region if needed
-    # 3. Update routing configuration
-
-    :ok
   end
 
   @doc """
