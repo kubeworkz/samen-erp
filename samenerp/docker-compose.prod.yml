@@ -54,6 +54,7 @@ services:
       SAMEN_POSTMARK_API_KEY: ${SAMEN_POSTMARK_API_KEY:-}
       SAMEN_SES_REGION: ${SAMEN_SES_REGION:-}
       SAMEN_RESEND_API_KEY: ${SAMEN_RESEND_API_KEY:-}
+      SAMEN_EMAIL_FROM: ${SAMEN_EMAIL_FROM:-noreply@samenerp.kubeworkz.io}
       
       # Observability (optional)
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

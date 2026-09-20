@@ -119,7 +119,23 @@ if config_env() == :prod do
         secret_key: System.get_env("SAMEN_SES_SECRET_KEY")
 
     "resend" ->
-      config :samen_resend, :api_key, System.get_env("SAMEN_RESEND_API_KEY")
+      resend_api_key = System.get_env("SAMEN_RESEND_API_KEY")
+      resend_from = System.get_env("SAMEN_EMAIL_FROM") || "noreply@samenerp.kubeworkz.io"
+
+      config :samen_resend, api_key: resend_api_key, from: resend_from
+
+      # Wire the ESP adapter for auth + lifecycle emails
+      config :samen_core, Samen.Delivery.Lifecycle.EmailWorker,
+        adapter: SamenResend.Provider,
+        adapter_config: %{
+          api_key: resend_api_key,
+          from: resend_from,
+          resolve_recipient:
+            Samen.Delivery.AuthRecipient.resolver(
+              credential_mod: Samenerp.Identity.Credential,
+              user_mod: Samenerp.Identity.User
+            )
+        }
 
     provider when provider in [nil, "", " "] ->
       # No ESP configured — fail-honest (returns {:error, :not_configured})

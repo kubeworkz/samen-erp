@@ -57,6 +57,7 @@ defmodule Samen.Web.Auth.AccountController do
 
   import Plug.Conn
 
+  alias Samen.Delivery.AuthMailer
   alias Samen.Identity.Invite
   alias Samen.Identity.Register
   alias Samen.Identity.Reset
@@ -91,7 +92,13 @@ defmodule Samen.Web.Auth.AccountController do
         }
 
         case Register.register(attrs, register_mods(mount)) do
-          {:ok, %{status: status}} when status in [:registered, :duplicate] ->
+          {:ok, %{status: :registered, credential: credential, raw_verify_token: token, org: org}} ->
+            # A2 — dispatch the verification email through the delivery chokepoint
+            dispatch_verify_email(credential.id, org.id, token)
+            redirect(conn, to: "#{path}?registered=1")
+
+          {:ok, %{status: :duplicate}} ->
+            # Same generic response — no account-existence oracle
             redirect(conn, to: "#{path}?registered=1")
 
           {:error, :weak_password} ->
@@ -233,6 +240,34 @@ defmodule Samen.Web.Auth.AccountController do
       membership: Mount.resource(mount, Membership),
       repo: mount.repo
     }
+  end
+
+  # -- A2 email dispatch ------------------------------------------------------
+
+  defp dispatch_verify_email(credential_id, org_id, raw_token) do
+    base_url =
+      Application.get_env(:samen_core, Samen.Delivery.AuthMailer, [])[:base_url] ||
+        build_base_url()
+
+    case AuthMailer.dispatch(:email_verify,
+           credential_id: credential_id,
+           org_id: org_id,
+           raw_token: raw_token,
+           base_url: base_url
+         ) do
+      {:ok, _receipt} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("[AccountController] verify email dispatch failed: #{inspect(reason)}")
+        :ok
+    end
+  end
+
+  defp build_base_url do
+    scheme = if Application.get_env(:samenerp, SamenerpWeb.Endpoint)[:url][:scheme] == "https", do: "https", else: "http"
+    host = Application.get_env(:samenerp, SamenerpWeb.Endpoint)[:url][:host] || "localhost"
+    "#{scheme}://#{host}"
   end
 
   # -- private ----------------------------------------------------------------

@@ -47,11 +47,14 @@ defmodule SamenerpWeb.PageController do
       .footer a { color: #0e7c5a; text-decoration: none; }
     </style>
     </head>
-    <body>
-      <div class="hero">
+    <body>        <div class="hero">
         <h1>Samen ERP</h1>
         <p>Open-source, AI-native ERP system for developer-led companies. 47 modules, 697 tests, correct-by-construction.</p>
         <div class="badge">Open Source · Built with Elixir/Phoenix/Ash · AI-Native</div>
+        <div style="margin-top:24px">
+          <a href="/signup" style="display:inline-block;background:white;color:#0e7c5a;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:1.1em;margin-right:12px">Get Started Free</a>
+          <a href="/login" style="display:inline-block;background:rgba(255,255,255,0.15);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:1.1em;border:1px solid rgba(255,255,255,0.3)">Sign In</a>
+        </div>
       </div>
 
       <div class="stats">
@@ -347,7 +350,7 @@ defmodule SamenerpWeb.PageController do
       </div>
 
       <div class="footer">
-        <p><a href="https://github.com/kubeworkz/samen-erp">GitHub</a> · <a href="https://ckluis.github.io/samen/">Design Story</a> · <a href="https://samenerp.kubeworkz.io/healthz">Health</a></p>
+        <p><a href="/signup">Sign Up</a> · <a href="/login">Sign In</a> · <a href="https://github.com/kubeworkz/samen-erp">GitHub</a> · <a href="https://ckluis.github.io/samen/">Design Story</a> · <a href="https://samenerp.kubeworkz.io/healthz">Health</a></p>
         <p style="margin-top:8px">Samen ERP — The open-source, AI-native ERP for developer-led companies</p>
       </div>
     </body></html>
