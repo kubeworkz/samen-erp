@@ -1,0 +1,78 @@
+# Docker ignore file for Samenerp
+# Exclude build artifacts, test files, and development files
+
+# Build artifacts
+_build/
+deps/
+*.o
+*.beam
+*.plt
+
+# Test files
+test/
+*_test.exs
+cover/
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD files
+.github/
+.sabotage/
+ci.sh
+ci-fast.sh
+
+# Scripts
+scripts/
+
+# Other apps in the umbrella (not needed for this app)
+demo/
+driftwood/
+pawchart/
+samen_anthropic/
+samen_postmark/
+samen_resend/
+samen_ses/
+samen_stripe/
+spikes/
+
+# Node.js files (if any)
+node_modules/
+package.json
+package-lock.json
+
+# Elixir build artifacts
+*.ez
+erl_crash.dump
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.cache/
