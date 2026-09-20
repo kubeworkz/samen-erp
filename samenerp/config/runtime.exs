@@ -23,6 +23,13 @@ if config_env() == :prod do
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
 
   # ---------------------------------------------------------------------------
+  # Audit Event App Role
+  # ---------------------------------------------------------------------------
+  if aud_role = System.get_env("SAMEN_AUD_EVENT_APP_ROLE") do
+    config :samenerp, :aud_event_app_role, aud_role
+  end
+
+  # ---------------------------------------------------------------------------
   # Phoenix Endpoint
   # ---------------------------------------------------------------------------
   secret_key_base =
