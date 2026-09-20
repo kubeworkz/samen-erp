@@ -203,7 +203,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
                     <div style="font-size:11px;color:var(--muted)">Avg Response</div>
                   </div>
                   <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
-                    <div style="font-size:24px;font-weight:bold;color:{if (@usage_stats.success_rate || 100) >= 90, do: "#15803D", else: "#B91C1C"}">{ Float.round(@usage_stats.success_rate || 100.0, 1)}%</div>
+                    <div style={"font-size:24px;font-weight:bold;color:#{success_rate_color(@usage_stats)}"}>{success_rate_value(@usage_stats)}%</div>
                     <div style="font-size:11px;color:var(--muted)">Success Rate</div>
                   </div>
                 </div>
@@ -383,4 +383,9 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
   defp format_datetime(nil), do: "Never"
   defp format_datetime(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y %H:%M")
   defp format_datetime(_), do: "Unknown"
+
+  defp success_rate_color(%{success_rate: rate}) when rate >= 90, do: "#15803D"
+  defp success_rate_color(_), do: "#B91C1C"
+
+  defp success_rate_value(%{success_rate: rate}), do: Float.round(rate || 100.0, 1)
 end
