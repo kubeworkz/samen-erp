@@ -77,12 +77,13 @@ defmodule Samen.Delivery.AuthRecipient do
     end
   end
 
-  defp reveal_from_vault(token, user) do
+  defp reveal_from_vault(token, _user) do
     # Use the Vault to reveal — the system has implicit authority for
     # auth-lifecycle sends (ADR-035 §5 A2).
     repo = determine_repo()
+    masked = %Samen.Masked{token: token, label: :email}
 
-    case Samen.Vault.reveal(%Samen.Type.VaultField{token: token}, repo) do
+    case Samen.Vault.reveal(masked, repo) do
       {:ok, email} when is_binary(email) -> {:ok, email}
       {:error, reason} -> {:error, {:vault_reveal_failed, reason}}
       _ -> {:error, :vault_reveal_failed}
@@ -94,10 +95,13 @@ defmodule Samen.Delivery.AuthRecipient do
   end
 
   defp determine_repo do
+    # Try the host app's repo first, then fall back to the test repo
     cond do
       repo = Application.get_env(:samenerp, Samenerp.Repo) -> repo
       repo = Application.get_env(:samen_core, :test_repo) -> repo
-      true -> raise "No repo configured for auth email resolution"
+      true ->
+        Logger.warning("[AuthRecipient] no repo configured — cannot reveal email")
+        nil
     end
   end
 end
