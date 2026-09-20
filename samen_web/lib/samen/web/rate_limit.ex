@@ -83,7 +83,25 @@ defmodule Samen.Web.RateLimit do
     # failure), so N ≫ limit brute-force attempts produce O(windows) audit rows, not O(N).
     # The tuple's first slot is the window's failure-count ceiling used only to keep the
     # counter cell bounded; the window is 15 min.
-    login_failed_audit: {1, 900_000}
+    login_failed_audit: {1, 900_000},
+
+    # API rate limits for authenticated users (Enterprise SaaS).
+    # Key: user_id (non-PII, bounded identifier).
+    # Limits are per-plan, configurable via config :samen_web, Samen.Web.RateLimit, limits: %{...}
+    api_request_user: {1000, 60_000},       # 1000 requests/min per user (default)
+    api_request_org: {10000, 60_000},       # 10000 requests/min per org (default)
+    api_request_ip: {500, 60_000},          # 500 requests/min per IP (unauthenticated)
+
+    # AI-specific rate limits (HuggingFace BYOK).
+    # Key: tenant_id (org-level).
+    ai_request_tenant: {100, 60_000},      # 100 AI requests/min per tenant
+    ai_stream_concurrent: {5, 60_000},     # 5 concurrent streams per tenant
+
+    # Plan-based limits (configurable per plan).
+    # Free plan: 100 req/min, Pro: 1000 req/min, Enterprise: 10000 req/min
+    plan_free: {100, 60_000},
+    plan_pro: {1000, 60_000},
+    plan_enterprise: {10000, 60_000}
   }
 
   @doc """
