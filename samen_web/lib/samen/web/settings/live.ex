@@ -35,6 +35,9 @@ defmodule Samen.Web.Settings.Live do
         <a href={href("/settings/api-keys", @org_id, @user_id)} class={nav_class(@active, :api_keys)} id="settings-nav-api-keys">
           API keys
         </a>
+        <a href={href("/settings/huggingface", @org_id, @user_id)} class={nav_class(@active, :huggingface)} id="settings-nav-huggingface">
+          HuggingFace
+        </a>
         <a href={href("/settings/security", @org_id, @user_id)} class={nav_class(@active, :security)} id="settings-nav-security">
           Security
         </a>

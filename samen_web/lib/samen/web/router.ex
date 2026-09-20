@@ -2011,6 +2011,7 @@ defmodule Samen.Web.Router do
       {"#{path}", Samen.Web.Settings.ProfileLive},
       {"#{path}/profile", Samen.Web.Settings.ProfileLive},
       {"#{path}/api-keys", Samen.Web.Settings.ApiKeysLive},
+      {"#{path}/huggingface", Samen.Web.Settings.HuggingFaceLive},
       {"#{path}/security", Samen.Web.Settings.SecurityLive},
       {"#{path}/invitations", Samen.Web.Settings.InvitationsLive},
       # PP-13 — the tenant reveal-APPROVER surface (its OWN LiveView, NOT SecurityLive —
