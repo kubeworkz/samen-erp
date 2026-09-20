@@ -32,7 +32,7 @@ RUN cd samenerp && mix release samenerp
 # ─── Stage 2: Runtime ───────────────────────────────────────────────────────
 FROM alpine:3.24.1 AS runtime
 
-RUN apk add --no-cache libstdc++ openssl libncurses5 curl
+RUN apk add --no-cache libstdc++ openssl ncurses curl
 
 RUN addgroup --system -g 1000 app && \
     adduser --system -g app --uid 1000 --shell /bin/sh app
