@@ -40,3 +40,7 @@ _orch-*/
 # per-app mix build cache. The harness applies every sabotage patch THERE, never in
 # the main checkout, so this is a scratch build cache — never committed.
 .sabotage/
+
+# Generated documentation
+_site/
+*/doc/
