@@ -34,7 +34,7 @@ services:
       DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-samenerp}
       
       # Phoenix
-      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      # SECRET_KEY_BASE is loaded from .env.production via env_file
       PHX_HOST: ${PHX_HOST:-65.109.232.89}
       PHX_SERVER: true
       
