@@ -75,12 +75,11 @@ defmodule Samenerp.Backup do
     backup_path = backup_directory()
     filepath = Path.join(backup_path, filename)
 
-    unless File.exists?(filepath) do
+    if !File.exists?(filepath) do
       Logger.error("[Backup] Backup file not found: #{filepath}")
-      return {:error, :file_not_found}
-    end
-
-    case System.cmd("pg_restore", [
+      {:error, :file_not_found}
+    else
+      case System.cmd("pg_restore", [
            "-U", "postgres",
            "-d", "samenerp",
            "-c",  # Clean (drop) objects before recreating
@@ -94,6 +93,7 @@ defmodule Samenerp.Backup do
       {output, exit_code} ->
         Logger.error("[Backup] Restore failed: #{output}")
         {:error, {:restore_failed, exit_code, output}}
+    end
     end
   end
 
