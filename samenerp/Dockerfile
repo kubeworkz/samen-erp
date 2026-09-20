@@ -1,10 +1,9 @@
 # Multi-stage Dockerfile for Samenerp
 # Stage 1: Build
-FROM hexpm/elixir:1.20.2-erlang-27.2-ubuntu-noble-20240617 AS build
+FROM hexpm/elixir:1.20.2-erlang-27.2.4-alpine-3.24.1 AS build
 
 # Install build dependencies
-RUN apt-get update -y && apt-get install -y build-essential git \
-    && apt-get clean && rm -f /var/lib/apt/lists/*_*
+RUN apk add --no-cache build-base git
 
 # Set build ENV
 ENV MIX_ENV=prod
@@ -41,24 +40,17 @@ RUN cd samenerp && MIX_ENV=prod mix compile
 RUN cd samenerp && MIX_ENV=prod mix release samenerp
 
 # Stage 2: Runtime
-FROM ubuntu:noble-20240617 AS runtime
+FROM alpine:3.24.1 AS runtime
 
 # Install runtime dependencies
-RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales curl \
-    && apt-get clean && rm -f /var/lib/apt/lists/*_*
+RUN apk add --no-cache libstdc++ openssl libncurses5 curl
 
-# Set the locale
-RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
-
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
-
+# Set workdir
 WORKDIR /app
 
 # Run as non-root user
-RUN groupadd --system -g 1000 app && \
-    useradd --system -g app --uid 1000 --shell /bin/sh app && \
+RUN addgroup --system -g 1000 app && \
+    adduser --system -g app --uid 1000 --shell /bin/sh app && \
     mkdir -p /app && chown app:app /app
 
 # Copy the release from the build stage
