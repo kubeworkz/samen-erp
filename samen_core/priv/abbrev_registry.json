@@ -374,7 +374,11 @@
     "cms": "Samen.Scopes.Cms.Page",
     "cmn": "Samen.Scopes.Cms.Template",
     "cml": "Samen.Scopes.Cms.Theme",
-    "cfv": "Samen.Scopes.CustomFields.FieldValue"
+    "cfv": "Samen.Scopes.CustomFields.FieldValue",
+    "aik": "Samen.Scopes.Ai.ApiKey",
+    "ail": "Samen.Scopes.Ai.PromptLog",
+    "aim": "Samen.Scopes.Ai.Model",
+    "aic": "Samen.Scopes.Ai.Conversation"
   },
   "hosts": {
     "demo": {

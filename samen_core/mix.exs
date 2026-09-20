@@ -149,7 +149,9 @@ defmodule SamenCore.MixProject do
       # catalog, no_plaintext_pii roster) via the version-resource mixin (§6.2). An
       # ash-project extension over Ash (already in the tree), not a vendor SDK.
       {:ash_paper_trail, "~> 0.6.0"},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      # Req: modern HTTP client for HuggingFace API integration (BYOK)
+      {:req, "~> 0.5"}
     ]
   end
 
