@@ -312,6 +312,8 @@ command in this README and that tutorial is verified against the CI probes' exec
 
 ## Docs
 
+- [Positioning Strategy](docs/positioning-strategy.md) — how Samen competes against enterprise ERP
+- [Competitive Analysis](docs/competitive-analysis.md) — detailed comparison with NetSuite, Odoo, ERPNext
 - [Docs index](docs/README.md) — the front door to everything under `docs/`, grouped
 - [Getting started — zero to first feature](docs/guides/getting-started.md)
 - [Cookbook](docs/guides/cookbook.md) — task recipes
