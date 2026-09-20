@@ -1,6 +1,6 @@
 defmodule Samen.IoTTest do
   @moduledoc """
-  WS-ERP E36: IoT — Flectra-inspired device integration.
+  WS-ERP E36: IoT —  device integration.
 
   ## Resources
 

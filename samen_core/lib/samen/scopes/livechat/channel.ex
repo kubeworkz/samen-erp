@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Livechat.Channel do
   @moduledoc """
-  Live Chat Channel (WS-ERP E22; Flectra-inspired).
+  Live Chat Channel (WS-ERP E22;).
 
   Defines chat channels for different purposes (support, sales, general).
 

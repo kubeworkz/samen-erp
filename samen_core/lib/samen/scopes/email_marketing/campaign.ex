@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.EmailMarketing.Campaign do
   @moduledoc """
-  Email Campaign (WS-ERP E33; Flectra-inspired).
+  Email Campaign (WS-ERP E33;).
 
   Email marketing campaign with lifecycle and analytics.
 

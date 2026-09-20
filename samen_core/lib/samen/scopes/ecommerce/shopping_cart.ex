@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Ecommerce.ShoppingCart do
   @moduledoc """
-  eCommerce ShoppingCart (WS-ERP E18; Flectra-inspired).
+  eCommerce ShoppingCart (WS-ERP E18;).
 
   A user's active shopping cart. One active cart per user per store.
   Carts older than 30 days are considered abandoned.

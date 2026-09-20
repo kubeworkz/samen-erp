@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.MarketingAutomation.Action do
   @moduledoc """
-  Marketing Automation Action (WS-ERP E28; Flectra-inspired).
+  Marketing Automation Action (WS-ERP E28;).
 
   An action within a workflow step.
 

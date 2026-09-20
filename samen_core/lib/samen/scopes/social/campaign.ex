@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Social.Campaign do
   @moduledoc """
-  Social Marketing Campaign (WS-ERP E22; Flectra-inspired).
+  Social Marketing Campaign (WS-ERP E22;).
 
   A marketing campaign containing multiple social media posts.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Pos.PosConfig do
   @moduledoc """
-  POS Configuration (WS-ERP E17; Flectra-inspired point of sale).
+  POS Configuration (WS-ERP E17; point of sale).
 
   Tier-0 config row: one POS terminal per org (or per location).
   Defines the terminal's behavior, default payment method, receipt

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Elearning.Progress do
   @moduledoc """
-  eLearning Progress (WS-ERP E20; Flectra-inspired).
+  eLearning Progress (WS-ERP E20;).
 
   Tracks completion of individual lessons within an enrollment.
 

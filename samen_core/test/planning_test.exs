@@ -1,6 +1,6 @@
 defmodule Samen.PlanningTest do
   @moduledoc """
-  WS-ERP E34: Planning/Scheduling — Flectra-inspired resource planning.
+  WS-ERP E34: Planning/Scheduling —  resource planning.
 
   ## Resources
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SmsMarketing.Template do
   @moduledoc """
-  SMS Marketing Template (WS-ERP E29; Flectra-inspired).
+  SMS Marketing Template (WS-ERP E29;).
 
   A reusable SMS message template with variable support.
 

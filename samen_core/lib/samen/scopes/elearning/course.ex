@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Elearning.Course do
   @moduledoc """
-  eLearning Course (WS-ERP E20; Flectra-inspired).
+  eLearning Course (WS-ERP E20;).
 
   A learning course containing lessons, quizzes, and enrollment.
 

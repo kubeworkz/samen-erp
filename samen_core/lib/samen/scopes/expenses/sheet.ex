@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Expenses.Sheet do
   @moduledoc """
-  Expense Sheet (WS-ERP E31; Flectra-inspired).
+  Expense Sheet (WS-ERP E31;).
 
   An expense report grouping multiple expenses for submission and approval.
 

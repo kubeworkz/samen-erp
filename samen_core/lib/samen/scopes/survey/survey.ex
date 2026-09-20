@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Survey.Survey do
   @moduledoc """
-  Survey (WS-ERP E20; Flectra-inspired).
+  Survey (WS-ERP E20;).
 
   A survey definition with questions, response collection, and
   optional certification support.

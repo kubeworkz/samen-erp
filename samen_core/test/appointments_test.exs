@@ -1,6 +1,6 @@
 defmodule Samen.AppointmentsTest do
   @moduledoc """
-  WS-ERP E27: Appointments — Flectra-inspired scheduling.
+  WS-ERP E27: Appointments —  scheduling.
 
   ## Resources
 

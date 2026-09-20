@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Documents.Document do
   @moduledoc """
-  Document (WS-ERP E32; Flectra-inspired).
+  Document (WS-ERP E32;).
 
   File metadata and lifecycle for document management.
 

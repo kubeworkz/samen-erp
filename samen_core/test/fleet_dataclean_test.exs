@@ -1,6 +1,6 @@
 defmodule Samen.FleetDatacleanTest do
   @moduledoc """
-  WS-ERP E23: Fleet + Data Cleaning — Flectra-inspired asset management.
+  WS-ERP E23: Fleet + Data Cleaning —  asset management.
 
   Tests:
     * fd1 Vehicle: status lifecycle (active → maintenance → active)

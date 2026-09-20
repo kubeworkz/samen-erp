@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Planning.Slot do
   @moduledoc """
-  Planning Slot (WS-ERP E34; Flectra-inspired).
+  Planning Slot (WS-ERP E34;).
 
   A time slot in the planning view representing available capacity.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Esign.Request do
   @moduledoc """
-  E-Signatures SignRequest (WS-ERP E26; Flectra-inspired).
+  E-Signatures SignRequest (WS-ERP E26;).
 
   A signing envelope sent to one or more recipients.
 

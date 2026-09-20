@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Ecommerce.StoreOrder do
   @moduledoc """
-  eCommerce StoreOrder (WS-ERP E18; Flectra-inspired).
+  eCommerce StoreOrder (WS-ERP E18;).
 
   An order created when a cart is checked out. Tracks the full
   lifecycle from checkout to delivery.

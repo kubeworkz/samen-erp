@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Ecommerce.CartItem do
   @moduledoc """
-  eCommerce CartItem (WS-ERP E18; Flectra-inspired).
+  eCommerce CartItem (WS-ERP E18;).
 
   An item in a shopping cart. Tracks the product, variant, quantity,
   and price at time of add (frozen for price consistency).

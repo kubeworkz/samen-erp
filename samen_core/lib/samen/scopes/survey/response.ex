@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Survey.Response do
   @moduledoc """
-  Survey Response (WS-ERP E20; Flectra-inspired).
+  Survey Response (WS-ERP E20;).
 
   A respondent's completed survey submission. Tracks score,
   completion time, and pass/fail status.

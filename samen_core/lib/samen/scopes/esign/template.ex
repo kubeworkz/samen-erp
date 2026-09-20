@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Esign.Template do
   @moduledoc """
-  E-Signatures SignTemplate (WS-ERP E26; Flectra-inspired).
+  E-Signatures SignTemplate (WS-ERP E26;).
 
   A reusable document template for e-signature requests.
 

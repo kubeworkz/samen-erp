@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Fleet.Inspection do
   @moduledoc """
-  Fleet Vehicle Inspection (WS-ERP E23; Flectra-inspired).
+  Fleet Vehicle Inspection (WS-ERP E23;).
 
   An inspection record for a vehicle — pre-trip, annual, or safety.
 

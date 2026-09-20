@@ -1,6 +1,6 @@
 defmodule Samen.MarketingAutomationTest do
   @moduledoc """
-  WS-ERP E28: Marketing Automation — Flectra-inspired campaign automation.
+  WS-ERP E28: Marketing Automation —  campaign automation.
 
   ## Resources
 

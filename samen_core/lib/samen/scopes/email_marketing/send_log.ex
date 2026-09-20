@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.EmailMarketing.SendLog do
   @moduledoc """
-  Email Send Log (WS-ERP E33; Flectra-inspired).
+  Email Send Log (WS-ERP E33;).
 
   Immutable audit trail for individual email sends.
 

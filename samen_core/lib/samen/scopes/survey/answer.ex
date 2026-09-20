@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Survey.Answer do
   @moduledoc """
-  Survey Answer (WS-ERP E20; Flectra-inspired).
+  Survey Answer (WS-ERP E20;).
 
   An individual answer to a survey question within a response.
 

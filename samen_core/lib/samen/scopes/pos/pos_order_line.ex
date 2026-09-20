@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Pos.PosOrderLine do
   @moduledoc """
-  POS Order Line (WS-ERP E17; Flectra-inspired point of sale).
+  POS Order Line (WS-ERP E17; point of sale).
 
   A line item on a POS order — represents one product in the cart.
 

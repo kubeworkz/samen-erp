@@ -51,7 +51,7 @@ defmodule SamenerpWeb.PageController do
       <div class="hero">
         <h1>Samen ERP</h1>
         <p>Open-source, AI-native ERP system for developer-led companies. 47 modules, 697 tests, correct-by-construction.</p>
-        <div class="badge">Inspired by Flectra · Built with Elixir/Phoenix/Ash</div>
+        <div class="badge">Open Source · Built with Elixir/Phoenix/Ash · AI-Native</div>
       </div>
 
       <div class="stats">
@@ -151,9 +151,8 @@ defmodule SamenerpWeb.PageController do
           </div>
         </div>
 
-        <!-- Flectra-Inspired -->
         <div class="section">
-          <h2>⚡ Flectra-Inspired (E19–E38)</h2>
+          <h2>⚡ Extended ERP (E19–E38)</h2>
           <div class="grid">
             <div class="card">
               <h3>Quality Control</h3>

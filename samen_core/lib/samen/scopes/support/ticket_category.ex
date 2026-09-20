@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Support.TicketCategory do
   @moduledoc """
-  Ticket Category (WS-ERP E16; Flectra-inspired helpdesk).
+  Ticket Category (WS-ERP E16; helpdesk).
 
   Tier-0 config row: one category per org. Used to classify support
   tickets by type (bug, feature request, question, billing, etc.).

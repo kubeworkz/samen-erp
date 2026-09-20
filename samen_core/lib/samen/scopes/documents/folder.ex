@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Documents.Folder do
   @moduledoc """
-  Document Folder (WS-ERP E32; Flectra-inspired).
+  Document Folder (WS-ERP E32;).
 
   Hierarchical folder structure for organizing documents.
 

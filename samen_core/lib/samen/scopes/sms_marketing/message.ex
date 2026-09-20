@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SmsMarketing.Message do
   @moduledoc """
-  SMS Marketing Message (WS-ERP E29; Flectra-inspired).
+  SMS Marketing Message (WS-ERP E29;).
 
   An individual SMS message sent to a recipient.
 

@@ -1,6 +1,6 @@
 defmodule Samen.DocumentsTest do
   @moduledoc """
-  WS-ERP E32: Document Management — Flectra-inspired DMS.
+  WS-ERP E32: Document Management —  DMS.
 
   ## Resources
 

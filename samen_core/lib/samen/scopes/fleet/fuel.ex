@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Fleet.Fuel do
   @moduledoc """
-  Fleet Vehicle Fuel (WS-ERP E23; Flectra-inspired).
+  Fleet Vehicle Fuel (WS-ERP E23;).
 
   A fuel transaction record for a vehicle.
 

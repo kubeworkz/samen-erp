@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SocialMarketing.Engagement do
   @moduledoc """
-  Social Marketing Engagement (WS-ERP E30; Flectra-inspired).
+  Social Marketing Engagement (WS-ERP E30;).
 
   Engagement metrics for a social media post.
 

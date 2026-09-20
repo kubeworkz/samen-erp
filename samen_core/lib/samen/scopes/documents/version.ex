@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Documents.Version do
   @moduledoc """
-  Document Version (WS-ERP E32; Flectra-inspired).
+  Document Version (WS-ERP E32;).
 
   Version control for documents — tracks every revision.
 

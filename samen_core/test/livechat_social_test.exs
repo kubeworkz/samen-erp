@@ -1,6 +1,6 @@
 defmodule Samen.LivechatSocialTest do
   @moduledoc """
-  WS-ERP E22: Live Chat + Social Marketing — Flectra-inspired communication.
+  WS-ERP E22: Live Chat + Social Marketing —  communication.
 
   Tests:
     * ls1 ChatChannel: channel types and defaults

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Appointments.Slot do
   @moduledoc """
-  Appointments AppointmentSlot (WS-ERP E27; Flectra-inspired).
+  Appointments AppointmentSlot (WS-ERP E27;).
 
   An available time slot for booking.
 

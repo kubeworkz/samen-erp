@@ -105,8 +105,9 @@ grant that a second party approved and the tenant can audit.
 
 Full mapping: [docs/claim-evidence.md](docs/claim-evidence.md) (Phase-1 identity spine + rich
 types are section J; Phase-2 billing + ESP + rate-limiting are section K; Phase-3 automation +
-lifecycle substrate + work objects + the LiveView client are **section L**). **Flectra parity:**
-~30/30 modules covered (E9–E38), plus HuggingFace AI integration. **Honest scope:**
+lifecycle substrate + work objects + the LiveView client are **section L**). **47 modules**
+covered (E9–E38), plus HuggingFace AI integration, enterprise SaaS features, and
+production deployment infrastructure. **Honest scope:**
 the identity spine, its auth-surface rate-limiting, and the Stripe/ESP adapters are complete and
 verified — **but everything runs on the keyless lane.** Billing/ESP dispatch is proven against
 hermetic fakes + injected-transport cassettes; **no host wires a live provider** (every generated
@@ -213,7 +214,7 @@ re-run this pass), `--warnings-as-errors` clean; treat exact counts as direction
 | `driftwood` | 123 |
 | `pawchart` | 49 |
 | sabotage harness | 308/308 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
-| E9–E38 (Flectra-inspired) | 588 tests across 30 ERP modules |
+| E9–E38 (ERP modules) | 588 tests across 30 ERP modules |
 | HuggingFace AI Integration | 109 tests (59 unit + 50 streaming integration) |
 | Enterprise SaaS Features | 47 modules (Deployment, Rate Limiting, Monitoring, Backup, Docs, Support, Security, SSO, Audit, Data Residency, White-Label) |
 

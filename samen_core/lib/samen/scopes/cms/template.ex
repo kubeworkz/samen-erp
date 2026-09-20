@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Cms.Template do
   @moduledoc """
-  CMS Template (WS-ERP E37; Flectra-inspired Website Builder).
+  CMS Template (WS-ERP E37; Website Builder).
 
   Page layout templates with HTML structure.
 

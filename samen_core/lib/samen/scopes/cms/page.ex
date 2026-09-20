@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Cms.Page do
   @moduledoc """
-  CMS Page (WS-ERP E37; Flectra-inspired Website Builder).
+  CMS Page (WS-ERP E37; Website Builder).
 
   Content pages with SEO and publishing lifecycle.
 

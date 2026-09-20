@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.EmailMarketing.Subscriber do
   @moduledoc """
-  Email Subscriber (WS-ERP E33; Flectra-inspired).
+  Email Subscriber (WS-ERP E33;).
 
   Mailing list subscriber with opt-in/opt-out management.
 

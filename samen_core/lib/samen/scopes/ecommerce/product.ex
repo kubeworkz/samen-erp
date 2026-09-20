@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Ecommerce.Product do
   @moduledoc """
-  eCommerce Product (WS-ERP E18; Flectra-inspired).
+  eCommerce Product (WS-ERP E18;).
 
   A sellable item in the store catalog. Maps to the inventory Item
   for stock tracking.

@@ -1,6 +1,6 @@
 defmodule Samen.TimesheetsTest do
   @moduledoc """
-  Timesheets (WS-ERP E15; Flectra-inspired project management).
+  Timesheets (WS-ERP E15; project management).
 
   Tests:
     * ts1 TimesheetGuard: no future entries

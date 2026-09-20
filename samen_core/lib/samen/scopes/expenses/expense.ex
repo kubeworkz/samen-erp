@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Expenses.Expense do
   @moduledoc """
-  Expense (WS-ERP E31; Flectra-inspired).
+  Expense (WS-ERP E31;).
 
   An individual expense line item.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Quality.Check do
   @moduledoc """
-  Quality Check (WS-ERP E19; Flectra-inspired).
+  Quality Check (WS-ERP E19;).
 
   A single quality check performed against a control point. Each check
   records the result (pass/fail), measured value, and who performed it.

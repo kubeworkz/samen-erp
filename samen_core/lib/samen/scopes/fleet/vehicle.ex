@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Fleet.Vehicle do
   @moduledoc """
-  Fleet Vehicle (WS-ERP E23; Flectra-inspired).
+  Fleet Vehicle (WS-ERP E23;).
 
   A vehicle in the company fleet.
 

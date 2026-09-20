@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.MarketingAutomation.Campaign do
   @moduledoc """
-  Marketing Automation Campaign (WS-ERP E28; Flectra-inspired).
+  Marketing Automation Campaign (WS-ERP E28;).
 
   A marketing automation campaign.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Social.Post do
   @moduledoc """
-  Social Marketing Post (WS-ERP E22; Flectra-inspired).
+  Social Marketing Post (WS-ERP E22;).
 
   An individual social media post within a campaign.
 

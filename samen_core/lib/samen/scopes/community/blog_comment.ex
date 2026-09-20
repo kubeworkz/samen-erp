@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Community.BlogComment do
   @moduledoc """
-  Community Blog Comment (WS-ERP E25; Flectra-inspired).
+  Community Blog Comment (WS-ERP E25;).
 
   A comment on a blog post.
 

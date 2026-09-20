@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Hr.Payslip do
   @moduledoc """
-  HR Payslip (WS-ERP E21; Flectra-inspired).
+  HR Payslip (WS-ERP E21;).
 
   An individual employee's payslip for a pay run. Contains the
   breakdown of earnings, deductions, and net pay.

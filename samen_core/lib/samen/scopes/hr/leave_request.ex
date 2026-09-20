@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Hr.LeaveRequest do
   @moduledoc """
-  HR Leave Request (WS-ERP E21; Flectra-inspired).
+  HR Leave Request (WS-ERP E21;).
 
   An employee's request for time off. Goes through an approval workflow.
 

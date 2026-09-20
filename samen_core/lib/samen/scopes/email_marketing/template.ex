@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.EmailMarketing.Template do
   @moduledoc """
-  Email Template (WS-ERP E33; Flectra-inspired).
+  Email Template (WS-ERP E33;).
 
   Reusable email templates with HTML content and merge tags.
 

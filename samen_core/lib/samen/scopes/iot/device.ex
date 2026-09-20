@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.IoT.Device do
   @moduledoc """
-  IoT Device (WS-ERP E36; Flectra-inspired).
+  IoT Device (WS-ERP E36;).
 
   Registry of connected IoT devices.
 

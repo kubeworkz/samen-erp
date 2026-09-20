@@ -1,6 +1,6 @@
 defmodule Samen.SocialMarketingUITest do
   @moduledoc """
-  WS-ERP E30: Social Marketing UI — Flectra-inspired social media management.
+  WS-ERP E30: Social Marketing UI —  social media management.
 
   ## Resources
 

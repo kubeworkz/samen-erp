@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Consolidation.IntercompanyTx do
   @moduledoc """
-  Multi-Company Intercompany Transaction (WS-ERP E24; Flectra-inspired).
+  Multi-Company Intercompany Transaction (WS-ERP E24;).
 
   Records a transaction between two companies in the same group.
   These transactions must be eliminated during consolidation.

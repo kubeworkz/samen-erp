@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Livechat.Session do
   @moduledoc """
-  Live Chat Session (WS-ERP E22; Flectra-inspired).
+  Live Chat Session (WS-ERP E22;).
 
   A live chat session between a visitor/customer and an agent.
 

@@ -1,6 +1,6 @@
 defmodule Samen.SurveyElearningTest do
   @moduledoc """
-  WS-ERP E20: Survey + eLearning — Flectra-inspired learning platform.
+  WS-ERP E20: Survey + eLearning —  learning platform.
 
   Tests:
     * se1 Survey: state lifecycle (draft → open → closed)

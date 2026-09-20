@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Cms.Theme do
   @moduledoc """
-  CMS Theme (WS-ERP E37; Flectra-inspired Website Builder).
+  CMS Theme (WS-ERP E37; Website Builder).
 
   Visual themes controlling site appearance.
 

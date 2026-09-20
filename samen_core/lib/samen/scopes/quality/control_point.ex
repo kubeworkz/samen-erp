@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Quality.ControlPoint do
   @moduledoc """
-  Quality Control Point (WS-ERP E19; Flectra-inspired).
+  Quality Control Point (WS-ERP E19;).
 
   Defines WHERE and WHEN quality checks occur. Control points can be
   attached to manufacturing operations, receipts, or deliveries.

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Livechat.Message do
   @moduledoc """
-  Live Chat Message (WS-ERP E22; Flectra-inspired).
+  Live Chat Message (WS-ERP E22;).
 
   An individual message in a live chat session.
 

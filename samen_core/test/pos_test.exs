@@ -1,6 +1,6 @@
 defmodule Samen.POSTest do
   @moduledoc """
-  Point of Sale (WS-ERP E17; Flectra-inspired).
+  Point of Sale (WS-ERP E17;).
 
   Tests:
     * p1 PosConfig: terminal configuration with defaults

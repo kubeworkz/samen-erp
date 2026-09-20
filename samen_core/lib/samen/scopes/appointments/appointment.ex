@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Appointments.Appointment do
   @moduledoc """
-  Appointments Appointment (WS-ERP E27; Flectra-inspired).
+  Appointments Appointment (WS-ERP E27;).
 
   A booked appointment.
 

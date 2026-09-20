@@ -1,6 +1,6 @@
 defmodule Samen.ExpensesTest do
   @moduledoc """
-  WS-ERP E31: Expenses — Flectra-inspired expense management.
+  WS-ERP E31: Expenses —  expense management.
 
   ## Resources
 

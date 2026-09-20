@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.IoT.Channel do
   @moduledoc """
-  IoT Channel (WS-ERP E36; Flectra-inspired).
+  IoT Channel (WS-ERP E36;).
 
   Communication channel configuration for IoT devices.
 

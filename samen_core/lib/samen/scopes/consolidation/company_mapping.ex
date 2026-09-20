@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Consolidation.CompanyMapping do
   @moduledoc """
-  Multi-Company Account Mapping (WS-ERP E24; Flectra-inspired).
+  Multi-Company Account Mapping (WS-ERP E24;).
 
   Maps accounts from subsidiary companies to the parent company's
   chart of accounts for consolidation.

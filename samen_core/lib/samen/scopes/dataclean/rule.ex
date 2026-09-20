@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Dataclean.Rule do
   @moduledoc """
-  Data Cleaning Rule (WS-ERP E23; Flectra-inspired).
+  Data Cleaning Rule (WS-ERP E23;).
 
   Defines deduplication rules for a specific table and field combination.
 

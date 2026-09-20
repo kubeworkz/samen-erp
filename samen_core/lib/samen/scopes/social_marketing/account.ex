@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SocialMarketing.Account do
   @moduledoc """
-  Social Marketing Account (WS-ERP E30; Flectra-inspired).
+  Social Marketing Account (WS-ERP E30;).
 
   A connected social media account.
 

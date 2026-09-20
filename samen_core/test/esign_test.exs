@@ -1,6 +1,6 @@
 defmodule Samen.EsignTest do
   @moduledoc """
-  WS-ERP E26: E-Signatures — Flectra-inspired document signing.
+  WS-ERP E26: E-Signatures —  document signing.
 
   ## Resources
 

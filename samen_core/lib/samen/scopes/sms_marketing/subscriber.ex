@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SmsMarketing.Subscriber do
   @moduledoc """
-  SMS Marketing Subscriber (WS-ERP E29; Flectra-inspired).
+  SMS Marketing Subscriber (WS-ERP E29;).
 
   An SMS marketing subscriber with consent management.
 

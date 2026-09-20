@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Elearning.Enrollment do
   @moduledoc """
-  eLearning Enrollment (WS-ERP E20; Flectra-inspired).
+  eLearning Enrollment (WS-ERP E20;).
 
   Tracks a user's enrollment in a course and their overall progress.
 

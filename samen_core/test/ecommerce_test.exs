@@ -1,6 +1,6 @@
 defmodule Samen.Core.EcommerceTest do
   @moduledoc """
-  WS-ERP E18: eCommerce — Flectra-inspired storefront.
+  WS-ERP E18: eCommerce —  storefront.
 
   Tests:
     * ec1 Store: currency defaults to USD

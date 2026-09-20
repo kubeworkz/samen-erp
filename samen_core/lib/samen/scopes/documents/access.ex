@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Documents.Access do
   @moduledoc """
-  Document Access (WS-ERP E32; Flectra-inspired).
+  Document Access (WS-ERP E32;).
 
   Access control and sharing permissions for documents and folders.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Work.TimesheetEntry do
   @moduledoc """
-  Timesheet Entry (WS-ERP E15; Flectra-inspired project management).
+  Timesheet Entry (WS-ERP E15; project management).
 
   A time log against a task. Each entry records hours spent by a user
   on a specific task on a specific date.

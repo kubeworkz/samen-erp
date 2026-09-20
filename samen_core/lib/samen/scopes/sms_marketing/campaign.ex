@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SmsMarketing.Campaign do
   @moduledoc """
-  SMS Marketing Campaign (WS-ERP E29; Flectra-inspired).
+  SMS Marketing Campaign (WS-ERP E29;).
 
   An SMS marketing campaign.
 

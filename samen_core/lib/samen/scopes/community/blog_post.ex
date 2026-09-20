@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Community.BlogPost do
   @moduledoc """
-  Community Blog Post (WS-ERP E25; Flectra-inspired).
+  Community Blog Post (WS-ERP E25;).
 
   An article/blog post within a blog.
 

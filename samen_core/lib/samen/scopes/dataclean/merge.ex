@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Dataclean.Merge do
   @moduledoc """
-  Data Cleaning Merge (WS-ERP E23; Flectra-inspired).
+  Data Cleaning Merge (WS-ERP E23;).
 
   Records a merge operation when duplicate records are resolved.
 

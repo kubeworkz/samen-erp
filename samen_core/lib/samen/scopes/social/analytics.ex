@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Social.Analytics do
   @moduledoc """
-  Social Marketing Analytics (WS-ERP E22; Flectra-inspired).
+  Social Marketing Analytics (WS-ERP E22;).
 
   Engagement metrics for social media posts.
 

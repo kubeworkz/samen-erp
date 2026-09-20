@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.IoT.DataPoint do
   @moduledoc """
-  IoT Data Point (WS-ERP E36; Flectra-inspired).
+  IoT Data Point (WS-ERP E36;).
 
   Individual sensor readings or device events.
 

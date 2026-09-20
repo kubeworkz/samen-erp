@@ -1,6 +1,6 @@
 defmodule Samen.ConsolidationTest do
   @moduledoc """
-  WS-ERP E24: Multi-Company Consolidation — Flectra-inspired multi-entity.
+  WS-ERP E24: Multi-Company Consolidation —  multi-entity.
 
   Tests:
     * mc1 CompanyGroup: group structure (parent + subsidiaries)

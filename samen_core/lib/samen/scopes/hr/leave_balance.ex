@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Hr.LeaveBalance do
   @moduledoc """
-  HR Leave Balance (WS-ERP E21; Flectra-inspired).
+  HR Leave Balance (WS-ERP E21;).
 
   Tracks the remaining leave days per employee per leave type per year.
 

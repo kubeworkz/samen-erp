@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.MarketingAutomation.Trigger do
   @moduledoc """
-  Marketing Automation Trigger (WS-ERP E28; Flectra-inspired).
+  Marketing Automation Trigger (WS-ERP E28;).
 
   A trigger condition that starts a workflow.
 

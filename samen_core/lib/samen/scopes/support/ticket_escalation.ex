@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Support.TicketEscalation do
   @moduledoc """
-  Ticket Escalation (WS-ERP E16; Flectra-inspired helpdesk).
+  Ticket Escalation (WS-ERP E16; helpdesk).
 
   Tracks the escalation history of a support ticket. Each row records
   one escalation event — when the ticket was escalated, from whom,

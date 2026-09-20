@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Quality.Alert do
   @moduledoc """
-  Quality Alert (WS-ERP E19; Flectra-inspired).
+  Quality Alert (WS-ERP E19;).
 
   Triggered when a quality check fails. Alerts notify quality teams
   and track corrective actions.

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Pos.PosOrder do
   @moduledoc """
-  POS Order (WS-ERP E17; Flectra-inspired point of sale).
+  POS Order (WS-ERP E17; point of sale).
 
   A completed or in-progress sale at a POS terminal. Each order
   has line items, payments, and a total.

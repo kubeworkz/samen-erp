@@ -1,6 +1,6 @@
 defmodule Samen.PayrollLeaveTest do
   @moduledoc """
-  WS-ERP E21: Payroll + Leave — Flectra-inspired HR management.
+  WS-ERP E21: Payroll + Leave —  HR management.
 
   Tests:
     * pl1 LeaveType: default values and paid/unpaid

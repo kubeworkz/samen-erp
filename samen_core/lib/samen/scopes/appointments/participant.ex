@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Appointments.Participant do
   @moduledoc """
-  Appointments Participant (WS-ERP E27; Flectra-inspired).
+  Appointments Participant (WS-ERP E27;).
 
   An attendee on an appointment.
 

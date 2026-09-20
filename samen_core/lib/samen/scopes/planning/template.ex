@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Planning.Template do
   @moduledoc """
-  Planning Template (WS-ERP E34; Flectra-inspired).
+  Planning Template (WS-ERP E34;).
 
   Recurring schedule templates for generating shifts.
 

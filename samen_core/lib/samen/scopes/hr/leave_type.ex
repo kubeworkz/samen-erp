@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Hr.LeaveType do
   @moduledoc """
-  HR Leave Type (WS-ERP E21; Flectra-inspired).
+  HR Leave Type (WS-ERP E21;).
 
   Defines the types of leave available (vacation, sick, personal, etc.).
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Consolidation.CompanyGroup do
   @moduledoc """
-  Multi-Company Group (WS-ERP E24; Flectra-inspired).
+  Multi-Company Group (WS-ERP E24;).
 
   Defines a group of companies for consolidation reporting.
   A group has one parent (holding) company and zero or more subsidiaries.

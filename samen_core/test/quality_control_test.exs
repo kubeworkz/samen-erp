@@ -1,6 +1,6 @@
 defmodule Samen.QualityControlTest do
   @moduledoc """
-  WS-ERP E19: Quality Control — Flectra-inspired quality management.
+  WS-ERP E19: Quality Control —  quality management.
 
   Tests:
     * qc1 ControlPoint: default values and check types

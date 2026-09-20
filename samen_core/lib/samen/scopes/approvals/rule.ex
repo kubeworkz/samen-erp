@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Approvals.Rule do
   @moduledoc """
-  Approval Rule (WS-ERP E35; Flectra-inspired).
+  Approval Rule (WS-ERP E35;).
 
   Defines approval policies — what requires approval and by whom.
 

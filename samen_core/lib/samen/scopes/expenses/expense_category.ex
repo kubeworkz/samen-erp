@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Expenses.ExpenseCategory do
   @moduledoc """
-  Expense Category (WS-ERP E31; Flectra-inspired).
+  Expense Category (WS-ERP E31;).
 
   Defines expense types with GL account mapping and policy limits.
 

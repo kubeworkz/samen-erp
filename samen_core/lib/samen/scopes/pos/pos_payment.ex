@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Pos.PosPayment do
   @moduledoc """
-  POS Payment (WS-ERP E17; Flectra-inspired point of sale).
+  POS Payment (WS-ERP E17; point of sale).
 
   A payment record against a POS order. An order can have multiple
   payments (split tender: part cash, part card).

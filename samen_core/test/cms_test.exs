@@ -1,6 +1,6 @@
 defmodule Samen.CmsTest do
   @moduledoc """
-  WS-ERP E37: CMS-light — Flectra-inspired Website Builder (data layer).
+  WS-ERP E37: CMS-light —  Website Builder (data layer).
 
   ## Resources
 

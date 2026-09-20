@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Appointments.Type do
   @moduledoc """
-  Appointments AppointmentType (WS-ERP E27; Flectra-inspired).
+  Appointments AppointmentType (WS-ERP E27;).
 
   A meeting type with scheduling rules.
 

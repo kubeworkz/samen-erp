@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Planning.Resource do
   @moduledoc """
-  Planning Resource (WS-ERP E34; Flectra-inspired).
+  Planning Resource (WS-ERP E34;).
 
   An employee or piece of equipment that can be scheduled.
 

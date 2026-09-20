@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Community.ForumComment do
   @moduledoc """
-  Community Forum Comment (WS-ERP E25; Flectra-inspired).
+  Community Forum Comment (WS-ERP E25;).
 
   A reply/comment on a forum post.
 

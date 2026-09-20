@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Expenses.Approver do
   @moduledoc """
-  Expense Approver (WS-ERP E31; Flectra-inspired).
+  Expense Approver (WS-ERP E31;).
 
   Defines the approval chain for expense sheets.
 

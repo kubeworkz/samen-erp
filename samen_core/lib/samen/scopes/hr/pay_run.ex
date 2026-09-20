@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Hr.PayRun do
   @moduledoc """
-  HR Pay Run (WS-ERP E21; Flectra-inspired).
+  HR Pay Run (WS-ERP E21;).
 
   A payroll processing period (e.g., "January 2026 Monthly Payroll").
 

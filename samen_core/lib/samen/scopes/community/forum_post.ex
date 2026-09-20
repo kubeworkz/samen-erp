@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Community.ForumPost do
   @moduledoc """
-  Community Forum Post (WS-ERP E25; Flectra-inspired).
+  Community Forum Post (WS-ERP E25;).
 
   A topic/post in a forum. Users can reply with comments.
 

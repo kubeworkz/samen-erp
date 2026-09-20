@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Fleet.Maintenance do
   @moduledoc """
-  Fleet Vehicle Maintenance (WS-ERP E23; Flectra-inspired).
+  Fleet Vehicle Maintenance (WS-ERP E23;).
 
   A maintenance record for a vehicle — scheduled or unscheduled.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Elearning.Lesson do
   @moduledoc """
-  eLearning Lesson (WS-ERP E20; Flectra-inspired).
+  eLearning Lesson (WS-ERP E20;).
 
   An individual lesson within a course. Lessons can be text, video,
   or quiz-based.

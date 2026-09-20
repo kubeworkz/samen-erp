@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Survey.Question do
   @moduledoc """
-  Survey Question (WS-ERP E20; Flectra-inspired).
+  Survey Question (WS-ERP E20;).
 
   An individual question within a survey. Supports multiple question
   types with scoring.

@@ -1,6 +1,6 @@
 defmodule Samen.HelpdeskTest do
   @moduledoc """
-  Helpdesk enhancements (WS-ERP E16; Flectra-inspired).
+  Helpdesk enhancements (WS-ERP E16;).
 
   Tests:
     * h1 TicketCategory: tier-0 config with default priority

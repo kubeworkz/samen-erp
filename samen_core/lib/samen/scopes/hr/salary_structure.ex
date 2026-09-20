@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Hr.SalaryStructure do
   @moduledoc """
-  HR Salary Structure (WS-ERP E21; Flectra-inspired).
+  HR Salary Structure (WS-ERP E21;).
 
   Defines the components of an employee's salary (base, allowances,
   deductions).

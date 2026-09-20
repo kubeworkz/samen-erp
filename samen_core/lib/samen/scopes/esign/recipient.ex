@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Esign.Recipient do
   @moduledoc """
-  E-Signatures SignRecipient (WS-ERP E26; Flectra-inspired).
+  E-Signatures SignRecipient (WS-ERP E26;).
 
   An individual signer or approver on a signing request.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Approvals.Request do
   @moduledoc """
-  Approval Request (WS-ERP E35; Flectra-inspired).
+  Approval Request (WS-ERP E35;).
 
   An approval request submitted for review.
 

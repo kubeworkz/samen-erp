@@ -1,6 +1,6 @@
 defmodule Samen.SmsMarketingTest do
   @moduledoc """
-  WS-ERP E29: SMS Marketing — Flectra-inspired SMS campaigns.
+  WS-ERP E29: SMS Marketing —  SMS campaigns.
 
   ## Resources
 

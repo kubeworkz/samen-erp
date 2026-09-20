@@ -1,6 +1,6 @@
 defmodule Samen.ApprovalsTest do
   @moduledoc """
-  WS-ERP E35: Approvals — Flectra-inspired multi-level approval workflows.
+  WS-ERP E35: Approvals —  multi-level approval workflows.
 
   ## Resources
 

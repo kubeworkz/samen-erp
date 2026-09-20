@@ -1,6 +1,6 @@
 defmodule Samen.EmailMarketingTest do
   @moduledoc """
-  WS-ERP E33: Email Marketing — Flectra-inspired email campaigns.
+  WS-ERP E33: Email Marketing —  email campaigns.
 
   ## Resources
 

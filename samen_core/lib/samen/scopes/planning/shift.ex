@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Planning.Shift do
   @moduledoc """
-  Planning Shift (WS-ERP E34; Flectra-inspired).
+  Planning Shift (WS-ERP E34;).
 
   An individual scheduled shift or assignment.
 

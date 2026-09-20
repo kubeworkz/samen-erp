@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Ecommerce.ProductVariant do
   @moduledoc """
-  eCommerce ProductVariant (WS-ERP E18; Flectra-inspired).
+  eCommerce ProductVariant (WS-ERP E18;).
 
   Variants of a product (e.g., "Red / Large / XL"). Each variant
   has its own SKU, price, and optional barcode.

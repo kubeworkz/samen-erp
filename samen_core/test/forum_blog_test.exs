@@ -1,6 +1,6 @@
 defmodule Samen.ForumBlogTest do
   @moduledoc """
-  WS-ERP E25: Forum + Blog — Flectra-inspired community features.
+  WS-ERP E25: Forum + Blog —  community features.
 
   Tests:
     * fb1 Forum: state and settings

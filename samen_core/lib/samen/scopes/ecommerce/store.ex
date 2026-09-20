@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Ecommerce.Store do
   @moduledoc """
-  eCommerce Store (WS-ERP E18; Flectra-inspired).
+  eCommerce Store (WS-ERP E18;).
 
   The storefront configuration — one store per org (or multi-store
   with separate configs). Defines the store's identity, theme, and

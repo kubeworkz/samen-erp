@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Esign.Audit do
   @moduledoc """
-  E-Signatures SignAudit (WS-ERP E26; Flectra-inspired).
+  E-Signatures SignAudit (WS-ERP E26;).
 
   An immutable audit trail entry for e-signature events.
 

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.SocialMarketing.Post do
   @moduledoc """
-  Social Marketing Post (WS-ERP E30; Flectra-inspired).
+  Social Marketing Post (WS-ERP E30;).
 
   A social media post to publish.
 

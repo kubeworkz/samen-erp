@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Consolidation.ConsolidationRule do
   @moduledoc """
-  Multi-Company Consolidation Rule (WS-ERP E24; Flectra-inspired).
+  Multi-Company Consolidation Rule (WS-ERP E24;).
 
   Defines how to eliminate intercompany transactions during
   consolidation. Rules can be based on account pairs, transaction

@@ -1,6 +1,6 @@
 defmodule Samen.Scopes.Approvals.Step do
   @moduledoc """
-  Approval Step (WS-ERP E35; Flectra-inspired).
+  Approval Step (WS-ERP E35;).
 
   An individual step in an approval chain.
 
