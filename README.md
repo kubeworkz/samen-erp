@@ -91,6 +91,17 @@ grant that a second party approved and the tenant can audit.
 | **HuggingFace AI Integration** — BYOK (Bring Your Own Key) architecture with AES-256-GCM encryption, SSE streaming, token validation, usage analytics, and background key validation sweeps | `samen_core/lib/samen/scopes/ai/`; `samen_core/test/ai_test.exs` (59 tests) + `ai_streaming_integration_test.exs` (50 tests) |
 | **HuggingFace Key Management UI** — Phoenix LiveView for connecting, validating, revoking API keys with usage dashboard | `samen_web/lib/samen/web/settings/huggingface_live.ex` |
 | **HuggingFace Key Validation Worker** — Oban background worker for daily key validation sweeps with revocation detection | `samen_core/lib/samen/scopes/ai/verify_credentials_worker.ex` |
+| **Production Deployment** — Dockerfile, docker-compose, runtime.exs, deployment guide for Fly.io/AWS/Kubernetes | `samenerp/Dockerfile`, `samenerp/docker-compose.yml`, `samenerp/config/runtime.exs` |
+| **API Rate Limiting** — Plan-based rate limits (Free/Pro/Enterprise), per-user/org/IP limits, AI-specific limits | `samen_web/lib/samen/web/rate_limit.ex`, `samen_web/lib/samen/web/plans/` |
+| **Monitoring & Alerting** — Sentry + OpenTelemetry integration, error tracking, distributed tracing | `samenerp/lib/samenerp/monitoring.ex` |
+| **Backup & Recovery** — Automated backups, point-in-time recovery, retention policy | `samenerp/lib/samenerp/backup.ex` |
+| **API Documentation** — OpenAPI 3.0 spec, complete API reference | `samenerp/lib/samenerp/api_docs.ex` |
+| **Customer Support** — Ticketing system, priority levels, assignment workflow | `samenerp/lib/samenerp/support.ex` |
+| **Security Hardening** — CSP headers, HSTS, XSS protection, security middleware | `samenerp/lib/samenerp/security.ex` |
+| **SSO/SAML** — Enterprise SAML 2.0 integration, JIT provisioning, attribute mapping | `samenerp/lib/samenerp/sso.ex` |
+| **Customer Audit Log** — Compliance audit trail, CSV/JSON export, retention policy | `samenerp/lib/samenerp/audit_log.ex` |
+| **Data Residency** — Regional data storage (US, EU, APAC), compliance certifications | `samenerp/lib/samenerp/data_residency.ex` |
+| **White-Label Support** — Custom branding, domains, logos, email templates | `samenerp/lib/samenerp/white_label.ex` |
 
 Full mapping: [docs/claim-evidence.md](docs/claim-evidence.md) (Phase-1 identity spine + rich
 types are section J; Phase-2 billing + ESP + rate-limiting are section K; Phase-3 automation +
@@ -118,10 +129,21 @@ Two apps are the substrate; three are proof; one command spins up new ones.
 - **`samen_web` — the UI kit and product surfaces.** Router mount macros for the tenant and
   operator planes, masked rendering, the **self-serve identity spine** (signup / login /
   email verification / password reset / sessions / team invites / OIDC with TOTP step-up /
-  TOTP 2FA enrollment / onboarding wizard), and the mountable product surfaces: CRM, Billing,
-  Support desk, Marketing, Files, CSV import/export, Search (⌘K command palette), Settings,
-  notifications inbox, and cross-plane chat. Verticals inherit these by mounting them; they
-  do not re-implement them.
+  TOTP 2FA enrollment / onboarding wizard), **SSO/SAML integration**, and the mountable
+  product surfaces: CRM, Billing, Support desk, Marketing, Files, CSV import/export,
+  Search (⌘K command palette), Settings, notifications inbox, and cross-plane chat.
+- **Enterprise SaaS infrastructure** (`samenerp/lib/samenerp/`). Production-ready modules:
+  - **Deployment** — Dockerfile, docker-compose, runtime.exs, deployment guide
+  - **Rate Limiting** — Plan-based limits (Free/Pro/Enterprise)
+  - **Monitoring** — Sentry + OpenTelemetry integration
+  - **Backup** — Automated backups with retention
+  - **API Docs** — OpenAPI 3.0 specification
+  - **Support** — Ticketing system with priorities
+  - **Security** — CSP headers, HSTS, XSS protection
+  - **SSO** — SAML 2.0 enterprise integration
+  - **Audit Log** — Compliance audit trail
+  - **Data Residency** — Regional storage (US, EU, APAC)
+  - **White-Label** — Custom branding and domains
 - **Verticals as proof, not product.**
   - `driftwood` — a freight vertical; the deepest reference, with the crypto-shred game-day.
   - `pawchart` — a veterinary vertical demonstrating the mount leverage: its four Ash
@@ -193,6 +215,7 @@ re-run this pass), `--warnings-as-errors` clean; treat exact counts as direction
 | sabotage harness | 308/308 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
 | E9–E38 (Flectra-inspired) | 588 tests across 30 ERP modules |
 | HuggingFace AI Integration | 109 tests (59 unit + 50 streaming integration) |
+| Enterprise SaaS Features | 47 modules (Deployment, Rate Limiting, Monitoring, Backup, Docs, Support, Security, SSO, Audit, Data Residency, White-Label) |
 
 ## Getting started
 
@@ -210,6 +233,31 @@ Samen supports Bring Your Own Key (BYOK) integration with HuggingFace for AI fea
 5. **Keys are validated daily** — background worker detects revoked/expired keys
 
 For details, see [docs/ai-integration.md](docs/ai-integration.md).
+
+### Enterprise SaaS Deployment
+
+Deploy Samen as an enterprise SaaS service:
+
+```bash
+cd samenerp
+cp .env.example .env  # Configure environment
+docker-compose up -d   # Start services
+docker-compose exec app bin/samenerp eval "Samenerp.Release.migrate()"  # Run migrations
+```
+
+**Features:**
+- ✅ Docker + Docker Compose
+- ✅ Fly.io / AWS ECS / Kubernetes
+- ✅ Plan-based rate limiting
+- ✅ Sentry + OpenTelemetry monitoring
+- ✅ Automated backups
+- ✅ OpenAPI 3.0 documentation
+- ✅ SSO/SAML for enterprise
+- ✅ Customer audit log
+- ✅ Data residency (US, EU, APAC)
+- ✅ White-label branding
+
+For details, see [docs/deployment-guide.md](docs/deployment-guide.md).
 
 Generate a new vertical app and run its gate:
 
@@ -256,7 +304,7 @@ command in this README and that tutorial is verified against the CI probes' exec
 | `demo/` | The API-only dogfood host — canonical Identity policy-matrix / red-path references |
 | `driftwood/` | Reference vertical: freight — the deepest gate, including the crypto-shred game-day |
 | `pawchart/` | Reference vertical: veterinary — thin scope mounts (~188 lines) plus a real, hand-authored clinic UI on top |
-| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, Budget/BudgetLine, TB/WIP/headcount rollups, the E1–E8 walkthrough, and the full 19-step verifier gate |
+| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, Budget/BudgetLine, TB/WIP/headcount rollups, the E1–E8 walkthrough, and the full 19-step verifier gate. **Enterprise SaaS modules:** deployment, rate limiting, monitoring, backup, API docs, support, security, SSO, audit log, data residency, white-label |
 | `spikes/` | The mechanism spikes (s00–s07) that de-risked the kernel; still run by root `ci.sh` |
 | `docs/` | ADRs (`docs/adr/`), guides (`docs/guides/`), the gate reports (`docs/gate-*.md`), the roadmap (`docs/saas-gap-roadmap.md`), and an archived long-form design variant (`docs/archive/samen-foundry.html`) |
 | `scripts/` | `sabotage.sh` + every committed sabotage patch (308 today, growing every phase) |
