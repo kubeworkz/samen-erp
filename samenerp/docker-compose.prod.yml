@@ -28,7 +28,7 @@ services:
     env_file:
       - .env.production
     ports:
-      - "127.0.0.1:4050:4050"
+      - "4050:4050"
     environment:
       # Database
       DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-samenerp}
