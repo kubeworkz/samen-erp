@@ -1,8 +1,6 @@
 # Multi-stage Dockerfile for Samenerp
-# Based on the official Elixir Docker images
-
 # Stage 1: Build
-FROM hexpm/elixir:1.20.2-erlang-27.2-ubuntu-jammy-20240904 AS build
+FROM hexpm/elixir:1.20.2-erlang-27.2-ubuntu-noble-20240617 AS build
 
 # Install build dependencies
 RUN apt-get update -y && apt-get install -y build-essential git \
@@ -30,26 +28,11 @@ RUN cd samen_web && mix deps.get --only prod
 RUN cd samenerp && mix deps.get --only prod
 
 # Copy umbrella structure
-COPY --from=0 /app/samen_core ./samen_core
-COPY --from=0 /app/samen_web ./samen_web
-COPY --from=0 /app/samenerp ./samenerp
+COPY samen_core ./samen_core
+COPY samen_web ./samen_web
+COPY samenerp ./samenerp
 
 # Compile dependencies
-RUN cd samen_core && MIX_ENV=prod mix compile
-RUN cd samen_web && MIX_ENV=prod mix compile
-RUN cd samenerp && MIX_ENV=prod mix compile
-
-# Copy application source
-COPY samen_core/lib ./samen_core/lib
-COPY samen_web/lib ./samen_web/lib
-COPY samenerp/lib ./samenerp/lib
-
-# Copy priv directories (migrations, static assets, etc.)
-COPY samen_core/priv ./samen_core/priv
-COPY samen_web/priv ./samen_web/priv
-COPY samenerp/priv ./samenerp/priv
-
-# Compile application
 RUN cd samen_core && MIX_ENV=prod mix compile
 RUN cd samen_web && MIX_ENV=prod mix compile
 RUN cd samenerp && MIX_ENV=prod mix compile
@@ -58,10 +41,10 @@ RUN cd samenerp && MIX_ENV=prod mix compile
 RUN cd samenerp && MIX_ENV=prod mix release samenerp
 
 # Stage 2: Runtime
-FROM ubuntu:jelly-20240416 AS runtime
+FROM ubuntu:noble-20240617 AS runtime
 
 # Install runtime dependencies
-RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales \
+RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales curl \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 # Set the locale

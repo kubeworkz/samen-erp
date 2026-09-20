@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-samenerp}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Samenerp Application
+  app:
+    build:
+      context: ..
+      dockerfile: samenerp/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4050:4050"
+    environment:
+      # Database
+      DATABASE_URL: ecto://postgres:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-samenerp}
+      
+      # Phoenix
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      PHX_HOST: ${PHX_HOST:-65.109.232.89}
+      PHX_SERVER: true
+      
+      # KMS (use FileBacked for dev, AWS KMS for prod)
+      SAMEN_KMS_ADAPTER: ${SAMEN_KMS_ADAPTER:-file_backed}
+      SAMEN_KMS_FILE_PATH: ${SAMEN_KMS_FILE_PATH:-/app/data/kms_store.json}
+      
+      # HuggingFace AI Integration
+      SAMEN_HF_FINCH_POOL: ${SAMEN_HF_FINCH_POOL:-Samenerp.HFHTTPClient}
+      
+      # Stripe (optional)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      
+      # ESP (optional)
+      SAMEN_ESP_PROVIDER: ${SAMEN_ESP_PROVIDER:-}
+      SAMEN_POSTMARK_API_KEY: ${SAMEN_POSTMARK_API_KEY:-}
+      SAMEN_SES_REGION: ${SAMEN_SES_REGION:-}
+      SAMEN_RESEND_API_KEY: ${SAMEN_RESEND_API_KEY:-}
+      
+      # Observability (optional)
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      
+      # Node name for clustering
+      RELEASE_NODE: ${RELEASE_NODE:-samenerp@127.0.0.1}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_data:/app/data
+    command: ["start"]
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  app_data:
