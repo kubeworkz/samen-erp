@@ -1,24 +1,74 @@
 defmodule Mix.Tasks.Samenerp.Seed do
-  @shortdoc "Seed the dev DB for Samenerp (vault-aware, via Samen.Factory)"
+  @shortdoc "Seed the operator org and initial admin account"
   @moduledoc """
-  Seed the Samenerp DEV database with sample `Vertical.Record` rows so the
-  inherited pages + the `/api/v1` JSON:API render REAL data. Every seeded 🔒 field is
-  vault-routed (WS-D D4). Mirrors `mix pawchart.seed`.
+  Seed the Samen ERP operator org and initial admin account.
 
-      MIX_ENV=dev mix samenerp.seed
+  Creates the well-known operator org and an admin user that can access
+  the `/operator/*` control plane.
 
-  Prints the seeded org id; use `?org=<uuid>` on the LiveView URLs.
+  Usage:
+
+      mix samenerp.seed
+
+  With custom credentials:
+
+      mix samenerp.seed --email admin@mycompany.com --password mypassword
+
+  Options:
+
+      --email       Admin email (default: admin@samenerp.kubeworkz.io)
+      --password    Admin password (default: changeme123456)
+      --first-name  Admin first name (default: Admin)
+      --last-name   Admin last name (default: User)
+
+  Idempotent — safe to re-run. Short-circuits if already seeded.
   """
   use Mix.Task
 
   @requirements ["app.start"]
 
   @impl Mix.Task
-  def run(_args) do
-    org_id = Samenerp.Seeds.run()
-    Mix.shell().info("Seeded Samenerp dev tenant org: #{org_id}")
-    Mix.shell().info("Open: /billing?org=#{org_id}")
-    Mix.shell().info("API:  GET /api/v1/records (Bearer <tenant api_key for #{org_id}>)")
-    org_id
+  def run(args) do
+    opts = parse_args(args)
+
+    case Samenerp.Seeds.seed!(opts) do
+      {:ok, :already_seeded} ->
+        Mix.shell().info("Operator org already seeded — skipping.")
+
+      {:ok, %{org: org, user: user}} ->
+        Mix.shell().info("""
+
+        ✅ Operator org seeded successfully!
+
+        Operator Org: #{org.name} (#{org.id})
+        Admin User:   #{user.handle || "admin"} (#{user.id})
+
+        You can now log in at:
+          https://samenerp.kubeworkz.io/login
+
+        Default credentials:
+          Email:    #{opts[:email] || "admin@samenerp.kubeworkz.io"}
+          Password: #{opts[:password] || "changeme123456"}
+
+        ⚠️  Change the default password after first login!
+
+        The admin account has access to the operator control plane at:
+          https://samenerp.kubeworkz.io/operator/accounts
+        """)
+    end
+  end
+
+  defp parse_args(args) do
+    args
+    |> OptionParser.parse(
+      switches: [
+        email: :string,
+        password: :string,
+        first_name: :string,
+        last_name: :string
+      ],
+      aliases: [e: :email, p: :password]
+    )
+    |> elem(0)
   end
 end

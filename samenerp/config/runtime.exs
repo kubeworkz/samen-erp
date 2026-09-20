@@ -165,6 +165,13 @@ if config_env() == :prod do
   end
 
   # ---------------------------------------------------------------------------
+  # Operator Authority (prod)
+  # ---------------------------------------------------------------------------
+  # Replace the dev-only bypass with a real resolver that checks operator membership.
+  config :samenerp, :operator_authority,
+    {Samenerp.OperatorAuthz, :resolve_role, [:samenerp]}
+
+  # ---------------------------------------------------------------------------
   # Logger
   # ---------------------------------------------------------------------------
   config :logger, level: :info

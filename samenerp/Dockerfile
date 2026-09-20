@@ -34,7 +34,7 @@ RUN cd samenerp && mix release samenerp
 # ─── Stage 2: Runtime ───────────────────────────────────────────────────────
 FROM alpine:3.24.1 AS runtime
 
-RUN apk add --no-cache libstdc++ openssl ncurses curl
+RUN apk add --no-cache libstdc++ openssl ncurses curl postgresql16-client
 
 RUN addgroup --system -g 1000 app && \
     adduser --system -g app --uid 1000 --shell /bin/sh app
@@ -56,8 +56,11 @@ EXPOSE 4050
 ENV PORT=4050
 ENV PHX_SERVER=true
 
+# Copy entrypoint
+COPY --chown=app:app samenerp/entrypoint.sh /app/entrypoint.sh
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:4050/healthz || exit 1
 
-ENTRYPOINT ["/app/samenerp/bin/samenerp"]
-CMD ["start"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD []
