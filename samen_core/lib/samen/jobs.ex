@@ -193,7 +193,10 @@ defmodule Samen.Jobs do
       {"*/10 * * * *", Samen.BreakGlass.ReconcileWorker},
       {"0 3 * * *", Samen.Retention.SweepWorker},
       {"0 1 * * *", Samen.AuditEvent.PartitionManager},
-      {"*/30 * * * *", Samen.AI.Embeddings.ReembedWorker}
+      {"*/30 * * * *", Samen.AI.Embeddings.ReembedWorker},
+      # HuggingFace BYOK key validation — daily at 02:00 UTC. Detects revoked/expired
+      # keys and clears credentials so tenants see honest "Setup Required" UI.
+      {"0 2 * * *", Samen.Scopes.Ai.VerifyCredentialsWorker}
     ]
   end
 
