@@ -26,7 +26,6 @@ defmodule Samenerp.MixProject do
       releases: [
         samenerp: [
           include_executables: false,
-          applications: [:runtime_tools],
           steps: [:assemble, :tar]
         ]
       ]
