@@ -19,7 +19,10 @@ defmodule Samenerp.MixProject do
       consolidate_protocols: Mix.env() != :test,
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      aliases: aliases()
+      aliases: aliases(),
+      name: "samenerp",
+      source_url: "https://github.com/kubeworkz/samen-erp",
+      docs: docs()
     ]
   end
 
@@ -64,7 +67,32 @@ defmodule Samenerp.MixProject do
       # leak surface and asserts `db_statement: :disabled` on it. Dropping that config
       # then flips the gate (the D6 flagship sabotage). The API+SDK ride transitively
       # from samen_core; only the Ecto integration must be a direct dep to arm the tier.
-      {:opentelemetry_ecto, "~> 1.2"}
+      {:opentelemetry_ecto, "~> 1.2"},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md"],
+      source_url: "https://github.com/kubeworkz/samen-erp",
+      homepage_url: "https://ckluis.github.io/samen/",
+      formatters: ["html", "epub"],
+      api_reference: true,
+      groups_for_modules: [
+        "Enterprise Infrastructure": [
+          Samenerp.Monitoring,
+          Samenerp.Backup,
+          Samenerp.ApiDocs,
+          Samenerp.Support,
+          Samenerp.Security,
+          Samenerp.Sso,
+          Samenerp.AuditLog,
+          Samenerp.DataResidency,
+          Samenerp.WhiteLabel
+        ]
+      ]
     ]
   end
 
