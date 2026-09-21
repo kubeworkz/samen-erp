@@ -96,6 +96,14 @@ defmodule Samen.Web.Auth.LoginLive do
             <.button type="submit" variant="primary" id="login-submit">Sign in</.button>
           </:actions>
         </.simple_form>
+
+        <div style="text-align:center;margin-top:14px">
+          <a href="/reset" style="font-size:13px;color:var(--muted)">Forgot your password?</a>
+        </div>
+
+        <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted)">
+          Don't have an account? <a href="/signup" style="color:#0e7c5a">Sign up</a>
+        </div>
       </div>
     </div>
     """
