@@ -16,7 +16,12 @@ defmodule SamenerpWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
+  socket("/live", Phoenix.LiveView.Socket,
+    websocket: [
+      connect_info: [session: @session_options],
+      check_origin: ["//samenerp.kubeworkz.io", "//65.109.232.89", "//localhost"]
+    ]
+  )
 
   # ADR-009 + ADR-042 C3: serve the samen_web UI kit stylesheet AND the vendored Phoenix
   # LiveView JS client at `/assets/*`, all from dependency priv (same files as every
