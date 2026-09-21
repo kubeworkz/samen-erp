@@ -35,6 +35,9 @@ defmodule Samenerp.Seeds do
   Returns `{:ok, :already_seeded}` if already seeded.
   """
   def seed! do
+    # Ensure the app and its repos are started
+    Application.ensure_all_started(:samenerp)
+
     if operator_org_seeded?() do
       {:ok, :already_seeded}
     else
@@ -52,6 +55,9 @@ defmodule Samenerp.Seeds do
     * `:last_name` — admin last name (default: "User")
   """
   def seed!(opts) do
+    # Ensure the app and its repos are started
+    Application.ensure_all_started(:samenerp)
+
     if operator_org_seeded?() do
       {:ok, :already_seeded}
     else
