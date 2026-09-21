@@ -127,6 +127,7 @@ defmodule Samen.UI do
   defdelegate sidebar(assigns), to: Samen.UI.Nav
   defdelegate nav_group(assigns), to: Samen.UI.Nav
   defdelegate nav_item(assigns), to: Samen.UI.Nav
+  defdelegate logout_form(assigns), to: Samen.UI.Nav
   defdelegate module_nav(assigns), to: Samen.UI.Nav
   defdelegate host_nav_extra(assigns), to: Samen.UI.Nav
   defdelegate topbar(assigns), to: Samen.UI.Nav
@@ -195,17 +196,4 @@ defmodule Samen.UI do
   defdelegate palette_label(display), to: Samen.UI.Helpers
   defdelegate social_links(assigns), to: Samen.UI.Helpers
   defdelegate social_networks(), to: Samen.UI.Helpers
-
-  @doc """
-  Renders a small logout button for the sidebar footer. Uses a POST form
-  since the /logout route is CSRF-protected.
-  """
-  def logout_form(assigns) do
-    ~H"""
-    <form action="/logout" method="post" style="margin-left:auto;display:flex;align-items:center">
-      <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-      <button type="submit" style="background:none;border:none;color:var(--faint);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:6px" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--faint)'">Logout</button>
-    </form>
-    """
-  end
 end

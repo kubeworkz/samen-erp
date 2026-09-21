@@ -52,6 +52,19 @@ defmodule Samen.UI.Nav do
   end
 
   @doc """
+  A small logout button for the sidebar footer. Uses a POST form
+  since the /logout route is CSRF-protected (R6 — state-changing POST).
+  """
+  def logout_form(assigns) do
+    ~H"""
+    <form action="/logout" method="post" style="margin-left:auto;display:flex;align-items:center">
+      <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+      <button type="submit" style="background:none;border:none;color:var(--faint);font-size:12px;cursor:pointer;padding:2px 6px;border-radius:6px" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--faint)'">Logout</button>
+    </form>
+    """
+  end
+
+  @doc """
   A labelled nav group: a `.grp` uppercase label followed by its `nav_item/1`s.
   """
   attr :label, :string, required: true
