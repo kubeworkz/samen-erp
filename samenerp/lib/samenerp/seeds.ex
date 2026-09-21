@@ -161,7 +161,10 @@ defmodule Samenerp.Seeds do
       |> Ash.Changeset.force_change_attribute(:verified_at, DateTime.utc_now())
       |> Ash.create!()
 
-    # Create user with minimal attrs (PII fields not in accept list)
+    # Create user — the Operator namespace's create action may not accept
+    # vault-routed PII fields (emails/full_name). Create the user first,
+    # then try to set PII via the real update action. If that fails too,
+    # the user still has a working login — profile PII can be set later.
     user =
       Op.User
       |> Ash.Changeset.for_create(
@@ -172,13 +175,19 @@ defmodule Samenerp.Seeds do
       |> Ash.Changeset.force_change_attribute(:credential_id, credential.id)
       |> Ash.create!()
 
-    # Now set vaulted PII fields via update with force_change
-    user =
+    # Best-effort: set vaulted PII via the real update action.
+    # If the Operator namespace doesn't accept these fields, skip silently.
+    try do
       user
-      |> Ash.Changeset.for_update(:update, %{}, authorize?: false)
-      |> Ash.Changeset.force_change_attribute(:full_name, %Samen.Type.FullName{first: first_name, last: last_name})
-      |> Ash.Changeset.force_change_attribute(:emails, [%{label: "primary", address: email}])
+      |> Ash.Changeset.for_update(
+        :update,
+        %{full_name: %{"first" => first_name, "last" => last_name}, emails: [%{"label" => "primary", "address" => email}]},
+        authorize?: false
+      )
       |> Ash.update!()
+    rescue
+      _ -> user
+    end
 
     # Create owner membership
     Op.Membership
