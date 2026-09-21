@@ -74,6 +74,7 @@ defmodule Samen.Web.Flags.Live do
           <div class="m">
             <b>{Mount.label(@mount, :user_name, "Signed in")}</b><span>{Mount.label(@mount, :user_role, "admin")}</span>
           </div>
+          <.logout_form />
         </div>
       </:footer>
     </.sidebar>

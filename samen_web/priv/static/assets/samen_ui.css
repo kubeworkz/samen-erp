@@ -158,8 +158,6 @@ svg { display: block; }
 .nav a .cnt { margin-left: auto; font-size: 11px; color: var(--faint); font-family: var(--mono); }
 .nav a .dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 
-.nav { flex: 1; overflow-y: auto; }
-
 .side .foot {
   margin-top: auto; padding: 10px; border-top: 1px solid var(--line);
   display: flex; align-items: center; gap: 9px;

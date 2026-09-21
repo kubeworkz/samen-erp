@@ -196,6 +196,7 @@ defmodule Samen.Web.CRM.Live do
           <div class="m">
             <b>{Mount.label(@mount, :user_name, "Signed in")}</b><span>{Mount.label(@mount, :user_role, "member")}</span>
           </div>
+          <.logout_form />
         </div>
       </:footer>
     </.sidebar>

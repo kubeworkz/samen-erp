@@ -65,6 +65,7 @@ defmodule Samen.Web.Automation.Live do
           <div class="m">
             <b>{Samen.Web.Mount.label(@mount, :user_name, "Signed in")}</b><span>{Samen.Web.Mount.label(@mount, :user_role, "admin")}</span>
           </div>
+          <.logout_form />
         </div>
       </:footer>
     </Samen.UI.sidebar>
