@@ -148,7 +148,7 @@ defmodule Samenerp.Seeds do
   end
 
   defp create_user_and_credential(org, email, password, first_name, last_name) do
-    # Create credential
+    # Create credential (email_bidx is private — force_change)
     {hash, scheme} = Samen.Auth.Hasher.hash(password)
     bidx = compute_bidx(email)
 
@@ -161,18 +161,23 @@ defmodule Samenerp.Seeds do
       |> Ash.Changeset.force_change_attribute(:verified_at, DateTime.utc_now())
       |> Ash.create!()
 
-    # Create user (PII fields are vaulted — use force_change_attribute)
+    # Create user with vaulted PII via Samen.Factory (routes through Vault.Change)
     user =
-      Op.User
-      |> Ash.Changeset.for_create(
-        :create,
-        %{org_id: org.id, handle: "#{first_name} #{last_name}"},
+      Samen.Factory.create!(
+        Op.User,
+        Map.merge(
+          %{org_id: org.id, handle: "#{first_name} #{last_name}"},
+          Samen.Factory.person(first_name, last_name, email: email)
+        ),
         authorize?: false
       )
+
+    # Set credential_id (private — force_change)
+    user =
+      user
+      |> Ash.Changeset.for_update(:update, %{}, authorize?: false)
       |> Ash.Changeset.force_change_attribute(:credential_id, credential.id)
-      |> Ash.Changeset.force_change_attribute(:full_name, %Samen.Type.FullName{first: first_name, last: last_name})
-      |> Ash.Changeset.force_change_attribute(:emails, [%{label: "primary", address: email}])
-      |> Ash.create!()
+      |> Ash.update!()
 
     # Create owner membership
     Op.Membership
