@@ -58,6 +58,7 @@ ENV PHX_SERVER=true
 
 # Copy entrypoint
 COPY --chown=app:app samenerp/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:4050/healthz || exit 1
