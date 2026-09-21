@@ -14,6 +14,7 @@ RUN mix local.hex --force && mix local.rebar --force
 WORKDIR /app
 
 # Copy the full monorepo
+ARG CACHEBUST=1
 COPY . .
 
 # Build顺序 matters: each package compiles its own _build, then the next
