@@ -120,19 +120,29 @@ defmodule Samenerp.Seeds do
   end
 
   defp create_admin_user(org, email, password, first_name, last_name) do
+    bidx = compute_bidx(email)
+
     # Check if admin already exists
-    case Op.Credential
-         |> Ash.Query.filter(email_bidx == ^compute_bidx(email))
-         |> Ash.Query.limit(1)
-         |> Ash.read(authorize?: false) do
+    creds =
+      Op.Credential
+      |> Ash.Query.filter(email_bidx == ^bidx)
+      |> Ash.Query.limit(1)
+      |> Ash.read!(authorize?: false)
+
+    case creds do
       [cred] ->
         # Credential exists — find the user
-        case Op.User |> Ash.Query.filter(credential_id == ^cred.id) |> Ash.read(authorize?: false) do
+        users =
+          Op.User
+          |> Ash.Query.filter(credential_id == ^cred.id)
+          |> Ash.read!(authorize?: false)
+
+        case users do
           [user] -> {user, cred}
-          [] -> create_user_and_credential(org, email, password, first_name, last_name)
+          _ -> create_user_and_credential(org, email, password, first_name, last_name)
         end
 
-      [] ->
+      _ ->
         create_user_and_credential(org, email, password, first_name, last_name)
     end
   end
