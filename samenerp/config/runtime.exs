@@ -49,7 +49,9 @@ if config_env() == :prod do
       port: port
     ],
     secret_key_base: secret_key_base,
-    server: true
+    server: true,
+    # Allow WebSocket connections from production domains
+    check_origin: ["//#{host}", "//65.109.232.89"]
 
   # ---------------------------------------------------------------------------
   # KMS Configuration
