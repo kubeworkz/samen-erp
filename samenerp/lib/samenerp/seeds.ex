@@ -161,20 +161,17 @@ defmodule Samenerp.Seeds do
       |> Ash.Changeset.force_change_attribute(:verified_at, DateTime.utc_now())
       |> Ash.create!()
 
-    # Create user
+    # Create user (PII fields are vaulted — use force_change_attribute)
     user =
       Op.User
       |> Ash.Changeset.for_create(
         :create,
-        %{
-          org_id: org.id,
-          handle: "#{first_name} #{last_name}",
-          full_name: %Samen.Type.FullName{first: first_name, last: last_name},
-          emails: [%{label: "primary", address: email}]
-        },
+        %{org_id: org.id, handle: "#{first_name} #{last_name}"},
         authorize?: false
       )
       |> Ash.Changeset.force_change_attribute(:credential_id, credential.id)
+      |> Ash.Changeset.force_change_attribute(:full_name, %Samen.Type.FullName{first: first_name, last: last_name})
+      |> Ash.Changeset.force_change_attribute(:emails, [%{label: "primary", address: email}])
       |> Ash.create!()
 
     # Create owner membership
