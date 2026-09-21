@@ -1,5 +1,5 @@
 defmodule Samenerp.Marketing do
-  @moduledoc """ Samenerp Marketing domain. """
+  @moduledoc "Samenerp Marketing domain."
   use Ash.Domain, validate_config_inclusion?: false
 
   use Samen.Scopes.Marketing,

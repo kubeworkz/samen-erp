@@ -1,5 +1,5 @@
 defmodule Samenerp.Crm do
-  @moduledoc """ Samenerp CRM domain. """
+  @moduledoc "Samenerp CRM domain."
   use Ash.Domain, validate_config_inclusion?: false
 
   use Samen.Scopes.Crm,
