@@ -8,6 +8,8 @@ config :samenerp,
   ecto_repos: [Samenerp.Repo],
   ash_domains: [
     Samenerp.Billing,
+    Samenerp.Crm,
+    Samenerp.Marketing,
     Samenerp.Erp,
     Samenerp.Vertical,
     Samenerp.Aggregate,
@@ -20,6 +22,8 @@ config :samenerp,
 # resource + the token-blind aggregate + the Primitives mount + the operator plane.
 config :samen_core, :ash_domains, [
   Samenerp.Billing,
+  Samenerp.Crm,
+  Samenerp.Marketing,
   Samenerp.Erp,
   Samenerp.Vertical,
   Samenerp.Aggregate,
