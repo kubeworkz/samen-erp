@@ -10,27 +10,15 @@ until pg_isready -h db -p 5432 -U postgres 2>/dev/null; do
 done
 echo "PostgreSQL is ready."
 
-# Start the application first (needed for repo access)
-echo "Starting application (background)..."
-/app/samenerp/bin/samenerp daemon &
-APP_PID=$!
+# Run migrations and seed via eval (starts app briefly)
+echo "Running migrations and seeding..."
+/app/samenerp/bin/samenerp eval "
+  Application.ensure_all_started(:samenerp)
+  Samenerp.Release.migrate()
+  Samenerp.Seeds.seed!()
+  IO.puts(\"Migration and seed complete.\")
+" || true
 
-# Wait for the app to be ready
-echo "Waiting for application to start..."
-sleep 5
-
-# Run migrations
-echo "Running migrations..."
-/app/samenerp/bin/samenerp eval "Samenerp.Release.migrate()" || true
-
-# Seed the operator org (idempotent — safe to re-run)
-echo "Seeding operator org..."
-/app/samenerp/bin/samenerp eval "Samenerp.Seeds.seed!()" || true
-
-# Stop the daemon and start foreground
-echo "Stopping daemon, starting foreground..."
-/app/samenerp/bin/samenerp stop || true
-sleep 2
-
-echo "Starting Samen ERP (foreground)..."
+# Start the application in foreground
+echo "Starting Samen ERP..."
 exec /app/samenerp/bin/samenerp start
