@@ -161,22 +161,23 @@ defmodule Samenerp.Seeds do
       |> Ash.Changeset.force_change_attribute(:verified_at, DateTime.utc_now())
       |> Ash.create!()
 
-    # Create user with vaulted PII via Samen.Factory (routes through Vault.Change)
+    # Create user with minimal attrs (PII fields not in accept list)
     user =
-      Samen.Factory.create!(
-        Op.User,
-        Map.merge(
-          %{org_id: org.id, handle: "#{first_name} #{last_name}"},
-          Samen.Factory.person(first_name, last_name, email: email)
-        ),
+      Op.User
+      |> Ash.Changeset.for_create(
+        :create,
+        %{org_id: org.id, handle: "#{first_name} #{last_name}"},
         authorize?: false
       )
+      |> Ash.Changeset.force_change_attribute(:credential_id, credential.id)
+      |> Ash.create!()
 
-    # Set credential_id (private — force_change)
+    # Now set vaulted PII fields via update with force_change
     user =
       user
       |> Ash.Changeset.for_update(:update, %{}, authorize?: false)
-      |> Ash.Changeset.force_change_attribute(:credential_id, credential.id)
+      |> Ash.Changeset.force_change_attribute(:full_name, %Samen.Type.FullName{first: first_name, last: last_name})
+      |> Ash.Changeset.force_change_attribute(:emails, [%{label: "primary", address: email}])
       |> Ash.update!()
 
     # Create owner membership
