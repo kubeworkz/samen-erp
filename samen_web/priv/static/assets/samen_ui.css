@@ -1015,3 +1015,11 @@ td.right { text-align: right; }
 .geo-map-data { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
 .geo-map-data th, .geo-map-data td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line, #E7E7EC); }
 .geo-map-data td { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Global input height — taller inputs for better usability */
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="url"], input[type="tel"], input[type="search"], input[type="date"], select, textarea {
+  min-height: 42px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
