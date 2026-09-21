@@ -127,7 +127,13 @@ defmodule SamenerpWeb.Router do
     #    resolution (query-param convenience in dev/test; session-only in prod).
     samen_module_routes(:billing, Samenerp.Billing, repo: Samenerp.Repo, labels: @current_org_labels)
 
-    # 1b. WS-ERP E8 — the six ERP tenant surfaces (CoA / journal / AP inbox /
+    # 1a. CRM — Companies, Contacts, Pipeline, Opportunities (inherited from samen_core)
+    samen_module_routes(:crm, Samenerp.Crm, repo: Samenerp.Repo, labels: @current_org_labels)
+
+    # 1b. Marketing — Campaigns, Segments, Subscribers, Templates (inherited from samen_core)
+    samen_module_routes(:marketing, Samenerp.Marketing, repo: Samenerp.Repo, labels: @current_org_labels)
+
+    # 1c. WS-ERP E8 — the six ERP tenant surfaces (CoA / journal / AP inbox /
     #    stock / purchase orders / work orders) over the `Samenerp.Erp` mount
     #    in ONE line: the surface allowlist + bounded columns live in
     #    `Samen.Web.Erp` (the registry IS the boundary), the generic

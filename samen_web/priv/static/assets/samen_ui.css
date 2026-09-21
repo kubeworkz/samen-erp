@@ -106,7 +106,11 @@ svg { display: block; }
   display: flex;
   flex-direction: column;
   padding: 14px 12px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100vh;
+  position: sticky;
+  top: 16px;
 }
 .ws { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; }
 .ws .logo {
@@ -153,6 +157,8 @@ svg { display: block; }
 .nav a.on .i { color: var(--brand); }
 .nav a .cnt { margin-left: auto; font-size: 11px; color: var(--faint); font-family: var(--mono); }
 .nav a .dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+.nav { flex: 1; overflow-y: auto; }
 
 .side .foot {
   margin-top: auto; padding: 10px; border-top: 1px solid var(--line);
