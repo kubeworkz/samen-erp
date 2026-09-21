@@ -674,5 +674,18 @@
       "eql": "Samenerp.Operator.Sla"
     }
   },
-  "global": {}
+  "global": {},
+  "zcm": "Samenerp.Crm.Company",
+  "zpr": "Samenerp.Crm.Person",
+  "zpl": "Samenerp.Crm.Pipeline",
+  "zop": "Samenerp.Crm.Opportunity",
+  "zat": "Samenerp.Crm.Attachment",
+  "zmc": "Samenerp.Marketing.Campaign",
+  "zmg": "Samenerp.Marketing.Segment",
+  "zms": "Samenerp.Marketing.Subscriber",
+  "zmt": "Samenerp.Marketing.Template",
+  "zmn": "Samenerp.Marketing.Send",
+  "zme": "Samenerp.Marketing.EmailEvent",
+  "zmp": "Samenerp.Marketing.Suppression",
+  "zmv": "Samenerp.Marketing.ConsentEvent"
 }
