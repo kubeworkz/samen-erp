@@ -133,6 +133,29 @@ defmodule SamenerpWeb.Router do
     # 1b. Marketing — Campaigns, Segments, Subscribers, Templates (inherited from samen_core)
     samen_module_routes(:marketing, Samenerp.Marketing, repo: Samenerp.Repo, labels: @current_org_labels)
 
+    # 1c. Support — Tickets + detail + KB (inherited from samen_core's Support
+    #     scope, mounted on the Samenerp.Support domain).
+    samen_module_routes(:support, Samenerp.Support, repo: Samenerp.Repo, labels: @current_org_labels)
+
+    # 1d. Automation — the tenant workflow builder (ADR-039/T118), mounted on
+    #     the Samenerp.Automation domain. Tenant plane ONLY (INV-2).
+    samen_automation_routes(:automation, Samenerp.Automation,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    # 1e. Settings — Profile · API keys · HuggingFace · Security · Invitations ·
+    #     Reveal approvals (WS-E E5), mounted over this app's Identity namespace
+    #     (`Samenerp.Operator` — Credential + Session + TOTP columns already exist
+    #     from `mount_operator_scopes`). `spine_*` opt-ins flip Security from its
+    #     honest placeholders to the REAL session list/revoke + 2FA enrollment.
+    samen_settings_routes(:settings, Samenerp.Operator,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels,
+      spine_totp: true,
+      spine_sessions: true
+    )
+
     # 1c. WS-ERP E8 — the six ERP tenant surfaces (CoA / journal / AP inbox /
     #    stock / purchase orders / work orders) over the `Samenerp.Erp` mount
     #    in ONE line: the surface allowlist + bounded columns live in

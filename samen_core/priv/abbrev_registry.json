@@ -391,7 +391,19 @@
     "zmn": "Samenerp.Marketing.Send",
     "zme": "Samenerp.Marketing.EmailEvent",
     "zmp": "Samenerp.Marketing.Suppression",
-    "zmv": "Samenerp.Marketing.ConsentEvent"
+    "zmv": "Samenerp.Marketing.ConsentEvent",
+    "ztk": "Samenerp.Support.Ticket",
+    "zcv": "Samenerp.Support.Conversation",
+    "zmo": "Samenerp.Support.Message",
+    "zag": "Samenerp.Support.Agent",
+    "zla": "Samenerp.Support.Sla",
+    "zma": "Samenerp.Support.Macro",
+    "zca": "Samenerp.Support.Csat",
+    "zct": "Samenerp.Support.CsatSurveyToken",
+    "zwf": "Samenerp.Automation.Workflow",
+    "zrm": "Samenerp.Automation.Reminder",
+    "zes": "Samenerp.Automation.Escalation",
+    "zrn": "Samenerp.Automation.Run"
   },
   "hosts": {
     "demo": {

@@ -91,7 +91,6 @@ defmodule Samenerp.MixProject do
           Samenerp.Monitoring,
           Samenerp.Backup,
           Samenerp.ApiDocs,
-          Samenerp.Support,
           Samenerp.Security,
           Samenerp.Sso,
           Samenerp.AuditLog,

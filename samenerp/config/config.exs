@@ -10,6 +10,8 @@ config :samenerp,
     Samenerp.Billing,
     Samenerp.Crm,
     Samenerp.Marketing,
+    Samenerp.Support,
+    Samenerp.Automation,
     Samenerp.Erp,
     Samenerp.Vertical,
     Samenerp.Aggregate,
@@ -24,12 +26,23 @@ config :samen_core, :ash_domains, [
   Samenerp.Billing,
   Samenerp.Crm,
   Samenerp.Marketing,
+  Samenerp.Support,
+  Samenerp.Automation,
   Samenerp.Erp,
   Samenerp.Vertical,
   Samenerp.Aggregate,
   Samenerp.Primitives,
   Samenerp.Operator
 ]
+
+# ADR-039 §3.1 — the Automation engine seams (driftwood's exact wiring): the
+# kernel reads workflows through the MFA seam, never a hard-coded resource.
+config :samen_core, Samen.Automation,
+  workflow_module: Samenerp.Automation.Workflow,
+  repo: Samenerp.Repo
+
+# T3.6 — the SlaBreachWorker's ticket resource (the scope's documented wire).
+config :samen_core, :support_sla_breach_ticket_resource, Samenerp.Support.Ticket
 
 config :ash, disable_async?: true
 config :ash, :missed_notifications, :ignore
