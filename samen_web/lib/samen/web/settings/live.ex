@@ -6,7 +6,7 @@ defmodule Samen.Web.Settings.Live do
   """
   use Phoenix.Component
 
-  import Samen.UI, only: [sidebar: 1]
+  import Samen.UI, only: [sidebar: 1, logout_form: 1]
 
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
@@ -56,6 +56,17 @@ defmodule Samen.Web.Settings.Live do
           Reveal approvals
         </a>
       </nav>
+
+      <:footer>
+        <div class="foot">
+          <div class="av" style="background:#DDE2F5;color:#3B4CCA">{Mount.label(@mount, :user_initials, "S")}</div>
+          <div class="m">
+            <b>{Mount.label(@mount, :user_name, "Signed in")}</b>
+            <span>{Mount.label(@mount, :user_role, "member")}</span>
+          </div>
+          <.logout_form />
+        </div>
+      </:footer>
     </.sidebar>
     """
   end

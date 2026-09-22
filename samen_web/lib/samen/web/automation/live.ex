@@ -15,6 +15,8 @@ defmodule Samen.Web.Automation.Live do
   """
   use Phoenix.Component
 
+  import Samen.UI
+
   @doc "Read the mount out of the session (see `Samen.Web.Live.assign_mount/2`)."
   defdelegate assign_mount(socket, session), to: Samen.Web.Live
 

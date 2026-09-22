@@ -143,6 +143,7 @@ defmodule Samen.Web.Operator.Live do
           <div class="m">
             <b>{label(@mount, :operator_user, "Operator")}</b><span>{label(@mount, :operator_role, "SaaS staff")}</span>
           </div>
+          <.logout_form />
         </div>
       </:footer>
     </.sidebar>
