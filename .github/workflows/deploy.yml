@@ -1,0 +1,63 @@
+name: Deploy
+
+# Production deploy, gated on CI:
+#   push to main → CI (ci.yml) → on SUCCESS this workflow SSHes to the server
+#   and runs scripts/deploy-prod.sh pinned to the exact CI-validated SHA.
+# CI failure ⇒ this never runs ⇒ the old container keeps serving.
+# A manual run (workflow_dispatch) deploys github.sha at the operator's own
+# risk — use it for emergencies, not routine releases.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two deploys at once; queue rather than kill a mid-swap deploy.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: ubuntu@65.109.232.89
+
+jobs:
+  deploy:
+    name: Deploy to production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      # Checkout the revision whose CI run triggered us (or github.sha on
+      # manual dispatch) — the script is read from THIS tree and handed to the
+      # server over stdin, so server and runner always deploy identical code.
+      - name: Check out the CI-validated revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install deploy key + pin host key
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' '65.109.232.89 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDCica1GLo+FC+WEsWXNn5IFKLeZ63y3HJHAOFP+XkgO' \
+            >> ~/.ssh/known_hosts
+
+      - name: Deploy ${{ github.event.workflow_run.head_sha || github.sha }}
+        env:
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=15 \
+            "$DEPLOY_HOST" "TARGET_SHA=$TARGET_SHA bash -s" \
+            < scripts/deploy-prod.sh

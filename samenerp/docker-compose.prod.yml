@@ -3,8 +3,11 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Tracked base (placeholders) first, then the UNTRACKED server-only secrets
+    # file (gitignored — never reset away by scripts/deploy-prod.sh).
     env_file:
       - .env.production
+      - .env.production.local
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -27,6 +30,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
+      - .env.production.local
     ports:
       - "8080:4050"
     environment:
@@ -42,19 +46,15 @@ services:
       SAMEN_KMS_ADAPTER: ${SAMEN_KMS_ADAPTER:-file_backed}
       SAMEN_KMS_FILE_PATH: ${SAMEN_KMS_FILE_PATH:-/app/data/kms_store.json}
       
-      # HuggingFace AI Integration
-      SAMEN_HF_FINCH_POOL: ${SAMEN_HF_FINCH_POOL:-Samenerp.HFHTTPClient}
-      
+      # NOTE: ESP keys (SAMEN_ESP_PROVIDER, SAMEN_RESEND_API_KEY, …) and
+      # SAMEN_HF_* come from the untracked `.env.production.local` via env_file.
+      # Do NOT add them to `environment:` — compose `environment:` interpolation
+      # reads only the host shell / compose-level `.env`, so `${VAR:-}` resolves
+      # to empty and OVERRIDES the real env_file value (the empty-RESEND bug).
+
       # Stripe (optional)
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      
-      # ESP (optional)
-      SAMEN_ESP_PROVIDER: ${SAMEN_ESP_PROVIDER:-}
-      SAMEN_POSTMARK_API_KEY: ${SAMEN_POSTMARK_API_KEY:-}
-      SAMEN_SES_REGION: ${SAMEN_SES_REGION:-}
-      SAMEN_RESEND_API_KEY: ${SAMEN_RESEND_API_KEY:-}
-      SAMEN_EMAIL_FROM: ${SAMEN_EMAIL_FROM:-noreply@samenerp.kubeworkz.io}
       
       # Observability (optional)
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -70,8 +70,13 @@ services:
       - app_data:/app/data
     command: ["start"]
 
-  # Nginx Reverse Proxy
+  # Nginx Reverse Proxy — LEGACY/optional. Production traffic is terminated by
+  # the SYSTEM nginx on the host (certbot certs, ports 80/443); this container
+  # would fail binding :80 and abort `docker compose up -d` for everyone. The
+  # profile keeps it out of the default up while remaining startable with
+  # `--profile nginx` (e.g. a container-only environment).
   nginx:
+    profiles: ["nginx"]
     image: nginx:alpine
     restart: unless-stopped
     ports:

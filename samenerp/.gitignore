@@ -7,5 +7,8 @@ erl_crash.dump
 *.ez
 *.beam
 /config/*.secret.exs
+# Server-only production secrets (Resend key, app DB role, …) — never committed.
+# Loaded as the SECOND compose env_file; see scripts/deploy-prod.sh header.
+.env.production.local
 .elixir_ls/
 /priv/dev_keystore/

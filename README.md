@@ -237,9 +237,11 @@ For details, see [docs/ai-integration.md](docs/ai-integration.md).
 
 ### Enterprise SaaS Deployment
 
-Deploy Samen as an enterprise SaaS service:
+Deploy Samen as an enterprise SaaS service. Production deploys are **CI-gated and automated**: every push to `main` runs the full `ci.sh` gate (`.github/workflows/ci.yml`); on success `deploy.yml` SSHes to the prod host and runs `scripts/deploy-prod.sh`, which syncs the tree to the release commit, rebuilds the image, applies migrations, gates on health + smoke + a live ESP check, and rolls back automatically if any gate fails.
 
-```bash
+The manual fallback (operator-run):
+
+```bash operator-todo
 cd samenerp
 cp .env.example .env  # Configure environment
 docker-compose up -d   # Start services
