@@ -344,6 +344,24 @@ defmodule Samen.Scopes.Automation.Blueprint do
           )
 
           attribute(:sent_at, :utc_datetime, public?: true)
+
+          # The reminder note — vault-routed scalar PII (🔒). Declared as a
+          # plain VaultField attribute HERE so it exists even if the
+          # MaterializePii transformer hasn't run yet (Docker-build ordering —
+          # the inventory Warehouse `address` precedent: `:schedule` explicitly
+          # `accept`s `:note`, and the accept verifier hard-fails when the only
+          # declaration is the `pii_attribute` below). MaterializePii is
+          # idempotent: it sees this attribute and skips adding a duplicate,
+          # leaving the explicit `source` in place — the fully-qualified
+          # scalar-PII column `pii_<abbrev>_note` MaterializePii itself would
+          # have set, which AbbrevStorage honors verbatim (no double prefix).
+          attribute(:note, Samen.Type.VaultField,
+            source: :"pii_#{unquote(abbrev)}_note",
+            public?: true,
+            allow_nil?: true,
+            writable?: true,
+            sensitive?: true
+          )
         end
 
         pii do
