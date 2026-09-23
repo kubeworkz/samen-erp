@@ -208,7 +208,7 @@ defmodule Samen.ApprovalsTest do
       rule = %{amount_threshold_cents: 100_00, auto_approve_below: true}
       req = %{amount_cents: 50_00}
 
-      auto_approved = rule.auto_approve_below and req.amount_cents < rule.amount_threshold_cents
+      auto_approved = req.amount_cents < rule.amount_threshold_cents and rule.auto_approve_below
       assert auto_approved == true
     end
 
@@ -216,7 +216,7 @@ defmodule Samen.ApprovalsTest do
       rule = %{amount_threshold_cents: 100_00, auto_approve_below: true}
       req = %{amount_cents: 150_00}
 
-      auto_approved = rule.auto_approve_below and req.amount_cents < rule.amount_threshold_cents
+      auto_approved = req.amount_cents < rule.amount_threshold_cents and rule.auto_approve_below
       assert auto_approved == false
     end
   end
@@ -280,7 +280,7 @@ defmodule Samen.ApprovalsTest do
         %{step_number: 2, status: :approved}
       ]
 
-      all_approved = rule.require_all_approvers and Enum.all?(steps, &(&1.status == :approved))
+      all_approved = Enum.all?(steps, &(&1.status == :approved)) and rule.require_all_approvers
       assert all_approved == true
     end
 
@@ -291,7 +291,7 @@ defmodule Samen.ApprovalsTest do
         %{step_number: 2, status: :pending}
       ]
 
-      any_approved = not rule.require_all_approvers and Enum.any?(steps, &(&1.status == :approved))
+      any_approved = Enum.any?(steps, &(&1.status == :approved)) and not rule.require_all_approvers
       assert any_approved == true
     end
   end

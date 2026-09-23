@@ -126,7 +126,7 @@ defmodule Samen.LivechatSocialTest do
 
     test "post can be scheduled" do
       post = %{platform: :twitter, content: "Check out our new product!", scheduled_at: ~U[2026-01-20 14:00:00Z]}
-      assert post.scheduled_at != nil
+      assert %DateTime{} = post.scheduled_at
     end
 
     test "post state lifecycle: draft → scheduled → published" do

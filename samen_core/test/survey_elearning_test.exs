@@ -19,6 +19,11 @@ defmodule Samen.SurveyElearningTest do
   """
   use ExUnit.Case, async: true
 
+  # Escapes constant folding on literal fixture data so engine-simulation
+  # branches stay representative under `mix test --warnings-as-errors`.
+  @spec widen(term()) :: term()
+  defp widen(value), do: value
+
   # ── se1: survey state lifecycle ──────────────────────────────────────
 
   describe "se1 — survey state lifecycle" do
@@ -122,7 +127,7 @@ defmodule Samen.SurveyElearningTest do
     test "no time limit" do
       time_limit = nil
       duration = 100
-      assert is_nil(time_limit) or duration <= time_limit
+      assert is_nil(time_limit) or duration <= widen(time_limit)
     end
   end
 

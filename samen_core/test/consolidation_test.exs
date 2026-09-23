@@ -184,7 +184,7 @@ defmodule Samen.ConsolidationTest do
 
   describe "mc9 — elimination matching" do
     test "account pair rule matches transactions" do
-      rule = %{rule_type: :account_pair, from_account_pattern: "1100-*", to_account_pattern: "2100-*"}
+      _rule = %{rule_type: :account_pair, from_account_pattern: "1100-*", to_account_pattern: "2100-*"}
       tx = %{from_account_id: "1100-receivable", to_account_id: "2100-payable"}
 
       from_match = String.starts_with?(tx.from_account_id, "1100")
@@ -244,7 +244,7 @@ defmodule Samen.ConsolidationTest do
       }
 
       # 4. Elimination rule
-      rule = %{
+      _rule = %{
         id: "r1",
         group_id: group.id,
         name: "Eliminate Intercompany Sales",

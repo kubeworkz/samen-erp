@@ -73,11 +73,11 @@ defmodule Samen.EsignTest do
 
       req = %{req | status: :sent, sent_at: DateTime.utc_now()}
       assert req.status == :sent
-      assert not is_nil(req.sent_at)
+      assert %DateTime{} = req.sent_at
 
       req = %{req | status: :completed, completed_at: DateTime.utc_now()}
       assert req.status == :completed
-      assert not is_nil(req.completed_at)
+      assert %DateTime{} = req.completed_at
     end
 
     test "request has required fields" do
@@ -139,7 +139,7 @@ defmodule Samen.EsignTest do
 
       rcpt = %{rcpt | status: :signed, signed_at: DateTime.utc_now()}
       assert rcpt.status == :signed
-      assert not is_nil(rcpt.signed_at)
+      assert %DateTime{} = rcpt.signed_at
     end
   end
 
@@ -214,14 +214,14 @@ defmodule Samen.EsignTest do
 
       # 3. Add recipients
       signer = %{name: "Client", email: "client@example.com", role: :signer, signing_order: 1, status: :pending, signed_at: nil}
-      cc = %{name: "Ops", email: "ops@example.com", role: :cc, signing_order: 2, status: :pending, signed_at: nil}
+      _cc = %{name: "Ops", email: "ops@example.com", role: :cc, signing_order: 2, status: :pending, signed_at: nil}
 
       # 4. Send request
       req = %{req | status: :sent, sent_at: DateTime.utc_now()}
       assert req.status == :sent
 
       # 5. Log audit
-      audit = %{event_type: :sent, description: "Request sent to 2 recipients"}
+      _audit = %{event_type: :sent, description: "Request sent to 2 recipients"}
 
       # 6. Recipient signs
       signer = %{signer | status: :signed, signed_at: DateTime.utc_now()}
@@ -410,7 +410,7 @@ defmodule Samen.EsignTest do
       # Add 3 recipients
       r1 = %{name: "Partner A", role: :signer, signing_order: 1, status: :pending, signed_at: nil}
       r2 = %{name: "Partner B", role: :signer, signing_order: 2, status: :pending, signed_at: nil}
-      r3 = %{name: "Legal Team", role: :cc, signing_order: 3, status: :pending, signed_at: nil}
+      _r3 = %{name: "Legal Team", role: :cc, signing_order: 3, status: :pending, signed_at: nil}
 
       # Send
       req = %{req | status: :sent, sent_at: DateTime.utc_now()}

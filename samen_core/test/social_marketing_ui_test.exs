@@ -203,7 +203,7 @@ defmodule Samen.SocialMarketingUITest do
       p = %{status: :draft, scheduled_at: nil}
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
       p = %{p | status: :scheduled, scheduled_at: future}
-      assert p.scheduled_at > DateTime.utc_now()
+      assert DateTime.compare(p.scheduled_at, DateTime.utc_now()) == :gt
     end
   end
 

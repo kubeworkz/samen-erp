@@ -258,7 +258,7 @@ defmodule Samen.SmsMarketingTest do
       future = DateTime.add(DateTime.utc_now(), 3600, :second)
       c = %{c | status: :scheduled, scheduled_at: future}
       assert c.status == :scheduled
-      assert c.scheduled_at > DateTime.utc_now()
+      assert DateTime.compare(c.scheduled_at, DateTime.utc_now()) == :gt
     end
   end
 
@@ -290,7 +290,7 @@ defmodule Samen.SmsMarketingTest do
   describe "sm19 — full SMS marketing ceremony" do
     test "complete campaign with 3 messages" do
       # Template
-      t = %{name: "Appointment Reminder", body: "Hi {{name}}, reminder: your appointment is on {{date}} at {{time}}.", variables: ["name", "date", "time"]}
+      _t = %{name: "Appointment Reminder", body: "Hi {{name}}, reminder: your appointment is on {{date}} at {{time}}.", variables: ["name", "date", "time"]}
 
       # Campaign
       c = %{name: "Appointment Reminders", status: :draft, template_id: "t_001", total_recipients: 0, total_sent: 0, total_delivered: 0, total_failed: 0, total_replies: 0, scheduled_at: nil, sent_at: nil, completed_at: nil}

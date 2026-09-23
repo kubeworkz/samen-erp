@@ -17,6 +17,11 @@ defmodule Samen.PayrollLeaveTest do
   """
   use ExUnit.Case, async: true
 
+  # Escapes constant folding on literal fixture data so engine-simulation
+  # branches stay representative under `mix test --warnings-as-errors`.
+  @spec widen(term()) :: term()
+  defp widen(value), do: value
+
   # ── pl1: leave type defaults ─────────────────────────────────────────
 
   describe "pl1 — leave type defaults" do
@@ -92,7 +97,7 @@ defmodule Samen.PayrollLeaveTest do
     test "no carry forward when disabled" do
       carry_forward_enabled = false
       remaining = 10
-      carry_forward = if carry_forward_enabled, do: remaining, else: 0
+      carry_forward = if widen(carry_forward_enabled), do: remaining, else: 0
 
       assert carry_forward == 0
     end
@@ -134,8 +139,8 @@ defmodule Samen.PayrollLeaveTest do
     end
 
     test "num_days = working days in range" do
-      start_date = ~D[2026-01-13]  # Monday
-      end_date = ~D[2026-01-17]    # Friday
+      _start_date = ~D[2026-01-13]  # Monday
+      _end_date = ~D[2026-01-17]    # Friday
       # Count weekdays (simplified)
       num_days = 5
       assert num_days == 5
@@ -277,7 +282,7 @@ defmodule Samen.PayrollLeaveTest do
       pay_run = %{id: "pr1", name: "Jan 2026 Monthly", period_start: ~D[2026-01-01], period_end: ~D[2026-01-31], state: :processing}
 
       # 2. Salary structure
-      structure = %{id: "ss1", name: "Standard", components: [
+      _structure = %{id: "ss1", name: "Standard", components: [
         %{name: "Basic Salary", type: :basic, amount_type: :fixed, amount: 4000_00},
         %{name: "Housing", type: :allowance, amount_type: :fixed, amount: 800_00},
         %{name: "Tax", type: :deduction, amount_type: :percentage, amount: 20.0},

@@ -16,6 +16,11 @@ defmodule Samen.QualityControlTest do
   """
   use ExUnit.Case, async: true
 
+  # Escapes constant folding on literal fixture data so engine-simulation
+  # branches stay representative under `mix test --warnings-as-errors`.
+  @spec widen(term()) :: term()
+  defp widen(value), do: value
+
   # ── qc1: default values and check types ─────────────────────────────
 
   describe "qc1 — control point defaults and check types" do
@@ -47,7 +52,7 @@ defmodule Samen.QualityControlTest do
 
   describe "qc2 — tolerance validation" do
     test "value within tolerance passes" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       value = 60.0
@@ -56,7 +61,7 @@ defmodule Samen.QualityControlTest do
     end
 
     test "value at min boundary passes" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       value = 59.5
@@ -65,7 +70,7 @@ defmodule Samen.QualityControlTest do
     end
 
     test "value at max boundary passes" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       value = 60.5
@@ -74,7 +79,7 @@ defmodule Samen.QualityControlTest do
     end
 
     test "value below tolerance fails" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       value = 59.0
@@ -83,7 +88,7 @@ defmodule Samen.QualityControlTest do
     end
 
     test "value above tolerance fails" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       value = 61.0
@@ -117,7 +122,7 @@ defmodule Samen.QualityControlTest do
 
   describe "qc4 — measure within tolerance" do
     test "check passes when value is within range" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       measured = 60.2
@@ -131,7 +136,7 @@ defmodule Samen.QualityControlTest do
 
   describe "qc5 — measure outside tolerance" do
     test "check fails when value is below range" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       measured = 58.0
@@ -141,7 +146,7 @@ defmodule Samen.QualityControlTest do
     end
 
     test "check fails when value is above range" do
-      norm = 60.0
+      _norm = 60.0
       tolerance_min = 59.5
       tolerance_max = 60.5
       measured = 62.0
@@ -227,7 +232,7 @@ defmodule Samen.QualityControlTest do
     test "control point → check → pass → no alert" do
       cp = %{id: "cp-1", check_type: :pass_fail, is_active: true}
       check = %{id: "check-1", control_point_id: cp.id, status: :pass}
-      alert = if check.status == :fail, do: %{check_id: check.id}, else: nil
+      alert = if widen(check.status) == :fail, do: %{check_id: check.id}, else: nil
 
       assert check.status == :pass
       assert alert == nil

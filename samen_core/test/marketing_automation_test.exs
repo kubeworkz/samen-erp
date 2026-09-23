@@ -370,7 +370,7 @@ defmodule Samen.MarketingAutomationTest do
       c = %{c | status: :running, start_at: DateTime.utc_now()}
 
       # Workflow
-      wf = %{campaign_id: "c_001", name: "Lead Nurture Flow", trigger_type: :form_submit, status: :active}
+      _wf = %{campaign_id: "c_001", name: "Lead Nurture Flow", trigger_type: :form_submit, status: :active}
 
       # Trigger
       t = %{workflow_id: "wf_001", name: "New Lead Form", event_type: :form_submission, status: :active, fire_count: 0}

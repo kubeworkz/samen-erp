@@ -34,6 +34,11 @@ defmodule Samen.AppointmentsTest do
   """
   use ExUnit.Case, async: true
 
+  # Escapes constant folding on literal fixture data so engine-simulation
+  # branches stay representative under `mix test --warnings-as-errors`.
+  @spec widen(term()) :: term()
+  defp widen(value), do: value
+
   # --- ap1: Type lifecycle ---
 
   describe "ap1 — type lifecycle" do
@@ -199,7 +204,7 @@ defmodule Samen.AppointmentsTest do
       appt = %{location: "Conference Room B"}
 
       # Appointment overrides type location
-      effective_location = if appt.location, do: appt.location, else: type.location
+      effective_location = if widen(appt.location), do: appt.location, else: type.location
       assert effective_location == "Conference Room B"
     end
 
@@ -207,7 +212,7 @@ defmodule Samen.AppointmentsTest do
       type = %{location: "Conference Room A"}
       appt = %{location: nil}
 
-      effective_location = if appt.location, do: appt.location, else: type.location
+      effective_location = if widen(appt.location), do: appt.location, else: type.location
       assert effective_location == "Conference Room A"
     end
   end
@@ -247,7 +252,7 @@ defmodule Samen.AppointmentsTest do
   describe "ap15 — full booking flow" do
     test "type → slot → appointment → participants → confirm → complete" do
       # 1. Create meeting type
-      type = %{name: "Consultation", duration_minutes: 30, status: :active}
+      _type = %{name: "Consultation", duration_minutes: 30, status: :active}
 
       # 2. Create available slot
       slot = %{type_id: "type_001", date: ~D[2026-10-01], start_time: "10:00", end_time: "10:30", is_available: true, booked_by: nil}
@@ -263,7 +268,7 @@ defmodule Samen.AppointmentsTest do
       }
 
       # 4. Add participants
-      organizer = %{name: "Host", role: :organizer, is_organizer: true, status: :accepted}
+      _organizer = %{name: "Host", role: :organizer, is_organizer: true, status: :accepted}
       client = %{name: "Client", role: :required, is_organizer: false, status: :pending}
 
       # 5. Mark slot as booked
@@ -353,7 +358,7 @@ defmodule Samen.AppointmentsTest do
   describe "ap20 — full scheduling ceremony" do
     test "complete booking with 3 participants" do
       # Type
-      type = %{name: "Team Standup", duration_minutes: 15, daily_cap: 3}
+      _type = %{name: "Team Standup", duration_minutes: 15, daily_cap: 3}
 
       # Slots for the day
       slots = [

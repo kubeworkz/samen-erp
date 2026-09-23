@@ -78,7 +78,7 @@ defmodule Samen.IoTTest do
     test "stale device detection" do
       d = %{last_seen_at: ~U[2026-10-01 09:00:00Z], status: :online}
       threshold = ~U[2026-10-01 10:00:00Z]
-      stale = d.last_seen_at < threshold
+      stale = DateTime.compare(d.last_seen_at, threshold) == :lt
       assert stale == true
     end
   end

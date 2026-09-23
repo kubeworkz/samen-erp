@@ -63,7 +63,7 @@ defmodule Samen.CreditNotesTaxTest do
 
     test "invoice present is valid" do
       invoice_id = "some-uuid"
-      assert not is_nil(invoice_id)
+      assert is_binary(invoice_id)
     end
   end
 
