@@ -82,6 +82,14 @@ Use Erlang’s native `:crypto` application for low-overhead **AES-256-GCM** dec
 
 When calling Hugging Face Serverless APIs, use **Finch** or **Req** for HTTP client management. They utilize Erlang's `:hackney` or `:poolboy` concepts underneath to manage connection pools dynamically.
 
+> **Implementation note (INV-4):** the shipped kernel cannot depend on a vendor
+> HTTP client — `samen_core/mix.exs` is gate-checked against `:req`/`:finch`/
+> `:hackney`/`:httpoison`/`:tesla`. The actual transport is the
+> `Samen.Scopes.Ai.HttpAdapter` seam (behaviour + OTP `:httpc` default + a
+> `config :samen_core, :hf_http_adapter, ...` override), which a host may
+> implement with Finch/Req outside the kernel. The examples below show the
+> original Req shape for reference; the seam preserves the same status mapping.
+
 Here is how to structure a secure, tenant-isolated inference call:
 
 ```plaintext

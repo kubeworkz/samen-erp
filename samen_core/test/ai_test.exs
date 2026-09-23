@@ -118,7 +118,7 @@ defmodule Samen.AiTest do
       key = %{status: :active, expires_at: ~U[2020-01-01 00:00:00Z]}
 
       now = DateTime.utc_now()
-      assert now > key.expires_at
+      assert DateTime.compare(now, key.expires_at) == :gt
 
       key = %{key | status: :expired}
       assert key.status == :expired
@@ -180,8 +180,6 @@ defmodule Samen.AiTest do
         :no_error
       rescue
         _e -> :raised
-      catch
-        :error, _e -> :caught
       end
 
       assert result in [:raised, :caught]
@@ -374,8 +372,9 @@ defmodule Samen.AiTest do
 
       result =
         case key.hf_status do
+          # Literal hf_status: :revoked — the :active branch below was
+          # unreachable to the type checker.
           :revoked -> {:error, :key_revoked}
-          :active -> {:ok, :proceed}
         end
 
       assert result == {:error, :key_revoked}
@@ -727,16 +726,14 @@ defmodule Samen.AiTest do
     test "deprecated model cannot be used" do
       model = %{status: :deprecated}
 
-      case model.status do
-        :available -> :ok
-        :deprecated -> {:error, :model_deprecated}
-        :private -> {:error, :model_private}
-        :rate_limited -> {:error, :rate_limited}
-      end
-      |> then(fn
-        :ok -> assert true
-        {:error, _} -> assert true
-      end)
+      # The literal status makes the other states unreachable to the type
+      # checker; the sibling "all model statuses" test above covers the set.
+      result =
+        case model.status do
+          :deprecated -> {:error, :model_deprecated}
+        end
+
+      assert result == {:error, :model_deprecated}
     end
   end
 

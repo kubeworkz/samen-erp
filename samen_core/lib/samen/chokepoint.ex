@@ -13,7 +13,9 @@ defmodule Samen.Chokepoint do
   ## Literal-match limitation (C3 is the real check)
 
   This is a **literal string scan**, deliberately. It matches the text
-  `Crypto.decrypt(`. It therefore does NOT catch:
+  `Crypto.decrypt(` **at a word boundary** — i.e. the bare alias form, NOT a
+  fully-qualified `<Mod>.Crypto.decrypt(` (a preceding `.` disqualifies the match).
+  It therefore does NOT catch:
 
     * an aliased module — `alias Samen.Kms.Crypto, as: C; C.decrypt(...)`
     * a fully-qualified call — `Samen.Kms.Crypto.decrypt(...)`
@@ -67,27 +69,52 @@ defmodule Samen.Chokepoint do
     end
   end
 
-  # A line is a decrypt CALL site if it contains `Crypto.decrypt(` as code — not
-  # in a `#` comment and not inside backticked doc prose.
+  # A line is a decrypt CALL site if it contains the BARE `Crypto.decrypt(` alias
+  # form as code — not a fully-qualified `<Mod>.Crypto.decrypt(` (the word-boundary
+  # rule above), not in a `#` comment, and not inside backticked doc prose.
   defp code_call_site?(line) do
-    String.contains?(line, "Crypto.decrypt(") and
-      not comment_line?(line) and
-      not in_backticks?(line, "Crypto.decrypt(")
-  end
-
-  defp comment_line?(line), do: String.starts_with?(String.trim_leading(line), "#")
-
-  # Does the pattern appear inside a backtick span on this line? (doc prose)
-  defp in_backticks?(line, pattern) do
-    case :binary.match(line, pattern) do
+    case bare_decrypt_pos(line) do
       {pos, _len} ->
-        before = binary_part(line, 0, pos)
-        # Odd number of backticks before the pattern ⇒ inside a backtick span.
-        before |> String.graphemes() |> Enum.count(&(&1 == "`")) |> rem(2) == 1
+        not comment_line?(line) and not in_backticks_at?(line, pos)
 
       :nomatch ->
         false
     end
+  end
+
+  # First occurrence of `Crypto.decrypt(` NOT preceded by `.` or a word
+  # character — the bare alias form the vault uses, excluding qualified calls
+  # like `Samen.Scopes.Ai.Crypto.decrypt(` (different module, never touches
+  # vault ciphertext; C3 catches those).
+  defp bare_decrypt_pos(line), do: bare_decrypt_pos(line, 0)
+
+  defp bare_decrypt_pos(line, from) do
+    case :binary.match(line, "Crypto.decrypt(", scope: {from, byte_size(line) - from}) do
+      {pos, len} ->
+        if pos == 0 or not word_char?(:binary.at(line, pos - 1)) do
+          {pos, len}
+        else
+          bare_decrypt_pos(line, pos + len)
+        end
+
+      :nomatch ->
+        :nomatch
+    end
+  end
+
+  defp word_char?(c)
+       when c in ?0..?9 or c in ?a..?z or c in ?A..?Z or c == ?. or c == ?_,
+       do: true
+
+  defp word_char?(_), do: false
+
+  defp comment_line?(line), do: String.starts_with?(String.trim_leading(line), "#")
+
+  # Is position `pos` inside a backtick span on this line? (doc prose)
+  defp in_backticks_at?(line, pos) do
+    before = binary_part(line, 0, pos)
+    # Odd number of backticks before the position ⇒ inside a backtick span.
+    before |> String.graphemes() |> Enum.count(&(&1 == "`")) |> rem(2) == 1
   end
 
   @doc """

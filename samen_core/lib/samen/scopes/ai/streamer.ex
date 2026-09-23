@@ -75,22 +75,19 @@ defmodule Samen.Scopes.Ai.Streamer do
         stream: true
       })
 
-    finch_pool = Application.get_env(:samen_core, :hf_finch_pool, SamenCore.HFHTTPClient)
-
     try do
-      case Req.post(url,
-             headers: headers,
-             body: body,
-             finch: finch_pool,
-             connect_timeout: 5_000,
-             receive_timeout: 60_000,
-             retry: false,
-             into: fn {:data, chunk}, context ->
+      case Samen.Scopes.Ai.HttpAdapter.stream_post(
+             url,
+             headers,
+             body,
+             [timeout: 60_000, connect_timeout: 5_000, autoretry: 0],
+             :ok,
+             fn chunk, acc ->
                parse_and_forward_chunk(chunk, target_pid)
-               {:cont, context}
+               acc
              end
            ) do
-        {:ok, _final_context} ->
+        {:ok, _acc} ->
           send(target_pid, {:hf_stream_done, :complete})
           :ok
 
@@ -128,24 +125,19 @@ defmodule Samen.Scopes.Ai.Streamer do
         stream: true
       })
 
-    finch_pool = Application.get_env(:samen_core, :hf_finch_pool, SamenCore.HFHTTPClient)
-
     initial_acc = %{tokens_streamed: 0, status: "success", error_type: nil}
 
     try do
-      case Req.post(url,
-             headers: headers,
-             body: body,
-             finch: finch_pool,
-             connect_timeout: 5_000,
-             receive_timeout: 60_000,
-             retry: false,
-             into: fn {:data, chunk}, context ->
+      case Samen.Scopes.Ai.HttpAdapter.stream_post(
+             url,
+             headers,
+             body,
+             [timeout: 60_000, connect_timeout: 5_000, autoretry: 0],
+             initial_acc,
+             fn chunk, acc ->
                streamed_count = parse_and_forward_chunk(chunk, target_pid)
-               updated_acc = Map.update!(context.acc, :tokens_streamed, &(&1 + streamed_count))
-               {:cont, Map.put(context, :acc, updated_acc)}
-             end,
-             acc: initial_acc
+               %{acc | tokens_streamed: acc.tokens_streamed + streamed_count}
+             end
            ) do
         {:ok, final_acc} ->
           end_time = System.monotonic_time(:millisecond)

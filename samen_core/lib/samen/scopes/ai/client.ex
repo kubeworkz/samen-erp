@@ -62,29 +62,23 @@ defmodule Samen.Scopes.Ai.Client do
         }
       })
 
-    finch_pool = Application.get_env(:samen_core, :hf_finch_pool, SamenCore.HFHTTPClient)
-
-    case Req.post(url,
-           headers: headers,
-           body: body,
-           finch: finch_pool,
-           connect_timeout: 5_000,
-           receive_timeout: 30_000,
-           retry: :safe_transient
+    case Samen.Scopes.Ai.HttpAdapter.post(url, headers, body,
+           timeout: 30_000,
+           connect_timeout: 5_000
          ) do
-      {:ok, %Req.Response{status: 200, body: response_body}} ->
+      {:ok, 200, response_body} ->
         {:ok, response_body}
 
-      {:ok, %Req.Response{status: 401}} ->
+      {:ok, 401, _body} ->
         {:error, :invalid_tenant_key}
 
-      {:ok, %Req.Response{status: 429}} ->
+      {:ok, 429, _body} ->
         {:error, :tenant_quota_exhausted}
 
-      {:ok, %Req.Response{status: 403}} ->
+      {:ok, 403, _body} ->
         {:error, :insufficient_permissions}
 
-      {:ok, %Req.Response{status: status, body: error_body}} ->
+      {:ok, status, error_body} ->
         {:error, {:hf_api_error, status, error_body}}
 
       {:error, reason} ->
@@ -100,29 +94,24 @@ defmodule Samen.Scopes.Ai.Client do
   @spec verify_key(String.t()) :: {:ok, map()} | {:error, term()}
   def verify_key(raw_key) do
     headers = [{"Authorization", "Bearer #{raw_key}"}]
-    finch_pool = Application.get_env(:samen_core, :hf_finch_pool, SamenCore.HFHTTPClient)
 
-    case Req.get(@hf_base_url,
-           headers: headers,
-           finch: finch_pool,
-           receive_timeout: 5_000
-         ) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
+    case Samen.Scopes.Ai.HttpAdapter.get(@hf_base_url, headers, timeout: 5_000) do
+      {:ok, 200, body} ->
         {:ok, body}
 
-      {:ok, %Req.Response{status: 401}} ->
+      {:ok, 401, _body} ->
         {:error, :invalid_token}
 
-      {:ok, %Req.Response{status: 403}} ->
+      {:ok, 403, _body} ->
         {:error, :insufficient_permissions}
 
-      {:ok, %Req.Response{status: 429}} ->
+      {:ok, 429, _body} ->
         {:error, :huggingface_rate_limited}
 
-      {:ok, %Req.Response{status: status}} ->
+      {:ok, status, _body} ->
         {:error, {:upstream_error, status}}
 
-      {:error, %{reason: :timeout}} ->
+      {:error, :timeout} ->
         {:error, :timeout}
 
       {:error, _reason} ->
@@ -145,16 +134,18 @@ defmodule Samen.Scopes.Ai.Client do
       |> maybe_put(:sort, Keyword.get(opts, :sort, :downloads))
       |> maybe_put(:direction, Keyword.get(opts, :direction, -1))
 
-    finch_pool = Application.get_env(:samen_core, :hf_finch_pool, SamenCore.HFHTTPClient)
+    # Query params (Req's `params:`) become an explicit query string — the
+    # defaults above guarantee a non-empty map.
+    url = "#{url}?#{URI.encode_query(params)}"
 
-    case Req.get(url, headers: headers, params: params, finch: finch_pool) do
-      {:ok, %Req.Response{status: 200, body: models}} ->
+    case Samen.Scopes.Ai.HttpAdapter.get(url, headers, timeout: 10_000) do
+      {:ok, 200, models} ->
         {:ok, models}
 
-      {:ok, %Req.Response{status: 401}} ->
+      {:ok, 401, _body} ->
         {:error, :invalid_tenant_key}
 
-      {:ok, %Req.Response{status: 429}} ->
+      {:ok, 429, _body} ->
         {:error, :tenant_quota_exhausted}
 
       {:error, reason} ->

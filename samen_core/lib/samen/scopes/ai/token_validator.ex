@@ -34,29 +34,24 @@ defmodule Samen.Scopes.Ai.TokenValidator do
   @spec verify_key(String.t()) :: {:ok, map()} | {:error, term()}
   def verify_key(raw_key) when is_binary(raw_key) do
     headers = [{"Authorization", "Bearer #{raw_key}"}]
-    finch_pool = Application.get_env(:samen_core, :hf_finch_pool, SamenCore.HFHTTPClient)
 
-    case Req.get(@hf_whoami_url,
-           headers: headers,
-           finch: finch_pool,
-           receive_timeout: 5_000
-         ) do
-      {:ok, %Req.Response{status: 200, body: body}} ->
+    case Samen.Scopes.Ai.HttpAdapter.get(@hf_whoami_url, headers, timeout: 5_000) do
+      {:ok, 200, body} ->
         {:ok, body}
 
-      {:ok, %Req.Response{status: 401}} ->
+      {:ok, 401, _body} ->
         {:error, :invalid_token}
 
-      {:ok, %Req.Response{status: 403}} ->
+      {:ok, 403, _body} ->
         {:error, :insufficient_permissions}
 
-      {:ok, %Req.Response{status: 429}} ->
+      {:ok, 429, _body} ->
         {:error, :huggingface_rate_limited}
 
-      {:ok, %Req.Response{status: status}} ->
+      {:ok, status, _body} ->
         {:error, {:upstream_error, status}}
 
-      {:error, %{reason: :timeout}} ->
+      {:error, :timeout} ->
         {:error, :timeout}
 
       {:error, _reason} ->

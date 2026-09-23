@@ -97,6 +97,10 @@ defmodule Samen.Scopes.Ai.VerifyCredentialsWorker do
       end)
 
     {:ok, results}
+  rescue
+    e ->
+      Logger.error("[HuggingFace.VerifyCredentials] Sweep crashed: #{inspect(e)}")
+      {:error, e}
   end
 
   @doc """

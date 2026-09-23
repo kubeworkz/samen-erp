@@ -42,8 +42,8 @@ defmodule Samen.Abbrev.AllocatorTest do
         %{global: g, hosts: h} = R.load_namespaced(path)
 
         assert get_in(h, ["widgetco", "wid"]) == "Widgetco.Vertical.Widget"
-        # global net unchanged (still the committed 328 rows).
-        assert map_size(g) == 328
+        # global net unchanged (still the committed 403 rows).
+        assert map_size(g) == 403
       after
         File.rm(path)
       end
@@ -264,8 +264,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # proof (`mix samen.gen.app`, prefix `er`): the E1–E7 scope set + the host's
       # kernel/Identity/Operator/Billing/Aggregate allocations — the registry grew to
       # 25_509 bytes.
-      assert byte_size(committed) == 28391
-      assert map_size(R.load()) == 608
+      # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
+      # Support/Settings/Automation mounts (c9d5272): 31_701 bytes, 683 flat.
+      assert byte_size(committed) == 31701
+      assert map_size(R.load()) == 683
     end
   end
 

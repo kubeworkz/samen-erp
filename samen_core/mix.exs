@@ -84,6 +84,12 @@ defmodule SamenCore.MixProject do
       # (Gate-0 fix task #1, T1.5 acceptance clause (a)). Runtime dep: host apps
       # that render masked values in HEEx need the protocol present.
       {:phoenix_html, "~> 4.1"},
+      # Phoenix.PubSub — the AI/Support scopes broadcast revocation + ticket
+      # events on it (Application.get_env(:samen_core, :pubsub, Samen.PubSub)).
+      # Hosts start the named server; core calls the module directly, so it must
+      # be a declared dep for a cold --warnings-as-errors compile (INV-4 bans
+      # HTTP clients, not the Phoenix ecosystem — phoenix_html is already here).
+      {:phoenix_pubsub, "~> 2.1"},
       # OTel tracing (T2.6): opentelemetry_api is the compile-time API surface;
       # opentelemetry is the SDK (span processor, exporter, BEAM propagation).
       # opentelemetry_ecto attaches to Ecto telemetry events — REQUIRED config:
@@ -149,9 +155,7 @@ defmodule SamenCore.MixProject do
       # catalog, no_plaintext_pii roster) via the version-resource mixin (§6.2). An
       # ash-project extension over Ash (already in the tree), not a vendor SDK.
       {:ash_paper_trail, "~> 0.6.0"},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      # Req: modern HTTP client for HuggingFace API integration (BYOK)
-      {:req, "~> 0.5"}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 

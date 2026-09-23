@@ -31,8 +31,6 @@ defmodule Samen.AiStreamingIntegrationTest do
   use ExUnit.Case, async: true
 
   alias Samen.Scopes.Ai.Crypto
-  alias Samen.Scopes.Ai.Client
-  alias Samen.Scopes.Ai.Streamer
 
   # --- st1: SSE chunk parsing ---
 
@@ -638,9 +636,6 @@ defmodule Samen.AiStreamingIntegrationTest do
           {:network_failure, _} ->
             # Would retry here
             :retry
-
-          _ ->
-            :no_retry
         end
 
       assert retry_result == :retry
@@ -655,9 +650,6 @@ defmodule Samen.AiStreamingIntegrationTest do
           {:error, :tenant_quota_exhausted} ->
             # Would snooze and retry
             {:snooze, 60}
-
-          _ ->
-            :no_retry
         end
 
       assert retry_result == {:snooze, 60}
@@ -690,7 +682,7 @@ defmodule Samen.AiStreamingIntegrationTest do
 
     test "tenant A key cannot decrypt tenant B data" do
       tenant_a_key = "hf_tenant_a_secret"
-      tenant_b_key = "hf_tenant_b_secret"
+      _tenant_b_key = "hf_tenant_b_secret"
 
       iv = Crypto.generate_iv()
       {:ok, encrypted} = Crypto.encrypt(tenant_a_key, iv)
