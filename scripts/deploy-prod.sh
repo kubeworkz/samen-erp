@@ -61,8 +61,11 @@ rollback() {
   fi
 }
 
-# Keep the last 10 deploy logs.
-ls -1t /tmp/deploy-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
+# Keep the last 10 deploy logs. `|| true` matters: on the first-ever deploy the
+# glob matches nothing, ls exits 2, and pipefail+set -e would abort the script
+# HERE — before the exec/tee below, i.e. with no output at all (hit for real in
+# run 35953123332: bare "exit code 2").
+ls -1t /tmp/deploy-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f || true
 exec > >(tee -a "/tmp/deploy-$(date +%Y%m%d-%H%M%S).log") 2>&1
 
 cd "$REPO"
