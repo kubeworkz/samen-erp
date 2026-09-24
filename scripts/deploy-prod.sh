@@ -56,6 +56,16 @@ rollback() {
     docker tag samenerp-app:previous samenerp-app:latest
     (cd "$APP_DIR" && docker compose -f docker-compose.prod.yml up -d --no-build) || true
     log "rollback issued — check: docker logs $CONTAINER"
+    # The tree is still reset to the FAILED target while the old image serves.
+    # Put it back on the pre-deploy commit so HEAD describes reality — otherwise
+    # the fast path ("already at TARGET && healthy") claims the failed code is
+    # live and silently skips the retry (that exact lie stranded the tree after
+    # run 35957261969).
+    if [ -n "${BACKUP:-}" ]; then
+      git reset --hard --quiet "$BACKUP" \
+        && log "tree reset back to $BACKUP (matches the image now serving)" \
+        || log "WARN: could not reset tree to $BACKUP — fast paths may skip the retry"
+    fi
   else
     log "no :previous image exists — manual intervention required"
   fi
@@ -170,11 +180,31 @@ done
 log "container healthy ✔"
 
 # ── 8. gate: migrations actually applied ─────────────────────────────────────
-docker logs "$CONTAINER" 2>&1 | grep -q "Migration and seed complete" \
+# POLL instead of grepping once: the healthcheck answers /healthz from inside the
+# entrypoint's migrate/seed eval (the endpoint boots before the eval prints its
+# marker), so "healthy" can precede the marker — a single instant grep lost that
+# race in run 35957261969 (green at +10s, marker a moment later → spurious
+# rollback). Capture the log to avoid pipefail/SIGPIPE quirks with `grep -q`.
+log "waiting for 'Migration and seed complete' in the app log (max 120s) ..."
+MIG_OK=""
+for _ in $(seq 1 60); do
+  APP_LOG="$(docker logs "$CONTAINER" 2>&1 || true)"
+  case "$APP_LOG" in
+    *"Migration and seed complete"*) MIG_OK=1; break ;;
+  esac
+  sleep 2
+done
+[ -n "$MIG_OK" ] \
   || die "entrypoint did not reach 'Migration and seed complete' — migrate/seed failed (entrypoint swallows the error: check 'docker logs $CONTAINER')"
+log "migrate/seed marker seen ✔"
 
 LATEST_FILE="$(ls "$APP_DIR/priv/repo/migrations"/*.exs | sort | tail -1)"
+# Version = the LEADING DIGITS only (20260922030000_add_automation_scope.exs →
+# 20260922030000). Comparing the whole basename made both `[` tests error with
+# "integer expected", so this gate could never fail — it passed vacuously in
+# run 20260924-151315 until fixed.
 LATEST_VERSION="$(basename "$LATEST_FILE" .exs)"
+LATEST_VERSION="${LATEST_VERSION%%[!0-9]*}"
 DB_MAX="$(docker exec "$DB_CONTAINER" psql -U postgres -d samenerp -Atc 'SELECT max(version) FROM schema_migrations' 2>/dev/null || true)"
 DB_MAX="${DB_MAX:-0}" # max() over zero rows prints empty, not 0
 if [ "$DB_MAX" -lt "$LATEST_VERSION" ]; then
