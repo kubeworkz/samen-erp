@@ -163,6 +163,24 @@ if ! (cd "$APP_DIR" && docker compose -f docker-compose.prod.yml build app); the
   die "docker build failed — old container still running (see build log above)"
 fi
 
+# ── 5b. prepare the persistent KMS key dir ───────────────────────────────────
+# `runtime.exs` points `:kms_key_dir` at a dir on the app_data volume, but that
+# volume is root-owned while the app runs as uid 1000(app) — so the app cannot
+# create it, and because the keystore holds the `sys:bidx` sign-in key, EVERY
+# login breaks the moment KMS is first used. Hit for real on 2026-09-24.
+# Idempotent: `mkdir -p` + `chown` on an existing dir is a no-op.
+KEY_UID="$(docker run --rm --entrypoint id samenerp-app:latest -u app 2>/dev/null || echo 1000)"
+KEY_GID="$(docker run --rm --entrypoint id samenerp-app:latest -g app 2>/dev/null || echo 65533)"
+KEY_VOL="$(docker volume ls --format '{{.Name}}' | grep -E '(^|_)app_data$' | head -1)"
+if [ -n "$KEY_VOL" ]; then
+  docker run --rm -u 0 --entrypoint sh -v "$KEY_VOL:/keys" samenerp-app:latest \
+    -c "mkdir -p /keys/kms_keys && chown -R $KEY_UID:$KEY_GID /keys/kms_keys" \
+    && log "KMS key dir ready on volume $KEY_VOL (uid $KEY_UID) " \
+    || log "WARN: could not prepare the KMS key dir on $KEY_VOL — check sign-in if KMS is file-backed"
+else
+  log "WARN: no *_app_data volume found — skipping KMS key-dir preparation"
+fi
+
 # ── 6. swap ──────────────────────────────────────────────────────────────────
 PHASE="swapped"
 log "starting new container ..."
@@ -242,6 +260,17 @@ for VAR in SAMEN_RESEND_API_KEY SAMEN_AUD_EVENT_APP_ROLE; do
   [ -n "$VAL" ] || die "$VAR not present in container env — .env.production.local not picked up"
 done
 log "secrets loaded (RESEND, aud role) ✔"
+
+# ── 12. gate: the KMS key dir is writable (file-backed adapters) ─────────────
+# Guard for the 2026-09-24 incident: an unwritable/absent key dir cannot persist
+# `sys:bidx`, so every login would silently fail — and only on the next login.
+if [ "$(docker exec "$CONTAINER" printenv SAMEN_KMS_ADAPTER 2>/dev/null || true)" = "file_backed" ]; then
+  KEY_DIR="$(docker exec "$CONTAINER" printenv SAMEN_KMS_KEY_DIR 2>/dev/null || true)"
+  KEY_DIR="${KEY_DIR:-/app/data/kms_keys}"
+  docker exec "$CONTAINER" sh -c "mkdir -p '$KEY_DIR' && touch '$KEY_DIR/.write_probe' && rm -f '$KEY_DIR/.write_probe'" \
+    || die "KMS key dir '$KEY_DIR' is not creatable/writable by the app user — the blind-index key cannot persist, so logins would break on the next recreate"
+  log "KMS key dir writable ✔ ($KEY_DIR)"
+fi
 
 # ── done ─────────────────────────────────────────────────────────────────────
 log "DEPLOY OK — $TARGET_SHORT in $(( $(date +%s) - START ))s"
