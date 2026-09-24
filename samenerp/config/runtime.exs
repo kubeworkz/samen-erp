@@ -71,9 +71,23 @@ if config_env() == :prod do
         table_name: System.get_env("SAMEN_KMS_DYNAMO_TABLE") || "samenerp-kms-keys"
 
     "file_backed" ->
-      # WARNING: Not suitable for production! Ephemeral filesystem.
+      # WARNING: only durable if the key DIR below is on a persistent volume.
       config :samen_core, Samen.Kms,
         adapter: Samen.Kms.FileBacked
+
+      # `Samen.Kms.FileBacked` reads `:kms_key_dir` (it stores one
+      # `<subject>.dek` + `master.key` per subject); the `file_path` key set
+      # below is vestigial and must not be relied on.
+      #
+      # This MUST point at the mounted volume: the adapter's default is
+      # `System.tmp_dir!()/samen_core_keystore`, which is EPHEMERAL per
+      # container. A rotating keystore mints a new master (and therefore a new
+      # `sys:bidx` blind-index key) on every container recreate, silently
+      # invalidating every stored `email_bidx` — i.e. ALL logins break, while
+      # every gate still passes. (Hit in prod 2026-09-24: 20 credentials, none
+      # resolvable, because the dir was /tmp inside the container.)
+      config :samen_core,
+        kms_key_dir: System.get_env("SAMEN_KMS_KEY_DIR") || "/app/data/kms_keys"
 
       config :samen_core, Samen.Kms.FileBacked,
         file_path: System.get_env("SAMEN_KMS_FILE_PATH") || "/app/data/kms_store.json"

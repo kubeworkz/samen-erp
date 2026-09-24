@@ -45,6 +45,9 @@ services:
       # KMS (use FileBacked for dev, AWS KMS for prod)
       SAMEN_KMS_ADAPTER: ${SAMEN_KMS_ADAPTER:-file_backed}
       SAMEN_KMS_FILE_PATH: ${SAMEN_KMS_FILE_PATH:-/app/data/kms_store.json}
+      # The key DIR must be on the persistent volume (see runtime.exs): an
+      # ephemeral keystore rotates `sys:bidx` per container and breaks logins.
+      SAMEN_KMS_KEY_DIR: ${SAMEN_KMS_KEY_DIR:-/app/data/kms_keys}
       
       # NOTE: ESP keys (SAMEN_ESP_PROVIDER, SAMEN_RESEND_API_KEY, …) and
       # SAMEN_HF_* come from the untracked `.env.production.local` via env_file.

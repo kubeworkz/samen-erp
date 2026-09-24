@@ -25,6 +25,10 @@ defmodule Samenerp.Seeds do
   # The well-known operator org id (fixed so config resolution works).
   @operator_org_id "0f000000-0000-4000-8000-0000000000aa"
 
+  # The seeded operator admin's defaults (`seed!/0,1` and `ensure_admin!/1`).
+  @default_email "admin@samenerp.kubeworkz.io"
+  @default_password "changeme123456"
+
   @doc "The well-known operator org id."
   def operator_org_id, do: @operator_org_id
 
@@ -104,6 +108,52 @@ defmodule Samenerp.Seeds do
     end
   end
 
+  @doc """
+  Ensure the operator admin can sign in under the CURRENT KMS blind-index key.
+
+  `seed!/0,1` short-circuits as soon as the operator org row exists, so it can
+  NEVER repair an admin whose credential was written under a different `k_bidx`
+  — e.g. after the keystore rotated (the prod incident of 2026-09-24: the
+  file-backed key dir was `/tmp` inside the container, so every deploy minted a
+  fresh `sys:bidx` and no stored `email_bidx` could ever be found again).
+
+  Idempotent:
+
+    * resolve the credential by the CURRENT key's blind index for `email` and
+      mint one when it is absent/unreachable (the rotation case),
+    * make sure the resolved credential owns an operator-org user, and
+    * make sure that user holds the `:owner` membership.
+
+  An already-reachable credential is left byte-untouched (its password is NOT
+  reset), so this is safe to run against a healthy install.
+
+  Options: `:email`, `:password`, `:first_name`, `:last_name` — the same
+  defaults as `seed!/1`.
+  """
+  @spec ensure_admin!(keyword()) :: {:ok, map()}
+  def ensure_admin!(opts \\ []) do
+    Application.ensure_all_started(:samenerp)
+
+    email = Keyword.get(opts, :email, @default_email)
+    password = Keyword.get(opts, :password, @default_password)
+    first_name = Keyword.get(opts, :first_name, "Admin")
+    last_name = Keyword.get(opts, :last_name, "User")
+
+    org = create_operator_org()
+    bidx = compute_bidx(email)
+
+    credential =
+      case find_credential(bidx) do
+        [cred] -> cred
+        [] -> create_user_and_credential(org, email, password, first_name, last_name) |> elem(1)
+      end
+
+    user = ensure_admin_user(org, credential, email, first_name, last_name)
+    ensure_owner_membership(org, user)
+
+    {:ok, %{org: org, user: user, credential: credential}}
+  end
+
   # -- Private ----------------------------------------------------------------
 
   defp operator_org_seeded? do
@@ -115,8 +165,8 @@ defmodule Samenerp.Seeds do
   end
 
   defp seed_operator_org_and_admin(opts \\ []) do
-    email = Keyword.get(opts, :email, "admin@samenerp.kubeworkz.io")
-    password = Keyword.get(opts, :password, "changeme123456")
+    email = Keyword.get(opts, :email, @default_email)
+    password = Keyword.get(opts, :password, @default_password)
     first_name = Keyword.get(opts, :first_name, "Admin")
     last_name = Keyword.get(opts, :last_name, "User")
 
@@ -200,6 +250,54 @@ defmodule Samenerp.Seeds do
       |> Ash.Changeset.force_change_attribute(:verified_at, DateTime.utc_now())
       |> Ash.create!()
 
+    user = create_admin_user_row(org, credential, email, first_name, last_name)
+    ensure_owner_membership(org, user)
+
+    {user, credential}
+  end
+
+  # The credential behind `email` under the CURRENT blind-index key (0 or 1 row).
+  defp find_credential(bidx) do
+    Op.Credential
+    |> Ash.Query.filter(email_bidx == ^bidx)
+    |> Ash.Query.ensure_selected([:id, :password_hash, :hash_scheme, :verified_at])
+    |> Ash.Query.limit(1)
+    # authz-scope: pre-auth operator-admin repair lookup on the unique email blind index (<=1 row); no org context exists at boot-time repair
+    |> Ash.read!(authorize?: false)
+  end
+
+  # The user owning `credential`, created when the credential is fresh.
+  defp ensure_admin_user(org, credential, email, first_name, last_name) do
+    case Op.User
+         |> Ash.Query.filter(credential_id == ^credential.id)
+         |> Ash.Query.limit(1)
+         |> Ash.read!(authorize?: false) do
+      [user] -> user
+      _ -> create_admin_user_row(org, credential, email, first_name, last_name)
+    end
+  end
+
+  # Idempotent `:owner` membership for (org, user).
+  defp ensure_owner_membership(org, user) do
+    case Op.Membership
+         |> Ash.Query.filter(org_id == ^org.id and user_id == ^user.id)
+         |> Ash.Query.limit(1)
+         |> Ash.read!(authorize?: false) do
+      [membership] ->
+        membership
+
+      _ ->
+        Op.Membership
+        |> Ash.Changeset.for_create(
+          :create,
+          %{org_id: org.id, user_id: user.id, role: :owner},
+          authorize?: false
+        )
+        |> Ash.create!()
+    end
+  end
+
+  defp create_admin_user_row(org, credential, email, first_name, last_name) do
     # Create user — the Operator namespace's create action may not accept
     # vault-routed PII fields (emails/full_name). Create the user first,
     # then try to set PII via the real update action. If that fails too,
@@ -227,17 +325,6 @@ defmodule Samenerp.Seeds do
     rescue
       _ -> user
     end
-
-    # Create owner membership
-    Op.Membership
-    |> Ash.Changeset.for_create(
-      :create,
-      %{org_id: org.id, user_id: user.id, role: :owner},
-      authorize?: false
-    )
-    |> Ash.create!()
-
-    {user, credential}
   end
 
   defp compute_bidx(email) do
