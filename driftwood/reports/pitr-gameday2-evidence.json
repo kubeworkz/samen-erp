@@ -1,6 +1,6 @@
 {
   "drill": "T5.5 Driftwood PITR game-day #2 LOCAL SIMULATION",
-  "postgres_version": "18.6(Debian18.6-1.pgdg12+2)",
+  "postgres_version": "16.15(Debian16.15-1.pgdg12+2)",
   "simulation_seam": "Neon branch-and-restore simulated with pg_dump (pre-contract snapshot) + psql restore into a fresh DB; real Neon drill registered as operator TODO in pitr-gameday.md",
   "base_db": "driftwood_pitr_drill_base",
   "restore_db": "driftwood_pitr_drill_restore",

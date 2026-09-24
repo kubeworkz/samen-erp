@@ -32,7 +32,7 @@ defmodule Samenerp.Monitoring do
     Logger.info("[Monitoring] Initializing monitoring and alerting")
 
     # Initialize Sentry if configured
-    if dsn = config[:sentry_dsn] || System.get_env("SENTRY_DSN") do
+    if config[:sentry_dsn] || System.get_env("SENTRY_DSN") do
       Logger.info("[Monitoring] Sentry configured")
     end
 
@@ -53,7 +53,7 @@ defmodule Samenerp.Monitoring do
 
     # In production, send to Sentry
     if System.get_env("SENTRY_DSN") do
-      Sentry.capture_exception(exception, extra: context)
+      apply(Sentry, :capture_exception, [exception, [extra: context]])
     end
 
     :ok
@@ -68,7 +68,7 @@ defmodule Samenerp.Monitoring do
 
     # In production, send to Sentry
     if System.get_env("SENTRY_DSN") do
-      Sentry.capture_message(message, level: level, extra: context)
+      apply(Sentry, :capture_message, [message, [level: level, extra: context]])
     end
 
     :ok
@@ -83,7 +83,7 @@ defmodule Samenerp.Monitoring do
 
     # In production, create OpenTelemetry span
     if System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
-      :otel_tracer.start_span(name, attributes: attributes)
+      apply(:otel_tracer, :start_span, [name, [attributes: attributes]])
     end
 
     :ok
@@ -98,7 +98,7 @@ defmodule Samenerp.Monitoring do
 
     # In production, end OpenTelemetry span
     if System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
-      :otel_tracer.end_span()
+      apply(:otel_tracer, :end_span, [])
     end
 
     :ok
@@ -113,7 +113,7 @@ defmodule Samenerp.Monitoring do
 
     # In production, record to OpenTelemetry metrics
     if System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
-      :otel_metrics.record(name, value, labels: labels)
+      apply(:otel_metrics, :record, [name, value, [labels: labels]])
     end
 
     :ok

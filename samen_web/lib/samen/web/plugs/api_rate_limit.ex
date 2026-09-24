@@ -49,7 +49,7 @@ defmodule Samen.Web.Plugs.ApiRateLimit do
   def init(opts), do: opts
 
   @impl true
-  def call(conn, opts) do
+  def call(conn, _opts) do
     # Get user/org info from conn (set by auth middleware)
     user_id = get_user_id(conn)
     org_id = get_org_id(conn)
@@ -91,7 +91,7 @@ defmodule Samen.Web.Plugs.ApiRateLimit do
   end
 
   # Determine which rate limit to enforce
-  defp determine_limit_key(user_id, org_id, plan, ip) do
+  defp determine_limit_key(user_id, org_id, _plan, ip) do
     cond do
       # Authenticated user with org — use user + org limits
       user_id && org_id ->

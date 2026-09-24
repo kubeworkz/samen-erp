@@ -72,8 +72,11 @@ defmodule Samenerp.Repo.Migrations.AddCrmScope do
 
     create table(:zop_opportunity, primary_key: false) do
       add(:zop_name, :text, null: false)
-      add(:zop_value_cents, :integer, default: 0)
-      add(:zop_currency, :text, default: "USD")
+      # ADR-036 H1/D7: ONE Money composite column (money_with_currency, installed
+      # by 20260709100000_app_resources) — the paired _cents/currency convention
+      # was already replaced at the blueprint level when this migration was
+      # authored; catalog_parity fails the stale pair as uncatalogued columns.
+      add(:zop_value, :money_with_currency)
       add(:zop_probability, :integer, default: 0)
       add(:zop_status, :text, default: "open")
       add(:zop_close_date, :date)

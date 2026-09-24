@@ -27,7 +27,7 @@ defmodule Samen.Scopes.Community.ForumPost do
     domain: Samen.Core.Domain,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    abbrev: "cmp",
+    abbrev: "fpo",
     archivable: true
 
   postgres do

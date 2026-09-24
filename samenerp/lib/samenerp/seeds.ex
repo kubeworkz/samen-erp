@@ -28,6 +28,45 @@ defmodule Samenerp.Seeds do
   @doc "The well-known operator org id."
   def operator_org_id, do: @operator_org_id
 
+  # -- WS-D D4 dev-data seeds (AC-G4-4) -------------------------------------
+  #
+  # The E8 vertical-record seeds. These coexist with the operator boot seed
+  # above (`seed!/0,1`): `run/0` writes the named `Samenerp.Vertical.Record`
+  # rows through `Samen.Factory.create!/3` — the SAME changeset path a real
+  # tenant write takes — so every 🔒 `secret` routes the vault chokepoint and
+  # lands as a `vt_*` token (proven by `seeds_vault_test.exs`).
+
+  @dev_records [
+    {"Northwind Record", "alpha", "seed-secret-northwind-01"},
+    {"Contoso Record", "alpha", "seed-secret-contoso-02"},
+    {"Fabrikam Record", "beta", "seed-secret-fabrikam-03"}
+  ]
+
+  @doc """
+  Seed the dev DB with a handful of `Samenerp.Vertical.Record` rows for the
+  `#{inspect(@operator_org_id)}` tenant. The 🔒 `secret` field on each is
+  vault-routed. Returns the org id.
+  """
+  @spec run() :: String.t()
+  def run do
+    for {name, segment, secret} <- records() do
+      Samen.Factory.create!(
+        Samenerp.Vertical.Record,
+        %{org_id: @operator_org_id, name: name, segment: segment, secret: secret},
+        authorize?: false
+      )
+    end
+
+    @operator_org_id
+  end
+
+  @doc "The dev-data seed dataset — `{name, segment, 🔒 secret}` tuples."
+  @spec records() :: [{String.t(), String.t(), String.t()}]
+  def records, do: @dev_records
+
+  @doc "The dev tenant org id the dev-data seeds anchor on."
+  def org_id, do: @operator_org_id
+
   @doc """
   Seed the operator org and initial admin. Idempotent.
 
@@ -94,10 +133,10 @@ defmodule Samenerp.Seeds do
     case Op.Org
          |> Ash.Query.filter(id == ^@operator_org_id)
          |> Ash.read(authorize?: false) do
-      [org] ->
+      {:ok, [org]} ->
         org
 
-      [] ->
+      {:ok, []} ->
         Op.Org
         |> Ash.Changeset.for_create(
           :create,

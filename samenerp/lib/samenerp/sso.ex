@@ -114,7 +114,7 @@ defmodule Samenerp.SSO do
   Initiate SP-initiated SSO flow.
   """
   @spec initiate_sso(String.t()) :: {:ok, String.t()} | {:error, term()}
-  def initiate_sso(return_url \\ "/") do
+  def initiate_sso(_return_url \\ "/") do
     if !enabled?() do
       {:error, :sso_not_enabled}
     else
@@ -158,7 +158,7 @@ defmodule Samenerp.SSO do
   Validate SAML response from IdP.
   """
   @spec validate_response(String.t()) :: {:ok, map()} | {:error, term()}
-  def validate_response(saml_response) do
+  def validate_response(_saml_response) do
     if !enabled?() do
       {:error, :sso_not_enabled}
     else

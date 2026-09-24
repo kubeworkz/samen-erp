@@ -105,6 +105,7 @@ defmodule Samenerp.Repo.Migrations.AddMarketingScope do
       add(:zmn_queued_at, :utc_datetime)
       add(:zmn_sent_at, :utc_datetime)
       add(:zmn_idempotency_key, :text)
+      add(:zmn_provider_message_id, :text)
       add(:zmn_custom, :map, default: fragment("'{}'::jsonb"))
 
       add(
@@ -174,21 +175,19 @@ defmodule Samenerp.Repo.Migrations.AddMarketingScope do
       add(:zme_updated_at, :utc_datetime, null: false)
     end
 
+    # Columns mirror Samen.Scopes.Marketing.Blueprint.define_consent_event
+    # (the append-only consent ledger: event/source/purpose/subject_hash/
+    # occurred_at + a bounded soft-ref subscriber_id — NOT belongs_to, so a
+    # shredded subscriber never blocks the immutable row; modeled on demo's
+    # mce_consent_event). The prior DDL here (action/channel/metadata + an FK)
+    # never matched the resource — catalog_parity failed it both directions.
     create table(:zmv_consent_event, primary_key: false) do
-      add(:zmv_action, :text, null: false)
-      add(:zmv_channel, :text)
+      add(:zmv_event, :text, null: false)
       add(:zmv_source, :text)
-      add(:zmv_metadata, :map, default: fragment("'{}'::jsonb"))
-
-      add(
-        :zmv_subscriber_id,
-        references(:zms_subscriber,
-          column: :zms_id,
-          name: "zmv_consent_event_zmv_subscriber_id_fkey",
-          type: :uuid,
-          prefix: "public"
-        )
-      )
+      add(:zmv_purpose, :text, default: "marketing")
+      add(:zmv_subject_hash, :text)
+      add(:zmv_occurred_at, :utc_datetime_usec, null: false)
+      add(:zmv_subscriber_id, :uuid, null: false)
 
       add(:zmv_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
       add(:zmv_org_id, :uuid, null: false)
@@ -202,7 +201,6 @@ defmodule Samenerp.Repo.Migrations.AddMarketingScope do
   def down do
     catalog_sync_down(@resources)
 
-    drop(constraint(:zmv_consent_event, "zmv_consent_event_zmv_subscriber_id_fkey"))
     drop(table(:zmv_consent_event))
 
     drop(constraint(:zme_email_event, "zme_email_event_zme_subscriber_id_fkey"))

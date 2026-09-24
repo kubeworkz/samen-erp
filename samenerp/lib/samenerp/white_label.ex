@@ -56,6 +56,11 @@ defmodule Samenerp.WhiteLabel do
 
   require Logger
 
+  # Escapes constant folding on the stub default-config's literal nils so the
+  # defensive branches below stay representative under --warnings-as-errors.
+  @spec widen(term()) :: term()
+  defp widen(value), do: value
+
   @type branding_config :: %{
           logo_url: String.t() | nil,
           favicon_url: String.t() | nil,
@@ -130,7 +135,7 @@ defmodule Samenerp.WhiteLabel do
       --border-radius: #{branding.border_radius};
     }
 
-    #{branding.custom_css || ""}
+    #{widen(branding.custom_css) || ""}
     """
   end
 
@@ -219,13 +224,13 @@ defmodule Samenerp.WhiteLabel do
     </head>
     <body>
       <div class="header">
-        #{if branding.logo_url, do: "<img src=\"#{branding.logo_url}\" alt=\"Logo\" />", else: "Samen ERP"}
+        #{if widen(branding.logo_url), do: "<img src=\"#{branding.logo_url}\" alt=\"Logo\" />", else: "Samen ERP"}
       </div>
       <div class="content">
         #{render_template(template_name, assigns)}
       </div>
       <div class="footer">
-        #{branding.custom_domain || "samenerp.com"}
+        #{widen(branding.custom_domain) || "samenerp.com"}
       </div>
     </body>
     </html>

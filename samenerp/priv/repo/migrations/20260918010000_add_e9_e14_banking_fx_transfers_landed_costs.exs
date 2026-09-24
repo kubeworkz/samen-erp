@@ -158,9 +158,25 @@ defmodule Samenerp.Repo.Migrations.AddE9E14BankingFxTransfersLandedCosts do
     end
 
     create(index(:eld_landed_cost, [:eld_org_id]))
+
+    # C1 catalog-in-tx (ADR-004): these four E10/E13/E14 resources were created
+    # without catalog_sync — catalog_parity (rightly) failed them as ghost tables.
+    catalog_sync([
+      Samenerp.Erp.ExchangeRate,
+      Samenerp.Erp.OrgFxSettings,
+      Samenerp.Erp.TransferOrder,
+      Samenerp.Erp.LandedCost
+    ])
   end
 
   def down do
+    catalog_sync_down([
+      Samenerp.Erp.ExchangeRate,
+      Samenerp.Erp.OrgFxSettings,
+      Samenerp.Erp.TransferOrder,
+      Samenerp.Erp.LandedCost
+    ])
+
     drop(table(:eld_landed_cost))
     drop(table(:etn_transfer_order))
     drop(table(:bkr_rule))

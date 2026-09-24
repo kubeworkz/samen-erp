@@ -50,6 +50,7 @@ defmodule Samen.Delivery.AuthRecipient do
     user_mod
     |> Ash.Query.filter(credential_id == ^credential_id)
     |> Ash.Query.limit(1)
+    # authz-scope: pre-auth credential_id→user unique-key lookup for auth-email delivery — the org is unknown until the user resolves, cannot be pinned; unique credential_id + limit(1) bounds it to one row
     |> Ash.read!(authorize?: false)
     |> case do
       [user] -> {:ok, user}

@@ -24,9 +24,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.CurrentOrg
-  alias Samen.Web.Mount
   alias Samen.Scopes.Ai.Crypto
-  alias Samen.Scopes.Ai.TokenValidator
 
   @impl true
   def mount(params, session, socket) do

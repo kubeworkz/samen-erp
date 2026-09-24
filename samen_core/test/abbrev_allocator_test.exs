@@ -42,8 +42,8 @@ defmodule Samen.Abbrev.AllocatorTest do
         %{global: g, hosts: h} = R.load_namespaced(path)
 
         assert get_in(h, ["widgetco", "wid"]) == "Widgetco.Vertical.Widget"
-        # global net unchanged (still the committed 403 rows).
-        assert map_size(g) == 403
+        # global net unchanged (still the committed 405 rows).
+        assert map_size(g) == 405
       after
         File.rm(path)
       end
@@ -266,8 +266,9 @@ defmodule Samen.Abbrev.AllocatorTest do
       # 25_509 bytes.
       # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
       # Support/Settings/Automation mounts (c9d5272): 31_701 bytes, 683 flat.
-      assert byte_size(committed) == 31701
-      assert map_size(R.load()) == 683
+      # +2 collision fix (fpo/mrg, restoring cmp/dcm): 31_778 bytes, 685 flat.
+      assert byte_size(committed) == 31778
+      assert map_size(R.load()) == 685
     end
   end
 

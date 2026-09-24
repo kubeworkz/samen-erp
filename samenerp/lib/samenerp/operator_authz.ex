@@ -54,8 +54,8 @@ defmodule Samenerp.OperatorAuthz do
     |> Ash.Query.limit(1)
     |> Ash.read(authorize?: false)
     |> case do
-      [%{role: role}] -> {:ok, role}
-      [] -> {:error, :no_membership}
+      {:ok, [%{role: role}]} -> {:ok, role}
+      {:ok, []} -> {:error, :no_membership}
     end
   rescue
     _ -> {:error, :query_failed}

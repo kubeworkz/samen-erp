@@ -25,9 +25,6 @@ defmodule Samen.Web.Onboarding.ProductTourLive do
 
   use Phoenix.LiveView
 
-  import Samen.UI
-
-  alias Samen.Web.Mount
   alias Samen.Web.CurrentOrg
 
   @tour_steps [
@@ -138,19 +135,15 @@ defmodule Samen.Web.Onboarding.ProductTourLive do
   end
 
   def handle_event("seed_sample_data", _params, socket) do
-    # Seed sample data for the tour
-    case seed_sample_data(socket.assigns.org_id) do
-      :ok ->
-        {:noreply,
-         socket
-         |> assign(sample_data_seeded: true)
-         |> put_flash(:info, "Sample data added! Explore the features with realistic data.")}
+    # Seed sample data for the tour. The seed is a stub that always succeeds;
+    # match loudly so a future fallible seed fails the request instead of
+    # silently skipping the success flash below.
+    :ok = seed_sample_data(socket.assigns.org_id)
 
-      {:error, reason} ->
-        {:noreply,
-         socket
-         |> put_flash(:error, "Failed to seed sample data: #{inspect(reason)}")}
-    end
+    {:noreply,
+     socket
+     |> assign(sample_data_seeded: true)
+     |> put_flash(:info, "Sample data added! Explore the features with realistic data.")}
   end
 
   @impl true
@@ -173,6 +166,7 @@ defmodule Samen.Web.Onboarding.ProductTourLive do
   # Tour overlay component
   defp tour_overlay(assigns) do
     step = Enum.at(assigns.tour_steps, assigns.current_step)
+    assigns = assign(assigns, :step, step)
 
     ~H"""
     <div class="tour-overlay" id="tour-overlay">
@@ -180,11 +174,11 @@ defmodule Samen.Web.Onboarding.ProductTourLive do
 
       <div class="tour-card" id={"tour-step-#{@current_step}"}>
         <div class="tour-header">
-          <span class="tour-icon">{step.icon}</span>
-          <h3 class="tour-title">{step.title}</h3>
+          <span class="tour-icon">{@step.icon}</span>
+          <h3 class="tour-title">{@step.title}</h3>
         </div>
 
-        <p class="tour-description">{step.description}</p>
+        <p class="tour-description">{@step.description}</p>
 
         <div class="tour-progress">
           <div class="tour-progress-bar" style={"width: #{(@current_step + 1) / @total_steps * 100}%"}></div>

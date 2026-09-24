@@ -567,12 +567,17 @@ defmodule Samen.Web.ActivityMaskingTest do
 
     html = render_activity(org_id)
 
-    # The activity FEED itself stays a pure reader (Class B). The ONE write affordance the
-    # LiveView now carries — the T150 open-session form (`handle_event("open_session", …)`) —
-    # is rendered EXCLUSIVELY on the deny state (no active session), never on this feed render.
-    refute html =~ "phx-click"
-    refute html =~ "phx-submit"
-    refute html =~ "<form"
+    # The shared operator layout (Samen.UI.Nav sidebar footer) carries a plain POST
+    # Logout form on EVERY operator page — a session-teardown affordance, not a write
+    # affordance of this feed. Strip it, then prove the FEED surface itself stays a
+    # pure reader (Class B). The ONE feed-owned write affordance the LiveView carries
+    # — the T150 open-session form (`handle_event("open_session", …)`) — is rendered
+    # EXCLUSIVELY on the deny state (no active session), never on this feed render.
+    feed_html = String.replace(html, ~r|<form action="/logout".*?</form>|s, "")
+
+    refute feed_html =~ "phx-click"
+    refute feed_html =~ "phx-submit"
+    refute feed_html =~ "<form"
   end
 
   test "no org resolved renders the honest empty state, never a crash" do

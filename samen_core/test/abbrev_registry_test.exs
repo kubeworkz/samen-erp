@@ -120,12 +120,13 @@ defmodule Samen.AbbrevRegistryTest do
       path
     end
 
-    test "the COMMITTED registry: 403 flat entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
+    test "the COMMITTED registry: 405 flat entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
       %{global: global, hosts: hosts} = Reg.load_namespaced()
       # +75 since the 328 pin (eb1de17): the WS-ERP E28–E38 scope batches + the
       # HuggingFace BYOK scope + the z-prefix re-nesting (9d751da/172057e) +
       # the samenerp Support/Settings/Automation mounts (c9d5272).
-      assert map_size(global) == 403
+      # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
+      assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
       # samen_core 84, samen_web 44, samenerp 68 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er`) = 280 host entries across six hosts.
@@ -724,8 +725,8 @@ defmodule Samen.AbbrevRegistryTest do
 #       68-entry samenerp host proof, prefix `er`) global
       # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
       # Support/Settings/Automation mounts (c9d5272) = 410 global → 410 + 280
-      # host = 690 flat… actual: 403 + 280 = 683.
-      assert map_size(Reg.load()) == 683
+      # host = 690 flat… actual: 405 + 280 = 685 (403/683 pre-fpo+mrg fix).
+      assert map_size(Reg.load()) == 685
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -103,7 +103,7 @@ defmodule Samenerp.Security do
   def enforce_https(conn) do
     if enforce_https?() and not secure_request?(conn) do
       https_url = "https://#{conn.host}#{conn.request_path}"
-      Plug.Conn.redirect(conn, to: https_url)
+      Phoenix.Controller.redirect(conn, external: https_url)
     else
       conn
     end

@@ -70,7 +70,6 @@ defmodule Samenerp.Repo.Migrations.AddSupportScope do
       add(:ztk_breached, :boolean, default: false, null: false)
       add(:ztk_resolved_at, :utc_datetime)
       add(:ztk_closed_at, :utc_datetime)
-      add(:ztk_tags, {:array, :text}, default: [])
       add(:ztk_custom, :map, default: fragment("'{}'::jsonb"))
       add(:ztk_external_id, :text)
       add(:ztk_archived_at, :utc_datetime_usec)

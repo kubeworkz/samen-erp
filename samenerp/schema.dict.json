@@ -801,6 +801,108 @@
     {
       "fields": [
         {
+          "column_name": "efs_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "efs_base_currency",
+          "logical_name": "base_currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efs_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efs_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efs_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efs_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.OrgFxSettings",
+      "table_name": "efs_org_fx_settings"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "efx_from_currency",
+          "logical_name": "from_currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efx_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efx_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efx_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efx_rate",
+          "logical_name": "rate",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efx_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efx_to_currency",
+          "logical_name": "to_currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efx_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efx_valid_at",
+          "logical_name": "valid_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ExchangeRate",
+      "table_name": "efx_exchange_rate"
+    },
+    {
+      "fields": [
+        {
           "column_name": "egr_id",
           "logical_name": "id",
           "pii": false,
@@ -875,6 +977,78 @@
       ],
       "resource": "Samenerp.Erp.GoodsReceipt",
       "table_name": "egr_goods_receipt"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eld_allocation_method",
+          "logical_name": "allocation_method",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eld_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eld_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eld_bill_id",
+          "logical_name": "bill_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eld_cost_account_id",
+          "logical_name": "cost_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eld_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eld_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eld_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eld_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eld_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eld_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.LandedCost",
+      "table_name": "eld_landed_cost"
     },
     {
       "fields": [
@@ -4689,6 +4863,84 @@
     {
       "fields": [
         {
+          "column_name": "etn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "etn_dest_warehouse_id",
+          "logical_name": "dest_warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "etn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "etn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "etn_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "etn_note",
+          "logical_name": "note",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "etn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "etn_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "etn_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "etn_source_warehouse_id",
+          "logical_name": "source_warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "etn_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "etn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.TransferOrder",
+      "table_name": "etn_transfer_order"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ewh_archived_at",
           "logical_name": "archived_at",
           "pii": false,
@@ -4949,6 +5201,1914 @@
       ],
       "resource": "Samenerp.Vertical.Record",
       "table_name": "rne_record"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "pii_zag_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zag_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zag_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zag_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zag_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zag_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zag_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zag_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zag_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zag_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zag_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zag_timezone",
+          "logical_name": "timezone",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zag_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Agent",
+      "table_name": "zag_agent"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zat_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zat_company_id",
+          "logical_name": "company_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zat_content_type",
+          "logical_name": "content_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zat_file_name",
+          "logical_name": "file_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zat_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zat_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zat_opportunity_id",
+          "logical_name": "opportunity_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zat_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zat_person_id",
+          "logical_name": "person_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zat_size_bytes",
+          "logical_name": "size_bytes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zat_storage_key",
+          "logical_name": "storage_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zat_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Crm.Attachment",
+      "table_name": "zat_attachment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zca_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zca_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zca_comments",
+          "logical_name": "comments",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zca_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zca_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zca_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zca_responded_at",
+          "logical_name": "responded_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zca_score",
+          "logical_name": "score",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zca_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zca_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Csat",
+      "table_name": "zca_csat"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zcm_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zcm_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zcm_domain",
+          "logical_name": "domain",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zcm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zcm_industry",
+          "logical_name": "industry",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zcm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zcm_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zcm_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zcm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zcm_size",
+          "logical_name": "size",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zcm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zcm_website",
+          "logical_name": "website",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Samenerp.Crm.Company",
+      "table_name": "zcm_company"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zct_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zct_consumed_at",
+          "logical_name": "consumed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zct_expires_at",
+          "logical_name": "expires_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zct_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zct_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zct_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zct_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zct_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zct_token_digest",
+          "logical_name": "token_digest",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zct_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.CsatSurveyToken",
+      "table_name": "zct_csat_survey_token"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zcv_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zcv_channel",
+          "logical_name": "channel",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zcv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zcv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zcv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zcv_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zcv_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zcv_ticket_id",
+          "logical_name": "ticket_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zcv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Conversation",
+      "table_name": "zcv_conversation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zes_chain",
+          "logical_name": "chain",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "zes_current_step",
+          "logical_name": "current_step",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zes_deadline_at",
+          "logical_name": "deadline_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zes_dedupe_key",
+          "logical_name": "dedupe_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zes_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zes_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zes_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zes_next_action_at",
+          "logical_name": "next_action_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zes_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zes_resolved_at",
+          "logical_name": "resolved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zes_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zes_subject_ref",
+          "logical_name": "subject_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zes_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Automation.Escalation",
+      "table_name": "zes_escalation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zla_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zla_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "zla_first_response_minutes",
+          "logical_name": "first_response_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zla_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zla_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zla_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zla_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zla_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zla_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zla_resolve_minutes",
+          "logical_name": "resolve_minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zla_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Sla",
+      "table_name": "zla_sla"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zma_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zma_body_template",
+          "logical_name": "body_template",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zma_category",
+          "logical_name": "category",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zma_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zma_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "zma_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zma_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zma_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zma_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zma_tags",
+          "logical_name": "tags",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "zma_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Macro",
+      "table_name": "zma_macro"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zmc_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zmc_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zmc_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmc_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmc_scheduled_at",
+          "logical_name": "scheduled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmc_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.Campaign",
+      "table_name": "zmc_campaign"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zme_event_type",
+          "logical_name": "event_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zme_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zme_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zme_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zme_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zme_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zme_send_id",
+          "logical_name": "send_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zme_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zme_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.EmailEvent",
+      "table_name": "zme_email_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zmg_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zmg_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zmg_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmg_filter_criteria",
+          "logical_name": "filter_criteria",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zmg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmg_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmg_subscriber_count",
+          "logical_name": "subscriber_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zmg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.Segment",
+      "table_name": "zmg_segment"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zmn_campaign_id",
+          "logical_name": "campaign_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmn_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zmn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmn_idempotency_key",
+          "logical_name": "idempotency_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmn_provider_message_id",
+          "logical_name": "provider_message_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmn_queued_at",
+          "logical_name": "queued_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmn_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmn_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmn_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmn_template_id",
+          "logical_name": "template_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.Send",
+      "table_name": "zmn_send"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "pii_zmo_body",
+          "logical_name": "body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zmo_agent_id",
+          "logical_name": "agent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmo_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zmo_attachments",
+          "logical_name": "attachments",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "zmo_conversation_id",
+          "logical_name": "conversation_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmo_created_via",
+          "logical_name": "created_via",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmo_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmo_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmo_message_type",
+          "logical_name": "message_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmo_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmo_sender_id",
+          "logical_name": "sender_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmo_sender_type",
+          "logical_name": "sender_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmo_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Message",
+      "table_name": "zmo_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zmp_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "zmp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmp_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmp_reason",
+          "logical_name": "reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmp_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmp_suppressed_at",
+          "logical_name": "suppressed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.Suppression",
+      "table_name": "zmp_suppression"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "pii_zms_email",
+          "logical_name": "email",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zms_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zms_consent_at",
+          "logical_name": "consent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zms_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zms_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zms_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zms_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zms_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zms_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zms_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.Subscriber",
+      "table_name": "zms_subscriber"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zmt_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zmt_body_html",
+          "logical_name": "body_html",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmt_body_text",
+          "logical_name": "body_text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmt_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zmt_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "zmt_from_address",
+          "logical_name": "from_address",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmt_from_name",
+          "logical_name": "from_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmt_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmt_subject_line",
+          "logical_name": "subject_line",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.Template",
+      "table_name": "zmt_template"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zmv_event",
+          "logical_name": "event",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zmv_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zmv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmv_purpose",
+          "logical_name": "purpose",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zmv_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmv_subject_hash",
+          "logical_name": "subject_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zmv_subscriber_id",
+          "logical_name": "subscriber_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zmv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Marketing.ConsentEvent",
+      "table_name": "zmv_consent_event"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zop_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zop_close_date",
+          "logical_name": "close_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "zop_company_id",
+          "logical_name": "company_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zop_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zop_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zop_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zop_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zop_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zop_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zop_pipeline_id",
+          "logical_name": "pipeline_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zop_probability",
+          "logical_name": "probability",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zop_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zop_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zop_value",
+          "logical_name": "value",
+          "pii": false,
+          "type": "Samen.Type.Money"
+        }
+      ],
+      "resource": "Samenerp.Crm.Opportunity",
+      "table_name": "zop_opportunity"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zpl_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zpl_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "zpl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zpl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zpl_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zpl_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zpl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zpl_stage_order",
+          "logical_name": "stage_order",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zpl_stage_type",
+          "logical_name": "stage_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zpl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Crm.Pipeline",
+      "table_name": "zpl_pipeline"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zpr_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "zpr_company_id",
+          "logical_name": "company_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zpr_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "zpr_display_name",
+          "logical_name": "display_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zpr_emails",
+          "logical_name": "emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zpr_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zpr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zpr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zpr_job_title",
+          "logical_name": "job_title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zpr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zpr_phones",
+          "logical_name": "phones",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zpr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Crm.Person",
+      "table_name": "zpr_person"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "pii_zrm_note",
+          "logical_name": "note",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "zrm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zrm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zrm_recipient_id",
+          "logical_name": "recipient_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zrm_remind_at",
+          "logical_name": "remind_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrm_sent_at",
+          "logical_name": "sent_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrm_source",
+          "logical_name": "source",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zrm_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zrm_subject_ref",
+          "logical_name": "subject_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zrm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Automation.Reminder",
+      "table_name": "zrm_reminder"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zrn_depth",
+          "logical_name": "depth",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zrn_dispatch_key",
+          "logical_name": "dispatch_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zrn_duration_ms",
+          "logical_name": "duration_ms",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "zrn_error_kind",
+          "logical_name": "error_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zrn_finished_at",
+          "logical_name": "finished_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zrn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zrn_outcome",
+          "logical_name": "outcome",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "zrn_started_at",
+          "logical_name": "started_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrn_state",
+          "logical_name": "state",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zrn_subject_ref",
+          "logical_name": "subject_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zrn_trigger_kind",
+          "logical_name": "trigger_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zrn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zrn_workflow_id",
+          "logical_name": "workflow_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Automation.Run",
+      "table_name": "zrn_run"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ztk_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ztk_breached",
+          "logical_name": "breached",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ztk_closed_at",
+          "logical_name": "closed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ztk_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ztk_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ztk_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ztk_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ztk_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ztk_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ztk_resolved_at",
+          "logical_name": "resolved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ztk_sla_breach_at",
+          "logical_name": "sla_breach_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ztk_sla_id",
+          "logical_name": "sla_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ztk_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ztk_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ztk_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Support.Ticket",
+      "table_name": "ztk_ticket"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "zwf_actions",
+          "logical_name": "actions",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "zwf_conditions",
+          "logical_name": "conditions",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "zwf_disabled_by_operator_at",
+          "logical_name": "disabled_by_operator_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zwf_disabled_reason",
+          "logical_name": "disabled_reason",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zwf_event",
+          "logical_name": "event",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zwf_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zwf_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zwf_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zwf_next_fire_at",
+          "logical_name": "next_fire_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zwf_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zwf_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "zwf_resource_key",
+          "logical_name": "resource_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zwf_schedule_cron",
+          "logical_name": "schedule_cron",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "zwf_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zwf_trigger_kind",
+          "logical_name": "trigger_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "zwf_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "zwf_webhook_secret",
+          "logical_name": "webhook_secret",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Samenerp.Automation.Workflow",
+      "table_name": "zwf_workflow"
     }
   ]
 }

@@ -207,7 +207,7 @@ defmodule Samenerp.AuditLog do
   Get audit log statistics.
   """
   @spec stats(map()) :: map()
-  def stats(filters \\ %{}) do
+  def stats(_filters \\ %{}) do
     Logger.info("[AuditLog] Calculating stats")
 
     # In production, this would aggregate from database
@@ -231,7 +231,7 @@ defmodule Samenerp.AuditLog do
     Logger.info("[AuditLog] Purging old entries")
 
     retention_days = retention_days()
-    cutoff_date = DateTime.utc_now() |> DateTime.add(-retention_days, :day)
+    _cutoff_date = DateTime.utc_now() |> DateTime.add(-retention_days, :day)
 
     # In production, this would delete old entries
     # For now, return 0

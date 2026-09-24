@@ -55,6 +55,8 @@ defmodule Samen.Web.Auth.AccountController do
   """
   use Phoenix.Controller, formats: [:html]
 
+  require Logger
+
   import Plug.Conn
 
   alias Samen.Delivery.AuthMailer

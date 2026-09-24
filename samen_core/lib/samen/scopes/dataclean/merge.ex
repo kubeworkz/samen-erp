@@ -24,7 +24,7 @@ defmodule Samen.Scopes.Dataclean.Merge do
     domain: Samen.Core.Domain,
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
-    abbrev: "dcm",
+    abbrev: "mrg",
     archivable: true
 
   postgres do

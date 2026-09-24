@@ -164,7 +164,7 @@ defmodule Samenerp.Backup do
         Logger.error("[Backup] Verification failed: file not found")
         {:error, :file_not_found}
 
-      File.size(filepath) == 0 ->
+      File.stat!(filepath).size == 0 ->
         Logger.error("[Backup] Verification failed: file is empty")
         {:error, :empty_file}
 
@@ -185,7 +185,7 @@ defmodule Samenerp.Backup do
       backups
       |> Enum.map(fn filename ->
         filepath = Path.join(backup_directory(), filename)
-        File.size(filepath)
+        File.stat!(filepath).size
       end)
       |> Enum.sum()
 

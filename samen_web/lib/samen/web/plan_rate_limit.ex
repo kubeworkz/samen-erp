@@ -59,8 +59,8 @@ defmodule Samen.Web.PlanRateLimit do
   @spec check_api(String.t(), atom()) :: :ok | {:error, :rate_limited}
   def check_api(user_id, plan \\ :free) when is_binary(user_id) and is_atom(plan) do
     limits = get_plan_limits(plan)
-    limit = limits.api
-    window_ms = 60_000  # 1 minute
+    _limit = limits.api
+    _window_ms = 60_000  # 1 minute
 
     # Use a combined key: plan:user_id
     key = "#{plan}:#{user_id}"
@@ -69,7 +69,7 @@ defmodule Samen.Web.PlanRateLimit do
     case RateLimit.check(:api_request_user, :api, key) do
       :ok ->
         # Also check against absolute limit (can't exceed enterprise limit)
-        absolute_limit = @default_plans.enterprise.api
+        _absolute_limit = @default_plans.enterprise.api
         case RateLimit.check(:api_request_user, :api, "absolute:#{user_id}") do
           :ok -> :ok
           {:error, :rate_limited} -> {:error, :rate_limited}
@@ -88,7 +88,7 @@ defmodule Samen.Web.PlanRateLimit do
   @spec check_ai(String.t(), atom()) :: :ok | {:error, :rate_limited}
   def check_ai(tenant_id, plan \\ :free) when is_binary(tenant_id) and is_atom(plan) do
     limits = get_plan_limits(plan)
-    limit = limits.ai
+    _limit = limits.ai
 
     key = "#{plan}:#{tenant_id}"
 
@@ -106,7 +106,7 @@ defmodule Samen.Web.PlanRateLimit do
   @spec check_stream(String.t(), atom()) :: {:ok, String.t()} | {:error, :rate_limited}
   def check_stream(tenant_id, plan \\ :free) when is_binary(tenant_id) and is_atom(plan) do
     limits = get_plan_limits(plan)
-    max_streams = limits.streams
+    _max_streams = limits.streams
 
     key = "#{plan}:#{tenant_id}"
 

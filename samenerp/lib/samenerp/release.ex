@@ -18,7 +18,6 @@ defmodule Samenerp.Release do
   """
 
   @app :samenerp
-  @repo Samenerp.Repo
 
   @doc """
   Run all pending migrations.
