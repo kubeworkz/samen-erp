@@ -1,6 +1,6 @@
 defmodule Samen.Web.AI.AssistantLive do
   @moduledoc """
-  Surface 7/7 of the tenant-plane AI UI kit — the ASSISTANT CHAT (OpenClaw-lite P1,
+  Surface 7/7 of the tenant-plane AI UI kit — the ASSISTANT CHAT (OpenClaw-lite P1 → P2 tool-aware,
   ADR-043 §5.3 outside the verbs/agent overlap): named assistants + conversation threads
   over a vault-routed transcript, file-drop grounding, model picker, streaming, and
   honest empty states.
@@ -56,6 +56,7 @@ defmodule Samen.Web.AI.AssistantLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, name: 2]
   import Samen.Web.AI.Components
 
+  alias Samen.Web.AI.AgentReads
   alias Samen.Web.AI.AssistantReads
   alias Samen.Web.AI.Server
   alias Samen.Web.Mount
@@ -106,6 +107,12 @@ defmodule Samen.Web.AI.AssistantLive do
 
     streaming = Keyword.get(opts, :streaming, socket.assigns[:streaming] || false)
     stream_buffer = Keyword.get(opts, :stream_buffer, socket.assigns[:stream_buffer] || "")
+    # Preserve tool-aware run context across reloads (P2) — load/3 is the single
+    # seam tests also drive without a socket, so these are assign-defaulted here
+    # and updated only on send / approve / reject.
+    pending_run = Keyword.get(opts, :assistant_run, socket.assigns[:assistant_run])
+    pending_approval = Keyword.get(opts, :assistant_approval, socket.assigns[:assistant_approval])
+    pending_provenance = Keyword.get(opts, :assistant_provenance, socket.assigns[:assistant_provenance])
 
     socket
     |> Phoenix.Component.assign(:org_id, org_id)
@@ -120,6 +127,10 @@ defmodule Samen.Web.AI.AssistantLive do
     |> Phoenix.Component.assign(:stream_buffer, stream_buffer)
     |> Phoenix.Component.assign(:outcome, Keyword.get(opts, :outcome, nil))
     |> Phoenix.Component.assign(:grounding, [])
+    |> Phoenix.Component.assign(:assistant_run, pending_run)
+    |> Phoenix.Component.assign(:assistant_approval, pending_approval)
+    |> Phoenix.Component.assign(:assistant_provenance, pending_provenance)
+    |> Phoenix.Component.assign(:available_tools, available_tools())
   end
 
   @impl true
@@ -158,11 +169,14 @@ defmodule Samen.Web.AI.AssistantLive do
     if is_nil(org_id) do
       {:noreply, socket}
     else
+      tools = parse_tools_param(params["tools"] || params["assistant_tools"])
+
       attrs = %{
         name: present(params["assistant_name"]) || "assistant-#{System.unique_integer([:positive])}",
         title: present(params["assistant_title"]) || "New assistant",
         system_prompt: present(params["system_prompt"]) || "You are a helpful assistant.",
-        model_id: present(params["model_id"])
+        model_id: present(params["model_id"]),
+        tools: tools
       }
 
       case Server.create_assistant(mount, org_id, attrs) do
@@ -192,30 +206,38 @@ defmodule Samen.Web.AI.AssistantLive do
         {:noreply, Phoenix.Component.assign(socket, :outcome, {:error, "Type a message."})}
 
       true ->
-        # Kick the kernel synchronously (P1 = direct complete; streaming hook is the
-        # push_event path when the HF adapter is wired — Fake in :test is immediate).
         grounding = socket.assigns[:grounding] || []
 
         case Server.assistant_run(mount, org_id, assistant_id, conv_id, input, grounding: grounding) do
-          {:ok, %{completion: completion, conversation: _updated}} ->
-            socket =
-              socket
-              |> Phoenix.Component.assign(:input, "")
-              |> Phoenix.Component.assign(:outcome, {:ok, completion})
-              |> Phoenix.Component.assign(:streaming, false)
-              |> Phoenix.Component.assign(:stream_buffer, "")
-
-            # Re-read the persisted turns so the transcript is fresh from the vault.
+          {:ok, %{completion: completion, conversation: _updated} = ok} ->
             detail =
               case AssistantReads.get_conversation(mount, org_id, conv_id) do
                 {:ok, d} -> d
                 _ -> socket.assigns[:detail]
               end
 
-            socket = Phoenix.Component.assign(socket, :detail, detail)
+            run = Map.get(ok, :run)
+            awaiting? = Map.get(ok, :awaiting_approval, false)
 
-            # If the completion is non-empty, push a chunk so the JS hook appends even
-            # for the Fake deterministic lane (parity with the HF streaming path).
+            {pending_approval, provenance} =
+              if awaiting? and not is_nil(run) do
+                approval = AgentReads.pending_approval(org_id, run)
+                {approval, AgentReads.provenance(approval)}
+              else
+                {nil, nil}
+              end
+
+            socket =
+              socket
+              |> Phoenix.Component.assign(:input, "")
+              |> Phoenix.Component.assign(:outcome, {:ok, completion})
+              |> Phoenix.Component.assign(:streaming, false)
+              |> Phoenix.Component.assign(:stream_buffer, "")
+              |> Phoenix.Component.assign(:detail, detail)
+              |> Phoenix.Component.assign(:assistant_run, run)
+              |> Phoenix.Component.assign(:assistant_approval, pending_approval)
+              |> Phoenix.Component.assign(:assistant_provenance, provenance)
+
             socket =
               if is_binary(completion.text) and completion.text != "" do
                 Phoenix.LiveView.push_event(socket, "assistant:chunk", %{text: completion.text})
@@ -225,11 +247,112 @@ defmodule Samen.Web.AI.AssistantLive do
 
             {:noreply, socket}
 
+          {:error, {:budget_exhausted, %Samen.AI.Agent.Run{} = run}} ->
+            {:noreply,
+             socket
+             |> Phoenix.Component.assign(:outcome, {:error, {:budget_exhausted, run.error_kind || "budget_exhausted"}})
+             |> Phoenix.Component.assign(:assistant_run, run)
+             |> Phoenix.Component.assign(:assistant_approval, nil)
+             |> Phoenix.Component.assign(:assistant_provenance, nil)}
+
+          {:error, {reason, %Samen.AI.Agent.Run{} = run}} when not is_nil(run) ->
+            {:noreply,
+             socket
+             |> Phoenix.Component.assign(:outcome, {:error, normalize_error(reason)})
+             |> Phoenix.Component.assign(:assistant_run, run)}
+
+          {:error, {:invalid_tools, bad}} when is_list(bad) ->
+            {:noreply,
+             Phoenix.Component.assign(socket, :outcome, {:error, "Invalid tools: " <> Enum.join(bad, ", ") <> " — must be one of " <> Enum.join(available_tools(), ", ")})}
+
           {:error, reason} ->
             {:noreply, Phoenix.Component.assign(socket, :outcome, {:error, normalize_error(reason)})}
         end
     end
   end
+
+  # P2 — the same decision card AgentLive renders, now on the assistant thread.
+  # The approval id is validated against THIS run's own :proposed turn row before
+  # the engine (id-discrimination, R-A5-5), and the acting principal is the
+  # AUTHENTICATED human (samen_tenant_principal), never broker:<org>.
+  def handle_event("approve", %{"id" => approval_id}, socket), do: decide(socket, :approve, approval_id)
+  def handle_event("reject", %{"id" => approval_id}, socket), do: decide(socket, :reject, approval_id)
+
+  defp decide(socket, action, approval_id) do
+    mount = socket.assigns[:samen_mount]
+    org_id = socket.assigns[:org_id]
+    run = socket.assigns[:assistant_run]
+
+    outcome =
+      with %Samen.AI.Agent.Run{} <- run,
+           %{id: ^approval_id} <- socket.assigns[:assistant_approval],
+           {:principal, actor_id} when is_binary(actor_id) <- {:principal, principal_id(socket)} do
+        classify(action, AgentReads.decide(action, approval_id, actor_id))
+      else
+        {:principal, _} ->
+          {:error, "You must be signed in as a member of this org to decide a proposal."}
+
+        _ ->
+          # Fallback: re-read run-scoped pending (page reload where assigns were
+          # not carried), still validated against the run's own pending.
+          with %Samen.AI.Agent.Run{} = other_run <- run,
+               %{id: ^approval_id} = _approval <- AgentReads.pending_approval(org_id, other_run),
+               {:principal, actor_id} when is_binary(actor_id) <- {:principal, principal_id(socket)} do
+            classify(action, AgentReads.decide(action, approval_id, actor_id))
+          else
+            {:principal, _} ->
+              {:error, "You must be signed in as a member of this org to decide a proposal."}
+
+            _ ->
+              {:error, "That proposal is no longer pending for this run."}
+          end
+      end
+
+    detail =
+      case socket.assigns[:conversation_id] && org_id && AssistantReads.get_conversation(mount, org_id, socket.assigns[:conversation_id]) do
+        {:ok, d} -> d
+        _ -> socket.assigns[:detail]
+      end
+
+    {next_approval, next_prov} =
+      case outcome do
+        {:ok, _} -> {nil, nil}
+        _ -> {socket.assigns[:assistant_approval], socket.assigns[:assistant_provenance]}
+      end
+
+    {:noreply,
+     socket
+     |> Phoenix.Component.assign(:outcome, outcome)
+     |> Phoenix.Component.assign(:detail, detail)
+     |> Phoenix.Component.assign(:assistant_approval, next_approval)
+     |> Phoenix.Component.assign(:assistant_provenance, next_prov)}
+  end
+
+  defp principal_id(socket) do
+    case socket.assigns[:samen_tenant_principal] do
+      id when is_binary(id) and id != "" -> id
+      _ -> stashed_principal(socket.assigns[:samen_mount])
+    end
+  end
+
+  defp stashed_principal(%Mount{} = mount) do
+    case Mount.label(mount, Samen.Web.TenantRole.principal_label(), nil) do
+      id when is_binary(id) and id != "" -> id
+      _ -> nil
+    end
+  end
+
+  defp stashed_principal(_mount), do: nil
+
+  defp classify(:approve, {:ok, _}), do: {:ok, "Approved — the write executed as you, inside the decision."}
+  defp classify(:reject, {:ok, _}), do: {:ok, "Rejected — the run stopped and nothing was executed."}
+  defp classify(_action, {:error, :self_approval}), do: {:error, "The requester of a proposal can never approve it."}
+  defp classify(_action, {:error, :not_authorized}), do: {:error, "You are not a member of this org, so you cannot decide this proposal."}
+  defp classify(_action, {:error, :approver_unresolvable}), do: {:error, "Approvals are not wired on this host — nothing was executed."}
+  defp classify(_action, {:error, :not_pending}), do: {:error, "That proposal has already been decided."}
+  defp classify(_action, {:error, {:tool_failed, kind}}), do: {:error, "The approved write failed (" <> to_string(kind) <> ") — the decision was rolled back and the proposal is still pending."}
+  defp classify(_action, {:error, :proposal_mismatch}), do: {:error, "The proposal no longer matches what was approved — nothing was executed."}
+  defp classify(_action, {:error, _}), do: {:error, "That decision could not be completed — nothing was executed."}
 
   # HF streamer forwards chunks as process messages while streaming is active — keep the
   # buffer in assigns so the render merges them into the last assistant bubble, and push
@@ -280,6 +403,15 @@ defmodule Samen.Web.AI.AssistantLive do
         "#{base}/assistant"
     end
   end
+
+  defp available_tools, do: Samen.AI.ToolSurface.names(:tenant)
+
+  defp parse_tools_param(nil), do: []
+  defp parse_tools_param(v) when is_list(v), do: Enum.filter(v, &is_binary/1) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+  defp parse_tools_param(v) when is_binary(v) do
+    v |> String.split([",", " "], trim: true) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+  end
+  defp parse_tools_param(_), do: []
 
   defp resolve_assistant_id(param_id, assistants) when is_binary(param_id) and param_id != "" do
     if Enum.any?(assistants, &(&1.id == param_id)), do: param_id, else: fallback_assistant_id(assistants)
@@ -342,6 +474,8 @@ defmodule Samen.Web.AI.AssistantLive do
                     {a.title} <span style="color:var(--muted)">({a.name})</span>
                   </a>
                   <span :if={a.model_id} style="margin-left:6px;color:var(--muted);font-size:11px">{a.model_id}</span>
+                  <span :if={a.tools != []} style="margin-left:6px;color:var(--muted);font-size:11px" class="assistant-tools-badge" data-tools={Enum.join(a.tools, ",")} >tools: {Enum.join(a.tools, ", ")}</span>
+                  <span :if={a.tools == []} style="margin-left:6px;color:var(--muted);font-size:11px" >no tools</span>
                 </li>
               </ul>
             <% end %>
@@ -352,6 +486,16 @@ defmodule Samen.Web.AI.AssistantLive do
               <input type="text" name="assistant_title" placeholder="Title" style="font-size:12px" />
               <textarea name="system_prompt" rows="2" placeholder="System prompt" style="font-size:12px"></textarea>
               <input type="text" name="model_id" placeholder="model_id (optional)" style="font-size:12px" />
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:11px;color:var(--muted)">Tools (subset of tenant surface — leave empty for chat-only)</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <label :for={t <- @available_tools} style="font-size:12px;display:flex;gap:4px;align-items:center">
+                    <input type="checkbox" name="tools[]" value={t} /> {t}
+                  </label>
+                </div>
+                <span style="font-size:11px;color:var(--muted)">or comma-separated: </span>
+                <input type="text" name="assistant_tools" placeholder="search_records, fetch_record" style="font-size:12px" />
+              </div>
               <.button variant="secondary" type="submit" id="assistant-create">Create</.button>
             </form>
 
@@ -384,9 +528,12 @@ defmodule Samen.Web.AI.AssistantLive do
               <% is_nil(@detail) -> %>
                 <.empty_state title="Conversation not found" body="That thread does not exist in this org." icon="?" />
               <% true -> %>
-                <div style="display:flex;align-items:center;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                   <.pill variant="info"><span id="assistant-conv-title">{@detail.title}</span></.pill>
                   <span :if={@assistant && @assistant.model_id} style="color:var(--muted);font-size:12px">model: {@assistant.model_id}</span>
+                  <.pill :if={@assistant && @assistant.tools != []} variant="info"><span id="assistant-tools-active" data-tools={Enum.join(@assistant.tools, ",")}>tools: {Enum.join(@assistant.tools, ", ")}</span></.pill>
+                  <span :if={@assistant_run} style="color:var(--muted);font-size:11px" id="assistant-run-id">run: {@assistant_run.id} · {@assistant_run.state}</span>
+                  <a :if={@assistant_run} href={"/ai/agents/#{@assistant_run.id}"} style="font-size:11px">View run →</a>
                   <.pill :if={@detail.masked?} variant="warn"><span id="assistant-masked-badge">•••• masked transcript</span></.pill>
                 </div>
 
@@ -408,6 +555,27 @@ defmodule Samen.Web.AI.AssistantLive do
 
                 <div :if={@outcome} id="assistant-outcome" style="margin-top:4px">
                   <.ai_result result={normalize_outcome(@outcome)} id="assistant-result" />
+                </div>
+
+                <div :if={@assistant_approval} class="card" id="assistant-decision-card" data-approval={@assistant_approval.id} style="padding:14px;border-color:#F0B429">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <.pill variant="warn"><span id="assistant-decision-badge">Awaiting your decision</span></.pill>
+                    <span style="color:var(--muted);font-size:12px">The assistant PROPOSED this write — it has not run without your approval (ADR-043 §6.2).</span>
+                  </div>
+                  <dl :if={@assistant_provenance} id="assistant-decision-provenance" style="margin:10px 0 0;font-size:13px">
+                    <div><dt style="display:inline;color:var(--muted)">tool:</dt> <dd style="display:inline;margin:0" id="assistant-prov-tool">{@assistant_provenance.tool_kind}</dd></div>
+                    <div><dt style="display:inline;color:var(--muted)">turn:</dt> <dd style="display:inline;margin:0" id="assistant-prov-turn">{@assistant_provenance.turn_index}</dd></div>
+                    <div><dt style="display:inline;color:var(--muted)">arg keys:</dt> <dd style="display:inline;margin:0" id="assistant-prov-argkeys" class="mono">{Enum.join(@assistant_provenance.arg_keys, ", ")}</dd></div>
+                    <div><dt style="display:inline;color:var(--muted)">args digest:</dt> <dd style="display:inline;margin:0" id="assistant-prov-digest" class="mono">{@assistant_provenance.args_digest}</dd></div>
+                  </dl>
+                  <p style="margin:8px 0 0;color:var(--muted);font-size:12px">
+                    Only key NAMES + digest (never values — INV-1). Approving executes as you, once, inside the decision.
+                    Deadline: <span id="assistant-decision-deadline">{@assistant_approval.deadline_at}</span>.
+                  </p>
+                  <div style="margin-top:10px;display:flex;gap:8px">
+                    <.button variant="primary" phx-click="approve" phx-value-id={@assistant_approval.id} id="assistant-approve" data-confirm="Approve this write? It will execute once, as you.">Approve + execute</.button>
+                    <.button variant="secondary" phx-click="reject" phx-value-id={@assistant_approval.id} id="assistant-reject">Reject</.button>
+                  </div>
                 </div>
 
                 <form phx-submit="send" id="assistant-composer" class="card" style="display:flex;gap:8px;padding:10px;align-items:flex-end">

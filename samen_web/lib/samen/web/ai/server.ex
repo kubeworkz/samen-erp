@@ -41,6 +41,7 @@ defmodule Samen.Web.AI.Server do
   @assistant_cap 4
   @max_history_turns 20
   @default_hf_model "mistralai/Mistral-7B-Instruct-v0.3"
+  @assistant_agent Samen.AI.AssistantAgent
 
   @doc "The verb names the Verbs surface exposes (the six ADR-043 §7.5 intelligence verbs)."
   @spec verbs() :: [atom()]
@@ -413,13 +414,148 @@ defmodule Samen.Web.AI.Server do
 
     with {:ok, assistant} <- get_assistant(mount, org_id, assistant_id),
          {:ok, %{conversation: conv, turns: prior_turns}} <- get_conversation(mount, org_id, conv_id),
-         :ok <- ensure_same_assistant(conv, assistant_id),
-         {:ok, completion} <- complete_for_assistant(scope, assistant, prior_turns, input, opts),
-         {:ok, updated} <- persist_turns(conv, prior_turns, input, completion, scope) do
-      _ = maybe_autotitle(conv, updated, scope, input)
-      {:ok, %{completion: completion, conversation: updated}}
+         :ok <- ensure_same_assistant(conv, assistant_id) do
+      if tool_aware?(assistant) do
+        do_tool_aware_run(mount, org_id, scope, assistant, conv, prior_turns, input, opts)
+      else
+        with {:ok, completion} <- complete_for_assistant(scope, assistant, prior_turns, input, opts),
+             {:ok, updated} <- persist_turns(conv, prior_turns, input, completion, scope) do
+          _ = maybe_autotitle(conv, updated, scope, input)
+          {:ok, %{completion: completion, conversation: updated}}
+        end
+      end
     end
   end
+
+  defp tool_aware?(assistant) do
+    case Map.get(assistant, :tools) do
+      tools when is_list(tools) and tools != [] -> true
+      _ -> false
+    end
+  end
+
+  defp do_tool_aware_run(_mount, org_id, scope, assistant, conv, prior_turns, input, opts) do
+    system_prompt = Map.get(assistant, :system_prompt) || ""
+    history = history_segments(prior_turns)
+    goal = build_agent_goal(system_prompt, history, input)
+    model_id = Map.get(assistant, :model_id) || @default_hf_model
+    base_provider = {Samen.AI.Provider.HuggingFace, %{org_id: org_id, model_id: model_id}}
+    provider = Keyword.get(opts, :provider, base_provider)
+    grounding = Keyword.get(opts, :grounding, [])
+
+    with :ok <- validate_assistant_tools_subset(assistant) do
+      origin = "assistant:#{assistant.id}"
+      caller_opts = Keyword.take(opts, [:meta, :env_reader, :hooks])
+
+      # Per-assistant narrowing (P2): AssistantAgent declares the maximal :tenant
+      # surface — the row declares a SUBSET. Without this hook the model would be
+      # OFFERED the superset. The hook rides this process (run/4 is synchronous),
+      # so the allowlist in the dict is per-run; nil/missing defers (non-assistant
+      # runs unaffected).
+      per_run_hooks =
+        (Keyword.get(caller_opts, :hooks, []) |> List.wrap()) ++ [Samen.AI.AssistantToolFilter]
+
+      agent_opts =
+        caller_opts
+        |> Keyword.put(:provider, provider)
+        |> Keyword.put(:grounding, grounding)
+        |> Keyword.put(:origin, origin)
+        |> Keyword.put(:hooks, per_run_hooks)
+
+      Process.put(:assistant_allowed_tools, assistant.tools || [])
+
+      result =
+        try do
+          Samen.AI.Agent.run(@assistant_agent, scope, goal, agent_opts)
+        after
+          Process.delete(:assistant_allowed_tools)
+        end
+
+      handle_agent_result(result, conv, prior_turns, input, scope)
+    end
+  end
+
+  defp build_agent_goal(system_prompt, history, input) do
+    history_block =
+      case history do
+        [] -> ""
+        lines -> "Conversation history (last #{length(lines)} turn(s)):\n" <> Enum.join(lines, "\n") <> "\n\n"
+      end
+
+    system_block =
+      case String.trim(system_prompt) do
+        "" -> ""
+        prompt -> prompt <> "\n\n"
+      end
+
+    system_block <> history_block <> "User: #{input}"
+  end
+
+  defp validate_assistant_tools_subset(assistant) do
+    allowed = MapSet.new(@assistant_agent.definition().tools)
+    declared = MapSet.new(assistant.tools || [])
+
+    if MapSet.subset?(declared, allowed) do
+      :ok
+    else
+      bad = declared |> MapSet.difference(allowed) |> MapSet.to_list() |> Enum.sort()
+      {:error, {:invalid_tools, bad}}
+    end
+  end
+
+  defp handle_agent_result(result, conv, prior_turns, input, scope) do
+    case result do
+      {:ok, %{answer: answer, run: run}} when is_binary(answer) ->
+        completion = %Samen.AI.Completion{
+          text: answer,
+          provider: :assistant,
+          simulated: simulated_from_run(run),
+          usage: %{},
+          meta: %{agent_run_id: run.id}
+        }
+
+        with {:ok, updated} <- persist_turns(conv, prior_turns, input, completion, scope) do
+          {:ok, %{completion: completion, conversation: updated, run: run}}
+        end
+
+      {:awaiting_approval, %Samen.AI.Agent.Run{} = run} ->
+        placeholder = %Samen.AI.Completion{
+          text: "Proposal pending approval — see Agent runs for decision (run #{run.id}).",
+          provider: :assistant,
+          simulated: true,
+          usage: %{},
+          meta: %{agent_run_id: run.id, awaiting_approval: true}
+        }
+
+        with {:ok, updated} <- persist_turns(conv, prior_turns, input, placeholder, scope) do
+          {:ok,
+           %{
+             completion: placeholder,
+             conversation: updated,
+             run: run,
+             awaiting_approval: true
+           }}
+        end
+
+      {:awaiting_approval, run} ->
+        {:ok, %{run: run, awaiting_approval: true, conversation: conv}}
+
+      {:error, :budget_exhausted, run} ->
+        {:error, {:budget_exhausted, run}}
+
+      {:error, reason, run} when not is_nil(run) ->
+        {:error, {reason, run}}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      other ->
+        {:error, {:unexpected_agent_result, other}}
+    end
+  end
+
+  defp simulated_from_run(%{id: _} = _run), do: true
+  defp simulated_from_run(_), do: false
 
   # --- completion (the chokepoint caller — the only provider path) ----------------------
 

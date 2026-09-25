@@ -1,7 +1,7 @@
 defmodule Samen.AI.AssistantChange do
   @moduledoc """
   Write-time governance for `Samen.AI.Assistant`'s create / rename actions
-  (docs/plans/ai-assistant-openclaw-lite.md §6, P1):
+  (docs/plans/ai-assistant-openclaw-lite.md §6, P1 → P2):
 
     1. Refuses a `system_prompt` that carries a `vt_` vault-token sentinel,
        fail-closed — `vt_` is never a legitimate system instruction the same
@@ -12,6 +12,11 @@ defmodule Samen.AI.AssistantChange do
     3. Validates `model_id` is either absent or a bounded model id shape
        (letter/digit + `:`, `_`, `.`, `/`, `-` — a non-authoritative horizon
        string, not a tenant-data envelope).
+    4. Validates `tools` against the CLOSED `Samen.AI.ToolSurface` tenant registry
+       (P2) — only opted-in, surface-admitted tools may be declared; an unknown
+       or off-surface name refuses fail-closed (the same five-way narrowing the
+       agent loop enforces at run start, surfaced at write time so a scaffolded
+       assistant can never declare a tool the loop would reject as `:invalid_tools`).
   """
 
   use Ash.Resource.Change
@@ -32,7 +37,8 @@ defmodule Samen.AI.AssistantChange do
          :ok <- refuse_vt(system_prompt),
          {:ok, name} <- require_field(changeset, :name),
          :ok <- validate_name(name),
-         :ok <- validate_model(changeset) do
+         :ok <- validate_model(changeset),
+         :ok <- validate_tools(changeset) do
       changeset
     else
       {:error, field, reason} ->
@@ -102,6 +108,41 @@ defmodule Samen.AI.AssistantChange do
 
       {:ok, _} ->
         {:error, :model_id, "model_id must be a model identifier string or nil"}
+    end
+  end
+
+  defp validate_tools(changeset) do
+    case Ash.Changeset.fetch_change(changeset, :tools) do
+      :error ->
+        :ok
+
+      {:ok, tools} when is_list(tools) ->
+        validate_tools_value(tools)
+
+      {:ok, _} ->
+        {:error, :tools, "tools must be a list of tool name strings (closed enum, :tenant surface)"}
+    end
+  end
+
+  defp validate_tools_value(tools) do
+    allowed = MapSet.new(Samen.AI.ToolSurface.names(:tenant))
+
+    cond do
+      Enum.any?(tools, &(not is_binary(&1))) ->
+        {:error, :tools, "every tool must be a string (closed enum, :tenant surface)"}
+
+      Enum.any?(tools, &String.contains?(&1, @vt_sentinel)) ->
+        {:error, :tools, "tools must not contain a vt_ vault-token sentinel (INV-7)"}
+
+      (bad = Enum.reject(tools, &MapSet.member?(allowed, &1))) != [] ->
+        {:error, :tools,
+         "tools contains invalid tool(s) #{inspect(bad)} — must be one of #{inspect(MapSet.to_list(allowed) |> Enum.sort())} (:tenant surface, opted-in)"}
+
+      length(tools) != length(Enum.uniq(tools)) ->
+        {:error, :tools, "tools must not contain duplicates"}
+
+      true ->
+        :ok
     end
   end
 end
