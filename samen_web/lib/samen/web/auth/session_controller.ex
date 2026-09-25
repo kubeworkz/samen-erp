@@ -415,9 +415,21 @@ defmodule Samen.Web.Auth.SessionController do
         # brute-force signal for BOTH key axes now that a real session minted.
         reset_login_failures(mount, credential_id)
 
+        # ADR-031 / ADR-035 bridging — the operator conn gate historically read
+        # ONLY `samen_current_user` (the BYO-auth key driftwood sets), while the
+        # spine login writes ONLY `samen_session_token`. Without a bridge the spine
+        # operator admin was always "unauthenticated" to `/operator/*`. Write the
+        # user_id for the credential's operator-org User alongside the token so
+        # BOTH `Samen.Web.AuthGate` and `Samen.Web.Operator.Authz` see it. Best-
+        # effort: a credential with no operator User (a non-operator tenant) skips
+        # the legacy key — `Samenerp.OperatorAuthz` credential→User indirection
+        # still handles it. Never fails the login on this lookup.
+        legacy_user_id = legacy_principal_for(mount, credential_id)
+
         conn
         |> configure_session(renew: true)
         |> Auth.put_session_token(raw_token)
+        |> maybe_put_legacy_user(legacy_user_id)
         |> maybe_remember(remember?, raw_token)
         |> Auth.clear_totp_pending_token()
         |> delete_session(@pending_remember_key)
@@ -623,6 +635,29 @@ defmodule Samen.Web.Auth.SessionController do
 
   defp maybe_remember(conn, true, raw_token), do: Auth.write_remember_cookie(conn, raw_token)
   defp maybe_remember(conn, _false, _raw_token), do: conn
+
+  defp maybe_put_legacy_user(conn, id) when is_binary(id), do: Auth.put_current_user(conn, id)
+  defp maybe_put_legacy_user(conn, _), do: conn
+
+  # The User id to bridge into `samen_current_user` alongside the spine token.
+  # Purely a compat bridge so the operator conn gate (which historically read
+  # ONLY this key) passes a spine login immediately; the spine token remains
+  # the authoritative session, and Samenerp.OperatorAuthz credential→User
+  # indirection is the fallback when this returns nil (non-operator/no user).
+  defp legacy_principal_for(mount, credential_id) do
+    Mount.resource(mount, User)
+    |> Ash.Query.filter(credential_id == ^credential_id)
+    |> Ash.Query.select([:id])
+    |> Ash.Query.limit(1)
+    # authz-scope: post-auth bridge lookup on the JUST-authenticated credential (unique key, ≤1 row, id only)
+    |> Ash.read!(authorize?: false)
+    |> case do
+      [%{id: id}] -> id
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
 
   defp login_path(conn), do: conn.private[:samen_login_path] || "/login"
 

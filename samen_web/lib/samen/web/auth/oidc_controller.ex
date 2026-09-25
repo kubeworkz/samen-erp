@@ -26,6 +26,8 @@ defmodule Samen.Web.Auth.OidcController do
 
   import Plug.Conn
 
+  require Ash.Query
+
   alias Samen.Auth.DeviceLabel
   alias Samen.Auth.SessionCreate
   alias Samen.Identity.OidcLink
@@ -106,13 +108,19 @@ defmodule Samen.Web.Auth.OidcController do
   end
 
   # The no-2FA path: mint the real `Identity.Session` and write the session
-  # token on the HTTP response (unchanged from the pre-T100 direct mint).
+  # token on the HTTP response. Mirrors `SessionController.finish_login/5`'s
+  # ADR-031/ADR-035 bridge so the operator conn gate (which historically read
+  # ONLY `samen_current_user`) passes a spine OIDC login immediately.
   defp finish_login(conn, credential_id) do
     case SessionCreate.create(session_create_mods(conn), credential_id, device_label: device_label(conn)) do
       {:ok, _session, raw_token} ->
+        mount = conn.private.samen_mount
+        legacy_user_id = legacy_principal_for(mount, credential_id)
+
         conn
         |> configure_session(renew: true)
         |> Auth.put_session_token(raw_token)
+        |> maybe_put_legacy_user(legacy_user_id)
         |> redirect(to: @default_return)
 
       {:error, reason} ->
@@ -220,6 +228,23 @@ defmodule Samen.Web.Auth.OidcController do
   defp login_path(conn), do: conn.private[:samen_login_path] || "/login"
 
   defp totp_path(conn), do: conn.private[:samen_totp_path] || "/2fa"
+
+  defp maybe_put_legacy_user(conn, id) when is_binary(id), do: Auth.put_current_user(conn, id)
+  defp maybe_put_legacy_user(conn, _), do: conn
+
+  defp legacy_principal_for(mount, credential_id) do
+    Mount.resource(mount, User)
+    |> Ash.Query.filter(credential_id == ^credential_id)
+    |> Ash.Query.select([:id])
+    |> Ash.Query.limit(1)
+    |> Ash.read!(authorize?: false)
+    |> case do
+      [%{id: id}] -> id
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
 
   # A bounded error code for the login redirect — never leaks WHY beyond a coarse
   # class (no account-existence oracle; `:no_account` and a strategy failure both

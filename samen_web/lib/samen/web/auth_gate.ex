@@ -55,21 +55,60 @@ defmodule Samen.Web.AuthGate do
     %{
       otp_app: Keyword.fetch!(opts, :otp_app),
       login_path: Keyword.get(opts, :login_path, "/login"),
-      exempt: Keyword.get(opts, :exempt, [])
+      exempt: Keyword.get(opts, :exempt, []),
+      namespace: Keyword.get(opts, :namespace),
+      session_mod: Keyword.get(opts, :session_mod)
     }
   end
 
   @impl Plug
-  def call(conn, %{otp_app: otp_app, login_path: login_path, exempt: exempt}) do
+  def call(conn, %{otp_app: otp_app, login_path: login_path, exempt: exempt} = opts) do
     cond do
       # Dev/test AUTHENTICATION no-op; the operator-ROLE gate still applies at the mount
       # (`Samen.Web.Operator.Authz` on_mount), so this dev relaxation cannot ship the exploit.
       not auth_required?(otp_app) -> conn
       conn.request_path in exempt -> conn
-      is_nil(WebAuth.authenticated_user_id(get_session(conn))) -> conn |> redirect(to: login_path) |> halt()
-      operator_role(conn, otp_app) -> conn
+      not authenticated?(get_session(conn), opts) -> conn |> redirect(to: login_path) |> halt()
+      operator_role(conn, otp_app, opts) -> conn
       true -> conn |> redirect(to: login_path) |> halt()
     end
+  end
+
+  # ADR-035 §5 A4 — the spine-aware authentication check. Accepts EITHER the
+  # legacy BYO-auth `samen_current_user` OR a live `samen_session_token` (the
+  # framework spine's session). When a `namespace`/`session_mod` is wired the
+  # token is validated against the DB (revoked/expired → not authenticated);
+  # without it the token's PRESENCE is enough for the conn gate — the LiveView
+  # `on_mount` is the final validator — so a legacy host without the new opt
+  # still passes a spine login's conn check rather than bouncing to /login.
+  defp authenticated?(session, opts) do
+    not is_nil(WebAuth.authenticated_user_id(session)) or spine_authenticated?(session, opts)
+  end
+
+  defp spine_authenticated?(session, %{session_mod: mod}) when is_atom(mod) do
+    case Map.get(session, WebAuth.session_token_key()) do
+      raw when is_binary(raw) ->
+        case Samen.Auth.SessionResolve.resolve(mod, raw) do
+          {:ok, _} -> true
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  rescue
+    _ -> false
+  end
+
+  defp spine_authenticated?(session, %{namespace: ns}) when is_atom(ns) do
+    mod = Module.concat(ns, Session)
+    spine_authenticated?(session, %{session_mod: mod})
+  end
+
+  defp spine_authenticated?(session, _opts) do
+    # No DB mod available — presence is enough for the conn gate (the on_mount
+    # validates). This keeps a host that hasn't wired the new opt from bouncing.
+    is_binary(Map.get(session, WebAuth.session_token_key()))
   end
 
   @doc """
@@ -84,8 +123,15 @@ defmodule Samen.Web.AuthGate do
   # T146 — resolve the authenticated principal's operator role via the host's app-env
   # `:operator_authority` MFA (called with the principal id appended). Fail CLOSED: no resolver,
   # an error, or a non-operator return → `nil` (the caller then denies).
-  defp operator_role(conn, otp_app) do
-    principal_id = WebAuth.authenticated_user_id(get_session(conn))
+  #
+  # ADR-035 §5 A4 — spine-aware: the session may carry ONLY `samen_session_token`
+  # (the framework spine) with no `samen_current_user`. The principal is then
+  # the resolved `credential_id` (validated against the DB when a `namespace`/
+  # `session_mod` is wired, otherwise the presence fallback keeps a host that
+  # hasn't wired the new opt from bouncing — the LiveView on_mount is the final
+  # validator). Mirrors `Samen.Web.CurrentOrg.principal_id/2` + `Samen.Web.Operator.Authz`.
+  defp operator_role(conn, otp_app, opts) do
+    principal_id = principal_id(get_session(conn), opts)
 
     case Application.get_env(otp_app, :operator_authority) do
       {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
@@ -100,4 +146,41 @@ defmodule Samen.Web.AuthGate do
   rescue
     _ -> nil
   end
+
+
+
+  # The principal for the operator role check — legacy `samen_current_user` first,
+  # then the spine `credential_id` (the SessionController also bridges to a user_id
+  # when it can, so this covers both wired and unbridged hosts). Returns `nil`
+  # when neither is present/valid.
+  defp principal_id(session, opts) do
+    case WebAuth.authenticated_user_id(session) do
+      id when is_binary(id) -> id
+      _ ->
+        case spine_credential_id(session, opts) do
+          {:ok, id} when is_binary(id) -> id
+          _ -> nil
+        end
+    end
+  end
+
+  defp spine_credential_id(session, %{session_mod: mod}) when is_atom(mod) do
+    case Map.get(session, WebAuth.session_token_key()) do
+      raw when is_binary(raw) ->
+        case Samen.Auth.SessionResolve.resolve(mod, raw) do
+          {:ok, %{credential_id: id}} -> {:ok, id}
+          _ -> :error
+        end
+
+      _ -> :error
+    end
+  rescue
+    _ -> :error
+  end
+
+  defp spine_credential_id(session, %{namespace: ns}) when is_atom(ns) do
+    spine_credential_id(session, %{session_mod: Module.concat(ns, Session)})
+  end
+
+  defp spine_credential_id(_session, _opts), do: :error
 end

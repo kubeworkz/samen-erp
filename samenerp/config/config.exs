@@ -109,11 +109,10 @@ config :samenerp, auth_required?: config_env() == :prod
 # authenticated principal actually holds operator authority before admitting them to the
 # operator control plane, and `Samen.Web.Operator.Authz` enforces the SAME by construction at
 # every operator route's mount. Deny-by-default: absent a resolver, a prod-armed app admits NO
-# operator. The generated default is a NAMED dev-only grant — it returns `:operator_admin` while
-# `:auth_required?` is false (dogfood convenience) and `nil` (fail CLOSED) once armed for prod.
-# A real deploy REPLACES it with a resolver over your operator roster / `Membership` rows (see
-# docs/runbooks/deploy.md).
-config :samenerp, :operator_authority, {Samen.Web.Operator.Authz, :dev_operator_role, [:samenerp]}
+# operator. `Samenerp.OperatorAuthz` checks a REAL operator-org Membership (credential→User→
+# Membership indirection so the spine `credential_id` principal resolves) and dev/test still
+# pass via the second-leg dev fallback; a tenant without an operator membership is refused.
+config :samenerp, :operator_authority, {Samenerp.OperatorAuthz, :resolve_role, [:samenerp]}
 
 # WS-A A4/A5 — the kernel notification ENGINE wired to this app's Primitives mount
 # (the ADR-014 SendWorker config convention: the kernel is mount-agnostic; the host

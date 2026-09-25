@@ -70,6 +70,11 @@ defmodule <%= module %>Web.Router do
     plug(:fetch_session)
     plug(:put_root_layout, html: {<%= module %>Web.Layouts, :root})
     plug(:protect_from_forgery)
+    # ADR-035 §5 A4 — resurrect a remember-me token into the Plug session before
+    # any LiveView mounts, so the subsequent `on_mount` hooks see it. Harmless when
+    # no remember cookie is present (request proceeds unauthenticated — enforcement
+    # is the `on_mount`'s job, mirroring the `CurrentOrg` plug/on_mount split).
+    plug(Samen.Web.Auth.Plug, namespace: <%= module %>.Operator)
   end
 
   # T117/ADR-031 — the OPERATOR control-plane auth gate. `Samen.Web.AuthGate` is a NO-OP in
@@ -80,7 +85,7 @@ defmodule <%= module %>Web.Router do
   # operator org id (NOT CurrentOrg), so it needs this conn-level gate — the driftwood
   # `plug(DriftwoodWeb.Auth)` house pattern, scoped to the operator plane.
   pipeline :require_authenticated_operator do
-    plug(Samen.Web.AuthGate, otp_app: :<%= otp_app %>)
+    plug(Samen.Web.AuthGate, otp_app: :<%= otp_app %>, namespace: <%= module %>.Operator)
   end
 
   # WS-D D3 — the versioned public API surface. `forward` sends `/api/v1/*` to the

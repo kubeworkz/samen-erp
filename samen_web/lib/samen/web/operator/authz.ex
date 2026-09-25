@@ -91,7 +91,7 @@ defmodule Samen.Web.Operator.Authz do
   """
   @spec resolve_role(Mount.t() | nil, map()) :: Actor.operator_role() | nil
   def resolve_role(%Mount{} = mount, session) when is_map(session) do
-    principal_id = Auth.authenticated_user_id(session)
+    principal_id = principal_id(mount, session)
 
     case authority_mfa(mount) do
       {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
@@ -105,6 +105,31 @@ defmodule Samen.Web.Operator.Authz do
   end
 
   def resolve_role(_mount, _session), do: nil
+
+  # ADR-035 §5 A4 — spine-aware principal. The session may carry ONLY
+  # `samen_session_token` (the framework spine), not `samen_current_user`.
+  # Prefer the legacy user_id when present (BYO-auth hosts), else resolve
+  # the live credential_id from the token. The credential_id is org-less
+  # (the Identity spine's per-org User indirection is the operator resolver's
+  # job, e.g. `Samenerp.OperatorAuthz` credential→User→Membership); resolving
+  # it here would couple this generic gate to one app's schema.
+  defp principal_id(%Mount{} = mount, session) do
+    case Auth.authenticated_user_id(session) do
+      id when is_binary(id) ->
+        id
+
+      _ ->
+        case Auth.resolve_principal(session, %{session: Mount.resource(mount, Session)}) do
+          {:ok, %{credential_id: id}} -> id
+          {:ok, %{user_id: id}} -> id
+          _ -> nil
+        end
+    end
+  rescue
+    _ -> nil
+  end
+
+
 
   @doc """
   A NAMED, opt-in DEV operator-authority resolver a host/generated router may wire as its

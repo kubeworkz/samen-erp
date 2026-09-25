@@ -70,6 +70,11 @@ defmodule SamenerpWeb.Router do
     plug(:fetch_session)
     plug(:put_root_layout, html: {SamenerpWeb.Layouts, :root})
     plug(:protect_from_forgery)
+    # ADR-035 §5 A4 — resurrect a remember-me token into the Plug session before
+    # any LiveView mounts, so the subsequent `on_mount` hooks see it. Harmless when
+    # no remember cookie is present (request proceeds unauthenticated — enforcement
+    # is the `on_mount`'s job, mirroring the `CurrentOrg` plug/on_mount split).
+    plug(Samen.Web.Auth.Plug, namespace: Samenerp.Operator)
   end
 
   # T117/ADR-031 — the OPERATOR control-plane auth gate. `Samen.Web.AuthGate` is a NO-OP in
@@ -80,7 +85,7 @@ defmodule SamenerpWeb.Router do
   # operator org id (NOT CurrentOrg), so it needs this conn-level gate — the driftwood
   # `plug(DriftwoodWeb.Auth)` house pattern, scoped to the operator plane.
   pipeline :require_authenticated_operator do
-    plug(Samen.Web.AuthGate, otp_app: :samenerp)
+    plug(Samen.Web.AuthGate, otp_app: :samenerp, namespace: Samenerp.Operator)
   end
 
   # WS-D D3 — the versioned public API surface. `forward` sends `/api/v1/*` to the
@@ -199,10 +204,10 @@ defmodule SamenerpWeb.Router do
         operator_workspace: "Samenerp Ops",
         # T146 — the operator-ROLE authority seam. `Samen.Web.Operator.Authz`'s on_mount derives
         # operator authority from the AUTHENTICATED SESSION PRINCIPAL via this MFA (fail CLOSED
-        # for any non-operator), so a plain tenant-user session cannot reach `/operator/*`. The
-        # generated default is a NAMED dev-only grant (see config/config.exs `:operator_authority`);
-        # a real deploy points this at your operator roster / `Membership` rows.
-        operator_authority: {Samen.Web.Operator.Authz, :dev_operator_role, [:samenerp]},
+        # for any non-operator), so a plain tenant-user session cannot reach `/operator/*`.
+        # In prod this resolves via `Samenerp.OperatorAuthz` credential→User→Membership (owner→
+        # :operator_admin); in dev/test it still grants `:operator_admin` when disarmed.
+        operator_authority: {Samenerp.OperatorAuthz, :resolve_role, [:samenerp]},
         # WS-B B6 — the FlagAdminLive namespace seam: the Primitives mount whose
         # FeatureFlag rows the platform flag admin manages.
         flags_namespace: Samenerp.Primitives
