@@ -191,7 +191,7 @@ defmodule Driftwood.GateA6AgentSliceTest do
   # ===========================================================================
 
   describe "≈0-LOC adoption (ADR-047 §9#7: the AI kit had a mount seam with no adoption proof)" do
-    test "the ONE samen_ai_routes call mounts all six tenant AI surfaces INCLUDING the agent pair" do
+    test "the ONE samen_ai_routes call mounts all tenant AI surfaces INCLUDING the agent pair and assistant" do
       routes = Map.new(DriftwoodWeb.Router.__routes__(), &{&1.path, &1})
 
       for path <- ["/ai", "/ai/search", "/ai/crm", "/ai/analytics", "/ai/support"] do
@@ -202,6 +202,14 @@ defmodule Driftwood.GateA6AgentSliceTest do
       assert elem(routes["/ai/agents"].metadata.phoenix_live_view, 0) == Samen.Web.AI.AgentLive
       assert elem(routes["/ai/agents/:id"].metadata.phoenix_live_view, 0) == Samen.Web.AI.AgentLive
 
+      # OpenClaw-lite P1 — the assistant chat surfaces, also inherited.
+      assert elem(routes["/ai/assistant"].metadata.phoenix_live_view, 0) == Samen.Web.AI.AssistantLive
+      assert elem(routes["/ai/assistant/:assistant_id"].metadata.phoenix_live_view, 0) ==
+               Samen.Web.AI.AssistantLive
+
+      assert elem(routes["/ai/assistant/:assistant_id/:id"].metadata.phoenix_live_view, 0) ==
+               Samen.Web.AI.AssistantLive
+
       # And the operator half is inherited by the EXISTING samen_operator_routes call.
       assert elem(routes["/operator/agents/:org_id"].metadata.phoenix_live_view, 0) ==
                Samen.Web.Operator.AgentHealthLive
@@ -211,8 +219,8 @@ defmodule Driftwood.GateA6AgentSliceTest do
       ai_routes =
         Enum.filter(DriftwoodWeb.Router.__routes__(), &String.starts_with?(&1.path, "/ai"))
 
-      # Non-vacuity: there ARE seven of them (five kit surfaces + the A6 agent pair).
-      assert length(ai_routes) == 7
+      # Non-vacuity: there ARE ten of them (five kit surfaces + the A6 agent pair + three assistant routes).
+      assert length(ai_routes) == 10
 
       for route <- ai_routes do
         {_view, _action, _opts, live_session} = route.metadata.phoenix_live_view

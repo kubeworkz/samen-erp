@@ -2,13 +2,16 @@ defmodule Samen.Web.AI.Server do
   @moduledoc """
   The context seam behind the tenant-plane AI UI kit (T155, ADR-043 §5.3 ≈0-LOC adoption).
   Every AI LiveView in `Samen.Web.AI.*` calls THIS module; this module calls ONLY the
-  `Samen.AI` kernel surfaces (`Samen.AI.Verbs`, `Samen.AI.Embeddings`, `Samen.AI.Crm`,
-  `Samen.AI.Analytics`, `Samen.AI.SupportOperator`) — never a `Samen.AI.Provider` callback
-  and never `%Samen.AI.MaskedPayload{}`. So every provider-bound byte the UI produces routes
-  through `Samen.AI.Chokepoint` by construction (INV-7): the full-tree
-  `Samen.AI.ChokepointAntiBypassProbeTest` scans `samen_web/lib` too, so a raw provider call
-  introduced here would flip it exactly like one in a verb module (RP-AI-1). The UI cannot
-  become a PII-egress path the plane's chokepoint does not see.
+  `Samen.AI` kernel surfaces (`Samen.AI`, `Samen.AI.Verbs`, `Samen.AI.Embeddings`,
+  `Samen.AI.Crm`, `Samen.AI.Analytics`, `Samen.AI.SupportOperator`) — never a
+  `Samen.AI.Provider` callback and never `%Samen.AI.MaskedPayload{}`. So every
+  provider-bound byte the UI produces routes through `Samen.AI.Chokepoint` by
+  construction (INV-7): the full-tree `Samen.AI.ChokepointAntiBypassProbeTest` scans
+  `samen_web/lib` too, so a raw provider call introduced here would flip it exactly
+  like one in a verb module (RP-AI-1). The UI cannot become a PII-egress path the
+  plane's chokepoint does not see. The assistant seam (`assistant_run/6`) also routes
+  through `Samen.AI.complete/4` with a BYOK provider config — never a direct provider
+  call.
 
   ## Scope is the caller's REAL scope (INV-2)
 
@@ -26,12 +29,18 @@ defmodule Samen.Web.AI.Server do
   """
 
   alias Samen.AI
+  alias Samen.AI.Assistant
+  alias Samen.AI.AssistantConversation
   alias Samen.AI.Embeddings
   alias Samen.Web.Mount
 
   require Ash.Query
 
   @type result :: {:ok, Samen.AI.Completion.t()} | {:error, term()}
+
+  @assistant_cap 4
+  @max_history_turns 20
+  @default_hf_model "mistralai/Mistral-7B-Instruct-v0.3"
 
   @doc "The verb names the Verbs surface exposes (the six ADR-043 §7.5 intelligence verbs)."
   @spec verbs() :: [atom()]
@@ -51,7 +60,7 @@ defmodule Samen.Web.AI.Server do
   @doc """
   Run one of the six verbs in the mount's scope over `input` (free text — the record's own
   content, §3.2 step 2d user-consented keystrokes). `params` are extra `{{key}}` template
-  substitutions (e.g. `%{labels: "billing, sales"}` for classify). Returns the kernel
+  substitutions (e.g. `%{labels: \"billing, sales\"}` for classify). Returns the kernel
   `complete/4` result verbatim (fail-honest `{:error, :not_configured}` when unwired).
   """
   @spec run_verb(Mount.t(), String.t() | nil, atom(), String.t(), map(), keyword()) :: result()
@@ -66,7 +75,7 @@ defmodule Samen.Web.AI.Server do
   Org-scoped semantic search. Returns `{search_result, simulated?}` where `search_result`
   is `{:ok, [%Samen.AI.Embeddings.Hit{}]}` | `{:error, term()}` and `simulated?` is the
   T78/T152 honesty flag for the ranking (`Samen.AI.Embeddings.embedder_simulated?/1`) — the
-  UI renders an honest "simulated ranking" badge from it, never a confident-looking real
+  UI renders an honest \"simulated ranking\" badge from it, never a confident-looking real
   result. Cross-org rows are never ranked (the `Embeddings.search/3` `aie_org_id` filter).
   """
   @spec search(Mount.t(), String.t() | nil, String.t(), keyword()) ::
@@ -223,6 +232,311 @@ defmodule Samen.Web.AI.Server do
     end
   rescue
     _ -> []
+  end
+
+  # --- Assistant surface (OpenClaw-lite P1 — tenant chat, org-scoped) ---------------------
+
+  @doc """
+  List this org's assistants (bounded labels, no vault field). ORG-SCOPE PIN:
+  `org_id == ^org` is from the trusted scope; dropping it would cross-scope.
+  """
+  @spec list_assistants(Mount.t(), String.t() | nil) :: [struct()]
+  def list_assistants(_mount, nil), do: []
+
+  def list_assistants(_mount, org_id) when is_binary(org_id) do
+    Assistant
+    |> Ash.Query.filter(org_id == ^org_id)
+    |> Ash.Query.sort(inserted_at: :desc)
+    |> Ash.Query.limit(20)
+    |> Ash.read(authorize?: false)
+    |> case do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  rescue
+    _ -> []
+  end
+
+  @doc """
+  Fetch one assistant, org-scoped. Returns `{:ok, assistant}` or `{:error, :not_found}`
+  (no existence oracle — a foreign org's assistant does not exist).
+  """
+  @spec get_assistant(Mount.t(), String.t() | nil, String.t()) ::
+          {:ok, struct()} | {:error, :not_found}
+  def get_assistant(_mount, nil, _id), do: {:error, :not_found}
+
+  def get_assistant(_mount, org_id, id) when is_binary(org_id) and is_binary(id) do
+    Assistant
+    |> Ash.Query.filter(org_id == ^org_id and id == ^id)
+    |> Ash.Query.limit(1)
+    |> Ash.read(authorize?: false)
+    |> case do
+      {:ok, [row]} -> {:ok, row}
+      _ -> {:error, :not_found}
+    end
+  rescue
+    _ -> {:error, :not_found}
+  end
+
+  def get_assistant(_mount, _org_id, _id), do: {:error, :not_found}
+
+  @doc """
+  Create an assistant in the org (org-scoped, name unique per org, `vt_` refused +
+  `FreeTextScan` via the resource). Caps at 4 assistants per org — the Server seamowns the cap so the resource stays a governed resource, not a policy actor.
+  """
+  @spec create_assistant(Mount.t(), String.t() | nil, map()) ::
+          {:ok, struct()} | {:error, term()}
+  def create_assistant(_mount, nil, _attrs), do: {:error, :no_org}
+
+  def create_assistant(mount, org_id, attrs) when is_binary(org_id) and is_map(attrs) do
+    scope = scope(mount, org_id)
+
+    with :ok <- check_assistant_cap(org_id) do
+      attrs = Map.put(attrs, :org_id, org_id)
+
+      Assistant
+      |> Ash.Changeset.for_create(:create_assistant, attrs, scope: scope)
+      |> Ash.create()
+    end
+  end
+
+  @doc """
+  List this org's conversations. When `assistant_id` is given, scoped to that
+  assistant; otherwise all assistants in the org. Still org-scoped — never
+  params. Delegates to `AssistantReads` after the PIN so LiveView need call
+  only the Server seam.
+  """
+  @spec list_conversations(Mount.t(), String.t() | nil, String.t() | nil) :: [struct()]
+  def list_conversations(_mount, nil, _assistant_id), do: []
+
+  def list_conversations(mount, org_id, assistant_id) when is_binary(org_id) do
+    alias Samen.Web.AI.AssistantReads
+
+    case assistant_id do
+      id when is_binary(id) and id != "" ->
+        AssistantReads.list_conversations(mount, org_id, id, [])
+
+      _ ->
+        AssistantReads.list_all_conversations(mount, org_id, [])
+    end
+  end
+
+  @doc """
+  Open a conversation thread under one assistant in the org (the General default
+  or a custom assistant). Validates the assistant belongs to the SAME org before
+  persisting — a thread under a foreign org's assistant is refused.
+  """
+  @spec create_conversation(Mount.t(), String.t() | nil, String.t(), map()) ::
+          {:ok, struct()} | {:error, term()}
+  def create_conversation(_mount, nil, _assistant_id, _attrs), do: {:error, :no_org}
+
+  def create_conversation(_mount, _org_id, assistant_id, _attrs)
+      when not is_binary(assistant_id) or assistant_id == "",
+      do: {:error, :invalid_assistant}
+
+  def create_conversation(mount, org_id, assistant_id, attrs)
+      when is_binary(org_id) and is_binary(assistant_id) do
+    scope = scope(mount, org_id)
+
+    with {:ok, _assistant} <- get_assistant(mount, org_id, assistant_id) do
+      title = Map.get(attrs, :title) || Map.get(attrs, "title") || "New conversation"
+      model_id = Map.get(attrs, :model_id) || Map.get(attrs, "model_id")
+
+      transcript = Jason.encode!(%{"turns" => []})
+
+      create_attrs = %{
+        org_id: org_id,
+        assistant_id: assistant_id,
+        title: title,
+        model_id: model_id,
+        transcript: transcript
+      }
+
+      AssistantConversation
+      |> Ash.Changeset.for_create(:new_conversation, create_attrs, scope: scope)
+      |> Ash.create()
+    end
+  end
+
+  @doc """
+  Fetch one conversation with its transcript resolved on the mount's plane
+  (delegates to `AssistantReads.get_conversation/3`).
+  """
+  @spec get_conversation(Mount.t(), String.t() | nil, String.t()) ::
+          {:ok, map()} | {:error, :not_found}
+  def get_conversation(_mount, nil, _id), do: {:error, :not_found}
+
+  def get_conversation(mount, org_id, conv_id) when is_binary(conv_id) do
+    Samen.Web.AI.AssistantReads.get_conversation(mount, org_id, conv_id)
+  end
+
+  @doc """
+  The P1 chat seam: append a user turn, call the model through the chokepoint,
+  and persist the assistant turn — every provider byte routes through
+  `Samen.AI.Chokepoint` by construction (INV-7).
+
+  * Reads the assistant + conversation org-scoped (both must be in `org_id`).
+  * Builds history from the vault-resolved transcript (bounded to last 20 turns,
+    re-scrubbed per §3.2a).
+  * Calls `Samen.AI.complete/4` with `provider: {HuggingFace, %{org_id: org_id, model_id: ...}}`
+    — the BYOK key is resolved inside the provider via `Samen.Scopes.Ai.ApiKey` +
+    `Crypto.decrypt/2`; if unwired → `{:error, :not_configured}` verbatim (fail-honest).
+  * Persists both turns to the vault `transcript` JSON (`append_turn`), bumps
+    `message_count`/`total_tokens`/`last_message_at`, and auto-titles a blank
+    conversation via `Samen.AI.Verbs` (best-effort, never a failure).
+  * Returns `{:ok, %{completion: completion, conversation: updated}}` or an error.
+
+  `input` is free text (user keystrokes, §3.2 step 2). Optional `opts[:grounding]`
+  (allowlisted catalog fields + file context chips) threads through to the chokepoint.
+  Never touches `%MaskedPayload{}` or `Provider` directly.
+  """
+  @spec assistant_run(Mount.t(), String.t() | nil, String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, %{completion: Samen.AI.Completion.t(), conversation: struct()}}
+          | {:error, term()}
+  def assistant_run(mount, org_id, assistant_id, conv_id, input, opts \\ [])
+  def assistant_run(_mount, nil, _assistant_id, _conv_id, _input, _opts), do: {:error, :no_org}
+
+  def assistant_run(mount, org_id, assistant_id, conv_id, input, opts)
+      when is_binary(org_id) and is_binary(assistant_id) and is_binary(conv_id) and
+             is_binary(input) do
+    trimmed = String.trim(input)
+
+    if trimmed == "" do
+      {:error, :empty_input}
+    else
+      do_assistant_run(mount, org_id, assistant_id, conv_id, trimmed, opts)
+    end
+  end
+
+  defp do_assistant_run(mount, org_id, assistant_id, conv_id, input, opts) do
+    scope = scope(mount, org_id)
+
+    with {:ok, assistant} <- get_assistant(mount, org_id, assistant_id),
+         {:ok, %{conversation: conv, turns: prior_turns}} <- get_conversation(mount, org_id, conv_id),
+         :ok <- ensure_same_assistant(conv, assistant_id),
+         {:ok, completion} <- complete_for_assistant(scope, assistant, prior_turns, input, opts),
+         {:ok, updated} <- persist_turns(conv, prior_turns, input, completion, scope) do
+      _ = maybe_autotitle(conv, updated, scope, input)
+      {:ok, %{completion: completion, conversation: updated}}
+    end
+  end
+
+  # --- completion (the chokepoint caller — the only provider path) ----------------------
+
+  defp complete_for_assistant(scope, assistant, prior_turns, input, opts) do
+    system_prompt = Map.get(assistant, :system_prompt) || ""
+    history = history_segments(prior_turns)
+    model_id = Map.get(assistant, :model_id) || @default_hf_model
+    org_id = scope_org_id(scope)
+
+    prompt_ref = if system_prompt != "", do: [system_prompt, input], else: [input]
+
+    provider = {Samen.AI.Provider.HuggingFace, %{org_id: org_id, model_id: model_id}}
+
+    complete_opts =
+      opts
+      |> Keyword.take([:grounding, :meta])
+      |> Keyword.put(:provider, provider)
+      |> Keyword.put(:history, history)
+
+    Samen.AI.complete(scope, prompt_ref, %{}, complete_opts)
+  end
+
+  defp history_segments(turns) when is_list(turns) do
+    turns
+    |> Enum.take(-@max_history_turns)
+    |> Enum.map(fn turn ->
+      content = Map.get(turn, "content") || Map.get(turn, :content) || ""
+      to_string(content)
+    end)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp history_segments(_), do: []
+
+  defp scope_org_id(%Samen.Scope{actor: %{org_id: org_id}}) when is_binary(org_id), do: org_id
+  defp scope_org_id(%{actor: %{org_id: org_id}}) when is_binary(org_id), do: org_id
+  defp scope_org_id(%{org_id: org_id}) when is_binary(org_id), do: org_id
+  defp scope_org_id(_), do: nil
+
+  # --- persistence (vault transcript is the ONE text artifact) --------------------------
+
+  defp persist_turns(conv, prior_turns, input, %Samen.AI.Completion{} = completion, scope) do
+    prior = prior_turns |> Enum.filter(&is_map/1)
+    now = DateTime.utc_now()
+
+    new_turns =
+      prior ++
+        [%{"role" => "user", "content" => input, "at" => DateTime.to_iso8601(now)}] ++
+        [%{"role" => "assistant", "content" => completion.text, "at" => DateTime.to_iso8601(now)}]
+
+    transcript = Jason.encode!(%{"turns" => new_turns})
+    usage_tokens = estimate_tokens(completion)
+
+    conv
+    |> Ash.Changeset.for_update(:append_turn, %{
+      transcript: transcript,
+      message_count: length(new_turns),
+      total_tokens: (Map.get(conv, :total_tokens) || 0) + usage_tokens,
+      last_message_at: now
+    })
+    |> Ash.update(scope: scope)
+  end
+
+  defp estimate_tokens(%Samen.AI.Completion{text: text, usage: usage}) do
+    cond do
+      is_map(usage) and is_integer(Map.get(usage, :total_tokens)) -> Map.get(usage, :total_tokens)
+      is_map(usage) and is_integer(Map.get(usage, :output_tokens)) -> Map.get(usage, :output_tokens)
+      is_binary(text) -> div(String.length(text), 4) + 1
+      true -> 1
+    end
+  end
+
+  defp ensure_same_assistant(conv, assistant_id) do
+    if Map.get(conv, :assistant_id) == assistant_id, do: :ok, else: {:error, :assistant_mismatch}
+  end
+
+  defp check_assistant_cap(org_id) do
+    count =
+      Assistant
+      |> Ash.Query.filter(org_id == ^org_id)
+      |> Ash.read(authorize?: false)
+      |> case do
+        {:ok, rows} -> length(rows)
+        _ -> 0
+      end
+
+    if count >= @assistant_cap, do: {:error, :assistant_cap_exceeded}, else: :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp maybe_autotitle(conv, updated, scope, input) do
+    title = Map.get(conv, :title) || ""
+    blank? = title == "" or title == "New conversation"
+    first_turn? = (Map.get(conv, :message_count) || 0) == 0
+
+    if blank? and first_turn? do
+      case Samen.AI.Verbs.run(:generate, scope, "Generate a 3-5 word title for this conversation: #{input}. Respond with title only.") do
+        {:ok, %Samen.AI.Completion{text: text}} when is_binary(text) and text != "" ->
+          short = text |> String.trim() |> String.slice(0, 60) |> String.trim()
+
+          if short != "" do
+            updated
+            |> Ash.Changeset.for_update(:rename, %{title: short})
+            |> Ash.update(scope: scope)
+          end
+
+          :ok
+
+        _ ->
+          :ok
+      end
+    else
+      :ok
+    end
+  rescue
+    _ -> :ok
   end
 
   # --- shared helpers ----------------------------------------------------------------------

@@ -582,7 +582,9 @@
       "sje": "SamenCore.Support.FinanceFixture.JournalEntry",
       "atn": "Samen.AI.Agent.Turn",
       "sfe": "SamenCore.Support.FleetFixture.EnrollmentToken",
-      "sol": "SamenCore.Support.InventoryFixture.SoLine"
+      "sol": "SamenCore.Support.InventoryFixture.SoLine",
+      "ast": "Samen.AI.Assistant",
+      "asc": "Samen.AI.AssistantConversation"
     },
     "samen_web": {
       "rti": "Samen.WebTest.RichTypes.Item",

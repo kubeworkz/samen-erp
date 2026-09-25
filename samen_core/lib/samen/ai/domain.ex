@@ -21,5 +21,7 @@ defmodule Samen.AI.Domain do
     resource(Samen.AI.Agent.Run)
     resource(Samen.AI.Agent.Turn)
     resource(Samen.AI.Agent.Kill)
+    resource(Samen.AI.Assistant)
+    resource(Samen.AI.AssistantConversation)
   end
 end

@@ -52,7 +52,7 @@ defmodule Samen.Web.AI.Components do
   def analytics_ask_offered?(%Samen.Web.Mount{plane: %{kind: :operator}}), do: true
   def analytics_ask_offered?(_), do: false
 
-  @doc "The six AI kit surfaces, in nav order: `{kind, label, sub_path}`."
+  @doc "The seven AI kit surfaces, in nav order: `{kind, label, sub_path}`."
   def surfaces do
     [
       {:verbs, "Verbs", ""},
@@ -62,7 +62,11 @@ defmodule Samen.Web.AI.Components do
       {:support, "Support draft", "/support"},
       # ADR-047 A5 — the agent run surface (multi-step runs, transcript, cancel, and the
       # approve/reject card for a proposed write).
-      {:agents, "Agent runs", "/agents"}
+      {:agents, "Agent runs", "/agents"},
+      # OpenClaw-lite P1 — the assistant chat surface (named assistants + vault-routed
+      # conversation threads). Framework-side, so a vertical mounting `samen_ai_routes`
+      # inherits it at 0 authored LOC.
+      {:assistant, "Assistant", "/assistant"}
     ]
   end
 

@@ -50,6 +50,13 @@ config :samen_core, :samen_ai_agent_turn_repo, SamenCore.TestRepo
 # cross-tenant blast-radius residual, closed. Same compile_env seam as its siblings.
 config :samen_core, :samen_ai_agent_kill_repo, SamenCore.TestRepo
 
+# OpenClaw-lite assistant (P1): the org-scoped assistant definition + the
+# vault-routed conversation thread under it (the Agent.Run transcript posture —
+# vault/DEK per row, `pii_transcript`, `mix samen.verify.*` vault_declared parity).
+# Same compile_env seam. Host apps configure their own; the test suite uses TestRepo.
+config :samen_core, :samen_ai_assistant_repo, SamenCore.TestRepo
+config :samen_core, :samen_ai_assistant_conversation_repo, SamenCore.TestRepo
+
 config :ash, disable_async?: true
 
 # T145: quiet Ash's benign `[warning] Missed N notifications` runtime log noise. The AI

@@ -2049,7 +2049,14 @@ defmodule Samen.Web.Router do
       # matters: the STATIC list path is declared before its dynamic `:id` sibling, the
       # same rule the operator family's resolve routes follow.
       {"#{path}/agents", Samen.Web.AI.AgentLive},
-      {"#{path}/agents/:id", Samen.Web.AI.AgentLive}
+      {"#{path}/agents/:id", Samen.Web.AI.AgentLive},
+      # OpenClaw-lite P1 — the tenant-plane ASSISTANT chat surfaces (named assistants +
+      # conversation threads over a vault-routed transcript). Framework-side, so a
+      # vertical mounting `samen_ai_routes` inherits them at 0 authored LOC. Declaration
+      # order matters: more-specific routes first.
+      {"#{path}/assistant", Samen.Web.AI.AssistantLive},
+      {"#{path}/assistant/:assistant_id", Samen.Web.AI.AssistantLive},
+      {"#{path}/assistant/:assistant_id/:id", Samen.Web.AI.AssistantLive}
     ]
   end
 

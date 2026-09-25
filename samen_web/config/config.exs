@@ -51,7 +51,8 @@ config :samen_web, :catalog_parity_allow_list, [
 config :samen_core, :samen_ai_agent_run_repo, Samen.WebTest.Repo
 config :samen_core, :samen_ai_agent_turn_repo, Samen.WebTest.Repo
 config :samen_core, :samen_ai_agent_kill_repo, Samen.WebTest.Repo
-
+config :samen_core, :samen_ai_assistant_repo, Samen.WebTest.Repo
+config :samen_core, :samen_ai_assistant_conversation_repo, Samen.WebTest.Repo
 
 config :phoenix, :json_library, Jason
 
