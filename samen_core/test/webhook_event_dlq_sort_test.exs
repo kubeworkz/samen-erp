@@ -51,11 +51,18 @@ defmodule Samen.Webhook.EventDlqSortTest do
   end
 
   test "positive control: with NO dead rows, plain most-recent-first ordering holds" do
+    # The tiebreak is `desc: inserted_at` (microsecond). Three back-to-back
+    # inserts can land in the SAME microsecond under load, making order
+    # undefined and this assertion flaky (observed 1/3959 under the 363s full
+    # suite). Sleep 10ms between inserts so timestamps are strictly distinct —
+    # the ordering then deterministically puts the last insert first.
     _r1 = insert("received", "c1")
+    Process.sleep(10)
     _r2 = insert("received", "c2")
+    Process.sleep(10)
     r3 = insert("received", "c3")
 
-    rows = Event.list_for_operator(TestRepo, limit: 10) |> Enum.filter(&(&1.provider == "dlqsort"))
+    rows = Event.list_for_operator(TestRepo, limit: 100) |> Enum.filter(&(&1.provider == "dlqsort"))
     [first | _] = rows
 
     # No dead row exists — the tiebreak (`desc: inserted_at`) alone decides, so
@@ -65,12 +72,16 @@ defmodule Samen.Webhook.EventDlqSortTest do
     # (billing/delivery) don't leak into this assertion — the full suite runs
     # 3959 tests with shared DB connections and occasional idle-in-transaction
     # leakage, which makes an unfiltered "most recent" assertion flaky.
+    # Limit 100 (not 10) so other-provider rows cannot push our rows past the
+    # limit before the filter.
     assert first.id == r3.id
   end
 
   test "MULTIPLE dead rows: all dead rows precede all non-dead, tiebroken by recency" do
     dead_old = insert("dead", "d-old")
+    Process.sleep(10)
     _live = insert("received", "live")
+    Process.sleep(10)
     dead_new = insert("dead", "d-new")
 
     rows = Event.list_for_operator(TestRepo, limit: 10) |> Enum.filter(&(&1.provider == "dlqsort"))

@@ -11,9 +11,22 @@
 
 set -uo pipefail
 
-CONTAINER="${SAMEN_PG_CONTAINER:-samen-pg}"
+resolve_container() {
+  if [[ -n "${SAMEN_PG_CONTAINER:-}" ]]; then
+    echo "$SAMEN_PG_CONTAINER"
+    return
+  fi
+  for c in samenpg samen-pg; do
+    if [[ "$(docker container inspect --format '{{.State.Running}}' "$c" 2>/dev/null)" == "true" ]]; then
+      echo "$c"
+      return
+    fi
+  done
+  echo "samenpg"
+}
+CONTAINER="$(resolve_container)"
 
-if ! docker container inspect "$CONTAINER" >/dev/null 2>&1; then
+if [[ "$(docker container inspect --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]]; then
   echo "pg_dump shim: container '$CONTAINER' not running (install a real pg_dump for non-docker use)" >&2
   exit 127
 fi

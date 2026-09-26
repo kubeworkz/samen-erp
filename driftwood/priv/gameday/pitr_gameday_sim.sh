@@ -52,7 +52,14 @@ REPORT="$DW_DIR/reports/T5.5.md"
 
 PGHOST="${DRILL_PGHOST:-localhost}"
 PGPORT="${DRILL_PGPORT:-5432}"
-PGUSER="${DRILL_PGUSER:-${USER:-${USERNAME:-postgres}}}"
+# DRILL_PGUSER wins; otherwise postgres (the dev container's superuser). The
+# previous fallback `${USER:-${USERNAME:-postgres}}` resolved to `kubew` on
+# Windows Git Bash (USER empty, USERNAME=kubew) where no `kubew` DB role
+# exists — `psql -U kubew` FATAL'd and CREATE DATABASE never ran, so Elixir
+# (which uses `System.get_env("USER") || "postgres"` → postgres) got FATAL
+# 3D000 invalid_catalog_name. Hard-default to postgres locally; CI sets
+# DRILL_PGUSER or PGUSER=runner explicitly.
+PGUSER="${DRILL_PGUSER:-${PGUSER:-postgres}}"
 
 BASE_DB="driftwood_pitr_drill_base"       # the "production" DB the incident happens on
 RESTORE_DB="driftwood_pitr_drill_restore" # the fresh DB we promote the branch into

@@ -19,9 +19,29 @@
 
 set -uo pipefail
 
-CONTAINER="${SAMEN_PG_CONTAINER:-samen-pg}"
+# Resolve container: explicit SAMEN_PG_CONTAINER wins; otherwise try the
+# live container names in priority order (samenpg is the real dev container;
+# samen-pg was a stale name that lingered as an exited container and caused
+# `docker container inspect` to succeed while `docker exec` failed with
+# "container is not running" — the T5.5 PITR drill's CREATE DATABASE never
+# ran and Elixir got FATAL 3D000 invalid_catalog_name).
+resolve_container() {
+  if [[ -n "${SAMEN_PG_CONTAINER:-}" ]]; then
+    echo "$SAMEN_PG_CONTAINER"
+    return
+  fi
+  for c in samenpg samen-pg; do
+    if [[ "$(docker container inspect --format '{{.State.Running}}' "$c" 2>/dev/null)" == "true" ]]; then
+      echo "$c"
+      return
+    fi
+  done
+  # Fallback to the first candidate so the error message names it.
+  echo "samenpg"
+}
+CONTAINER="$(resolve_container)"
 
-if ! docker container inspect "$CONTAINER" >/dev/null 2>&1; then
+if [[ "$(docker container inspect --format '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]]; then
   echo "psql shim: container '$CONTAINER' not running (install a real psql client for non-docker use)" >&2
   exit 127
 fi

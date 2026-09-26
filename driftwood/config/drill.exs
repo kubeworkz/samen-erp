@@ -11,7 +11,7 @@ import Config
 # This mirrors demo/config/drill.exs (the T2.5 machinery this game-day reuses),
 # adapted for the Driftwood repo + domains.
 config :driftwood, Driftwood.Repo,
-  username: System.get_env("USER") || "postgres",
+  username: System.get_env("DRILL_PGUSER") || System.get_env("PGUSER") || System.get_env("USER") || "postgres",
   password: "",
   hostname: System.get_env("DRILL_PGHOST") || "localhost",
   port: String.to_integer(System.get_env("DRILL_PGPORT") || "5432"),
