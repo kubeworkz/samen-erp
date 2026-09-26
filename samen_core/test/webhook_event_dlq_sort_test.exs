@@ -43,7 +43,8 @@ defmodule Samen.Webhook.EventDlqSortTest do
     _r2 = insert("received", "r2")
     _r3 = insert("received", "r3")
 
-    [first | _rest] = Event.list_for_operator(TestRepo, limit: 10)
+    rows = Event.list_for_operator(TestRepo, limit: 10) |> Enum.filter(&(&1.provider == "dlqsort"))
+    [first | _rest] = rows
 
     assert first.id == dead.id, "the DLQ listing must surface :dead rows FIRST, per its own docstring"
     assert first.status == "dead"
@@ -54,11 +55,16 @@ defmodule Samen.Webhook.EventDlqSortTest do
     _r2 = insert("received", "c2")
     r3 = insert("received", "c3")
 
-    [first | _] = Event.list_for_operator(TestRepo, limit: 10)
+    rows = Event.list_for_operator(TestRepo, limit: 10) |> Enum.filter(&(&1.provider == "dlqsort"))
+    [first | _] = rows
 
     # No dead row exists — the tiebreak (`desc: inserted_at`) alone decides, so
     # the LAST-inserted row (r3) is first. Proves the fix didn't break the
     # ordinary "most recent first" behaviour for the no-dead-rows case.
+    # Filter to our provider so concurrent sandbox rows from other webhook tests
+    # (billing/delivery) don't leak into this assertion — the full suite runs
+    # 3959 tests with shared DB connections and occasional idle-in-transaction
+    # leakage, which makes an unfiltered "most recent" assertion flaky.
     assert first.id == r3.id
   end
 
@@ -67,7 +73,7 @@ defmodule Samen.Webhook.EventDlqSortTest do
     _live = insert("received", "live")
     dead_new = insert("dead", "d-new")
 
-    rows = Event.list_for_operator(TestRepo, limit: 10)
+    rows = Event.list_for_operator(TestRepo, limit: 10) |> Enum.filter(&(&1.provider == "dlqsort"))
     dead_ids = MapSet.new([dead_old.id, dead_new.id])
 
     {leading_dead, rest} = Enum.split_while(rows, &MapSet.member?(dead_ids, &1.id))

@@ -239,7 +239,7 @@ defmodule SamenStripe.CheckoutTest do
         "data" => %{"object" => object}
       })
 
-    ts = System.system_time(:second)
+    ts = System.os_time(:second)
     sig = Signer.sign(body, ts, @secret)
     headers = [{"stripe-signature", sig}]
 

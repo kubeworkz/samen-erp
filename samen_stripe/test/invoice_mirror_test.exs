@@ -75,7 +75,7 @@ defmodule SamenStripe.InvoiceMirrorTest do
         }
       })
 
-    ts = System.system_time(:second)
+    ts = System.os_time(:second)
     sig = Signer.sign(body, ts, @secret)
     headers = [{"stripe-signature", sig}]
 
