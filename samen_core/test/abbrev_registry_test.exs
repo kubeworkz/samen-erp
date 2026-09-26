@@ -128,10 +128,11 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 84, samen_web 44, samenerp 68 (the WS-ERP E8 host proof —
-      # `mix samen.gen.app` prefix `er`) = 280 host entries across six hosts.
+      # samen_core 86, samen_web 44, samenerp 68 (the WS-ERP E8 host proof —
+      # `mix samen.gen.app` prefix `er`) = 282 host entries across six hosts.
       assert hosts["samenerp"] != nil
       assert map_size(hosts["samenerp"]) == 68
+      assert map_size(hosts["samen_core"]) == 86
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -459,7 +460,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # (`SamenCore.Support.HrFixture`), allocator-reserved.
                  "hem" => "SamenCore.Support.HrFixture.Employee",
                  "hev" => "SamenCore.Support.HrFixture.EmploymentEvent",
-                 "hlv" => "SamenCore.Support.HrFixture.LeaveRequest"
+                 "hlv" => "SamenCore.Support.HrFixture.LeaveRequest",
+                 # OpenClaw-lite AI assistant (P1): the assistant + conversation
+                 # resources, allocator-reserved under host `samen_core`.
+                 "ast" => "Samen.AI.Assistant",
+                 "asc" => "Samen.AI.AssistantConversation"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -724,9 +729,9 @@ defmodule Samen.AbbrevRegistryTest do
       # host's kernel/Identity/Operator/Billing/Aggregate allocations) = 543 (the final +73: the E8 report reservations sbg/sbe/sea + the
 #       68-entry samenerp host proof, prefix `er`) global
       # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
-      # Support/Settings/Automation mounts (c9d5272) = 410 global → 410 + 280
-      # host = 690 flat… actual: 405 + 280 = 685 (403/683 pre-fpo+mrg fix).
-      assert map_size(Reg.load()) == 685
+      # Support/Settings/Automation mounts (c9d5272) = 410 global → 410 + 282
+      # host = 692 flat… actual: 405 + 282 = 687 (403/683 pre-fpo+mrg fix).
+      assert map_size(Reg.load()) == 687
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

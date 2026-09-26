@@ -237,6 +237,7 @@ defmodule Samen.Web.Auth.OidcController do
     |> Ash.Query.filter(credential_id == ^credential_id)
     |> Ash.Query.select([:id])
     |> Ash.Query.limit(1)
+    # authz-scope: post-auth bridge lookup on the JUST-authenticated credential (unique key, ≤1 row, id only)
     |> Ash.read!(authorize?: false)
     |> case do
       [%{id: id}] -> id

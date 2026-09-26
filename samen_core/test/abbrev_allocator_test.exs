@@ -267,8 +267,11 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
       # Support/Settings/Automation mounts (c9d5272): 31_701 bytes, 683 flat.
       # +2 collision fix (fpo/mrg, restoring cmp/dcm): 31_778 bytes, 685 flat.
-      assert byte_size(committed) == 31778
-      assert map_size(R.load()) == 685
+      # +2 OpenClaw-lite AI assistant (ast/asc — Samen.AI.Assistant/
+      # AssistantConversation, allocator-reserved under host `samen_core`):
+      # 31_860 bytes, 687 flat.
+      assert byte_size(committed) == 31860
+      assert map_size(R.load()) == 687
     end
   end
 

@@ -1,7 +1,7 @@
 defmodule Samen.AI.Provider.HuggingFace do
   @moduledoc """
   HuggingFace-via-BYOK `Samen.AI.Provider` adapter (OpenClaw-lite P1 companion to
-  `SamenAnthropic.Provider`, ADR-043 §5.1).
+  the reference vendor adapter, ADR-043 §5.1).
 
   **MaskedPayload-only** — both callbacks head-match `%Samen.AI.MaskedPayload{}`; a
   raw string refuses by `FunctionClauseError` (the INV-7 clause gate,
@@ -101,7 +101,7 @@ defmodule Samen.AI.Provider.HuggingFace do
 
   defp decrypt_api_key_from_row(%ApiKey{encrypted_key: ct, encryption_iv: iv})
        when is_binary(ct) and byte_size(ct) > 16 and is_binary(iv) and byte_size(iv) == 12 do
-    decrypted = Crypto.decrypt(ct, iv)
+    decrypted = Samen.Scopes.Ai.Crypto.decrypt(ct, iv)
     :erlang.garbage_collect()
     {:ok, decrypted}
   rescue

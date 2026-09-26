@@ -425,7 +425,7 @@ defmodule Samen.Gen.AppTest do
       # prod app redirects an anonymous `/operator/*` request to `/login`. Mirrors driftwood's
       # `plug(DriftwoodWeb.Auth)` house gate, scoped to the operator plane.
       assert router =~ "pipeline :require_authenticated_operator do"
-      assert router =~ "plug(Samen.Web.AuthGate, otp_app: :widgetco)"
+      assert router =~ "plug(Samen.Web.AuthGate, otp_app: :widgetco, namespace: Widgetco.Operator)"
       assert router =~ "pipe_through([:browser, :require_authenticated_operator])"
 
       assert router =~ ~s{get("/healthz", PageController, :healthz)}
