@@ -51,7 +51,8 @@ defmodule Samen.AI.AssistantConversation do
     data_layer: AshPostgres.DataLayer,
     authorizers: [Ash.Policy.Authorizer],
     abbrev: "asc",
-    archivable: true
+    archivable: true,
+    embeddable: [:title]
 
   postgres do
     table("ai_assistant_conversation")

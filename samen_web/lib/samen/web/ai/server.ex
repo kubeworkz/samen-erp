@@ -42,6 +42,9 @@ defmodule Samen.Web.AI.Server do
   @max_history_turns 20
   @default_hf_model "mistralai/Mistral-7B-Instruct-v0.3"
   @assistant_agent Samen.AI.AssistantAgent
+  @assistant_max_messages 100
+  @assistant_max_tokens 60_000
+  @assistant_recall_limit 5
 
   @doc "The verb names the Verbs surface exposes (the six ADR-043 §7.5 intelligence verbs)."
   @spec verbs() :: [atom()]
@@ -353,9 +356,16 @@ defmodule Samen.Web.AI.Server do
         transcript: transcript
       }
 
-      AssistantConversation
-      |> Ash.Changeset.for_create(:new_conversation, create_attrs, scope: scope)
-      |> Ash.create()
+      case AssistantConversation
+           |> Ash.Changeset.for_create(:new_conversation, create_attrs, scope: scope)
+           |> Ash.create() do
+        {:ok, conv} ->
+          _ = reindex_conversation(scope, conv)
+          {:ok, conv}
+
+        other ->
+          other
+      end
     end
   end
 
@@ -369,6 +379,129 @@ defmodule Samen.Web.AI.Server do
 
   def get_conversation(mount, org_id, conv_id) when is_binary(conv_id) do
     Samen.Web.AI.AssistantReads.get_conversation(mount, org_id, conv_id)
+  end
+
+  # --- Assistant recall (P3 title-only, org-scoped HNSW, deterministic in CI) ---------------
+
+  @doc """
+  Recall conversations for an assistant via title embeddings (P3 title-only recall).
+
+  The vector sidecar is CANDIDATE RETRIEVAL ONLY: every hit is RE-VERIFIED against
+  the caller's own org-scoped `AssistantConversation` read (defense in depth — the
+  `KbReads` pattern, generalized to the assistant's own title field). Stale or
+  over-broad vectors can never surface another org's thread or a thread under a
+  different assistant. Honest states, never a fabricated suggestion:
+
+    * `:ok` — real hits (embedder configured, `simulated: false`) or the keyless
+      `:test`-only deterministic ranking (`simulated: true`, clearly signposted —
+      T152 via `Embeddings.embedder_simulated?/1`).
+    * `:empty` — embedder ran, found nothing (never a match-all default).
+    * `:not_configured` — no embedder wired; `configuration_hint` carries
+      `Samen.AI.configuration_hint()` verbatim.
+  """
+  @spec assistant_recall(Mount.t(), String.t() | nil, String.t() | nil, String.t(), keyword()) ::
+          map()
+  def assistant_recall(mount, org_id, assistant_id, query, opts \\ [])
+  def assistant_recall(_mount, nil, _assistant_id, _query, _opts), do: %{state: :empty, hits: []}
+  def assistant_recall(_mount, _org_id, _assistant_id, query, _opts)
+      when not is_binary(query) or query == "",
+      do: %{state: :empty, hits: []}
+
+  def assistant_recall(mount, org_id, assistant_id, query, opts)
+      when is_binary(org_id) and is_binary(query) do
+    scope = scope(mount, org_id)
+    search_opts = Keyword.merge([repo: mount.repo, limit: @assistant_recall_limit], opts)
+
+    case Embeddings.search(scope, query, search_opts) do
+      {:ok, []} ->
+        %{state: :empty, hits: [], simulated: false}
+
+      {:ok, raw_hits} ->
+        {:ok, simulated} = simulated_or_false(Embeddings.embedder_simulated?(search_opts))
+        by_id = Map.new(raw_hits, &{&1.source_id, &1})
+        hit_ids = Enum.map(raw_hits, & &1.source_id)
+
+        rows =
+          case reverify_conversations(org_id, assistant_id, hit_ids) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+
+        # Preserve rank order (nearest first) — the refetch does not.
+        ordered =
+          rows
+          |> Enum.sort_by(&Map.get(by_id, &1.id).distance)
+
+        if ordered == [] do
+          %{state: :empty, hits: [], simulated: simulated}
+        else
+          %{
+            state: :ok,
+            simulated: simulated,
+            hits:
+              Enum.map(ordered, fn c ->
+                %{conversation: c, snippet: Map.get(by_id, c.id).snippet}
+              end)
+          }
+        end
+
+      {:error, :not_configured} ->
+        %{
+          state: :not_configured,
+          hits: [],
+          configuration_hint: Samen.AI.configuration_hint()
+        }
+
+      {:error, _} ->
+        %{state: :error, hits: []}
+    end
+  end
+
+  @doc """
+  Per-assistant usage roll-up (P3 counter roll-up, no new table).
+
+  Sums `AssistantConversation` counters (`message_count`, `total_tokens`) for one
+  assistant in the org and derives an honest cost estimate via
+  `Samen.Scopes.Ai.Analytics.estimate_cost/2` — no new table, no fabricated cost
+  (zero tokens ⇒ zero cost). The Live header renders this; it is also the budget
+  denominator for the thread caps below.
+  """
+  @spec assistant_usage(Mount.t(), String.t() | nil, String.t() | nil) :: map()
+  def assistant_usage(_mount, nil, _assistant_id),
+    do: %{conversation_count: 0, message_count: 0, total_tokens: 0, estimated_cost: 0.0}
+
+  def assistant_usage(_mount, _org_id, nil),
+    do: %{conversation_count: 0, message_count: 0, total_tokens: 0, estimated_cost: 0.0}
+
+  def assistant_usage(_mount, org_id, assistant_id)
+      when is_binary(org_id) and is_binary(assistant_id) do
+    rows =
+      AssistantConversation
+      |> Ash.Query.filter(org_id == ^org_id and assistant_id == ^assistant_id)
+      |> Ash.read(authorize?: false)
+      |> case do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    conversation_count = length(rows)
+
+    message_count =
+      Enum.reduce(rows, 0, fn r, acc -> acc + (Map.get(r, :message_count) || 0) end)
+
+    total_tokens =
+      Enum.reduce(rows, 0, fn r, acc -> acc + (Map.get(r, :total_tokens) || 0) end)
+
+    estimated_cost = Samen.Scopes.Ai.Analytics.estimate_cost(total_tokens, 0)
+
+    %{
+      conversation_count: conversation_count,
+      message_count: message_count,
+      total_tokens: total_tokens,
+      estimated_cost: estimated_cost
+    }
+  rescue
+    _ -> %{conversation_count: 0, message_count: 0, total_tokens: 0, estimated_cost: 0.0}
   end
 
   @doc """
@@ -414,7 +547,8 @@ defmodule Samen.Web.AI.Server do
 
     with {:ok, assistant} <- get_assistant(mount, org_id, assistant_id),
          {:ok, %{conversation: conv, turns: prior_turns}} <- get_conversation(mount, org_id, conv_id),
-         :ok <- ensure_same_assistant(conv, assistant_id) do
+         :ok <- ensure_same_assistant(conv, assistant_id),
+         :ok <- check_conversation_budget(conv) do
       if tool_aware?(assistant) do
         do_tool_aware_run(mount, org_id, scope, assistant, conv, prior_turns, input, opts)
       else
@@ -609,14 +743,24 @@ defmodule Samen.Web.AI.Server do
     transcript = Jason.encode!(%{"turns" => new_turns})
     usage_tokens = estimate_tokens(completion)
 
-    conv
-    |> Ash.Changeset.for_update(:append_turn, %{
-      transcript: transcript,
-      message_count: length(new_turns),
-      total_tokens: (Map.get(conv, :total_tokens) || 0) + usage_tokens,
-      last_message_at: now
-    })
-    |> Ash.update(scope: scope)
+    result =
+      conv
+      |> Ash.Changeset.for_update(:append_turn, %{
+        transcript: transcript,
+        message_count: length(new_turns),
+        total_tokens: (Map.get(conv, :total_tokens) || 0) + usage_tokens,
+        last_message_at: now
+      })
+      |> Ash.update(scope: scope)
+
+    case result do
+      {:ok, updated} ->
+        _ = reindex_conversation(scope, updated)
+        {:ok, updated}
+
+      other ->
+        other
+    end
   end
 
   defp estimate_tokens(%Samen.AI.Completion{text: text, usage: usage}) do
@@ -658,12 +802,19 @@ defmodule Samen.Web.AI.Server do
           short = text |> String.trim() |> String.slice(0, 60) |> String.trim()
 
           if short != "" do
-            updated
-            |> Ash.Changeset.for_update(:rename, %{title: short})
-            |> Ash.update(scope: scope)
-          end
+            case updated
+                 |> Ash.Changeset.for_update(:rename, %{title: short})
+                 |> Ash.update(scope: scope) do
+              {:ok, renamed} ->
+                _ = reindex_conversation(scope, renamed)
+                :ok
 
-          :ok
+              _ ->
+                :ok
+            end
+          else
+            :ok
+          end
 
         _ ->
           :ok
@@ -674,6 +825,61 @@ defmodule Samen.Web.AI.Server do
   rescue
     _ -> :ok
   end
+
+  # --- P3 helpers: recall re-verify + budgets + best-effort reindex --------------------
+
+  defp simulated_or_false({:ok, bool}) when is_boolean(bool), do: {:ok, bool}
+  defp simulated_or_false(_), do: {:ok, false}
+
+  defp reverify_conversations(org_id, assistant_id, hit_ids) when is_list(hit_ids) do
+    query =
+      case assistant_id do
+        id when is_binary(id) and id != "" ->
+          AssistantConversation
+          |> Ash.Query.filter(org_id == ^org_id and assistant_id == ^id and id in ^hit_ids)
+
+        _ ->
+          AssistantConversation
+          |> Ash.Query.filter(org_id == ^org_id and id in ^hit_ids)
+      end
+
+    case Ash.read(query, authorize?: false) do
+      {:ok, rows} -> {:ok, rows}
+      {:error, reason} -> {:error, reason}
+    end
+  rescue
+    e -> {:error, e}
+  end
+
+  defp check_conversation_budget(conv) do
+    message_count = Map.get(conv, :message_count) || 0
+    total_tokens = Map.get(conv, :total_tokens) || 0
+
+    cond do
+      message_count >= @assistant_max_messages ->
+        {:error, :budget_exhausted}
+
+      total_tokens >= @assistant_max_tokens ->
+        {:error, :budget_exhausted}
+
+      true ->
+        :ok
+    end
+  end
+
+  # Best-effort title reindex (P3) — never blocks a write on embedding availability.
+  # Mirrors KbReads.reindex/2: :not_configured / any error is swallowed (honest
+  # degradation — the conversation still saved, simply not yet semantically searchable).
+  defp reindex_conversation(scope, %{__struct__: resource} = conv) when resource == AssistantConversation do
+    # Only the allowlisted non-PII :title is embedded (vault :transcript never is,
+    # §7.2 — Embeddings.assert_embeddable/2 + ai_prompt_masking verifier).
+    Embeddings.embed_record(scope, conv, resource, [])
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp reindex_conversation(_scope, _conv), do: :ok
 
   # --- shared helpers ----------------------------------------------------------------------
 

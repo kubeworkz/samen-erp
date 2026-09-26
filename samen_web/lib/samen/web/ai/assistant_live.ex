@@ -114,6 +114,27 @@ defmodule Samen.Web.AI.AssistantLive do
     pending_approval = Keyword.get(opts, :assistant_approval, socket.assigns[:assistant_approval])
     pending_provenance = Keyword.get(opts, :assistant_provenance, socket.assigns[:assistant_provenance])
 
+    # P3 — per-assistant usage roll-up (counter roll-up, no new table) + recall state.
+    # `assistant_usage` is derived from conversation counters via `Server.assistant_usage/3`
+    # (honest cost via `Analytics.estimate_cost/2`); `assistant_recall` is the title-only
+    # HNSW recall (re-verified, simulated badge) when a query is present.
+    recall_query = Keyword.get(opts, :recall_query, socket.assigns[:recall_query] || "")
+
+    assistant_usage =
+      cond do
+        Keyword.has_key?(opts, :assistant_usage) -> Keyword.get(opts, :assistant_usage)
+        socket.assigns[:assistant_usage] && recall_query == socket.assigns[:recall_query] -> socket.assigns[:assistant_usage]
+        org_id && resolved_assistant_id -> Server.assistant_usage(mount, org_id, resolved_assistant_id)
+        true -> %{conversation_count: 0, message_count: 0, total_tokens: 0, estimated_cost: 0.0}
+      end
+
+    assistant_recall =
+      cond do
+        Keyword.has_key?(opts, :assistant_recall) -> Keyword.get(opts, :assistant_recall)
+        is_binary(recall_query) && String.trim(recall_query) != "" -> socket.assigns[:assistant_recall]
+        true -> socket.assigns[:assistant_recall]
+      end
+
     socket
     |> Phoenix.Component.assign(:org_id, org_id)
     |> Phoenix.Component.assign(:assistant_id, resolved_assistant_id)
@@ -131,6 +152,9 @@ defmodule Samen.Web.AI.AssistantLive do
     |> Phoenix.Component.assign(:assistant_approval, pending_approval)
     |> Phoenix.Component.assign(:assistant_provenance, pending_provenance)
     |> Phoenix.Component.assign(:available_tools, available_tools())
+    |> Phoenix.Component.assign(:assistant_usage, assistant_usage)
+    |> Phoenix.Component.assign(:assistant_recall, assistant_recall)
+    |> Phoenix.Component.assign(:recall_query, recall_query)
   end
 
   @impl true
@@ -142,6 +166,36 @@ defmodule Samen.Web.AI.AssistantLive do
   def handle_event("select-conversation", %{"id" => conv_id}, socket) do
     assistant_id = socket.assigns[:assistant_id]
     {:noreply, push_patch(socket, to: assistant_path(socket.assigns[:samen_mount], assistant_id, conv_id))}
+  end
+
+  # P3 — title-only recall search (org-scoped HNSW, deterministic in CI).
+  # Re-verified against the caller's own scoped read, simulated badge via
+  # `Embeddings.embedder_simulated?/1` — never a confident-looking real result
+  # when keyless. The Live search is a thin pass-through to `Server.assistant_recall/5`.
+  def handle_event("assistant-recall", %{"query" => query}, socket) do
+    mount = socket.assigns[:samen_mount]
+    org_id = socket.assigns[:org_id]
+    assistant_id = socket.assigns[:assistant_id]
+    trimmed = String.trim(query || "")
+
+    recall =
+      if trimmed != "" and is_binary(org_id) and is_binary(assistant_id) do
+        Server.assistant_recall(mount, org_id, assistant_id, trimmed, [])
+      else
+        nil
+      end
+
+    {:noreply,
+     socket
+     |> Phoenix.Component.assign(:recall_query, trimmed)
+     |> Phoenix.Component.assign(:assistant_recall, recall)}
+  end
+
+  def handle_event("assistant-recall-clear", _params, socket) do
+    {:noreply,
+     socket
+     |> Phoenix.Component.assign(:recall_query, "")
+     |> Phoenix.Component.assign(:assistant_recall, nil)}
   end
 
   def handle_event("create-conversation", _params, socket) do
@@ -246,6 +300,14 @@ defmodule Samen.Web.AI.AssistantLive do
               end
 
             {:noreply, socket}
+
+          {:error, :budget_exhausted} ->
+            {:noreply,
+             socket
+             |> Phoenix.Component.assign(:outcome, {:error, :budget_exhausted})
+             |> Phoenix.Component.assign(:assistant_run, nil)
+             |> Phoenix.Component.assign(:assistant_approval, nil)
+             |> Phoenix.Component.assign(:assistant_provenance, nil)}
 
           {:error, {:budget_exhausted, %Samen.AI.Agent.Run{} = run}} ->
             {:noreply,
@@ -503,6 +565,35 @@ defmodule Samen.Web.AI.AssistantLive do
               <b style="font-size:13px">Conversations</b>
               <.button variant="secondary" phx-click="create-conversation" id="assistant-conv-new">New</.button>
             </div>
+            <div :if={@assistant_id != nil and @assistant_usage} id="assistant-usage" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <.pill variant="info"><span id="assistant-usage-threads">{@assistant_usage.conversation_count} threads</span></.pill>
+              <span style="color:var(--muted);font-size:12px" id="assistant-usage-tokens">{@assistant_usage.message_count} msgs · {@assistant_usage.total_tokens} tokens</span>
+              <span style="color:var(--muted);font-size:11px" id="assistant-usage-cost">est. ${:erlang.float_to_binary(@assistant_usage.estimated_cost * 1.0, decimals: 6)}</span>
+            </div>
+
+            <form :if={@assistant_id != nil} phx-submit="assistant-recall" id="assistant-recall-form" style="display:flex;gap:6px">
+              <input type="text" name="query" value={@recall_query} placeholder="Search conversations (title)" style="flex:1;font-size:12px" id="assistant-recall-input" />
+              <.button variant="secondary" type="submit" id="assistant-recall">Search</.button>
+              <.button :if={@recall_query != ""} variant="secondary" phx-click="assistant-recall-clear" type="button" id="assistant-recall-clear">Clear</.button>
+            </form>
+
+            <div :if={@assistant_recall} id="assistant-recall-results" class="card" style="padding:8px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <b style="font-size:12px">Recall</b>
+                <span style="color:var(--muted);font-size:11px" id="assistant-recall-state">{@assistant_recall.state}</span>
+                <.pill :if={Map.get(@assistant_recall, :simulated, false)} variant="warn"><span id="assistant-recall-sim-badge">SIMULATED ranking</span></.pill>
+                <.pill :if={Map.get(@assistant_recall, :simulated) == false} variant="ok"><span id="assistant-recall-live-badge">Live ranking</span></.pill>
+              </div>
+              <div :if={@assistant_recall.state == :not_configured} id="assistant-recall-hint" style="color:var(--muted);font-size:12px">{Map.get(@assistant_recall, :configuration_hint, "")}</div>
+              <ul :if={@assistant_recall.hits != []} style="list-style:none;margin:0;padding:0">
+                <li :for={hit <- @assistant_recall.hits} class="assistant-recall-hit" id={"assistant-recall-hit-#{hit.conversation.id}"} style="padding:4px 0;border-bottom:1px solid var(--line,#222)">
+                  <a href={assistant_path(@samen_mount, @assistant_id, hit.conversation.id)} style="font-size:12px">{hit.conversation.title}</a>
+                  <span :if={hit.snippet} style="margin-left:6px;color:var(--muted);font-size:11px" class="assistant-recall-snippet">{hit.snippet}</span>
+                </li>
+              </ul>
+              <div :if={@assistant_recall.hits == [] and @assistant_recall.state not in [:not_configured, :error]} style="color:var(--muted);font-size:12px" id="assistant-recall-empty">No matches.</div>
+            </div>
+
             <%= if @assistant_id == nil do %>
               <div id="assistant-conv-empty" style="color:var(--muted);font-size:12px">Pick an assistant first.</div>
             <% else %>
@@ -555,6 +646,10 @@ defmodule Samen.Web.AI.AssistantLive do
 
                 <div :if={@outcome} id="assistant-outcome" style="margin-top:4px">
                   <.ai_result result={normalize_outcome(@outcome)} id="assistant-result" />
+                </div>
+                <div :if={@outcome == {:error, :budget_exhausted}} id="assistant-budget-exhausted" class="card" data-state="budget_exhausted" style="padding:10px">
+                  <.pill variant="warn">Stopped at a budget</.pill>
+                  <span style="margin-left:8px;font-size:13px">This conversation hit its message/token budget — <b>no partial answer was promoted</b> (fail-honest, like the agent loop).</span>
                 </div>
 
                 <div :if={@assistant_approval} class="card" id="assistant-decision-card" data-approval={@assistant_approval.id} style="padding:14px;border-color:#F0B429">
