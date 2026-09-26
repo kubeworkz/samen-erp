@@ -93,7 +93,12 @@ module = identity.module
 prefix = identity.prefix
 resource_abbrev = identity.abbrev
 
-http_port = 4990 + rem(System.unique_integer([:positive]), 90)
+# 4990-5079 included 5040 which is reserved by Windows svchost/HTTP.sys
+# (observed :eacces on 5040 under full-ci load). Use 5100-5189 which is
+# free on this host and avoids the reserved range; retry once if the
+# OS still reports :eacces (e.g. a concurrent probe holds the port).
+http_port = 5100 + rem(System.unique_integer([:positive]), 90)
+http_port = if http_port == 5040, do: 5041, else: http_port
 
 samen_core_root = Gen.default_target() |> Path.join("samen_core")
 scratch_root = Path.expand(Path.join(samen_core_root, ".."))
