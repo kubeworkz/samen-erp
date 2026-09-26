@@ -333,6 +333,162 @@
     {
       "fields": [
         {
+          "column_name": "ast_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ast_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ast_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ast_model_id",
+          "logical_name": "model_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ast_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ast_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ast_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ast_system_prompt",
+          "logical_name": "system_prompt",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ast_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ast_tools",
+          "logical_name": "tools",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "ast_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samen.AI.Assistant",
+      "table_name": "ai_assistant"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "asc_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "asc_assistant_id",
+          "logical_name": "assistant_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "asc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "asc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "asc_last_message_at",
+          "logical_name": "last_message_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "asc_message_count",
+          "logical_name": "message_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "asc_model_id",
+          "logical_name": "model_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "asc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "asc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "asc_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "asc_total_tokens",
+          "logical_name": "total_tokens",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "asc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_asc_transcript",
+          "logical_name": "transcript",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samen.AI.AssistantConversation",
+      "table_name": "ai_assistant_conversation"
+    },
+    {
+      "fields": [
+        {
           "column_name": "aip_body",
           "logical_name": "body",
           "pii": false,
