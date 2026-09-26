@@ -156,6 +156,11 @@ defmodule Driftwood.SettlementMathTest do
 
   # -- Property test (thousands of random settlements) ----------------------------
 
+  # 200 DB-backed iterations (~100ms each = 20s solo) can exceed the 60s
+  # default ExUnit timeout when 5 app gates run concurrently and contend
+  # on the single Postgres + BEAM scheduler. 120s covers the contended case
+  # without weakening the check; solo still completes in ~20s.
+  @tag timeout: 120_000
   property "reshape netting matches the independent reference for every input" do
     check all(
             linehaul <- integer(0..1_000_000),
