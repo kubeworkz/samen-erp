@@ -151,8 +151,14 @@ fi
 # The module name is checked against the build root's ebin dirs rather than a
 # `test/` path heuristic: a host domain that legitimately exists in :prod (e.g.
 # `Samenerp.Billing`, named while a path dep compiles before it is itself
-# compiled) DOES have a beam by the time the compile finishes and is therefore
-# fine; a test-support fixture never has one.
+# compiled — the samen_core dep inside the samenerp build verifies the HOST's
+# `config :samen_core, :ash_domains` before the host's own lib/ compiles, and
+# emits exactly these `not a Spark DSL module` lines) DOES have a beam by the
+# time the compile finishes and is therefore fine; a test-support fixture never
+# has one. NB: Elixir writes beam files as `Elixir.<Module>.beam`, so both
+# names must be probed — matching only `<Module>.beam` flags every Elixir
+# module as absent (that false positive failed this gate's first CI run,
+# 2026-09-28, while the samenerp compile itself was green).
 scan_prod_absent_dsl() {
   local app="$1" log="$2"
   local -a offenders=()
@@ -160,7 +166,8 @@ scan_prod_absent_dsl() {
 
   while IFS= read -r mod; do
     [ -n "$mod" ] || continue
-    if ! compgen -G "$BUILD_ROOT/$app/lib/*/ebin/$mod.beam" >/dev/null; then
+    if ! compgen -G "$BUILD_ROOT/$app/lib/*/ebin/$mod.beam" >/dev/null &&
+      ! compgen -G "$BUILD_ROOT/$app/lib/*/ebin/Elixir.$mod.beam" >/dev/null; then
       offenders+=("$mod")
     fi
   done < <(
