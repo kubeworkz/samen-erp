@@ -100,6 +100,16 @@
 # a latent bug (the "patch 67 missing header aborts silently" class), so it is
 # checked regardless of which subset was selected.
 #
+# STRUCTURAL PREFLIGHT. After the selection — and after the `--list`/`--dry-run` short-circuit,
+# so previewing stays instant — every real run also runs scripts/sabotage_preflight.sh: residue /
+# EOLs / patch applicability / test anchors, all read-only. Each of those classes used to be
+# discovered only when the replay REACHED the offending patch, arbitrarily deep and after the
+# whole tier stack had been paid for; a DIRECT `bash scripts/sabotage.sh` now fails as fast as a
+# gate run does. ci.sh runs the SAME preflight at the top of the gate (before the spikes) and
+# therefore passes `--no-preflight` here: the guards are read-only and idempotent, so the second
+# run would buy nothing and cost ~3 minutes. `--no-preflight` is the only caller-supplied opt-out,
+# and a direct run never needs it.
+#
 # A filtered run's success line is deliberately DISTINCT from the full-harness
 # line so a partial run can never be mistaken for full certification, e.g.
 #   SABOTAGE HARNESS: ALL PASSED (97 of 212 sabotages — FILTERED: app=samen_web)
@@ -161,6 +171,7 @@ usage() {
   echo "Usage: sabotage.sh [--app <name>] [--range <lo>-<hi> | --from <lo> --to <hi>]"
   echo "                   [--touching <path>... | --touching-file <file> | --changed [<ref>]]"
   echo "                   [--list | --dry-run]"
+  echo "                   [--no-preflight]  (skip the structural preflight — for callers that already ran it)"
   echo ""
   # Marker-delimited (not line-numbered) so editing the header cannot silently
   # desynchronize the help text from the flags it documents.
@@ -222,6 +233,7 @@ TOUCH_DESC=""
 TOUCH_SET="$WORK/touch_set"
 : > "$TOUCH_SET"
 LIST_ONLY=0
+NO_PREFLIGHT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -286,6 +298,8 @@ while [[ $# -gt 0 ]]; do
       TOUCH_DESC="changed=${changed_ref}+untracked" ;;
     --list|--dry-run)
       LIST_ONLY=1; shift ;;
+    --no-preflight)
+      NO_PREFLIGHT=1; shift ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -508,6 +522,20 @@ fi
 # An empty selection certifies nothing — fail loudly (never a silent green).
 if [[ $sel_count -eq 0 ]]; then
   fail "selection is empty ($sel_count of $grand_total) for filter [$(filter_label)] — nothing to certify"
+fi
+
+# ── structural preflight ─────────────────────────────────────────────────────
+# Run BEFORE the replay (and after the --list short-circuit above, so a preview stays
+# instant): residue, EOLs, patch applicability, and test anchors. Without it, a patch
+# whose anchor moved or whose MUST_FAIL died only fails when the replay REACHES it —
+# arbitrarily deep, after the tier stack has been paid for. Read-only and idempotent;
+# silent when clean. `--no-preflight` (ci.sh, which already ran these exact guards at the
+# top of the gate) skips it.
+if [[ $NO_PREFLIGHT -eq 1 ]]; then
+  echo "==> sabotage preflight: SKIPPED (--no-preflight — the caller already ran it)"
+else
+  bash "$REPO_ROOT/scripts/sabotage_preflight.sh" \
+    || fail "structural preflight failed (see above) — no patch was applied"
 fi
 
 # Announce the effective selection at the start of any FILTERED run (the default

@@ -5,79 +5,27 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# --- RESIDUE PREFLIGHT (fail closed, seconds) ------------------------------------------
-# An applied sabotage in the working tree is not obvious breakage: it fails exactly the tests
-# the sabotage targets — a confusing red ~50 minutes into this gate, far from the cause — and
-# `git add -A` commits it as if it were a fix (patch 12-e5 reached main that way, and that is
-# why the harness now replays every patch in a throwaway worktree instead of this checkout).
-# The state still arrives by other routes, so it is still checked here: a checkout left behind
-# by a pre-isolation run, a hard kill (SIGKILL skips every trap, including the harness's), a
-# patch applied by hand, or a committed sweep. Check the tree BEFORE spending the gate on it.
-# Read-only — it reverts nothing and prints nothing when clean.
-echo "==> Preflight: the working tree must carry no applied sabotage patch"
-bash "$REPO_ROOT/scripts/sabotage_residue.sh" || {
+# --- SABOTAGE PREFLIGHTS (fail closed, seconds–minutes) --------------------------------
+# Four read-only guards run before the gate is spent. Each answers a question knowable in
+# seconds that was, historically, only discovered ~an hour into the sabotage replay (or the
+# app gates) — and every class cost at least one full gate:
+#   * residue — an applied sabotage in this checkout poisons every baseline (12-e5 reached main);
+#   * EOLs    — `eol=lf` declared but CRLF on disk → `git apply` rewrites it → no byte-exact
+#               revert (died 47 patches in on 133-t84b, misreported by the SHA gate);
+#   * apply   — a patch whose anchor moved no longer applies (165-t85 / 243-a2 / 255-a4);
+#   * anchors — a patch anchored to a renamed/moved or prose-named test still APPLIES but
+#               cannot flip (224-d3 / 300-t183b) → a phantom "vacuous gate" deep in the replay.
+# The guards and their exact repairs live in scripts/sabotage_preflight.sh — the single source
+# of truth, which scripts/sabotage.sh ALSO runs before its own replay (so a direct harness run
+# fails fast too, and skips its copy with --no-preflight because this gate already ran it).
+# Read-only: they revert nothing, repair nothing, and print nothing when the tree is clean.
+echo "==> Preflights: residue · EOLs · patch applicability · test anchors"
+if ! bash "$REPO_ROOT/scripts/sabotage_preflight.sh"; then
   echo ""
-  echo "==> ROOT CI: FAILED — sabotage residue in the working tree (see above). Revert the"
-  echo "    listed patch(es) and re-run; do not commit this tree."
+  echo "==> ROOT CI: FAILED — a sabotage preflight failed (see above). Repair the listed"
+  echo "    path/patch/anchor and re-run; do not spend the gate on it."
   exit 1
-}
-echo "==> residue preflight: clean"
-
-# --- EOL PREFLIGHT (fail closed, milliseconds) -----------------------------------------
-# `.gitattributes` pins the source tree to LF so a `git apply` round-trip stays byte-stable
-# on a `core.autocrlf=true` host. A path that declares `eol=lf` but sits CRLF in the
-# worktree is INVISIBLE to `git status` (autocrlf normalizes before comparing) and only
-# detonates when a patch touches it: `git apply` rewrites the file as LF, so the sabotage
-# harness's reverse-apply can never return the pre-captured bytes and the run dies with a
-# misleading `SHA mismatch after revert`. That cost a 47-patch-deep abort on the first full
-# 308-patch replay (133-t84b, `samen_web/lib/samen/web/router.ex`). The class is detectable
-# in milliseconds, so it is checked BEFORE the gate is spent, like the residue preflight
-# above. Read-only — it repairs nothing and prints nothing when the tree is clean.
-echo "==> Preflight: the worktree must hold the EOLs .gitattributes declares"
-bash "$REPO_ROOT/scripts/eol_preflight.sh" || {
-  echo ""
-  echo "==> ROOT CI: FAILED — worktree EOL drift (see above). Repair the listed path(s),"
-  echo "    confirm 'git status --short' is empty, and re-run. Do not spend the gate on it."
-  exit 1
-}
-echo "==> eol preflight: clean"
-
-# --- SABOTAGE-PATCH APPLY PREFLIGHT (fail closed, seconds) ------------------------------
-# Every shipped sabotage patch must still apply to THIS tree. A patch is a hunk pinned to
-# source that keeps moving, and the harness only discovers a moved anchor when it REACHES
-# that patch — patch N of 308, after the whole tier stack has been paid for. Both times
-# this fired it cost a full gate (~25 and ~90 minutes in): 165-t85 lost its trailing
-# context to the AI kit growing from six to seven surfaces; 243-a2 and 255-a4 lost their
-# anchors to the UXD-08 `:hooks` persistence and the A11 `redacted_and_sanitized/1`
-# refactor. `git apply --check` is exact and read-only — it writes nothing and prints
-# nothing when every patch still applies.
-echo "==> Preflight: every sabotage patch must still apply to this tree"
-bash "$REPO_ROOT/scripts/sabotage_apply_preflight.sh" || {
-  echo ""
-  echo "==> ROOT CI: FAILED — one or more sabotage patches no longer apply (see above)."
-  echo "    Re-anchor the listed hunk(s) and re-verify the flip, then re-run."
-  exit 1
-}
-echo "==> sabotage apply preflight: clean"
-
-# --- SABOTAGE-PATCH ANCHOR PREFLIGHT (fail closed, seconds) -----------------------------
-# A patch that APPLIES is not necessarily a patch that can FLIP: its `# TEST_FILES:` and
-# `# MUST_FAIL:` headers name the tests that must go red, and when a test is renamed, moves
-# file, or the header never named a test at all (prose instead of an ExUnit name), the patch
-# still applies cleanly while its suite stays GREEN — so the harness reaches it deep into the
-# replay and reports `suite PASSED under sabotage — the guarantee did not flip (vacuous
-# gate)`, blaming the guarantee instead of the anchor. Both real cases cost a full gate: the
-# D3 guard whose REFUSED red-path had moved to the completeness gate's live-guard probe, and
-# the T183b patch whose `# TEST_FILES:` carried an app-doubled path and whose `# MUST_FAIL:`
-# was prose. This asserts every anchor exists, statically and read-only.
-echo "==> Preflight: every sabotage patch must still be anchored to a live test"
-bash "$REPO_ROOT/scripts/sabotage_anchor_preflight.sh" || {
-  echo ""
-  echo "==> ROOT CI: FAILED — one or more sabotage patches are anchored to a moved or missing"
-  echo "    test (see above). Re-point the listed header(s) and re-verify the flip, then re-run."
-  exit 1
-}
-echo "==> sabotage anchor preflight: clean"
+fi
 
 run_spike() {
   local spike_dir="$1"
@@ -404,7 +352,9 @@ echo "==> sabotage selection regression: PASSED"
 echo ""
 if [[ "${SAMEN_SABOTAGE:-0}" == "1" ]]; then
   echo "==> Running sabotage harness (SAMEN_SABOTAGE=1 — every gate sabotage must flip + restore byte-exact)"
-  bash "$REPO_ROOT/scripts/sabotage.sh"
+  # --no-preflight: the top-of-gate preflights above already certified this exact tree;
+  # the guards are idempotent, so re-running them here would only cost ~3 minutes.
+  bash "$REPO_ROOT/scripts/sabotage.sh" --no-preflight
   echo "==> sabotage harness: PASSED"
 else
   echo "==> Skipping sabotage harness (opt-in: SAMEN_SABOTAGE=1 ./ci.sh replays all gate sabotages)"

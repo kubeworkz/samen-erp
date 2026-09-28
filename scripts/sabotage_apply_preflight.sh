@@ -16,9 +16,9 @@
 # The check is exact and READ-ONLY: `git apply --check` validates each patch's context and
 # line counts against the worktree it would be applied to and writes nothing.
 #
-# SCOPE: wired into ci.sh's preflight (the gate). `scripts/sabotage.sh` itself is NOT wired
-# to it, so a DIRECT harness invocation still discovers a stale patch only when it reaches
-# it — with the harness's own, honest `patch did not apply in the replay tree` message.
+# SCOPE: run by scripts/sabotage_preflight.sh, which BOTH ci.sh (before the spikes) and
+# scripts/sabotage.sh (before its replay) invoke — so a DIRECT harness invocation discovers a
+# stale patch here, in seconds, instead of reaching it deep in the replay.
 #
 # Output contract: NOTHING is printed when every patch still applies, so callers' output is
 # unchanged.
