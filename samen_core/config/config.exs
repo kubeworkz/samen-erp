@@ -4,24 +4,51 @@ import Config
 # own test/dev fixtures (test/support/*) can be introspected by `mix ash.codegen`
 # and exercised against a real Postgres. Host applications configure their own
 # repo + domains.
+#
+# The `SamenCore.Support.*` FIXTURE domains (and `SamenCore.TestRepo`) are DEV/TEST
+# ONLY — `test/support/*` is not compiled into a `MIX_ENV=prod` build. Listing them
+# unconditionally made Ash introspect modules that do not exist there, so EVERY
+# resource's verification raised
+# `ArgumentError: SamenCore.Support.Crm is not a Spark DSL module` (the
+# `warning: Exception while verifying ...` lines in each prod build log). That had two
+# consequences: it aborted the prod `samen_core` compile (`== Compilation error in file
+# lib/samen/ai/assistant_conversation.ex ==` — `Cannot accept [:transcript]`, because the
+# derailed verification left the transformer-materialized attribute invisible to the
+# `accept` check; every deploy failed from 2026-09-25 on), and at runtime it left
+# resources whose DSL never completed verifying, so `Samen.Pii.Info` saw no `pii`
+# declarations and `Samen.Vault.Change` silently no-oped — EVERY plaintext PII write in
+# production failed (registration's generic `?error=1`, the seeds' PII-less admins, zero
+# `pii_vault` rows, no subject DEK ever minted) while dev/test passed, because there
+# `test/support/*` IS compiled and the introspection succeeds. Keep the fixtures out of
+# `:prod`; the kernel-infra domains below are real `lib/` modules and stay in every env.
+fixture_domains =
+  if config_env() == :prod do
+    []
+  else
+    [
+      SamenCore.Support.Crm,
+      SamenCore.Support.Clinical,
+      SamenCore.Support.PropDomain,
+      SamenCore.Support.PiiClassifyDomain,
+      SamenCore.Support.CustomFields,
+      SamenCore.Support.RichTypes,
+      # T3.10 bounded-context DSL toy domain — `test/support/context_fixture.ex`
+      # (aliased/reshaped by `Ctx.Toy`): a FIXTURE, not kernel infra.
+      Core.Ctx
+    ]
+  end
+
 config :samen_core,
-  ecto_repos: [SamenCore.TestRepo],
-  ash_domains: [
-    SamenCore.Support.Crm,
-    SamenCore.Support.Clinical,
-    SamenCore.Support.PropDomain,
-    SamenCore.Support.PiiClassifyDomain,
-    SamenCore.Support.CustomFields,
-    SamenCore.Support.RichTypes,
-    Samen.CustomObjects.Domain,
-    # T3.10 bounded-context DSL toy KERNEL domain (aliased/reshaped by Ctx.Toy).
-    Core.Ctx,
-    # T68 (ADR-043 §7.5): the D3 versioned Prompt resource. Real kernel infra (the
-    # Samen.CustomObjects.Domain precedent) — registered here so samen_core's OWN
-    # test/dev suite can exercise it against SamenCore.TestRepo with a real migration.
-    # Host apps mount it by adding Samen.AI.Domain to THEIR OWN :ash_domains.
-    Samen.AI.Domain
-  ]
+  ecto_repos: if(config_env() == :prod, do: [], else: [SamenCore.TestRepo]),
+  ash_domains:
+    [
+      Samen.CustomObjects.Domain,
+      # T68 (ADR-043 §7.5): the D3 versioned Prompt resource. Real kernel infra (the
+      # Samen.CustomObjects.Domain precedent) — registered here so samen_core's OWN
+      # test/dev suite can exercise it against SamenCore.TestRepo with a real migration.
+      # Host apps mount it by adding Samen.AI.Domain to THEIR OWN :ash_domains.
+      Samen.AI.Domain
+    ] ++ fixture_domains
 
 # T3.9 Tier-2 custom objects: the repo backing the `tnt_record` Ash resource +
 # the `tnt_object`/`tnt_field` catalog. Host apps configure their own; falls back

@@ -41,6 +41,11 @@ _orch-*/
 # the main checkout, so this is a scratch build cache — never committed.
 .sabotage/
 
+# Prod-compile gate (scripts/prod_compile_gate.sh): the per-app MIX_ENV=prod build
+# root (`mix deps.get --only prod` + `mix compile --force` + the release). A scratch
+# build cache that must never shadow the real `_build/prod` — never committed.
+.prod_gate/
+
 # Generated documentation
 _site/
 */doc/

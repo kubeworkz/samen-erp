@@ -65,6 +65,35 @@ jobs:
       - name: Run fast CI tier
         run: bash ./ci-fast.sh
 
+  # The deploy build, on EVERY pull request AND every push to main. `fast`/`full`
+  # compile in MIX_ENV=test only, so neither can see a :prod-only compile break —
+  # which is how main stayed green while every deploy failed `docker build` for
+  # four days (2026-09-25 → 09-28). Runs in parallel with them (a PR pays no extra
+  # wall-clock) and is deliberately NOT part of ci.sh/ci-fast.sh: it is the one
+  # stage that has to `mix deps.get --only prod` and compile from scratch (~10 min
+  # cold), which would roughly double the local root gate for a verdict CI already
+  # gives. Run it locally with `bash scripts/prod_compile_gate.sh`. No Postgres
+  # service: it compiles, it never connects.
+  prod:
+    name: Prod Compile Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir and Erlang
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20.2"
+          otp-version: "29.0"
+          install-hex: true
+          rebar3-version: latest
+
+      - name: Build every app in MIX_ENV=prod + assemble the samenerp release
+        run: bash ./scripts/prod_compile_gate.sh
+
   full:
     name: Full CI
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
