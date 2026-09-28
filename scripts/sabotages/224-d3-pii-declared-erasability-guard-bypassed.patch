@@ -6,9 +6,21 @@
 # the exact structural hole the guard closes. Flips the guard's REFUSED red-path (a
 # spec-less pii_declared define must be rejected) while the WITH-spec positive control
 # still passes, so this targets ONLY the guard's fail-closed branch.
+#
+# RE-ANCHORED at the erasure-completeness fold: the REFUSED red-path that used to live in
+# `test/custom_fields_test.exs` no longer exists by that name anywhere in the tree — the
+# physical-table rung is now proven by the completeness gate's OWN live-guard probe,
+# `Samen.Erasure.Completeness.define_guard_enforced?/0` (`check/1` with
+# `skip_bag_guard?: false`), which defines a `pii_declared` field on the un-covered
+# `__erasure_completeness_probe__` table and requires the EXACT
+# `{:error, {:pii_declared_unerasable, ...}}` refusal this sabotage removes. With `:ok`
+# returned instead, the probe reports the guard un-enforced and the named test reds. Same
+# defect, same flipped branch (`true -> {:error, ...}` -> `true -> :ok`), same guarantee;
+# only the test anchor moved. Note the `tnt$obj$` object-bag rung (above it in the same
+# `cond`) is deliberately NOT touched — the object-bag guard keeps refusing.
 # APP: samen_core
-# TEST_FILES: test/custom_fields_test.exs
-# MUST_FAIL: REFUSED: a pii_declared field on a table with NO custom-bag erasure spec is rejected
+# TEST_FILES: test/erasure/completeness_test.exs
+# MUST_FAIL: check exercises the LIVE custom-bag define-time erasability guard (no repo needed)
 diff --git a/samen_core/lib/samen/custom_fields.ex b/samen_core/lib/samen/custom_fields.ex
 --- a/samen_core/lib/samen/custom_fields.ex
 +++ b/samen_core/lib/samen/custom_fields.ex

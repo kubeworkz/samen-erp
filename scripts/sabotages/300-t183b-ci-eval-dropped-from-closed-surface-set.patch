@@ -5,9 +5,20 @@
 # depends on becomes unobservable. The named reds (the new tool_surface verifier tier AND
 # the shipped T183 unit suite) MUST flip; the clean shipped set proves the checks are not
 # blanket-failing.
+#
+# RE-ANCHORED: both anchors were stale. `# TEST_FILES:` carried an app-DOUBLED path
+# (`samen_core/test/...` under `# APP: samen_core`, so the harness looked for
+# `samen_core/samen_core/test/...`), and the single `# MUST_FAIL:` named the check rather
+# than a TEST (`mix samen.verify.tool_surface exits 1` is prose, not an ExUnit name), so the
+# harness could never match it against a failed-test header. Re-pointed at the two tests the
+# dropped `:ci_eval` member actually reds: the verifier tier's own closed-set assertion, and
+# the shipped T183 unit suite's. Both are named in the header's own prose ("the new
+# tool_surface verifier tier AND the shipped T183 unit suite MUST flip") — the flip and the
+# defect are unchanged.
 # APP: samen_core
-# TEST_FILES: samen_core/test/ai/tool_surface_test.exs
-# MUST_FAIL: the exactly-four-surfaces check (mix samen.verify.tool_surface exits 1)
+# TEST_FILES: test/ai/tool_surface_verifier_test.exs test/ai/tool_surface_test.exs
+# MUST_FAIL: the shipped surfaces/0 is exactly the four
+# MUST_FAIL: there are EXACTLY four surfaces, and `:mcp` is not one an action may declare
 diff --git a/samen_core/lib/samen/ai/tool_surface.ex b/samen_core/lib/samen/ai/tool_surface.ex
 index d5af019..4289acc 100644
 --- a/samen_core/lib/samen/ai/tool_surface.ex

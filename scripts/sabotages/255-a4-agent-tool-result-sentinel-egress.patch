@@ -19,6 +19,13 @@
 # `vt_` sentinel scan is dropped), same two MUST_FAIL targets, re-verified flip + byte-exact
 # restore. The sabotaged clause keeps BOTH the redact and sanitize calls so only the
 # sentinel scan is removed — the defect is not widened.
+# REGENERATED AGAIN at the A11 perf-bound pass: `redacted_and_sanitized/1` replaced the
+# inline `v |> Secrets.redact() |> Ingress.sanitize()` in this exact clause, and the A11
+# rationale was inserted as the hunk's leading comment context — so the patch stopped
+# applying. Same defect (the `vt_` sentinel scan is dropped), same two MUST_FAIL targets,
+# re-verified flip + byte-exact restore. The sabotaged clause still calls the SAME
+# redact-then-sanitize transform (now via the helper), so only the sentinel scan is removed
+# and the defect is NOT widened.
 # APP: samen_core
 # TEST_FILES: test/ai/agent_tools_test.exs
 # MUST_FAIL: emit [unrenderable:<key>] for a vt_-bearing scalar
@@ -26,12 +33,12 @@
 diff --git a/samen_core/lib/samen/ai/agent/tool_result.ex b/samen_core/lib/samen/ai/agent/tool_result.ex
 --- a/samen_core/lib/samen/ai/agent/tool_result.ex
 +++ b/samen_core/lib/samen/ai/agent/tool_result.ex
-@@ -259,12 +259,10 @@
-   # binary, before `Ingress.sanitize/1` — a distinct lane from the `pii_*` vault taxonomy
-   # above, catching operator/app API keys, tokens and connection strings that carry no
-   # declared-field vault routing at all (see `Secrets`' moduledoc for the ordering rationale).
+@@ -437,12 +437,10 @@
+   # the FULL, unbounded `v` (never windowed — the vt_ floor must not narrow), and truncation to
+   # `@max_scalar_bytes` still runs AFTER the scan, on the bounded transform's output, exactly as
+   # before.
 -  defp render_scalar(v, key) when is_binary(v) do
--    sanitized = v |> Secrets.redact() |> Ingress.sanitize()
+-    sanitized = redacted_and_sanitized(v)
 -
 -    if sentinel?(v) or sentinel?(sanitized),
 -      do: unrenderable(key),
@@ -39,7 +46,7 @@ diff --git a/samen_core/lib/samen/ai/agent/tool_result.ex b/samen_core/lib/samen
 +  defp render_scalar(v, _key) when is_binary(v) do
 +    # SABOTAGE (A4 fold (c), ADR-047 §4.3): the sentinel scan is GONE — a vt_-bearing
 +    # scalar renders verbatim into the transcript and the next turn's history.
-+    truncate(v |> Secrets.redact() |> Ingress.sanitize())
++    truncate(redacted_and_sanitized(v))
    end
  
    defp render_scalar(v, _key) when is_number(v), do: to_string(v)

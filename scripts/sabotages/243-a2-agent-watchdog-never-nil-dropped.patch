@@ -11,6 +11,11 @@
 # (RE-ANCHORED at A4: the create_run! context moved when the hardcoded `depth: 0, chain:
 # []` became the resolved loop provenance. The sabotage's removed/added lines and the
 # guarantee it defeats are unchanged.)
+# (RE-ANCHORED AGAIN at the P1 assistant + UXD-08 fold: two later edits shifted BOTH
+# anchors — the durable per-turn advance moved from ~:834 to :1043, and the UXD-08 `:hooks`
+# persistence landed between `chain:` and `transcript:` in create_run!, so the second hunk
+# now anchors on the `hooks:` line instead of on `chain:`. Removed/added lines, the
+# never-nil watchdog it drops, and all three MUST_FAIL targets are unchanged.)
 # APP: samen_core
 # TEST_FILES: test/ai/agent_durability_test.exs
 # MUST_FAIL: ARMED watchdog and a token-only TurnWorker job
@@ -19,7 +24,7 @@
 diff --git a/samen_core/lib/samen/ai/agent.ex b/samen_core/lib/samen/ai/agent.ex
 --- a/samen_core/lib/samen/ai/agent.ex
 +++ b/samen_core/lib/samen/ai/agent.ex
-@@ -834,7 +834,7 @@
+@@ -1043,7 +1043,7 @@
            run
            |> Ash.Changeset.for_update(:advance, %{
              current_turn: turn_index,
@@ -28,10 +33,8 @@ diff --git a/samen_core/lib/samen/ai/agent.ex b/samen_core/lib/samen/ai/agent.ex
              transcript: encode_transcript(goal, lines ++ [completion.text]),
              input_tokens_used: run.input_tokens_used + in_tokens,
              output_tokens_used: run.output_tokens_used + out_tokens
-@@ -1700,8 +1700,12 @@
-             # anything past the v1 ceiling before we got here), not a hardcoded 0/[].
-             depth: Keyword.get(opts, :depth, 0),
-             chain: Keyword.get(opts, :chain, []),
+@@ -2434,6 +2434,10 @@
+             hooks: opts |> Keyword.get(:hooks) |> List.wrap() |> Enum.map(&Atom.to_string/1),
 -            transcript: encode_transcript(goal, []),
 -            next_turn_at: DateTime.add(DateTime.utc_now(), @inflight_watchdog_seconds)
 +            # SABOTAGE (A2, §4.1): the never-nil watchdog is DROPPED — a :queued run is

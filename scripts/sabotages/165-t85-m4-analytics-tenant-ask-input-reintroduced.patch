@@ -8,6 +8,13 @@
 # deterministically. T144 ITSELF is untouched by this sabotage (the kernel
 # gate still refuses); this patch only reintroduces the dead-tab INPUT the
 # M4 fix removed. Reverts byte-exact.
+#
+# RE-ANCHORED at the P1 assistant fold (73cae86): `Samen.Web.AI.Components.surfaces/0`'s
+# own `@doc` grew from "The six AI kit surfaces" to "The seven AI kit surfaces" (the
+# assistant surface joined the kit), and that line is TRAILING CONTEXT in this hunk — so
+# the patch stopped applying the moment the kit grew. Only the anchor moved: the flip
+# (`false` -> `true` on the catch-all clause) and both MUST_FAIL targets are unchanged,
+# and `analytics_ask_offered?/1`'s own body is byte-identical to what this hunk expects.
 # APP: samen_web
 # TEST_FILES: test/samen/web/ai/analytics_ask_honesty_test.exs
 # MUST_FAIL: the ask-box INPUT is not rendered on the tenant plane
@@ -21,5 +28,5 @@
 -  def analytics_ask_offered?(_), do: false
 +  def analytics_ask_offered?(_), do: true
  
-   @doc "The six AI kit surfaces, in nav order: `{kind, label, sub_path}`."
+   @doc "The seven AI kit surfaces, in nav order: `{kind, label, sub_path}`."
    def surfaces do
