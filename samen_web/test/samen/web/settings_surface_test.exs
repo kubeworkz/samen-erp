@@ -190,4 +190,36 @@ defmodule Samen.Web.SettingsSurfaceTest do
       assert leaked =~ "phx-click"
     end
   end
+
+  # ==========================================================================
+  # Shared sidebar chrome — the stylesheet's nav vocabulary
+  # ==========================================================================
+
+  describe "the shared settings sidebar" do
+    test "styles its links with `.nav a` / `.nav a.on` and lights EXACTLY the active surface" do
+      org_id = Ash.UUID.generate()
+      {user, _} = seed!(org_id)
+
+      html = render_live(Samen.Web.Settings.ProfileLive, build_mount(:settings), [org_id, user.id])
+
+      # The `.grp` + `<nav class="nav">` pair `Samen.UI.Nav.nav_group/1` emits, which is
+      # what `samen_ui.css` actually styles; `.settings-nav` is the hook
+      # `product_tour_live.ex` highlights.
+      assert html =~ ~s(<div class="grp">Settings</div>)
+      assert html =~ ~s(class="nav settings-nav")
+
+      # REGRESSION: `module-nav` / `module-nav-item` are defined NOWHERE in the sheet, so
+      # the sidebar rendered as unstyled anchors and the active item never lit up.
+      refute html =~ "module-nav"
+
+      # Every sub-surface is reachable from the sidebar...
+      for id <- ~w(profile api-keys huggingface security invitations reveal-approvals) do
+        assert html =~ ~s(id="settings-nav-#{id}")
+      end
+
+      # ...and exactly the active one carries `.on`.
+      assert html =~ ~r/<a href="[^"]+" class="on" id="settings-nav-profile">/
+      refute html =~ ~r/class="on" id="settings-nav-(?!profile)/
+    end
+  end
 end

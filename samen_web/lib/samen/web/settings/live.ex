@@ -1,8 +1,9 @@
 defmodule Samen.Web.Settings.Live do
   @moduledoc """
   Shared chrome for the framework SETTINGS LiveViews (WS-E E5; ADR-029) — the sidebar
-  nav across the three settings sub-surfaces (Profile · API keys · Security) and the
-  small plane helpers each surface reads. Mirrors `Samen.Web.Files.Live`.
+  nav across the settings sub-surfaces (Profile · API keys · HuggingFace · Security ·
+  Invitations · Reveal approvals) and the small plane helpers each surface reads.
+  Mirrors `Samen.Web.Files.Live`.
   """
   use Phoenix.Component
 
@@ -20,7 +21,7 @@ defmodule Samen.Web.Settings.Live do
   attr :active, :atom, default: :profile
   attr :user_id, :string, default: nil
 
-  @doc "The settings sidebar with the three sub-surface nav links."
+  @doc "The settings sidebar with the settings sub-surface nav links."
   def settings_sidebar(assigns) do
     ~H"""
     <.sidebar
@@ -28,7 +29,8 @@ defmodule Samen.Web.Settings.Live do
       subtitle="Settings"
       logo={Mount.label(@mount, :glyph, "S")}
     >
-      <nav class="module-nav" aria-label="Settings">
+      <div class="grp">Settings</div>
+      <nav class="nav settings-nav" aria-label="Settings">
         <a href={href("/settings", @org_id, @user_id)} class={nav_class(@active, :profile)} id="settings-nav-profile">
           Profile
         </a>
@@ -71,8 +73,12 @@ defmodule Samen.Web.Settings.Live do
     """
   end
 
-  defp nav_class(active, active), do: "module-nav-item on"
-  defp nav_class(_active, _item), do: "module-nav-item"
+  # The stylesheet's sidebar-link vocabulary is `.nav a` / `.nav a.on` (`samen_ui.css`,
+  # the same pair `Samen.UI.Nav.nav_group/1` emits), plus the `.settings-nav` hook the
+  # product tour highlights. `module-nav` / `module-nav-item` are defined NOWHERE in the
+  # sheet, so the links rendered as unstyled anchors and the active item never lit up.
+  defp nav_class(active, active), do: "on"
+  defp nav_class(_active, _item), do: nil
 
   defp href(path, org_id, user_id) do
     query =
