@@ -106,7 +106,8 @@ defmodule Samen.Web.Auth.AccountController do
           {:error, :weak_password} ->
             redirect(conn, to: "#{path}?error=weak_password")
 
-          {:error, _reason} ->
+          {:error, reason} ->
+            log_register_failure(reason)
             redirect(conn, to: "#{path}?error=1")
         end
     end
@@ -202,6 +203,32 @@ defmodule Samen.Web.Auth.AccountController do
   end
 
   def accept_invite(conn, %{"token" => token}), do: redirect(conn, to: "#{invite_path(conn)}/#{token}?error=1")
+
+  # The RESPONSE stays deliberately generic (`?error=1`, no account-existence oracle) — but a
+  # silent generic failure is UNDIAGNOSABLE: `Register.register/2`'s `{:error, reason}` covers a
+  # blind-index/KMS problem, a vault-store failure in the user write, and a DB constraint, all
+  # rendered as the same copy with NOTHING on the server side to tell them apart. (Registration
+  # is also the FIRST write in a fresh install that exercises the PII vault — see
+  # `Samen.Seeds`-style seeds that create users without PII — so a broken vault store fails
+  # here first and nowhere else.) Log the FAILURE SHAPE ONLY: each error's struct and field,
+  # never a value or a message — a changeset/Ash error's `inspect` can carry the submitted PII,
+  # and this log is a plaintext channel. `field: :vault` is `Samen.Vault.Change`'s store
+  # failure; a `:email_bidx`/`eoc_*` field is a DB constraint.
+  defp log_register_failure(reason) do
+    Logger.error(
+      "[AccountController] registration failed (generic ?error=1 returned): #{shape(reason)}"
+    )
+  end
+
+  defp shape(%{errors: errors}) when is_list(errors) do
+    "errors=" <> inspect(Enum.map(errors, &error_shape/1))
+  end
+
+  defp shape(%{__struct__: mod}), do: inspect(mod)
+  defp shape(other), do: inspect(other)
+
+  defp error_shape(%{__struct__: mod} = error), do: {mod, Map.get(error, :field)}
+  defp error_shape(other), do: other
 
   # -- private: mods (mirror the LiveViews' own `mods/1`) ----------------------
 

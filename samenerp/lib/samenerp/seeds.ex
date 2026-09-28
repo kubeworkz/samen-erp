@@ -298,10 +298,13 @@ defmodule Samenerp.Seeds do
   end
 
   defp create_admin_user_row(org, credential, email, first_name, last_name) do
-    # Create user — the Operator namespace's create action may not accept
-    # vault-routed PII fields (emails/full_name). Create the user first,
-    # then try to set PII via the real update action. If that fails too,
-    # the user still has a working login — profile PII can be set later.
+    # Create the user row first (identity only), then set the vault-routed PII
+    # (full_name/emails) via a separate update. NB: the Operator namespace's
+    # actions DO accept the vaulted fields (`defaults([... create: :*, update: :*])`
+    # in the identity blueprint materializes them `public?: true, writable?: true`),
+    # so an update failure here is NOT "the action doesn't take them" — it is a real
+    # write failure (a `Samen.Vault.Change`/KMS store error, or a DB constraint), and
+    # swallowing it silently left every prod admin login-able but PII-less.
     user =
       Op.User
       |> Ash.Changeset.for_create(
@@ -323,7 +326,18 @@ defmodule Samenerp.Seeds do
       )
       |> Ash.update!()
     rescue
-      _ -> user
+      e ->
+        # Log the FAILURE SHAPE only (struct name) — a message or value here can carry
+        # the submitted PII, and this is a plaintext log. The admin keeps a working
+        # login; PII can be repaired once the underlying write failure is fixed.
+        require Logger
+
+        Logger.warning(
+          "[seeds] vaulted-PII update on user #{user.id} failed (#{inspect(e.__struct__)}) — " <>
+            "admin keeps a working login but profile PII is unset"
+        )
+
+        user
     end
   end
 
