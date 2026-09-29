@@ -41,6 +41,21 @@ defmodule Samen.Transformers.CoreAttributes do
   def before?(Samen.Transformers.AbbrevStorage), do: true
   def before?(Samen.Transformers.MaterializePii), do: true
   def before?(Ash.Resource.Transformers.DefaultAccept), do: true
+
+  # The PK `id` we inject must be visible to everything that derives from it.
+  # Ash.Resource.Info.primary_key/1 returns the value CachePrimaryKey PERSISTS, and
+  # AshPaperTrail's CreateVersionResource builds the version resource from it — but
+  # neither has an ordering edge to this transformer, so the pair falls to Spark's
+  # per-compiler-host tie-break (unresolved digraph pairs resolve by vertex
+  # iteration order, which varies between VM instances). A cache that snaps before
+  # we inject `id` persists `[]` and paper trail dies with "Resources with
+  # composite primary keys are not currently supported. Got keys []"
+  # (SamenCore.Support.Versioning.Contact, Deploy Docs 2026-09-29). Order both
+  # readers explicitly; before?(/after?) referencing a module that doesn't run on
+  # a given resource is a no-op, so non-paper-trail resources are unaffected.
+  def before?(Ash.Resource.Transformers.CachePrimaryKey), do: true
+  def before?(AshPaperTrail.Resource.Transformers.CreateVersionResource), do: true
+
   def before?(_), do: false
 
   # Injected timestamps are ordinary attributes; no relationship interaction.
