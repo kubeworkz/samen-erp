@@ -49,6 +49,14 @@ defmodule Samenerp.MixProject do
       # Billing/Notifications/Operator LiveViews from samen_web, so the entire
       # inherited product UI is framework-level, not per-vertical.
       {:samen_web, path: "../samen_web"},
+      # The delivery chokepoint's provider comes from prod config
+      # (runtime.exs sets `adapter: SamenResend.Provider` when
+      # SAMEN_EMAIL_PROVIDER=resend). Without this path dep the RELEASE ships
+      # without the module and the first signup after the 2026-09-29 ordering
+      # fix crashed with UndefinedFunctionError
+      # (SamenResend.Provider.configured?/1 is undefined) at the verify-email
+      # dispatch — the first deploy to ever reach that code path.
+      {:samen_resend, path: "../samen_resend"},
       # `mix format`'s `import_deps` needs a DIRECT dep — pinned to the SAME exact
       # versions samen_core/samen_web declare (see `mix_exs/0`).
       {:ash, "== 3.31.2"},
