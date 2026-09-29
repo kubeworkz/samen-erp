@@ -31,8 +31,16 @@ defmodule Samen.Transformers.CoreAttributes do
 
   alias Spark.Dsl.Transformer
 
+  # CoreAttributes → MaterializePii → AbbrevStorage → DefaultAccept: the injected
+  # columns must exist before the PII materializer and the abbrev prefix pass see
+  # them, and all of them must precede DefaultAccept's fatal accept-list validation
+  # (an explicit `accept([:org_id, …])` references the injected org_id). NB: the
+  # before?(AbbrevStorage) claim is REAL only since AbbrevStorage stopped
+  # declaring the mutual catch-all that cancelled it (see its header).
   @impl true
   def before?(Samen.Transformers.AbbrevStorage), do: true
+  def before?(Samen.Transformers.MaterializePii), do: true
+  def before?(Ash.Resource.Transformers.DefaultAccept), do: true
   def before?(_), do: false
 
   # Injected timestamps are ordinary attributes; no relationship interaction.

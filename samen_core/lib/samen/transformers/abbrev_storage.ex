@@ -44,15 +44,29 @@ defmodule Samen.Transformers.AbbrevStorage do
   alias Spark.Dsl.Transformer
 
   # Ordering is the crux of the abbrev idiom (R2 friction; S0.2 caveat F1).
-  # Run AFTER BelongsToAttribute (which *creates* the FK attribute) so the FK
-  # column is prefixed, and BEFORE everything else that reads `attribute.source`.
+  # Run AFTER BelongsToAttribute (which *creates* the FK attribute) and AFTER
+  # every Samen transformer that ADDS attributes (CoreAttributes' org_id et al.,
+  # MaterializePii's vault columns) so their attributes get prefixed too, but
+  # BEFORE DefaultAccept. A catch-all `before?(_) -> true` CANNOT express this:
+  # Spark drops the edge when BOTH transformers claim the same direction, so the
+  # catch-all silently cancelled MaterializePii/CoreAttributes' explicit
+  # before?(AbbrevStorage) claims — leaving the prefix pass to environment-
+  # dependent atom-order luck. In the deploy build it lost: composite PII
+  # attributes (source: nil, delegating their prefix to THIS transformer)
+  # reached the DB layer unprefixed (`column "emails" of relation "eou_user"
+  # does not exist` — every plaintext PII write failed in prod 2026-09-25 →
+  # 09-29 while dev/test rolled the dice the other way). Enumerate the edges.
   @impl true
   def after?(Ash.Resource.Transformers.BelongsToAttribute), do: true
+
+  def after?(Samen.Transformers.CoreAttributes), do: true
+  def after?(Samen.Transformers.MaterializePii), do: true
   def after?(_), do: false
 
   @impl true
   def before?(Ash.Resource.Transformers.BelongsToAttribute), do: false
-  def before?(_), do: true
+  def before?(Ash.Resource.Transformers.DefaultAccept), do: true
+  def before?(_), do: false
 
   @impl true
   def transform(dsl_state) do
