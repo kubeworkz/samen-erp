@@ -40,6 +40,9 @@ TARGET_SHA="${TARGET_SHA:-}"
 START="$(date +%s)"
 PHASE="sync" # sync → built → swapped — gates only roll back once swapped
 SKIP_PATTERNS='(^docs/)|(^\.github/)|(^scripts/)|(^spec/)|(^_orch)|(^demo/)|(^driftwood/)|(\.md$)|(^samen_core/test/)|(^samen_web/test/)|(^samenerp/test/)'
+# Outside the repo so the dirty-tree guard never sees it (and /tmp clearing on a
+# reboot merely costs one redundant rebuild, never a wrong skip).
+DEPLOYED_SHA_FILE="/tmp/samenerp-deployed-sha"
 
 log() { printf '[deploy %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 die() {
@@ -113,13 +116,20 @@ UNKNOWN_DIRTY="$(git status --porcelain |
 $UNKNOWN_DIRTY"
 
 # ── 3. fast paths ────────────────────────────────────────────────────────────
+# HEAD == TARGET alone CANNOT prove the target's code is live: a FAILED build
+# aborts pre-swap, leaving the tree reset to TARGET while the OLD image keeps
+# serving (hit 2026-09-29: the failed 17fde50 dispatch left the tree at 17fde50,
+# and the next run's fast path claimed victory while the 4-day-old image — the
+# one that cannot register users — was still up). The image's true SHA is
+# recorded at the END of a fully-gated deploy and must MATCH for the skip.
 if [ "$(git rev-parse HEAD)" = "$(git rev-parse "$TARGET_SHA")" ]; then
+  DEPLOYED="$(cat "$DEPLOYED_SHA_FILE" 2>/dev/null || echo unknown)"
   HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$CONTAINER" 2>/dev/null || echo absent)"
-  if [ "$HEALTH" = "healthy" ]; then
-    log "already at $TARGET_SHORT and container healthy — nothing to do. ✔"
+  if [ "$HEALTH" = "healthy" ] && [ "$DEPLOYED" = "$TARGET_SHA" ]; then
+    log "already at $TARGET_SHORT, deployed-sha matches, container healthy — nothing to do. ✔"
     exit 0
   fi
-  log "already at $TARGET_SHORT but container is '$HEALTH' — redeploying."
+  log "tree at $TARGET_SHORT but deployed-sha='$DEPLOYED' / container '$HEALTH' — redeploying (HEAD alone is not proof)."
 fi
 
 CHANGED="$(git diff --name-only HEAD "$TARGET_SHA" 2>/dev/null || true)"
@@ -274,6 +284,8 @@ fi
 
 # ── done ─────────────────────────────────────────────────────────────────────
 log "DEPLOY OK — $TARGET_SHORT in $(( $(date +%s) - START ))s"
+# Record what is ACTUALLY serving — the fast path above trusts only this.
+printf '%s' "$TARGET_SHA" > "$DEPLOYED_SHA_FILE"
 log "  image:  $(docker inspect -f '{{.Id}}' "$CONTAINER" | cut -c8-19)"
 log "  rollback image: samenerp-app:previous ($(docker inspect -f '{{.Id}}' samenerp-app:previous 2>/dev/null | cut -c8-19 || echo none))"
 log "  backup branch:  $BACKUP"
