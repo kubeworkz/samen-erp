@@ -50,6 +50,22 @@ defmodule Samen.Transformers.MaterializePii do
   alias Spark.Dsl.Transformer
 
   @impl true
+  # BEFORE Ash's DefaultAccept (the `Ash.Resource.Transformers.ResolvePipelines`
+  # precedent): DefaultAccept validates every action's `accept` list against the
+  # attributes that EXIST at its turn and RAISES from Spark's __before_compile__
+  # pipeline — fatal, not a warning. A `pii_attribute` is materialized HERE, so
+  # this transformer must run first wherever an action accepts the field. There
+  # is no default ordering edge between the two, and Spark's tie-break for
+  # unordered transformers is environment-dependent (atom ordering): on OTP 29
+  # (dev, CI's prod gate) this transformer happened to win; in the deploy image
+  # (hexpm 1.20.2-erlang-27.2.4-alpine, OTP 27) DefaultAccept ran first and
+  # `accept [..., :transcript]` died with "Cannot accept [:transcript], because
+  # they are not attributes." — the SECOND, independent half of the
+  # 2026-09-25 → 09-29 deploy outage (the first being the fixture domains in
+  # :prod config), invisible to every :test compile and to a prod gate on a
+  # different OTP.
+  def before?(Ash.Resource.Transformers.DefaultAccept), do: true
+
   def before?(Samen.Transformers.AbbrevStorage), do: true
   def before?(_), do: false
 

@@ -1,0 +1,5 @@
+.prod_gate/
+.sabotage/
+.git/
+**/_build/
+**/deps/
