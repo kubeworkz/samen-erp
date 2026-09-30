@@ -148,8 +148,13 @@ if config_env() == :prod do
           from: resend_from,
           resolve_recipient:
             Samen.Delivery.AuthRecipient.resolver(
-              credential_mod: Samenerp.Identity.Credential,
-              user_mod: Samenerp.Identity.User
+              # The Operator-namespace Identity resources (Samen.Scopes.Identity
+              # composes Samenerp.Operator + Org/User/Credential/...); there are no
+              # Samenerp.Identity.* modules. These are the same rows the signup
+              # transaction writes, so the resolver reads them back by id —
+              # authorize?: false, credentials never leave the process.
+              credential_mod: Samenerp.Operator.Credential,
+              user_mod: Samenerp.Operator.User
             )
         }
 
