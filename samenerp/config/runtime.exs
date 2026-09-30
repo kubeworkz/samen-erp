@@ -154,7 +154,11 @@ if config_env() == :prod do
               # transaction writes, so the resolver reads them back by id —
               # authorize?: false, credentials never leave the process.
               credential_mod: Samenerp.Operator.Credential,
-              user_mod: Samenerp.Operator.User
+              user_mod: Samenerp.Operator.User,
+              # The repo MODULE — reveal needs a started repo to read the vault
+              # rows. In a release, Application.get_env(:samenerp, Repo) returns
+              # the repo's config, not the module, so this must be explicit.
+              repo: Samenerp.Repo
             )
         }
 
