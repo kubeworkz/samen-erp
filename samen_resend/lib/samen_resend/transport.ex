@@ -13,6 +13,8 @@ defmodule SamenResend.Transport do
   (`mix samen.smoke.resend`, ADR-038 §7.1 lane 2).
   """
 
+  alias SamenResend.Secret
+
   @endpoint "https://api.resend.com/emails"
 
   @doc """
@@ -33,7 +35,10 @@ defmodule SamenResend.Transport do
       })
 
     headers = [
-      {"authorization", "Bearer #{api_key}"},
+      # The credential arrives as a %Secret{} (Inspect-redacting wrapper);
+      # unwrap is this header's ONLY legitimate consumer. Interpolation would
+      # raise (no String.Chars on Secret) — that failure IS the design.
+      {"authorization", "Bearer " <> Secret.unwrap(api_key)},
       {"content-type", "application/json"}
     ]
 

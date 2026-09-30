@@ -195,8 +195,6 @@ defmodule SamenResend.Provider do
     {:error, {:unexpected_response, status, scrub_credential(body)}}
   end
 
-  defp handle_response({:error, reason}), do: {:error, scrub_credential(reason)}
-
   # Layer 2 of the redaction story: strip the credential VALUE out of any term
   # before it can ride in an error tuple (tuples eventually reach an inspect in
   # a crash report or a caller's Logger line). Deep over maps/lists/tuples;
