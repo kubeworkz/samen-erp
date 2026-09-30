@@ -16,15 +16,19 @@ defmodule Samen.Delivery.AuthRecipient do
   adapter's config.
 
   Returns a function `fn message -> {:ok, email} | {:error, reason}`.
+
+  Options:
+
+    * `:credential_mod` (required) — the host's credential resource
+    * `:user_mod` (required) — the host's user resource
+    * `:repo` (required) — the host's Ecto repo MODULE. In a release,
+      `Application.get_env(app, Repo)` yields the repo's config, not the
+      module, so this cannot be inferred reliably.
   """
-  @spec resolver(map()) :: (map() -> {:ok, String.t()} | {:error, term()})
+  @spec resolver(keyword()) :: (map() -> {:ok, String.t()} | {:error, term()})
   def resolver(opts) do
     credential_mod = Keyword.fetch!(opts, :credential_mod)
     user_mod = Keyword.fetch!(opts, :user_mod)
-    # The host MUST name its repo module: in a release, `Application.get_env(app,
-    # Repo)` yields the repo's CONFIG (a keyword list), not the module, so the
-    # legacy determine_repo/0 fallback cannot infer it (first prod signup
-    # crashed reveal with Protocol.UndefinedError on that keyword list).
     repo = Keyword.fetch!(opts, :repo)
 
     fn message ->
@@ -57,9 +61,11 @@ defmodule Samen.Delivery.AuthRecipient do
     |> Ash.Query.limit(1)
     # The vaulted emails attribute is NOT loaded by default — reading it
     # without an explicit load hands extract_primary_email an %Ash.NotLoaded{}
-    # and Enum.find crashes on it (first prod signup post-7f58cce).
+    # and Enum crashes on it (prod, 2026-09-30).
     |> Ash.Query.load(:emails)
-    # authz-scope: pre-auth credential_id→user unique-key lookup for auth-email delivery — the org is unknown until the user resolves, cannot be pinned; unique credential_id + limit(1) bounds it to one row
+    # authz-scope: pre-auth credential_id→user unique-key lookup for auth-email
+    # delivery — the org is unknown until the user resolves, cannot be pinned;
+    # unique credential_id + limit(1) bounds it to one row.
     |> Ash.read!(authorize?: false)
     |> case do
       [user] -> {:ok, user}
@@ -68,20 +74,29 @@ defmodule Samen.Delivery.AuthRecipient do
   end
 
   # Extract the primary email from the user's vaulted `emails` field.
-  # In dev/test the field may be a plain list of maps with string addresses.
-  # In prod with vault active, the address is a %Masked{} or %VaultField{}.
+  # In prod the loaded attribute is a SINGLE %Masked{} token (the primary
+  # address); dev/test fixtures may carry the legacy list of %{label, address}
+  # maps. Never assume Enumerable — Enum over the bare struct crashed the
+  # first configured prod send (Protocol.UndefinedError, 2026-09-30).
   defp extract_primary_email(user, repo) do
-    emails = Map.get(user, :emails) || []
-
-    case Enum.find(emails, fn e -> Map.get(e, :label) == "primary" end) do
-      %{address: %Masked{token: token}} when is_binary(token) ->
+    case Map.get(user, :emails) do
+      %Masked{token: token} when is_binary(token) ->
         reveal_from_vault(token, repo)
 
-      %{address: %{token: token}} when is_binary(token) ->
-        reveal_from_vault(token, repo)
+      emails when is_list(emails) ->
+        case Enum.find(emails, fn e -> Map.get(e, :label) == "primary" end) do
+          %{address: %Masked{token: token}} when is_binary(token) ->
+            reveal_from_vault(token, repo)
 
-      %{address: email} when is_binary(email) ->
-        {:ok, email}
+          %{address: %{token: token}} when is_binary(token) ->
+            reveal_from_vault(token, repo)
+
+          %{address: email} when is_binary(email) ->
+            {:ok, email}
+
+          _ ->
+            {:error, :no_primary_email}
+        end
 
       _ ->
         {:error, :no_primary_email}
