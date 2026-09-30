@@ -21,7 +21,13 @@ defmodule SamenResend.SecretTest do
 
   test "wrap/1 rejects empty and non-binary credentials" do
     assert_raise FunctionClauseError, fn -> Secret.wrap("") end
-    assert_raise FunctionClauseError, fn -> Secret.wrap(42) end
+
+    # 42 smuggled through an opaque boundary: this gate compiles with
+    # --warnings-as-errors, and a literal Secret.wrap(42) is statically
+    # flagged (success typing says binary()). The RUNTIME raise is the
+    # contract under test.
+    bad = Application.get_env(:samen_resend, :secret_test_bad, 42)
+    assert_raise FunctionClauseError, fn -> Secret.wrap(bad) end
   end
 
   test "Inspect renders [REDACTED], never the value" do
@@ -30,8 +36,12 @@ defmodule SamenResend.SecretTest do
   end
 
   test "interpolation RAISES (no String.Chars) instead of silently leaking" do
-    assert_raise Protocol.UndefinedError, fn ->
-      "Bearer #{Secret.wrap("re_SUPER_SECRET_123456")}"
-    end
+    # Same opaque boundary: interpolating a KNOWN %Secret{} is a compile-time
+    # type warning under --warnings-as-errors; the runtime
+    # Protocol.UndefinedError is the contract being asserted.
+    secret =
+      Application.get_env(:samen_resend, :secret_test_wrap, Secret.wrap("re_SUPER_SECRET_123456"))
+
+    assert_raise Protocol.UndefinedError, fn -> "Bearer #{secret}" end
   end
 end
