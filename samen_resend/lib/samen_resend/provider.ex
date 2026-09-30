@@ -61,7 +61,8 @@ defmodule SamenResend.Provider do
   use Samen.Delivery.Provider
 
   alias Samen.Delivery.{Message, ProviderEvent}
-  alias SamenResend.{SvixSignature, Transport}
+  alias Samen.Delivery.Redact
+  alias SamenResend.{Secret, SvixSignature, Transport}
 
   # Real Resend webhook `type` -> the bounded, samen-owned ProviderEvent kind
   # enum (ADR-038 §3.3/§4.4). Anything not listed (email.sent,
@@ -161,14 +162,24 @@ defmodule SamenResend.Provider do
     transport = Map.get(config, :transport, &Transport.live/1)
 
     request = %{
-      api_key: Map.fetch!(config, :api_key),
+      # Layer 1 of the redaction story (2026-09-30 incident): the credential
+      # rides as a %Secret{} whose Inspect renders [REDACTED], so a crash dump
+      # that prints the request/config can never emit the raw key. The
+      # transport unwraps it ONLY to build the Authorization header.
+      api_key: Secret.wrap(Map.fetch!(config, :api_key)),
       from: Map.fetch!(config, :from),
       to_email: to_email,
       subject: Map.get(config, :subject, "(rendering pending — template #{message.template_id || "none"})"),
       text_body: Map.get(config, :text_body, "(rendering pending — ADR-038 C3/T29)")
     }
 
-    transport.(request) |> handle_response()
+    case transport.(request) do
+      {:ok, response} ->
+        handle_response({:ok, response})
+
+      {:error, reason} ->
+        {:error, scrub_credential(reason)}
+    end
   end
 
   defp handle_response({:ok, %{status: status, body: %{"id" => id}}})
@@ -181,10 +192,35 @@ defmodule SamenResend.Provider do
   end
 
   defp handle_response({:ok, %{status: status, body: body}}) do
-    {:error, {:unexpected_response, status, body}}
+    {:error, {:unexpected_response, status, scrub_credential(body)}}
   end
 
-  defp handle_response({:error, reason}), do: {:error, reason}
+  defp handle_response({:error, reason}), do: {:error, scrub_credential(reason)}
+
+  # Layer 2 of the redaction story: strip the credential VALUE out of any term
+  # before it can ride in an error tuple (tuples eventually reach an inspect in
+  # a crash report or a caller's Logger line). Deep over maps/lists/tuples;
+  # unknown structs pass through (they cannot carry the key — do_deliver only
+  # ever places it in the request map, already wrapped as a %Secret{} whose own
+  # Inspect redacts). Same discipline as the chokepoint's Samen.Delivery.Redact,
+  # duplicated here because adapter packages stay vendor-free of samen_core
+  # internals (ADR-038 §8.1).
+  defp scrub_credential(%Secret{}), do: "[REDACTED]"
+
+  # Strings get the SAME boundary-prefixed credential detection the chokepoint
+  # uses (Samen.Delivery.Redact — samen_core is this package's declared dep,
+  # so reuse beats duplicating the regex).
+  defp scrub_credential(string) when is_binary(string), do: Redact.scrub(string)
+
+  defp scrub_credential(%{__struct__: _} = struct), do: struct
+
+  defp scrub_credential(%{} = map), do: Map.new(map, fn {k, v} -> {k, scrub_credential(v)} end)
+  defp scrub_credential(list) when is_list(list), do: Enum.map(list, &scrub_credential/1)
+
+  defp scrub_credential(tuple) when is_tuple(tuple),
+    do: tuple |> Tuple.to_list() |> Enum.map(&scrub_credential/1) |> List.to_tuple()
+
+  defp scrub_credential(other), do: other
 
   # ---------------------------------------------------------------------------
   # verify_and_parse_event/3

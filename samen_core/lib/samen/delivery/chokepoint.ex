@@ -60,7 +60,7 @@ defmodule Samen.Delivery.Chokepoint do
 
   require Logger
 
-  alias Samen.Delivery.{Message, ProviderSelection, Rendering}
+  alias Samen.Delivery.{Message, ProviderSelection, Redact, Rendering}
 
   @doc """
   Pure fail-honest decision (ADR-014 §3; unchanged from the pre-T28 per-worker
@@ -143,7 +143,17 @@ defmodule Samen.Delivery.Chokepoint do
         if suppressed?(message.org_id, message.to_subscriber_id) do
           {:error, :suppressed}
         else
-          adapter.deliver(message, config)
+          case adapter.deliver(message, config) do
+            {:ok, _} = ok ->
+              ok
+
+            # Layer 2 (see Samen.Delivery.Redact): scrub credential-shaped
+            # strings out of adapter error terms BEFORE they can ride in a
+            # caller's Logger line or crash report (2026-09-30 incident: a
+            # delivery crash printed the provider config incl. the API key).
+            {:error, reason} ->
+              {:error, Redact.scrub(reason)}
+          end
         end
     end
   end

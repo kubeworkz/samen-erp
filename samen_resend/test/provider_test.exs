@@ -9,7 +9,7 @@ defmodule SamenResend.ProviderTest do
   use ExUnit.Case, async: true
 
   alias Samen.Delivery.Message
-  alias SamenResend.{Provider, SvixSignature}
+  alias SamenResend.{Provider, Secret, SvixSignature}
 
   defp msg do
     %Message{send_id: "s1", org_id: "o1", to_subscriber_id: "sub1", template_id: nil}
@@ -328,6 +328,68 @@ defmodule SamenResend.ProviderTest do
              "an allowlisted key with a non-scalar value must still be dropped"
 
       assert redacted["created_at"] == "2026-07-22T00:00:00.000Z"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Credential redaction (2026-09-30 incident: a crash printed the provider
+  # config — incl. the API key — into the container log). Two layers:
+  # the %Secret{} wrapper (Inspect redaction) and the scrubbed error terms.
+
+  describe "credential redaction" do
+    test "the request credential is a Secret whose Inspect renders [REDACTED]" do
+      config =
+        base_config()
+        |> Map.put(:resolve_recipient, fn _m -> {:ok, "to@example.test"} end)
+        |> Map.put(:transport, fn request ->
+          # The transport unwraps it ONLY for the Authorization header.
+          assert Secret.unwrap(request.api_key) == "fixture-key"
+          refute is_binary(request.api_key)
+          {:ok, %{status: 200, body: %{"id" => "redact-id-1"}}}
+        end)
+
+      assert {:ok, _} = Provider.deliver(msg(), config)
+    end
+
+    test "an exception dumping the request/config prints [REDACTED], never the key" do
+      captured =
+        try do
+          raise ArgumentError,
+            message: "config: #{inspect(%{api_key: Secret.wrap("re_SECRET_do_not_leak_123456"), from: "a@b.test"})}"
+        rescue
+          e -> Exception.message(e)
+        end
+
+      refute captured =~ "re_SECRET_do_not_leak_123456"
+      assert captured =~ "[REDACTED]"
+    end
+
+    test "a transport-level error carrying the key comes back scrubbed (token-level)" do
+      config =
+        base_config()
+        |> Map.put(:resolve_recipient, fn _m -> {:ok, "to@example.test"} end)
+        |> Map.put(:transport, fn _req ->
+          {:error, {:conn_failed, "Bearer re_SECRET_do_not_leak_123456"}}
+        end)
+
+      assert {:error, {:conn_failed, "Bearer [REDACTED]"}} = Provider.deliver(msg(), config)
+      assert {:error, {:conn_failed, body}} = Provider.deliver(msg(), config)
+      refute body =~ "re_SECRET"
+    end
+
+    test "an unexpected response body carrying the key comes back scrubbed (token-level)" do
+      config =
+        base_config()
+        |> Map.put(:resolve_recipient, fn _m -> {:ok, "to@example.test"} end)
+        |> Map.put(:transport, fn _req ->
+          {:ok, %{status: 500, body: %{"debug" => "key was re_SECRET_do_not_leak_123456"}}}
+        end)
+
+      assert {:error, {:unexpected_response, 500, %{"debug" => debug}}} =
+               Provider.deliver(msg(), config)
+
+      refute debug =~ "re_SECRET"
+      assert debug =~ "[REDACTED]"
     end
   end
 end

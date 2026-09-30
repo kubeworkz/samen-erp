@@ -115,9 +115,17 @@ defmodule Samen.Delivery.AuthMailer do
         err
 
       other ->
-        other
+        # Scrub credential-shaped strings from adapter error terms before they
+        # reach the caller's Logger lines (layer 2 — Samen.Delivery.Redact).
+        scrub(other)
     end
   end
+
+  # Credential-scrub every dispatch failure before it reaches a Logger line
+  # (layer 2 of the 2026-09-30 redaction story — see Samen.Delivery.Redact;
+  # the chokepoint already scrubs adapter errors, this covers the legacy
+  # dispatch_config path).
+  defp scrub(term), do: Samen.Delivery.Redact.scrub(term)
 
   # The rendered auth-email content rides on the send config the SAME way
   # `Samen.Notifications.Digest` threads its digest content — merged ONTO the
