@@ -770,7 +770,15 @@ defmodule Samen.AiTest do
       ]
 
       thirty_days_ago = DateTime.add(now, -30, :day)
-      recent = Enum.filter(logs, &(&1.inserted_at >= thirty_days_ago))
+
+      # DateTime structs must be compared with DateTime.compare/2, never the
+      # struct operators: >= on two DateTimes is a structural field comparison
+      # whose order is an implementation detail (on 1.20.2 it effectively ranks
+      # day over month), so "now >= now-30d" reads FALSE whenever the month
+      # boundary lands between them (e.g. Sep 30 -> Aug 31, 30 >= 31). That
+      # turned this probe into a monthly boundary flake (CI 36644828821 failed
+      # on it twice, once past UTC midnight, once crossing it).
+      recent = Enum.filter(logs, &DateTime.compare(&1.inserted_at, thirty_days_ago) != :lt)
 
       assert length(recent) == 1
     end
