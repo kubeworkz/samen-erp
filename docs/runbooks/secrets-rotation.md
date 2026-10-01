@@ -16,6 +16,7 @@ gap boots nothing.
 | `SECRET_KEY_BASE` | `fly secrets` | Compromise, scheduled rotation | Invalidates existing sessions/signed cookies — forced re-login | §2 |
 | `SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION` | `fly secrets` | CMK rotation/replacement, region migration | High-risk if changing to a **different** key — requires DEK re-wrap | §3 |
 | Webhook HMAC signing secret (`pii_wh_signing_secret`) | Vaulted per-webhook field, minted via governed Primitives webhook resource | Compromise, scheduled rotation, consumer offboarding | Per-webhook; old signature verification breaks for that endpoint once retired | §4 |
+| Provider API keys (e.g. `SAMEN_RESEND_API_KEY`) | `.env.production.local` on the app server (docker compose `env_file`) — NOT `fly secrets` | Key leak, staff offboarding, scheduled rotation | Zero — healthz-gated container recreate (~5s) | §5 |
 
 ---
 
@@ -99,3 +100,107 @@ secrets` at all — rotation is scoped to a single webhook, not the whole app.
 4. Once the consumer confirms verification against the new secret, retire the old secret on
    the webhook resource.
 5. Confirm a live webhook delivery round-trips (signed, delivered, verified) post-rotation.
+
+## 5. Provider API keys (`SAMEN_RESEND_API_KEY` and friends)
+
+Email-provider API keys are **third-party credentials**: they live outside the app's own
+fail-closed secret set and outside `fly secrets` — in this deployment they sit in
+`.env.production.local` (mode 600) next to `docker-compose.prod.yml`, and the deploy script
+refuses to run without `SAMEN_RESEND_API_KEY` set. Rotation is therefore an operator-on-the-
+server procedure, automated by [`scripts/rotate-resend-key.sh`](../../scripts/rotate-resend-key.sh)
+(exercised for the 2026-10-01 rotation — full incident record:
+[postmortem](../postmortem-resend-key-leak.md)).
+
+**Trigger:** confirmed or suspected leak (a key that has EVER been printed to a log, chat,
+or ticket is compromised — rotation of the storage medium does not un-compromise it),
+scheduled rotation, or staff offboarding. The leaked key in the 2026-10-01 incident was
+send-restricted, which bounded the blast radius to one domain's outbound mail — mint
+replacement keys with the same least-privilege scope, never "Full access".
+
+### Hard rules (from the 2026-10-01 incident)
+
+1. **The key never passes through chat, tickets, or agent transcripts.** Mint it in the
+   dashboard, and apply it to the server in YOUR OWN SSH session. A transcript that carries a
+   live credential is itself a leak (the pre-rotation key was still sitting in the incident
+   transcript when this runbook was written — rendered harmless only by revocation).
+2. **Validate before you swap.** The cutover script probes Resend with the new key and aborts
+   on anything but a send-scope answer — a mistyped key changes nothing.
+3. **Revoke is the actual neutralization.** Cutover alone replaces the value; the old key
+   stays LIVE at Resend until deleted in the dashboard. Revoke immediately after cutover,
+   then PROVE the revocation (step 6).
+4. **The backup file contains the old key.** It exists (mode 600) between cutover and
+   cleanup — delete it as soon as revocation is proven.
+
+### Procedure (copy-paste)
+
+1. **Mint** in [dashboard.resend.com/api-keys](https://dashboard.resend.com/api-keys) →
+   *Create API Key*: name it (`samenerp-prod-YYYY-MM`), permission **Sending access**, scope
+   to the verified sending domain. The value (`re_…`) is shown **once** — copy it now.
+2. **Get the script on the server** (from a checkout of this repo):
+
+   ```bash
+   scp scripts/rotate-resend-key.sh ubuntu@<prod-host>:/home/ubuntu/rotate-resend-key.sh
+   ```
+
+3. **Cutover — in your own SSH session**, key as a quoted argument:
+
+   ```bash
+   ssh ubuntu@<prod-host>
+   bash /home/ubuntu/rotate-resend-key.sh 're_PASTE_NEW_KEY'
+   ```
+
+   The script: (1) probes Resend with the new key — `422`/`200`/`202` = authenticates with
+   send scope, `401` = abort with nothing changed; (2) swaps the key in
+   `.env.production.local` (timestamped backup, `chmod 600`); (3) recreates only the app
+   container; (4) gates on `healthz` for 120s, auto-restoring the backup and recreating again
+   on failure; (5) prints the old-key fingerprint and the revoke reminder.
+
+4. **Verify from a second channel** (not the cutover session):
+
+   ```bash
+   # fingerprint changed (prints first8...last4 + length — compare before/after)
+   ssh ubuntu@<prod-host> 'k=$(grep -oP "^SAMEN_RESEND_API_KEY=\K.*" \
+     /home/ubuntu/samen-erp/samenerp/.env.production.local); echo "${k:0:8}...${k: -4} (len ${#k})"'
+
+   # full E2E from the repo: healthz, signup→registered=1, login, sidebar
+   bash .prod_gate/prod_verify.sh
+
+   # dispatch signature: want {:resend_error, 422, ...} (AUTHENTICATED + fail-soft on the
+   # invalid probe recipient); a 401 here means the NEW key is wrong/revoked
+   ssh ubuntu@<prod-host> 'docker logs samenerp-app-1 --since 10m 2>&1 \
+     | grep -oE "resend_error, [0-9]+" | sort | uniq -c'
+   ```
+
+   Semantics worth memorizing: `401` from Resend = authentication problem (bad/revoked key);
+   `422` = authentication PASSED and the payload was rejected. A healthy deployment shows
+   `422` on `.example`-address probes, never `401`.
+
+5. **Revoke the old key** in the dashboard (API Keys → delete the old entry). Until this
+   step the leaked/replaced credential is still live.
+6. **Prove revocation** — probe the OLD value; expect `401 "API key is invalid"`
+   (`422` would mean it is still live — go re-check the dashboard):
+
+   ```bash
+   curl -s -m 20 https://api.resend.com/emails \
+     -H "Authorization: Bearer re_OLD_KEY" -H 'content-type: application/json' -d '{}'
+   ```
+
+7. **Cleanup + final gate** — delete the backup (it holds the old key), then re-run
+   `prod_verify.sh` and the log-hygiene grep:
+
+   ```bash
+   ssh ubuntu@<prod-host> 'rm /home/ubuntu/samen-erp/samenerp/.env.production.local.bak.*
+     && docker logs samenerp-app-1 2>&1 | grep -cE "re_[A-Za-z0-9_-]{20,}"'
+   # want: no backup files, grep count 0 (also enforced in-code by Samen.Delivery.Redact)
+   ```
+
+8. **Record it**: append the rotation (date, key fingerprint, trigger) to the ops log so the
+   next scheduled rotation has a baseline.
+
+### Rollback
+
+If the healthz gate fails, the script self-rolls-back (restores the backup env file and
+recreates the container) — investigate `docker logs samenerp-app-1` and re-run. If you need
+to roll back MANUALLY after a successful cutover (e.g. the new key was revoked too early),
+restore the backup the same way before deleting it, and remember the OLD key must still be
+live at Resend for that to work.
