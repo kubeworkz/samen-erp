@@ -39,7 +39,9 @@ services:
       
       # Phoenix
       # SECRET_KEY_BASE is loaded from .env.production via env_file
-      PHX_HOST: ${PHX_HOST:-65.109.232.89}
+      # Domain, not the bare IP (IP:443 = foreign cert → email links fail TLS).
+      # environment: overrides env_file:, so this default is what the app gets.
+      PHX_HOST: ${PHX_HOST:-samenerp.kubeworkz.io}
       PHX_SERVER: true
       
       # KMS (use FileBacked for dev, AWS KMS for prod)
