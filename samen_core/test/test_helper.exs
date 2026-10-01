@@ -64,6 +64,12 @@ Ecto.Migrator.run(TestRepo, :up, all: true)
 # month (forward-safe; the ensure is idempotent).
 Samen.AuditEvent.PartitionManager.ensure_upcoming_partitions(TestRepo, Date.utc_today(), 2)
 
+# ...and the PREVIOUS month(s): audit rows are written with BACKDATED timestamps (e.g. an
+# "occurred_at = now - 25h" fixture) that reach across a month boundary in the first days of
+# each month — without the previous month's partition those writes fail with 23514. The ensure
+# is idempotent and never drops anything. (Real regression observed 2026-10-01 00:26 UTC.)
+Samen.AuditEvent.PartitionManager.ensure_recent_partitions(TestRepo, 1)
+
 # Start Oban (T1.6 same-tx reveal-grant auto-revoke) after the repo is up and
 # migrated. In :manual testing mode (config/test.exs) queues do not auto-execute:
 # `Oban.insert` writes the job row (so same-tx enqueue + rollback are observable)

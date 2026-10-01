@@ -47,6 +47,12 @@ defmodule Mix.Tasks.SamenWeb.TestSetup do
       2
     )
 
+    # ...and the PREVIOUS month: audit fixtures backdate timestamps (e.g. a stale-window row at
+    # `now - 25h`) that reach across the month boundary in the first days of each month — the
+    # previous month's partition is then missing and the insert fails with 23514. Idempotent.
+    # (Real regression observed in CI 2026-10-01 00:26 UTC.)
+    Module.concat([Samen.AuditEvent, PartitionManager]).ensure_recent_partitions(repo, 1)
+
     :ok
   end
 

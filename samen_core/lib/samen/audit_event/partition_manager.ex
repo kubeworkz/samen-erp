@@ -206,9 +206,44 @@ defmodule Samen.AuditEvent.PartitionManager do
       when is_integer(months_ahead) and months_ahead >= 0 do
     0..months_ahead
     |> Enum.map(fn offset ->
-      date = Date.add(anchor, offset * 31) |> first_of_month()
+      date = shift_month(anchor, offset) |> first_of_month()
       ensure_partition(repo, date)
     end)
+  end
+
+  @doc """
+  Ensure the CURRENT + the `months_back` PRECEDING months' `aud_event` partitions
+  exist (T2.2 forward/backward safety).
+
+  Rationale: the migrations seed only the launch-month partition and prod relies on
+  the daily forward-roll job. But audit rows are routinely written with BACKDATED
+  timestamps (late-arriving events, replay/reconciliation, seeds importing history).
+  In a fresh environment (test harness, demo, a restored sandbox) those writes hit
+  "no partition of relation aud_event" (23514) for the PREVIOUS month — a failure
+  window that opens on the first day(s) of every month when `now - lookback`
+  reaches across the boundary. Ensuring the previous month(s) closes that window;
+  the create is idempotent and this never detaches or drops anything.
+  """
+  @spec ensure_recent_partitions(module(), pos_integer()) ::
+          [{:ok, String.t()} | {:error, term()}]
+  def ensure_recent_partitions(repo, months_back) when is_integer(months_back) and months_back >= 1 do
+    0..months_back
+    |> Enum.map(fn offset ->
+      date = shift_month(Date.utc_today(), -offset) |> first_of_month()
+      ensure_partition(repo, date)
+    end)
+  end
+
+  # Calendar-exact month arithmetic — `Date.add(d, 30|31)` walks can SKIP a short
+  # month (anchor on the 31st hops Jan 31 -> Mar 3), which would leave the skipped
+  # month's partition uncreated. Clamping day 29/30/31 to the target month's last
+  # day keeps every step on a distinct calendar month.
+  defp shift_month(%Date{year: y, month: m, day: d}, offset) do
+    total = y * 12 + (m - 1) + offset
+    ny = div(total, 12)
+    nm = rem(total, 12) + 1
+    day = min(d, Date.days_in_month(Date.new!(ny, nm, 1)))
+    Date.new!(ny, nm, day)
   end
 
   # ---------------------------------------------------------------------------

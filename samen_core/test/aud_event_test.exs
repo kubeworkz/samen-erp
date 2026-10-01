@@ -317,6 +317,63 @@ defmodule Samen.AuditEventTest do
       end)
     end
 
+    test "REGRESSION (2026-10-01 CI): ensure_recent_partitions backfills the PREVIOUS month's partition" do
+      # Fresh-env equivalent: only the current month exists; an audit row backdated into the
+      # previous month (e.g. an `occurred_at = now - 25h` fixture on the 1st) has no partition
+      # to land in and fails with 23514. ensure_recent_partitions must close that window.
+      backdated = DateTime.utc_now() |> DateTime.add(-25 * 3600, :second)
+
+      prev_name =
+        backdated |> DateTime.to_date() |> Date.beginning_of_month() |> PartitionManager.partition_name()
+
+      Repo.query("ALTER TABLE aud_event DETACH PARTITION #{prev_name}")
+      Repo.query("DROP TABLE IF EXISTS #{prev_name}")
+      refute aud_partition_exists?(prev_name)
+
+      assert_raise Postgrex.Error, ~r/no partition/i, fn ->
+        AuditEvent.insert(Repo, %{
+          event_type: "system",
+          subject_id: "t128-backfill-baseline",
+          occurred_at: backdated
+        })
+      end
+
+      results = PartitionManager.ensure_recent_partitions(Repo, 1)
+      assert Enum.all?(results, &match?({:ok, _}, &1))
+      assert aud_partition_exists?(prev_name)
+
+      assert {:ok, _} =
+               AuditEvent.insert(Repo, %{
+                 event_type: "system",
+                 subject_id: "t128-backfill",
+                 occurred_at: backdated
+               })
+
+      Repo.query("ALTER TABLE aud_event DETACH PARTITION #{prev_name}")
+      Repo.query("DROP TABLE IF EXISTS #{prev_name}")
+    end
+
+    test "ensure_upcoming_partitions walks CALENDAR months (no skipped month on a day-31 anchor)" do
+      # `Date.add(anchor, offset * 31)` from Aug 31 lands on Oct 2 — September would be
+      # silently skipped and its partition never created. The calendar walk must hit it.
+      created_names =
+        [~D[2099-08-01], ~D[2099-09-01], ~D[2099-10-01]]
+        |> Enum.map(&PartitionManager.partition_name/1)
+
+      Enum.each(created_names, fn n -> Repo.query("DROP TABLE IF EXISTS #{n}") end)
+
+      results = PartitionManager.ensure_upcoming_partitions(Repo, ~D[2099-08-31], 2)
+      assert Enum.all?(results, &match?({:ok, _}, &1))
+
+      assert aud_partition_exists?(PartitionManager.partition_name(~D[2099-09-01])),
+             "the short month between two 31-day hops must NOT be skipped"
+
+      Enum.each(created_names, fn n ->
+        Repo.query("ALTER TABLE aud_event DETACH PARTITION #{n}")
+        Repo.query("DROP TABLE IF EXISTS #{n}")
+      end)
+    end
+
     test "the cron's worker perform/1 actually invokes ensure_upcoming (not a stub)" do
       # perform/1 anchors at Date.utc_today() and ensures current + months_ahead months.
       # Drop the +2-month partition, run the worker, and prove it was recreated — a stub
