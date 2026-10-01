@@ -246,7 +246,7 @@ defmodule Samen.Web.Mount do
     kb_namespace kb_path
     fleet_namespace fleet_cockpit
     ai_path ai_crm_resource ai_aggregate_resource
-    signup_path verify_path reset_path invite_path totp_path totp_issuer
+    signup_path verify_path resend_path reset_path invite_path totp_path totp_issuer
     work_path work_logo_style
     __principal__
   )a

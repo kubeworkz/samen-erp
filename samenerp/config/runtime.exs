@@ -54,6 +54,18 @@ if config_env() == :prod do
     check_origin: ["//#{host}", "//65.109.232.89"]
 
   # ---------------------------------------------------------------------------
+  # Auth email links (A2 verify / A3 reset / A5 invite)
+  # ---------------------------------------------------------------------------
+  # `Samen.Delivery.AuthMailer` falls back to this when a caller does not
+  # thread its own `:base_url`. Only `AccountController.register/2` does so
+  # today — `Confirm.resend/2`, `Reset.request/2` and the invite dispatch all
+  # rely on this fallback, and WITHOUT it their emails carry a site-relative
+  # `/verify/<token>` link that no mail client can follow (caught while
+  # mounting the resend-verification surface, 2026-10-01).
+  config :samen_core, Samen.Delivery.AuthMailer,
+    base_url: "https://#{host}"
+
+  # ---------------------------------------------------------------------------
   # KMS Configuration
   # ---------------------------------------------------------------------------
   # ADR-045 §4.2 — the KMS adapter is selected at RUNTIME.

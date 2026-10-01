@@ -1361,6 +1361,9 @@ defmodule Samen.Web.Router do
 
     * `GET /signup`        → `Samen.Web.Auth.RegistrationLive` (ADR-035 §5 A1)
     * `GET /verify/:token` → `Samen.Web.Auth.ConfirmLive` (ADR-035 §5 A2)
+    * `GET /verify/resend` → `Samen.Web.Auth.ResendVerifyLive` (ADR-035 §5 A2 — the
+      resend-verification request for a stuck unverified account; a STATIC path
+      emitted BEFORE `/verify/:token` so it never parses as a token)
     * `GET /reset`         → `Samen.Web.Auth.ResetRequestLive` (ADR-035 §5 A3)
     * `GET /reset/:token`  → `Samen.Web.Auth.ResetLive` (ADR-035 §5 A3)
     * `GET /login`         → `Samen.Web.Auth.LoginLive` (ADR-035 §5 A4)
@@ -1385,6 +1388,7 @@ defmodule Samen.Web.Router do
   submit leaks credentials into the URL as a GET):
 
     * `POST /signup`        → `Samen.Web.Auth.AccountController.register/2` (A1)
+    * `POST /verify/resend` → `Samen.Web.Auth.AccountController.resend_verify/2` (A2)
     * `POST /reset`         → `Samen.Web.Auth.AccountController.request_reset/2` (A3)
     * `POST /reset/:token`  → `Samen.Web.Auth.AccountController.reset/2` (A3)
     * `POST /invite/:token` → `Samen.Web.Auth.AccountController.accept_invite/2` (A5)
@@ -1411,7 +1415,8 @@ defmodule Samen.Web.Router do
   `:reset_path`/`:login_path`/`:logout_path`/`:invite_path`/`:totp_path`
   override the defaults (`/signup`, `/verify`, `/reset`, `/login`, `/logout`,
   `/invite`, `/2fa`) independently; `:path` (legacy, T02) is still honored as
-  the signup path override alone. `:labels` — OPTIONAL host label overrides merged onto
+  the signup path override alone. `:resend_path` overrides the resend surface's
+  path (default: `/verify/resend`, derived from `:verify_path`). `:labels` — OPTIONAL host label overrides merged onto
   this mount (PP-7, Batch 3 NAV-REACHABILITY) — e.g. `tenant_landing:` (see
   `Samen.Web.Auth.SessionController`'s `finish_login/5` moduledoc). The framework's own
   path labels above always win on a name collision.
@@ -1423,6 +1428,11 @@ defmodule Samen.Web.Router do
     login_path = Keyword.get(opts, :login_path, "/login")
     logout_path = Keyword.get(opts, :logout_path, "/logout")
     invite_path = Keyword.get(opts, :invite_path, "/invite")
+    # A2's resend-verification surface. STATIC and derived from verify_path,
+    # emitted BEFORE `#{verify_path}/:token` in the live_session below —
+    # "/verify/resend" must match THIS LiveView, never parse as a token that
+    # ConfirmLive would try to consume.
+    resend_path = Keyword.get(opts, :resend_path, "#{verify_path}/resend")
     # ADR-035 §5 A7 — the 2FA interstitial, mounted UNCONDITIONALLY like
     # `/login` (never opt-in): a host with no credential ever enrolling 2FA
     # simply never reaches it (`SessionController.create/2` only redirects
@@ -1448,6 +1458,7 @@ defmodule Samen.Web.Router do
             login_path: login_path,
             logout_path: logout_path,
             invite_path: invite_path,
+            resend_path: resend_path,
             totp_path: totp_path,
             session_name: session_name,
             oidc_enabled?: oidc_enabled?,
@@ -1480,12 +1491,18 @@ defmodule Samen.Web.Router do
               # T126 — `ConfirmLive` rebuilds its own `/verify/:token` path off this
               # label to redirect to the `?verified=1`/`?error=` status flag after
               # the single-use consume (the double-mount guard).
-              verify_path: verify_path
+              verify_path: verify_path,
+              # A2 resend surface — `ResendVerifyLive`'s own form action plus
+              # the "Resend verification email" links `ConfirmLive` (error
+              # state) and `RegistrationLive` (`?registered=1`) render.
+              resend_path: resend_path
             })
         )
 
       live_session session_name, session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
         live(signup_path, Samen.Web.Auth.RegistrationLive)
+        # STATIC first: `/verify/resend` must never hit the `:token` clause.
+        live(resend_path, Samen.Web.Auth.ResendVerifyLive)
         live("#{verify_path}/:token", Samen.Web.Auth.ConfirmLive)
         live(reset_path, Samen.Web.Auth.ResetRequestLive)
         live("#{reset_path}/:token", Samen.Web.Auth.ResetLive)
@@ -1536,6 +1553,10 @@ defmodule Samen.Web.Router do
       # no-JS POST bypasses the LiveView's inline guard entirely).
       post(signup_path, Samen.Web.Auth.AccountController, :register,
         private: %{samen_mount: mount, samen_signup_path: signup_path}
+      )
+
+      post(resend_path, Samen.Web.Auth.AccountController, :resend_verify,
+        private: %{samen_mount: mount, samen_resend_path: resend_path}
       )
 
       post(reset_path, Samen.Web.Auth.AccountController, :request_reset,

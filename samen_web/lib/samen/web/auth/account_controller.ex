@@ -60,6 +60,7 @@ defmodule Samen.Web.Auth.AccountController do
   import Plug.Conn
 
   alias Samen.Delivery.AuthMailer
+  alias Samen.Identity.Confirm
   alias Samen.Identity.Invite
   alias Samen.Identity.Register
   alias Samen.Identity.Reset
@@ -115,6 +116,51 @@ defmodule Samen.Web.Auth.AccountController do
 
   def register(conn, _params), do: redirect(conn, to: "#{signup_path(conn)}?error=1")
 
+  # -- A2 resend verification ------------------------------------------------
+
+  @doc """
+  `POST /verify/resend`. Params: `resend_verify[email]`. Enforces the
+  `:token_request_account` limit (3/15min per `email_bidx` — the SAME row
+  reset-request uses; `Samen.Web.RateLimit`'s own doc names it "reset-request /
+  verify resend"), then runs the A2 resend (`Samen.Identity.Confirm.resend/2`:
+  fresh `:email_verify` token + dispatch through the Delivery chokepoint for an
+  unverified credential).
+
+  ALWAYS redirects with the uniform `?sent=1` — existing, unknown, or
+  already-verified address, and even a delivery that honestly failed — because
+  a distinguishable outcome would be the account-existence oracle A2 forbids
+  (a failed dispatch is instead logged server-side with the same scrubbed
+  reason shape `register/2` logs). `?throttled=1` when the limiter trips; the
+  limiter keys on the SUPPLIED address's blind index, so it reveals nothing
+  about existence either. The email is never echoed into the redirect target.
+  """
+  def resend_verify(conn, %{"resend_verify" => params}) do
+    path = resend_path(conn)
+    email = trim(params["email"]) || ""
+
+    case token_request_rate_limit(email) do
+      {:error, :rate_limited} ->
+        redirect(conn, to: "#{path}?throttled=1")
+
+      :ok ->
+        # Uniform outcome by contract — the RESULT never changes the response
+        # (no oracle); `Confirm.resend/2` returns {:error, _} only for a real
+        # unverified account whose dispatch honestly failed, which is the
+        # operator-facing signal logged below.
+        case Confirm.resend(email, token_request_mods(conn.private.samen_mount)) do
+          {:ok, _sent} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning("[AccountController] verify resend dispatch failed: #{inspect(reason)}")
+        end
+
+        redirect(conn, to: "#{path}?sent=1")
+    end
+  end
+
+  def resend_verify(conn, _params), do: redirect(conn, to: "#{resend_path(conn)}?sent=1")
+
   # -- A3 password reset ------------------------------------------------------
 
   @doc """
@@ -129,7 +175,7 @@ defmodule Samen.Web.Auth.AccountController do
     mount = conn.private.samen_mount
     email = trim(email)
 
-    case reset_rate_limit(email) do
+    case token_request_rate_limit(email) do
       {:error, :rate_limited} ->
         # `?throttled=1` is NOT an account-existence oracle: the limiter keys on
         # the SUPPLIED `email_bidx` and fires identically whether or not that
@@ -139,7 +185,7 @@ defmodule Samen.Web.Auth.AccountController do
         redirect(conn, to: "#{path}?throttled=1")
 
       :ok ->
-        _ = Reset.request(email, reset_request_mods(mount))
+        _ = Reset.request(email, token_request_mods(mount))
         redirect(conn, to: "#{path}?requested=1")
     end
   end
@@ -243,7 +289,9 @@ defmodule Samen.Web.Auth.AccountController do
     }
   end
 
-  defp reset_request_mods(%Mount{} = mount) do
+  # Shared by A3 reset-request and A2 resend-verify — both mint a token for a
+  # supplied address through the same uniform, no-oracle contract.
+  defp token_request_mods(%Mount{} = mount) do
     %{
       credential: Mount.resource(mount, Credential),
       auth_token: Mount.resource(mount, AuthToken),
@@ -301,7 +349,11 @@ defmodule Samen.Web.Auth.AccountController do
 
   # -- private ----------------------------------------------------------------
 
-  defp reset_rate_limit(email) do
+  # The ONE `:token_request_account` gate (3/15min per email_bidx) shared by
+  # A3 reset-request and A2 resend-verify (RateLimit's doc: "reset-request /
+  # verify resend"). Blind-index failure → :ok (fail-open like request_reset;
+  # a bidx we cannot compute is not a reason to bounce the user).
+  defp token_request_rate_limit(email) do
     case Samen.Auth.BlindIndex.compute(email) do
       {:ok, bidx} -> RateLimit.check(:token_request_account, :email_bidx, bidx)
       _ -> :ok
@@ -314,6 +366,7 @@ defmodule Samen.Web.Auth.AccountController do
   defp invite_error_code(_), do: "invalid"
 
   defp signup_path(conn), do: conn.private[:samen_signup_path] || "/signup"
+  defp resend_path(conn), do: conn.private[:samen_resend_path] || "/verify/resend"
   defp reset_path(conn), do: conn.private[:samen_reset_path] || "/reset"
   defp invite_path(conn), do: conn.private[:samen_invite_path] || "/invite"
 

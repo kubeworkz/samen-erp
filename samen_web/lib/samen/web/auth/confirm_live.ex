@@ -101,6 +101,10 @@ defmodule Samen.Web.Auth.ConfirmLive do
           Couldn't verify this link
         </h2>
         <p :if={not @verified?} id="confirm-error" style="margin:0;color:#B91C1C">{@error}</p>
+        <p :if={not @verified?} id="confirm-resend-hint" style="margin:14px 0 0;color:var(--muted)">
+          Need a new link?
+          <a href={Mount.label(@samen_mount, :resend_path, "/verify/resend")}>Resend verification email</a>
+        </p>
       </div>
     </div>
     """

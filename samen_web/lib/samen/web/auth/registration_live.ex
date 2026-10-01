@@ -121,6 +121,10 @@ defmodule Samen.Web.Auth.RegistrationLive do
         <p style="margin:0 0 18px;color:var(--muted)">Free to start — no card required.</p>
 
         <p :if={@flash_ok} id="registration-ok" style="color:#15803D;margin:8px 0">{@flash_ok}</p>
+        <p :if={@registered?} id="registration-resend-hint" style="margin:8px 0 0;color:var(--muted)">
+          Didn't get the email?
+          <a href={Mount.label(@samen_mount, :resend_path, "/verify/resend")}>Resend verification email</a>
+        </p>
         <p :if={@error} id="registration-error" style="color:#B91C1C;margin:8px 0">{@error}</p>
 
         <.simple_form

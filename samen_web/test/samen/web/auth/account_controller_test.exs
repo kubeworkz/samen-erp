@@ -13,7 +13,8 @@ defmodule Samen.Web.Auth.AccountControllerTest do
   Proven here:
 
     1. Each POST action performs the REAL server-side mutation (register /
-       request-reset / reset / accept-invite) — the LiveView is not trusted.
+       resend-verify / request-reset / reset / accept-invite) — the LiveView
+       is not trusted.
     2. Every redirect Location carries only NON-secret status flags — never the
        submitted password/token (the invariant, asserted per action).
     3. The router pairs a `post(...)` route with each pre-actor GET `live(...)`
@@ -233,6 +234,56 @@ defmodule Samen.Web.Auth.AccountControllerTest do
   end
 
   # ===========================================================================
+  # resend_verify/2 — A2 (the no-JS floor for ResendVerifyLive)
+  # ===========================================================================
+
+  describe "AccountController.resend_verify/2 (POST /verify/resend)" do
+    test "an unverified account gets the uniform ?sent=1 and a FRESH verify token — email never in the URL" do
+      result = register!()
+      before = Ash.count!(AuthToken, authorize?: false)
+
+      conn =
+        arc_conn(:post, "/verify/resend", %{samen_mount: mount(), samen_resend_path: "/verify/resend"})
+        |> AccountController.resend_verify(%{"resend_verify" => %{"email" => result.email}})
+
+      assert location(conn) == "/verify/resend?sent=1"
+      refute location(conn) =~ result.email
+      # The resend was real: a fresh :email_verify token was minted.
+      assert Ash.count!(AuthToken, authorize?: false) == before + 1
+    end
+
+    test "a NON-existent email gets the SAME ?sent=1 and mints NOTHING (no account-existence oracle)" do
+      before = Ash.count!(AuthToken, authorize?: false)
+
+      conn =
+        arc_conn(:post, "/verify/resend", %{samen_mount: mount(), samen_resend_path: "/verify/resend"})
+        |> AccountController.resend_verify(%{"resend_verify" => %{"email" => unique_email()}})
+
+      assert location(conn) == "/verify/resend?sent=1"
+      assert Ash.count!(AuthToken, authorize?: false) == before
+    end
+
+    test "the 4th attempt inside the window redirects ?throttled=1 (token_request_account 3/15min)" do
+      email = unique_email()
+      private = %{samen_mount: mount(), samen_resend_path: "/verify/resend"}
+
+      for _ <- 1..3 do
+        conn =
+          arc_conn(:post, "/verify/resend", private)
+          |> AccountController.resend_verify(%{"resend_verify" => %{"email" => email}})
+
+        assert location(conn) == "/verify/resend?sent=1"
+      end
+
+      conn =
+        arc_conn(:post, "/verify/resend", private)
+        |> AccountController.resend_verify(%{"resend_verify" => %{"email" => email}})
+
+      assert location(conn) == "/verify/resend?throttled=1"
+    end
+  end
+
+  # ===========================================================================
   # accept_invite/2 — A5
   # ===========================================================================
 
@@ -298,10 +349,10 @@ defmodule Samen.Web.Auth.AccountControllerTest do
   # ===========================================================================
 
   describe "T110 invariant — the router pairs a POST route with each pre-actor GET LiveView" do
-    test "samen_auth_routes emits post(...) for /signup, /reset, /reset/:token, /invite/:token" do
+    test "samen_auth_routes emits post(...) for /signup, /verify/resend, /reset, /reset/:token, /invite/:token" do
       routes = HostRouter.__routes__()
 
-      for path <- ["/signup", "/reset", "/reset/:token", "/invite/:token"] do
+      for path <- ["/signup", "/verify/resend", "/reset", "/reset/:token", "/invite/:token"] do
         assert Enum.any?(routes, &(&1.verb == :post and &1.path == path)),
                "expected a POST route for #{path} (the no-JS credential-safe fallback), found none"
 
@@ -309,6 +360,20 @@ defmodule Samen.Web.Auth.AccountControllerTest do
         assert Enum.any?(routes, &(&1.verb == :get and &1.path == path)),
                "expected the paired GET live route for #{path}"
       end
+    end
+
+    test "GET /verify/resend is declared BEFORE /verify/:token (the static route must never parse as a token)" do
+      routes = HostRouter.__routes__()
+
+      resend_idx = Enum.find_index(routes, &(&1.verb == :get and &1.path == "/verify/resend"))
+      token_idx = Enum.find_index(routes, &(&1.verb == :get and &1.path == "/verify/:token"))
+
+      assert resend_idx, "expected a GET live route for /verify/resend"
+      assert token_idx, "expected a GET live route for /verify/:token"
+      # Phoenix dispatches top-down — if the :token clause came first,
+      # ConfirmLive would try to CONSUME the literal "resend" as a token.
+      assert resend_idx < token_idx,
+             "/verify/resend must be emitted before /verify/:token in the route table"
     end
   end
 
