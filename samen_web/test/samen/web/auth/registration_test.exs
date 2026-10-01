@@ -236,6 +236,34 @@ defmodule Samen.Web.Auth.RegistrationTest do
   end
 
   # ===========================================================================
+  # 2b. A2 VERIFY-EMAIL RECIPIENT — AuthRecipient resolves the PLAIN address
+  # ===========================================================================
+
+  describe "A2 verify-email recipient (AuthRecipient resolver round-trip)" do
+    test "resolves the registered credential to the PLAIN address, never the vaulted JSON" do
+      attrs = valid_attrs()
+      assert {:ok, %{status: :registered, credential: credential}} = Register.register(attrs, mods())
+
+      resolver =
+        Samen.Delivery.AuthRecipient.resolver(
+          credential_mod: Credential,
+          user_mod: User,
+          repo: Repo
+        )
+
+      # The prod-shaped round trip: credential → User (`:emails` load) → vault
+      # reveal → primary-address normalization. Before the 2026-10-01 fix this
+      # returned the SERIALIZED composite (`[{"label":...}]`), which Resend
+      # rejects with 422 "Invalid `to` field" — six prod accounts, zero
+      # verification emails ever dispatched.
+      assert {:ok, address} = resolver.(%{to_subscriber_id: credential.id})
+      assert address == attrs.email
+      refute address =~ "["
+      refute address =~ "label"
+    end
+  end
+
+  # ===========================================================================
   # 3. PASSWORD HASHING (ADR-035 §4.4) + weak-password rejection
   # ===========================================================================
 

@@ -112,7 +112,7 @@ defmodule Samen.Delivery.AuthRecipient do
       masked = %Samen.Masked{token: token, label: :email}
 
       case Samen.Vault.reveal(masked, repo) do
-        {:ok, email} when is_binary(email) -> {:ok, email}
+        {:ok, email} when is_binary(email) -> {:ok, primary_address(email)}
         {:error, reason} -> {:error, {:vault_reveal_failed, reason}}
         _ -> {:error, :vault_reveal_failed}
       end
@@ -121,5 +121,33 @@ defmodule Samen.Delivery.AuthRecipient do
     e ->
       Logger.warning("[AuthRecipient] vault reveal error: #{inspect(e)}")
       {:error, :vault_reveal_error}
+  end
+
+  # The vaulted `emails` value is Samen.Type.Emails' SERIALIZED composite — a
+  # JSON list of %{label, address} entries, NOT the bare address. Returning the
+  # revealed binary as-is made every prod verify-email send that JSON blob as
+  # Resend's `to`, which rejects it (422 "Invalid `to` field" — the 2026-10-01
+  # signup incident: six accounts, zero verification emails). Decode the
+  # composite and pick the primary entry; a plain-address binary (any legacy
+  # vault row) passes through untouched, and non-address JSON never fabricates
+  # an address — it passes through fail-honest so the provider's validation
+  # still surfaces the bad value.
+  @doc false
+  @spec primary_address(binary()) :: binary()
+  def primary_address(revealed) when is_binary(revealed) do
+    case Jason.decode(revealed) do
+      {:ok, decoded} ->
+        case Samen.Type.Emails.cast_input(decoded, []) do
+          {:ok, %Samen.Type.Emails{entries: [_ | _] = entries}} ->
+            primary = Enum.find(entries, &(Map.get(&1, :label) == "primary")) || hd(entries)
+            Map.get(primary, :address)
+
+          _ ->
+            revealed
+        end
+
+      _ ->
+        revealed
+    end
   end
 end
