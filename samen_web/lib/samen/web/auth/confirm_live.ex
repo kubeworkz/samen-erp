@@ -96,6 +96,15 @@ defmodule Samen.Web.Auth.ConfirmLive do
         <p :if={@verified?} style="margin:0;color:var(--muted)">
           Your email address is confirmed — you're all set.
         </p>
+        <a
+          :if={@verified?}
+          id="confirm-continue"
+          href={Mount.label(@samen_mount, :login_path, "/login")}
+          class="btn primary"
+          style="text-decoration:none;margin-top:16px;display:inline-block"
+        >
+          Continue to log in
+        </a>
 
         <h2 :if={not @verified?} id="confirm-error-title" style="margin:0 0 4px">
           Couldn't verify this link

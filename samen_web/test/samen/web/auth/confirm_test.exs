@@ -270,6 +270,10 @@ defmodule Samen.Web.Auth.ConfirmTest do
 
       assert html =~ "Email verified"
       assert html =~ "confirm-ok"
+      # The verified card is NOT a dead end: it carries a primary CTA to the
+      # login page (registration creates no session, so login is the next hop).
+      assert html =~ "confirm-continue"
+      assert html =~ ~s(href="/login")
     end
 
     test "an INVALID token redirects to ?error=invalid_token; the flag render is the generic no-oracle error" do
@@ -282,6 +286,10 @@ defmodule Samen.Web.Auth.ConfirmTest do
       html = mount_smoke(ConfirmLive, mount, %{"error" => "invalid_token"})
       assert html =~ "confirm-error-title"
       assert html =~ "invalid or has expired"
+      # The success CTA belongs ONLY to the verified state — the generic error
+      # card keeps its resend hint instead (state-specific affordances).
+      refute html =~ "confirm-continue"
+      assert html =~ "confirm-resend-hint"
     end
 
     # =========================================================================
