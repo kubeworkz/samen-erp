@@ -73,9 +73,12 @@ defmodule Samen.Web.Auth.AccountController do
   `POST /signup`. Params: `registration[org_name|first_name|last_name|email|password]`.
   Enforces the `:registration_ip` limit (5/hr per IP, ADR-038 §6.3) HERE — the
   no-JS path never runs the LiveView's guard — then the atomic A1 transaction.
-  Redirects to the signup page with a NON-secret status flag: `?registered=1`
-  (fresh OR duplicate — no oracle), `?error=weak_password`, `?error=rate_limited`,
-  or `?error=1`. The password never leaves the POST body.
+  Redirects with a NON-secret status flag: `?registered=1` for a FRESH account,
+  `?error=weak_password`, `?error=rate_limited`, or `?error=1`. A DUPLICATE
+  email redirects to the login page with `?error=exists` (product decision,
+  dogfood 2026-10-02: the uniform `?registered=1` stranded returning users on
+  a verify-email page whose email never comes); a duplicate STILL dispatches
+  nothing. The password never leaves the POST body.
   """
   def register(conn, %{"registration" => params}) do
     mount = conn.private.samen_mount
@@ -101,8 +104,11 @@ defmodule Samen.Web.Auth.AccountController do
             redirect(conn, to: "#{path}?registered=1")
 
           {:ok, %{status: :duplicate}} ->
-            # Same generic response — no account-existence oracle
-            redirect(conn, to: "#{path}?registered=1")
+            # Product decision (2026-10-02): the uniform `?registered=1` told a
+            # returning user an email was coming when it never does. Land them
+            # on login with an explicit notice instead (the account-existence
+            # oracle at SIGNUP is accepted UX); dispatch STILL never fires here.
+            redirect(conn, to: "#{login_path(conn)}?error=exists")
 
           {:error, :weak_password} ->
             redirect(conn, to: "#{path}?error=weak_password")
@@ -366,6 +372,7 @@ defmodule Samen.Web.Auth.AccountController do
   defp invite_error_code(_), do: "invalid"
 
   defp signup_path(conn), do: conn.private[:samen_signup_path] || "/signup"
+  defp login_path(conn), do: conn.private[:samen_login_path] || "/login"
   defp resend_path(conn), do: conn.private[:samen_resend_path] || "/verify/resend"
   defp reset_path(conn), do: conn.private[:samen_reset_path] || "/reset"
   defp invite_path(conn), do: conn.private[:samen_invite_path] || "/invite"

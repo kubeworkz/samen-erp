@@ -155,11 +155,12 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       assert [_org] = find_org(name)
     end
 
-    test "a duplicate email is the SAME ?registered=1 outcome (no account-existence oracle)" do
+    test "a duplicate email redirects to LOGIN with ?error=exists and creates NOTHING" do
       existing = register!()
+      dup_org = "Dup #{System.unique_integer([:positive])}"
 
       params = %{
-        "org_name" => "Dup #{System.unique_integer([:positive])}",
+        "org_name" => dup_org,
         "email" => existing.email,
         "password" => @strong_password
       }
@@ -168,7 +169,12 @@ defmodule Samen.Web.Auth.AccountControllerTest do
         arc_conn(:post, "/signup", %{samen_mount: mount(), samen_signup_path: "/signup"})
         |> AccountController.register(%{"registration" => params})
 
-      assert location(conn) == "/signup?registered=1"
+      # Product decision (dogfood 2026-10-02): a returning user is told the
+      # account EXISTS and sent to login — never parked on the dead
+      # ?registered=1 verify-email page whose email never comes. The
+      # duplicate branch still creates nothing and dispatches nothing.
+      assert location(conn) == "/login?error=exists"
+      assert find_org(dup_org) == []
     end
 
     test "a weak password redirects with ?error=weak_password and creates NOTHING" do

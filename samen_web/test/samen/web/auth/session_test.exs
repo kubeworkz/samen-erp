@@ -740,6 +740,18 @@ defmodule Samen.Web.Auth.SessionTest do
       assert socket.assigns.error == nil
     end
 
+    test "?error=exists renders the duplicate-signup notice — DISTINCT from the generic credential error" do
+      mount = build_mount(:auth)
+
+      exists = mount_smoke(LoginLive, mount, %{"error" => "exists"})
+      assert exists =~ "login-error"
+      assert exists =~ "already have an account"
+
+      generic = mount_smoke(LoginLive, mount, %{"error" => "1"})
+      assert generic =~ "Invalid email or password."
+      refute generic =~ "already have an account"
+    end
+
     test "RED: wrong password shows the generic error, never arms the trigger — SAME message as an unknown email" do
       result = register!()
       mount = build_mount(:auth)

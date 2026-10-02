@@ -33,7 +33,17 @@ defmodule Samen.Web.Auth.LoginLive do
 
   @impl true
   def handle_params(params, _uri, socket) do
-    error = if params["error"], do: "Invalid email or password.", else: socket.assigns[:error]
+    error =
+      case params["error"] do
+        # A1 duplicate-signup hand-off (product decision, dogfood 2026-10-02):
+        # an EXISTING account lands here from the signup form with an explicit
+        # notice instead of the dead "check your email" page. This flag only
+        # arrives from the duplicate branch; sign-in failures below stay generic.
+        "exists" -> "You already have an account with this email — log in to continue."
+        nil -> socket.assigns[:error]
+        _ -> "Invalid email or password."
+      end
+
     {:noreply, assign(socket, error: error)}
   end
 
