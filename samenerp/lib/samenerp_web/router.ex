@@ -57,12 +57,17 @@ defmodule SamenerpWeb.Router do
   # only, ARMED BY DEFAULT — ADR-045 §2). `:identity_namespace` names this app's
   # Identity mount (`Samenerp.Operator`) so an ARMED (prod) host derives the
   # caller's REAL `Identity.Membership` role for tenant `write_scope` instead of
-  # failing closed to `:member` (ADR-045 §4.4, the S12 residual). A module
-  # attribute (compile-time literal) so it is usable inside the framework
-  # route-macro expansions; both values are session-safe.
+  # failing closed to `:member` (ADR-045 §4.4, the S12 residual).
+  # `:org_directory` is the `{mod, fun, args}` seam `Samen.Web.CurrentOrg.list_orgs/1`
+  # reads for the workspace switcher + the RESOLVED org display name — without it every
+  # sidebar header + topbar breadcrumb fell back to the static "Workspace" string
+  # (`Samenerp.Directory.orgs/0` — tenant orgs only, operator/debris excluded).
+  # Module attributes (compile-time literals) so they are usable inside the framework
+  # route-macro expansions; all values are session-safe.
   @current_org_labels %{
     authn: {:app_env, :samenerp, :auth_required?},
-    identity_namespace: Samenerp.Operator
+    identity_namespace: Samenerp.Operator,
+    org_directory: {Samenerp.Directory, :orgs, []}
   }
 
   pipeline :browser do
