@@ -37,6 +37,7 @@ defmodule Samen.Web.Files.PreviewLive do
   import Samen.Web.Files.Live, only: [assign_mount: 2, files_sidebar: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Files.Reads
   alias Samen.Web.Mount
@@ -174,11 +175,11 @@ defmodule Samen.Web.Files.PreviewLive do
   end
 
   defp crumbs(mount, org_id, nil),
-    do: [CurrentOrg.name(mount, org_id), "Files", "Preview"]
+    do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :files), "Preview"]
 
   defp crumbs(mount, org_id, file) do
     name = if is_struct(file.filename, Samen.Masked), do: "••••", else: (file.filename || "File")
-    [CurrentOrg.name(mount, org_id), "Files", name]
+    [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :files), name]
   end
 
   defp plane_note(%Mount{plane: %{kind: :operator}}), do: "operator plane · filename masked"

@@ -81,6 +81,7 @@ defmodule Samen.Web.Support.TicketLive do
   import Samen.Web.Support.Live, only: [assign_mount: 2, support_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -651,7 +652,7 @@ defmodule Samen.Web.Support.TicketLive do
 
   # -- helpers (MASKING INVARIANT) -------------------------------------------
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Support", "Inbox", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :support), "Inbox", leaf]
 
   defp ticket_subject(nil), do: "Ticket"
   defp ticket_subject(%{subject: s}), do: s

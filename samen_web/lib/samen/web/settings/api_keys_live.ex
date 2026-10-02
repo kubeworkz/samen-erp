@@ -15,6 +15,7 @@ defmodule Samen.Web.Settings.ApiKeysLive do
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Settings.ApiKeys
@@ -109,7 +110,7 @@ defmodule Samen.Web.Settings.ApiKeysLive do
           <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:api_keys} />
         </:sidebar>
 
-        <.topbar title="API keys" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Settings", "API keys"]}>
+        <.topbar title="API keys" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "API keys"]}>
           <:actions></:actions>
         </.topbar>
 

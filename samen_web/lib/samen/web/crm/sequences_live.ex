@@ -47,6 +47,7 @@ defmodule Samen.Web.CRM.SequencesLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.CRM.SequencesReads, as: Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -150,7 +151,7 @@ defmodule Samen.Web.CRM.SequencesLive do
           <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_sequences} return_to={@return_to} />
         </:sidebar>
 
-        <.topbar title="Sequences" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "CRM", "Sequences"]} />
+        <.topbar title="Sequences" crumbs={[Crumbs.org(@samen_mount, @org_id),  "CRM",  "Sequences"]} />
         <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
         <%= if @no_org do %>

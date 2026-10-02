@@ -34,6 +34,7 @@ defmodule Samen.Web.Marketing.LeadsLive do
   import Samen.Web.Marketing.Live, only: [assign_mount: 2, marketing_sidebar: 1, marketing_path: 1, marketing_plane_note: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -161,7 +162,7 @@ defmodule Samen.Web.Marketing.LeadsLive do
     """
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Marketing", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :marketing), leaf]
 
   defp segments_path(mount, org_id), do: "#{marketing_path(mount)}/segments?org=#{org_id}"
 

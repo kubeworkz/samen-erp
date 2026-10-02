@@ -44,6 +44,7 @@ defmodule Samen.Web.Settings.SecurityLive do
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Settings.Reads
@@ -257,7 +258,7 @@ defmodule Samen.Web.Settings.SecurityLive do
           <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:security} />
         </:sidebar>
 
-        <.topbar title="Security" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Settings", "Security"]}>
+        <.topbar title="Security" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Security"]}>
           <:actions></:actions>
         </.topbar>
 

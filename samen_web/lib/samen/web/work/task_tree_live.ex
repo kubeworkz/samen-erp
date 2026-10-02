@@ -38,6 +38,7 @@ defmodule Samen.Web.Work.TaskTreeLive do
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Tree
@@ -171,7 +172,7 @@ defmodule Samen.Web.Work.TaskTreeLive do
     """
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Work", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :work), leaf]
 
   defp status_variant(:pending), do: "mut"
   defp status_variant(:in_progress), do: "info"

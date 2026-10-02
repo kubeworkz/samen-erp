@@ -23,6 +23,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Scopes.Ai.Crypto
 
@@ -124,7 +125,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
           <.settings_sidebar mount={@samen_mount} org_id={@org_id} active={:huggingface} />
         </:sidebar>
 
-        <.topbar title="HuggingFace Integration" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Settings", "HuggingFace"]}>
+        <.topbar title="HuggingFace Integration" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "HuggingFace"]}>
           <:actions></:actions>
         </.topbar>
 

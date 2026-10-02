@@ -11,6 +11,7 @@ defmodule Samen.Web.Work.ProjectsLive do
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -98,7 +99,7 @@ defmodule Samen.Web.Work.ProjectsLive do
           <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_projects} return_to={@return_to} />
         </:sidebar>
 
-        <.topbar title="Projects" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Work", "Projects"]}>
+        <.topbar title="Projects" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :work), "Projects"]}>
           <:actions>
             <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_project" id="new-project">
               New project

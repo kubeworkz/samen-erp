@@ -31,6 +31,7 @@ defmodule Samen.Web.Billing.DunningLive do
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -185,7 +186,7 @@ defmodule Samen.Web.Billing.DunningLive do
 
   # -- helpers (MASKING INVARIANT) -------------------------------------------
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Billing", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :billing), leaf]
 
   defp plane_note(%Mount{plane: %{kind: :operator}}), do: "operator plane · masked"
   defp plane_note(_), do: "your org in the clear"

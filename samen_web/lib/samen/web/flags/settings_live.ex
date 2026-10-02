@@ -33,6 +33,7 @@ defmodule Samen.Web.Flags.SettingsLive do
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Flags.Reads
   alias Samen.Web.Mount
@@ -345,5 +346,5 @@ defmodule Samen.Web.Flags.SettingsLive do
     """
   end
 
-  defp crumbs(mount, org_id), do: [CurrentOrg.name(mount, org_id), "Settings", "Feature flags"]
+  defp crumbs(mount, org_id), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :settings), "Feature flags"]
 end

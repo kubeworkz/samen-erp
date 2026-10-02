@@ -28,6 +28,7 @@ defmodule Samen.Web.Chat.ThreadLive do
 
   alias Samen.Web.Chat
   alias Samen.Web.Chat.{Identity, PubSub, Reads}
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Operator.Impersonation
@@ -250,7 +251,7 @@ defmodule Samen.Web.Chat.ThreadLive do
 
         <%= cond do %>
           <% @impersonation == :out_of_scope -> %>
-            <.topbar title="Chat" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Chat"]} />
+            <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
             <div class="wrap">
               <div class="card" id="out-of-scope" style="padding:22px 20px">
                 <div style="color:var(--red);font-weight:600" id="not-in-scope">
@@ -263,7 +264,7 @@ defmodule Samen.Web.Chat.ThreadLive do
               </div>
             </div>
           <% @impersonation == :denied -> %>
-            <.topbar title="Chat" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Chat"]} />
+            <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
             <div class="wrap">
               <div class="card" id="impersonation-required" style="padding:22px 20px">
                 <div style="color:var(--red);font-weight:600" id="no-session">
@@ -292,7 +293,7 @@ defmodule Samen.Web.Chat.ThreadLive do
               </div>
             </div>
           <% @no_thread -> %>
-            <.topbar title="Chat" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Chat"]} />
+            <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
             <div class="wrap">
               <div class="card" id="no-thread" style="padding:22px 20px;color:var(--muted)">
                 Conversation not available.
@@ -301,7 +302,7 @@ defmodule Samen.Web.Chat.ThreadLive do
           <% true -> %>
             <.topbar
               title={@thread.subject || "Conversation"}
-              crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Chat", @thread.subject || "Conversation"]}
+              crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :chat), @thread.subject || "Conversation"]}
             >
               <:actions>
                 <span class="lane">{plane_note(@samen_mount)} · disclosure: {@thread.disclosure_mode}</span>

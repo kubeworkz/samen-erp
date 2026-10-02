@@ -44,6 +44,7 @@ defmodule Samen.Web.CRM.ContactsLive do
   import Samen.Web.FirstRun, only: [first_run_card: 1]
 
   alias Samen.Web.CRM.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.FirstRun
   alias Samen.Web.Mount
@@ -348,7 +349,7 @@ defmodule Samen.Web.CRM.ContactsLive do
   # %Masked{} or call the vault. A %Masked{} is returned AS-IS so it renders •••• through
   # Phoenix.HTML.Safe. Only a plaintext string is reshaped.
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id),  "CRM",  leaf]
 
   defp contact_path(mount, org_id, id),
     do: "#{Mount.label(mount, :crm_path, "/crm")}/contacts/#{id}?org=#{org_id}"

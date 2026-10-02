@@ -44,6 +44,7 @@ defmodule Samen.Web.Automation.BuilderLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.Automation.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -595,7 +596,7 @@ defmodule Samen.Web.Automation.BuilderLive do
     """
   end
 
-  defp crumbs(mount, org_id), do: [CurrentOrg.name(mount, org_id), "Settings", "Automation"]
+  defp crumbs(mount, org_id), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :settings), "Automation"]
 
   defp modal_title(:new), do: "New workflow"
   defp modal_title(%{name: name}) when is_binary(name) and name != "", do: name

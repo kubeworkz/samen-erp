@@ -34,6 +34,7 @@ defmodule Samen.Web.Marketing.CampaignsLive do
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -249,7 +250,7 @@ defmodule Samen.Web.Marketing.CampaignsLive do
     """
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Marketing", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :marketing), leaf]
 
   defp campaign_path(mount, org_id, id),
     do: "#{marketing_path(mount)}/campaigns/#{id}?org=#{org_id}"

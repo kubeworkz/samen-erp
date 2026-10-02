@@ -18,6 +18,7 @@ defmodule Samen.Web.Work.TaskLive do
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1, work_path: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -157,5 +158,5 @@ defmodule Samen.Web.Work.TaskLive do
   end
 
   defp crumbs(_mount, _org_id, nil), do: ["Work", "Task"]
-  defp crumbs(mount, org_id, task), do: [CurrentOrg.name(mount, org_id), "Work", task.title || "Task"]
+  defp crumbs(mount, org_id, task), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :work), task.title || "Task"]
 end

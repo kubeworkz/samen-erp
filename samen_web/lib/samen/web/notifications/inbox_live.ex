@@ -51,6 +51,7 @@ defmodule Samen.Web.Notifications.InboxLive do
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Notifications.PubSub, as: NotificationsPubSub
@@ -287,7 +288,7 @@ defmodule Samen.Web.Notifications.InboxLive do
     end
   end
 
-  defp crumbs(mount, org_id), do: [CurrentOrg.name(mount, org_id), "Inbox", "Notifications"]
+  defp crumbs(mount, org_id), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :inbox), "Notifications"]
 
   defp plane_note(%Mount{plane: %{kind: :operator}}), do: "operator plane · masked"
   defp plane_note(_), do: "your org in the clear"

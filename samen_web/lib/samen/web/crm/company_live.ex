@@ -25,6 +25,7 @@ defmodule Samen.Web.CRM.CompanyLive do
     only: [assign_mount: 2, crm_sidebar: 1, writable?: 1, mail_timeline_entries: 1, merge_timeline: 2]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -592,7 +593,7 @@ defmodule Samen.Web.CRM.CompanyLive do
 
   # -- helpers -----------------------------------------------------------------
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", "Companies", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), "CRM", Crumbs.section(mount, org_id, :companies), leaf]
 
   defp composer?(%Mount{plane: %{kind: :operator}}), do: false
   defp composer?(_), do: true

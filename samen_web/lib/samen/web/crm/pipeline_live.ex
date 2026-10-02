@@ -48,6 +48,7 @@ defmodule Samen.Web.CRM.PipelineLive do
 
   alias Samen.Web.Board
   alias Samen.Web.CRM.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -228,7 +229,7 @@ defmodule Samen.Web.CRM.PipelineLive do
 
   # -- helpers -----------------------------------------------------------------
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id),  "CRM",  leaf]
 
   defp stage_dom(nil), do: "none"
   defp stage_dom(key), do: key |> to_string() |> String.replace(~r/[^A-Za-z0-9_-]/, "-")

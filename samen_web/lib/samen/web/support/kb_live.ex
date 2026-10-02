@@ -30,6 +30,7 @@ defmodule Samen.Web.Support.KbLive do
   import Samen.Web.Support.Live, only: [assign_mount: 2, support_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Support.KbReads
@@ -265,7 +266,7 @@ defmodule Samen.Web.Support.KbLive do
     """
   end
 
-  defp crumbs(mount, org_id), do: [CurrentOrg.name(mount, org_id), "Support", "Knowledge base"]
+  defp crumbs(mount, org_id), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :support), "Knowledge base"]
 
   defp status_variant(:draft), do: "mut"
   defp status_variant(:published), do: "ok"

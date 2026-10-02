@@ -39,6 +39,7 @@ defmodule Samen.Web.CRM.ContactsGalleryLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.CRM.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Page
@@ -159,7 +160,7 @@ defmodule Samen.Web.CRM.ContactsGalleryLive do
     """
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", "Contacts", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), "CRM", Crumbs.section(mount, org_id, :contacts), leaf]
 
   # A monogram from the NON-PII display_name only (never the vaulted full_name) — a leading-
   # letters avatar that carries no secret.

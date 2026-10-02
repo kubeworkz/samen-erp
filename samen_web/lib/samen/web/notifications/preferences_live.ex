@@ -39,6 +39,7 @@ defmodule Samen.Web.Notifications.PreferencesLive do
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Notifications.Reads
@@ -299,7 +300,7 @@ defmodule Samen.Web.Notifications.PreferencesLive do
   end
 
   defp crumbs(mount, org_id),
-    do: [CurrentOrg.name(mount, org_id), "Inbox", "Notification settings"]
+    do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :inbox), "Notification settings"]
 
   defp plane_note(%Mount{plane: %{kind: :operator}}), do: "operator plane · read-only"
   defp plane_note(_), do: "your org"

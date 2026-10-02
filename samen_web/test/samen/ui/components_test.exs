@@ -325,4 +325,42 @@ defmodule Samen.UI.ComponentsTest do
     # No bag → no links element.
     refute render_component(&Samen.UI.social_links/1, %{custom: nil}) =~ ~s(class="social-links")
   end
+
+  # Linked breadcrumbs (Samen.Web.Crumbs) — a `{label, href}` crumb renders as a
+  # LIVE anchor; a plain-string crumb (the trail's leaf / the current page) stays
+  # inert text, byte-for-byte the pre-link rendering.
+  test "topbar/1 renders {label, href} crumbs as live links and string crumbs as inert text" do
+    html =
+      render_component(&Samen.UI.topbar/1, %{
+        title: "Acme",
+        crumbs: [
+          {"Gridworkz QA", "/crm/dashboard?org=ORG-1"},
+          "CRM",
+          {"Companies", "/crm/companies?org=ORG-1"},
+          "Acme"
+        ]
+      })
+
+    # Linked crumbs are real anchors…
+    assert html =~ ~s(<a href="/crm/dashboard?org=ORG-1")
+    assert html =~ ~s(<a href="/crm/companies?org=ORG-1")
+    assert html =~ ">Gridworkz QA</a>"
+    assert html =~ ">Companies</a>"
+    # …plain crumbs (mid-trail plain section + leaf) render as text, never as links.
+    refute html =~ ">CRM</a>"
+    refute html =~ ">Acme</a>"
+    assert html =~ "CRM"
+    assert html =~ "Acme"
+    # Exactly one anchor per tuple crumb.
+    assert length(Regex.scan(~r/<a /, html)) == 2
+  end
+
+  test "topbar/1 keeps an all-string trail inert (sep-joined, zero anchors)" do
+    html = render_component(&Samen.UI.topbar/1, %{title: "Fleet", crumbs: ["Operator plane", "Fleet"]})
+
+    refute html =~ "<a "
+    assert html =~ "Operator plane"
+    assert html =~ "Fleet"
+    assert html =~ ~s(class="sep")
+  end
 end

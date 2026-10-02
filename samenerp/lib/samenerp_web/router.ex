@@ -119,7 +119,19 @@ defmodule SamenerpWeb.Router do
     # sole Identity mount (`Samenerp.Operator`) in ONE line. Pre-actor
     # public (no plane/org data). The generated app is the first host to serve
     # the full framework auth path with zero hand-edits (A9).
-    samen_auth_routes(namespace: Samenerp.Operator, repo: Samenerp.Repo)
+    #
+    # PP-7 (post-login landing) — `tenant_landing:` names where a login with NO
+    # explicit `return_to` lands (the ordinary case: a bookmark, a fresh tab, the
+    # invite-accept / email-verify "log in" links). Without it the framework
+    # fallback is the neutral `"/"` — this host's MARKETING page — so every
+    # successful login bounced back to the homepage instead of opening the
+    # tenant workspace. Wired to the tenant CRM Dashboard (the sidebar's
+    # "Dashboard" target) so login lands IN the workspace.
+    samen_auth_routes(
+      namespace: Samenerp.Operator,
+      repo: Samenerp.Repo,
+      labels: %{tenant_landing: "/crm/dashboard"}
+    )
 
     # ADR-035 §5 A8 — the FIRST-RUN onboarding wizard (`GET /onboarding`):
     # org-naming, plan-selection (the honest "no plans configured" empty state —

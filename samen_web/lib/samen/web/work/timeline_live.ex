@@ -46,6 +46,7 @@ defmodule Samen.Web.Work.TimelineLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.Board
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Work.Reads
@@ -214,7 +215,7 @@ defmodule Samen.Web.Work.TimelineLive do
     """
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Work", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :work), leaf]
 
   defp priority_variant(:low), do: "mut"
   defp priority_variant(:normal), do: "info"

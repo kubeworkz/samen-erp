@@ -55,6 +55,7 @@ defmodule Samen.Web.CRM.DashboardLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.CRM.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Series
@@ -197,7 +198,7 @@ defmodule Samen.Web.CRM.DashboardLive do
 
   # -- helpers -----------------------------------------------------------------
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id),  "CRM",  leaf]
 
   # A value-by-stage slice's `value` is a Money sum in cents → dollars.
   defp money_cents(%Series.Point{value: cents}) when is_integer(cents), do: dollars_cents(cents)

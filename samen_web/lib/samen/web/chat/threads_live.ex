@@ -15,6 +15,7 @@ defmodule Samen.Web.Chat.ThreadsLive do
 
   alias Samen.Web.Chat
   alias Samen.Web.Chat.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Operator.Impersonation
@@ -223,7 +224,7 @@ defmodule Samen.Web.Chat.ThreadsLive do
           </div>
         </:sidebar>
 
-        <.topbar title="Chat" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Chat"]}>
+        <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id),  "Chat"]}>
           <:actions>
             <span class="lane">{plane_note(@samen_mount)}</span>
           </:actions>

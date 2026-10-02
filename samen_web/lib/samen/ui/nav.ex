@@ -368,9 +368,16 @@ defmodule Samen.UI.Nav do
   # ---------------------------------------------------------------------------
 
   @doc """
-  The main-pane topbar: a breadcrumb trail (`crumbs` = a list of strings, joined
+  The main-pane topbar: a breadcrumb trail (`crumbs` = a list of crumbs, joined
   with `/`), the page `title` (an `<h1>`), and an optional `:actions` slot for
   buttons on the right.
+
+  A crumb is either a plain string — inert text, used for the trail's leaf (the
+  page you are already on) — or a `{label, href}` tuple rendered as a LIVE
+  `<.link>`. `Samen.Web.Crumbs` builds the linked org/section crumbs every
+  tenant trail starts with (`Crumbs.org/2` links the org name to the workspace
+  Dashboard), so "back to my workspace" is one click from any page. String
+  crumbs render byte-for-byte as before.
   """
   attr :title, :string, required: true
   attr :crumbs, :list, default: []
@@ -382,7 +389,11 @@ defmodule Samen.UI.Nav do
       <div :if={@crumbs != []} class="crumb">
         <%= for {crumb, idx} <- Enum.with_index(@crumbs) do %>
           <span :if={idx > 0} class="sep">/</span>
-          {crumb}
+          <%= if is_tuple(crumb) do %>
+            <.link href={elem(crumb, 1)}>{elem(crumb, 0)}</.link>
+          <% else %>
+            {crumb}
+          <% end %>
         <% end %>
       </div>
       <div class="head">

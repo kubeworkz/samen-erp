@@ -25,6 +25,7 @@ defmodule Samen.Web.CRM.CompaniesLive do
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -282,7 +283,7 @@ defmodule Samen.Web.CRM.CompaniesLive do
   # -- helpers -----------------------------------------------------------------
 
   defp crumbs(mount, org_id, leaf) do
-    [CurrentOrg.name(mount, org_id), "CRM", leaf]
+    [Crumbs.org(mount, org_id),  "CRM",  leaf]
   end
 
   defp company_path(mount, org_id, id),

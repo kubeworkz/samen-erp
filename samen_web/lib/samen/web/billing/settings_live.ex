@@ -45,6 +45,7 @@ defmodule Samen.Web.Billing.SettingsLive do
 
   alias Samen.Billing.Checkout
   alias Samen.Billing.PaymentMethod
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.ListState
   alias Samen.Web.Mount
@@ -328,7 +329,7 @@ defmodule Samen.Web.Billing.SettingsLive do
     end
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "Billing", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :billing), leaf]
 
   defp payment_method_available?(%{provider_customer_ref: ref}), do: is_binary(ref) and ref != ""
   defp payment_method_available?(_), do: false

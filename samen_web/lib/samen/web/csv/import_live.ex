@@ -26,6 +26,7 @@ defmodule Samen.Web.Csv.ImportLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.Csv
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -121,7 +122,7 @@ defmodule Samen.Web.Csv.ImportLive do
       <.app_shell>
         <:sidebar></:sidebar>
 
-        <.topbar title={"Import #{@resource_name} CSV"} crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Import"]}>
+        <.topbar title={"Import #{@resource_name} CSV"} crumbs={[Crumbs.org(@samen_mount, @org_id),  "Import"]}>
           <:actions></:actions>
         </.topbar>
 

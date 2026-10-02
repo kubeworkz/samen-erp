@@ -42,6 +42,7 @@ defmodule Samen.Web.CRM.CalendarLive do
   alias Samen.UI.Calendar
   alias Samen.Web.Board
   alias Samen.Web.CRM.Reads
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -175,7 +176,7 @@ defmodule Samen.Web.CRM.CalendarLive do
     """
   end
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id),  "CRM",  leaf]
 
   defp status_variant(:open), do: "info"
   defp status_variant(:won), do: "ok"

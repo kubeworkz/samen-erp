@@ -47,6 +47,7 @@ defmodule Samen.Web.CRM.ContactLive do
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
 
@@ -489,7 +490,7 @@ defmodule Samen.Web.CRM.ContactLive do
 
   # -- helpers (MASKING INVARIANT) -------------------------------------------
 
-  defp crumbs(mount, org_id, leaf), do: [CurrentOrg.name(mount, org_id), "CRM", "Contacts", leaf]
+  defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), "CRM", Crumbs.section(mount, org_id, :contacts), leaf]
 
   # The composer is tenant-plane only (ADR-011 §6.3): an operator never authors into a
   # tenant's timeline. Hidden on the operator plane; the plane note already signals it.

@@ -28,6 +28,7 @@ defmodule Samen.Web.Settings.ProfileLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Masked
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Settings.Profile
@@ -110,7 +111,7 @@ defmodule Samen.Web.Settings.ProfileLive do
           <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:profile} />
         </:sidebar>
 
-        <.topbar title="Profile" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Settings", "Profile"]}>
+        <.topbar title="Profile" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Profile"]}>
           <:actions></:actions>
         </.topbar>
 

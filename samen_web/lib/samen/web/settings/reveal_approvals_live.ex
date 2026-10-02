@@ -48,6 +48,7 @@ defmodule Samen.Web.Settings.RevealApprovalsLive do
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Reveal.Grants
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Settings.Reads
@@ -208,7 +209,7 @@ defmodule Samen.Web.Settings.RevealApprovalsLive do
           <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:reveal_approvals} />
         </:sidebar>
 
-        <.topbar title="Reveal approvals" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Settings", "Reveal approvals"]}>
+        <.topbar title="Reveal approvals" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Reveal approvals"]}>
           <:actions></:actions>
         </.topbar>
 

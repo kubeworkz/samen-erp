@@ -19,6 +19,7 @@ defmodule Samen.Web.Settings.InvitationsLive do
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
   alias Samen.Web.Settings.Invitations
@@ -104,7 +105,7 @@ defmodule Samen.Web.Settings.InvitationsLive do
           <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:invitations} />
         </:sidebar>
 
-        <.topbar title="Team invitations" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Settings", "Invitations"]}>
+        <.topbar title="Team invitations" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Invitations"]}>
           <:actions></:actions>
         </.topbar>
 
