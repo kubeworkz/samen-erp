@@ -128,8 +128,8 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 86, samen_web 44, samenerp 68 (the WS-ERP E8 host proof —
-      # `mix samen.gen.app` prefix `er`) = 282 host entries across six hosts.
+      # samen_core 86, samen_web 70, samenerp 68 (the WS-ERP E8 host proof —
+      # `mix samen.gen.app` prefix `er`) = 308 host entries across six hosts.
       assert hosts["samenerp"] != nil
       assert map_size(hosts["samenerp"]) == 68
       assert map_size(hosts["samen_core"]) == 86
@@ -560,7 +560,41 @@ defmodule Samen.AbbrevRegistryTest do
                  # CSV mask-by-omission red-path. Allocator-reserved.
                  "whe" => "Samen.WebTest.Hr.Employee",
                  "whv" => "Samen.WebTest.Hr.EmploymentEvent",
-                 "whl" => "Samen.WebTest.Hr.LeaveRequest"
+                 "whl" => "Samen.WebTest.Hr.LeaveRequest",
+                 # ERP detail pages + write affordances: the samen_web test host's
+                 # FIRST real ERP domain (`Samen.WebTest.Erp` — the Finance +
+                 # Inventory scope blueprints, test/support/erp.ex). The 22
+                 # scope-DEFAULT abbrevs were unclaimed and are reserved here; the
+                 # 4 defaults already owned by the samen_core fixture legs
+                 # (fxr/fxf/trn/lcd) get fresh test-host codes instead (no
+                 # cross-host reuse, so the ADR-025 flatten tripwire stays clean).
+                 # 26 entries, allocator-reserved.
+                 "fca" => "Samen.WebTest.Erp.Account",
+                 "fje" => "Samen.WebTest.Erp.JournalEntry",
+                 "fjl" => "Samen.WebTest.Erp.JournalLine",
+                 "fai" => "Samen.WebTest.Erp.ApInvoice",
+                 "frr" => "Samen.WebTest.Erp.PaymentReceipt",
+                 "fpa" => "Samen.WebTest.Erp.PostingAccount",
+                 "fbg" => "Samen.WebTest.Erp.Budget",
+                 "fbl" => "Samen.WebTest.Erp.BudgetLine",
+                 "fex" => "Samen.WebTest.Erp.ExchangeRate",
+                 "ofx" => "Samen.WebTest.Erp.OrgFxSettings",
+                 "ini" => "Samen.WebTest.Erp.Item",
+                 "inw" => "Samen.WebTest.Erp.Warehouse",
+                 "inl" => "Samen.WebTest.Erp.StockLedger",
+                 "ins" => "Samen.WebTest.Erp.StockLevel",
+                 "ipo" => "Samen.WebTest.Erp.PurchaseOrder",
+                 "ipl" => "Samen.WebTest.Erp.PoLine",
+                 "igr" => "Samen.WebTest.Erp.GoodsReceipt",
+                 "ird" => "Samen.WebTest.Erp.ReceiptLine",
+                 "iso" => "Samen.WebTest.Erp.SalesOrder",
+                 "iol" => "Samen.WebTest.Erp.SoLine",
+                 "ibo" => "Samen.WebTest.Erp.Bom",
+                 "ibl" => "Samen.WebTest.Erp.BomLine",
+                 "iwo" => "Samen.WebTest.Erp.WorkOrder",
+                 "ipg" => "Samen.WebTest.Erp.ProductionLog",
+                 "tro" => "Samen.WebTest.Erp.TransferOrder",
+                 "lac" => "Samen.WebTest.Erp.LandedCost"
                },
                # WS-ERP E8 (ADR-049): the samenerp HOST PROOF — `mix samen.gen.app`,
                # prefix `er`. The full E1–E7 ERP scope set re-materialized under the
@@ -731,7 +765,10 @@ defmodule Samen.AbbrevRegistryTest do
       # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
       # Support/Settings/Automation mounts (c9d5272) = 410 global → 410 + 282
       # host = 692 flat… actual: 405 + 282 = 687 (403/683 pre-fpo+mrg fix).
-      assert map_size(Reg.load()) == 687
+      # +26 ERP detail pages + write affordances: the samen_web test host's
+      # first real ERP domain (`Samen.WebTest.Erp`, the Finance + Inventory
+      # scope blueprints) = 405 + 308 = 713 flat.
+      assert map_size(Reg.load()) == 713
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

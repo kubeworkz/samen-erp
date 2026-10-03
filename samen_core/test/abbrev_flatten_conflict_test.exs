@@ -24,7 +24,7 @@ defmodule Samen.AbbrevFlattenConflictTest do
       assert Reg.flatten_conflicts(Reg.load_namespaced()) == []
     end
 
-    test "load/0 does not raise and returns the full lossless union (405 global + 282 host)" do
+    test "load/0 does not raise and returns the full lossless union (405 global + 308 host)" do
       flat = Reg.load()
       # + 3 T109 (ADR-038 §6.4) host reservations (dil/dol/wol — the durable
       # brute-force failure counter, allocator-proposed) = 355; +7 in T119 = 362;
@@ -81,7 +81,10 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # (ForumPost) / `mrg` (Dataclean.Merge) = 685 flat.
       # +2 OpenClaw-lite AI assistant (ast/asc — Samen.AI.Assistant/
       # AssistantConversation, allocator-reserved under host `samen_core`) = 687 flat.
-      assert map_size(flat) == 687
+      # +26 ERP detail pages + write affordances: the samen_web test host's first
+      # real ERP domain (`Samen.WebTest.Erp` — the Finance + Inventory scope
+      # blueprints, test/support/erp.ex), allocator-reserved = 713 flat.
+      assert map_size(flat) == 713
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

@@ -270,8 +270,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +2 OpenClaw-lite AI assistant (ast/asc — Samen.AI.Assistant/
       # AssistantConversation, allocator-reserved under host `samen_core`):
       # 31_860 bytes, 687 flat.
-      assert byte_size(committed) == 31860
-      assert map_size(R.load()) == 687
+      # +26 ERP detail pages + write affordances: the samen_web test host's first
+      # real ERP domain (`Samen.WebTest.Erp` — the Finance + Inventory scope
+      # blueprints, test/support/erp.ex), all allocator-reserved via the sanctioned
+      # `mix samen.abbrev.reserve` loop: 33_026 bytes, 713 flat.
+      assert byte_size(committed) == 33026
+      assert map_size(R.load()) == 713
     end
   end
 
