@@ -15,12 +15,12 @@ diff --git a/samen_web/lib/samen/ui/nav.ex b/samen_web/lib/samen/ui/nav.ex
 index f51ca98..2e6691a 100644
 --- a/samen_web/lib/samen/ui/nav.ex
 +++ b/samen_web/lib/samen/ui/nav.ex
-@@ -293,7 +293,7 @@ defmodule Samen.UI.Nav do
+@@ -353,7 +353,7 @@ defmodule Samen.UI.Nav do
    # and every pre-existing caller) renders everything unchanged; a LIST renders only its
    # members. Correct for ANY subset with no per-app fork.
    defp surface_mounted?(:all, _surface), do: true
 -  defp surface_mounted?(surfaces, surface) when is_list(surfaces), do: surface in surfaces
 +  defp surface_mounted?(surfaces, surface) when is_list(surfaces), do: surface in surfaces or true
  
-   # ---------------------------------------------------------------------------
-   # Host nav extra (PP-10) — data-driven vertical nav, rendered identically from
+   # The ERP surface glyphs (presentation only — `Samen.Web.Erp.label/1` drives the nav
+   # TEXT, so the registry stays the single source of truth for "the nav + heading"; an
