@@ -29,9 +29,11 @@ defmodule Samen.Web.Erp.SurfaceLive do
 
   use Phoenix.LiveView
 
-  import Samen.Web.Live, only: [assign_mount: 2]
+  import Samen.UI
+  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
   alias Samen.Web.ListState
@@ -47,7 +49,13 @@ defmodule Samen.Web.Erp.SurfaceLive do
 
     {:ok,
      socket
-     |> assign(surface: surface, org_id: org_id, list_state: %ListState{}, page: %Samen.Web.Page{})
+     |> assign(
+       surface: surface,
+       org_id: org_id,
+       list_state: %ListState{},
+       page: %Samen.Web.Page{},
+       return_to: nil
+     )
      |> load()}
   end
 
@@ -63,9 +71,12 @@ defmodule Samen.Web.Erp.SurfaceLive do
 
   # The bounded read: the SAME `page!/3` primitive every mounted list uses.
   # `Erp.resource/2` returning nil (an unmounted surface) reads nothing.
-  defp load(%{assigns: %{surface: nil}} = socket), do: socket
+  # EVERY path assigns `:unmounted` — the render branch reads `@unmounted`, and the old
+  # `Map.get(@assigns, :unmounted, false)` idiom raised KeyError (`:assigns` is not an
+  # assign) the moment a surface resolved — i.e. every REAL `/erp/:surface` render.
+  defp load(%{assigns: %{surface: nil}} = socket), do: assign(socket, unmounted: true)
 
-  defp load(%{assigns: %{surface: _surface, org_id: nil}} = socket), do: socket
+  defp load(%{assigns: %{surface: _surface, org_id: nil}} = socket), do: assign(socket, unmounted: true)
 
   defp load(socket) do
     %{samen_mount: mount, surface: surface, org_id: org_id, list_state: state} = socket.assigns
@@ -89,46 +100,73 @@ defmodule Samen.Web.Erp.SurfaceLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="wrap">
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="gtitle">
-          <h3>{Erp.label(@surface)}</h3>
-          <span class="n">{length(@page.items)}</span>
-          <span class="lane">· org-scoped · read-only</span>
+    <div id="erp-surface">
+      <.app_shell>
+        <:sidebar>
+          <.erp_sidebar
+            mount={@samen_mount}
+            org_id={@org_id}
+            active={@surface && :"erp_#{@surface}"}
+            return_to={@return_to}
+          />
+        </:sidebar>
+
+        <.topbar
+          title={if(@surface, do: Erp.label(@surface), else: "Not found")}
+          crumbs={crumbs(@samen_mount, @org_id, @surface)}
+        />
+
+        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+        <div class="wrap">
+          <%= if is_nil(@org_id) do %>
+            <.no_org_card mount={@samen_mount} />
+          <% else %>
+            <div :if={@surface} class="gtitle">
+              <h3>{Erp.label(@surface)}</h3>
+              <span class="n">{length(@page.items)}</span>
+              <span class="lane">· org-scoped · read-only</span>
+            </div>
+            <%= if is_nil(@surface) or @unmounted do %>
+              <div class="card" style="padding:16px;color:var(--muted)">
+                This surface is not available on this workspace's mounted modules.
+              </div>
+            <% else %>
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr>
+                    <th :for={col <- Erp.columns(@surface)} scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                      {col |> Atom.to_string() |> String.replace("_", " ")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={row <- @page.items}>
+                    <td :for={col <- Erp.columns(@surface)} style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                      {render_cell(row, col)}
+                    </td>
+                  </tr>
+
+                  <tr :if={@page.items == []}>
+                    <td colspan={length(Erp.columns(@surface))} style="padding:16px 8px;color:var(--muted)">
+                      Nothing here yet.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            <% end %>
+          <% end %>
         </div>
-        <%= if @surface == nil or Map.get(@assigns, :unmounted, false) do %>
-          <div class="card" style="padding:16px;color:var(--muted)">
-            This surface is not available on this workspace's mounted modules.
-          </div>
-        <% else %>
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead>
-              <tr>
-                <th :for={col <- Erp.columns(@surface)} scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                  {col |> Atom.to_string() |> String.replace("_", " ")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={row <- @page.items}>
-                <td :for={col <- Erp.columns(@surface)} style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
-                  {render_cell(row, col)}
-                </td>
-              </tr>
-              <tr :if={@page.items == []}>
-                <td colspan={length(Erp.columns(@surface))} style="padding:16px 8px;color:var(--muted)">
-                  Nothing here yet.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        <% end %>
-      <% end %>
+      </.app_shell>
     </div>
     """
+  end
+
+  # The trail every ERP page shares: org (linked back to the workspace) › ERP › surface.
+  # The "ERP" middle crumb is inert text (no section route exists to link); a nil surface
+  # (unknown URL name) stops at "ERP" — the honest not-found title renders in the topbar.
+  defp crumbs(mount, org_id, surface) do
+    [Crumbs.org(mount, org_id), "ERP"] ++ if(surface, do: [Erp.label(surface)], else: [])
   end
 
   # The cell renderer walks the REGISTRY's column list (the row loop's `col`

@@ -222,7 +222,7 @@ defmodule Samen.Web.Notifications.PreferencesLive do
           <.notifications_sidebar
             mount={@samen_mount}
             org_id={@org_id}
-            active={:notifications}
+            active={:notifications_settings}
             return_to={@return_to}
           />
         </:sidebar>

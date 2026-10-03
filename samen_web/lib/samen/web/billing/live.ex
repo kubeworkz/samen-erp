@@ -48,7 +48,7 @@ defmodule Samen.Web.Billing.Live do
         <.search_box org_id={@org_id} placeholder="Search customers, invoices…" />
       </:search>
 
-      <.module_nav org_id={@org_id} active={@active}>
+      <.module_nav org_id={@org_id} active={@active} erp_path={Mount.label(@mount, :erp_path, nil)}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

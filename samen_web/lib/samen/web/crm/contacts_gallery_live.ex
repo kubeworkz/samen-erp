@@ -122,7 +122,7 @@ defmodule Samen.Web.CRM.ContactsGalleryLive do
     <div id="crm-contacts-gallery">
       <.app_shell>
         <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_contacts} return_to={@return_to} />
+          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_gallery} return_to={@return_to} />
         </:sidebar>
 
         <.topbar title="Contacts — Gallery" crumbs={crumbs(@samen_mount, @org_id, "Gallery")} />

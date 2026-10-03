@@ -115,9 +115,12 @@ defmodule Samen.UI.Nav do
   Attrs:
 
     * `org_id`   — threaded into every href so navigation preserves the `?org=` selector.
-    * `active`   — one of `:crm_companies | :crm_contacts | :crm_pipeline | :crm_calendar |
-      :crm_dashboard | :crm_mailbox | :crm_sequences | :billing_overview | :billing_invoices |
-      :billing_dunning | :billing_plans | :support_tickets | :settings | :automation` (or `nil`).
+    * `active`   — one of `:crm_companies | :crm_contacts | :crm_gallery | :crm_pipeline |
+      :crm_calendar | :crm_dashboard | :crm_mailbox | :crm_sequences | :billing_overview |
+      :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
+      :support_tickets | :notifications_settings | :settings | :automation | :erp_coa |
+      :erp_entries | :erp_ap_invoices | :erp_stock | :erp_purchase_orders | :erp_work_orders`
+      (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
@@ -125,6 +128,12 @@ defmodule Samen.UI.Nav do
       Automation (PP-9) surfaces (default `/settings`, `/automation`) — both real shipped
       framework surfaces that otherwise have NO nav entry anywhere (they were total nav
       islands, hand-typed-URL-only).
+    * `erp_path` — the mount path prefix for the six WS-ERP E8 surfaces (default `nil` = the
+      ERP group is NOT rendered). Presence IS the X1 dead-link guard for ERP: a host threads
+      its `:erp_path` mount label (set alongside `samen_erp_routes/3` in the router) through
+      every sidebar, so a host that never mounts `/erp/:surface` never emits the group —
+      unlike the surface-gated groups below, no `surfaces` atom exists for a route macro
+      only samenerp calls today.
 
   The `:extra` slot renders BEFORE the inherited groups — a host puts its vertical-specific
   nav groups (e.g. freight "Operations") there. The inherited nav is the framework's; the
@@ -140,6 +149,14 @@ defmodule Samen.UI.Nav do
   attr :notifications_path, :string, default: "/notifications"
   attr :settings_path, :string, default: "/settings"
   attr :automation_path, :string, default: "/automation"
+
+  attr :erp_path, :string,
+    default: nil,
+    doc: """
+    The ERP route prefix — non-nil ONLY on a host whose router calls `samen_erp_routes/3`
+    (threaded from the `:erp_path` mount label). `nil` hides the whole ERP group (the X1
+    dead-link guard; every pre-existing caller and generated app defaults to `nil`).
+    """
 
   attr :notifications_unread, :any,
     default: nil,
@@ -166,6 +183,17 @@ defmodule Samen.UI.Nav do
     ~H"""
     {render_slot(@extra)}
 
+    <.nav_group :if={@erp_path} label="ERP">
+      <.nav_item
+        :for={surface <- Samen.Web.Erp.surfaces()}
+        label={Samen.Web.Erp.label(surface)}
+        href={"#{@erp_path}/#{surface}?org=#{@org_id}"}
+        active={@active == :"erp_#{surface}"}
+      >
+        <:icon>{erp_icon(surface)}</:icon>
+      </.nav_item>
+    </.nav_group>
+
     <.nav_group :if={surface_mounted?(@surfaces, :inbox)} label="Inbox">
       <.nav_item
         label="Notifications"
@@ -175,6 +203,15 @@ defmodule Samen.UI.Nav do
       >
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label="Preferences"
+        href={"#{@notifications_path}/settings?org=#{@org_id}"}
+        active={@active == :notifications_settings}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="8" cy="17" r="2" /></svg>
         </:icon>
       </.nav_item>
     </.nav_group>
@@ -188,6 +225,11 @@ defmodule Samen.UI.Nav do
       <.nav_item label="Contacts" href={"#{@crm_path}/contacts?org=#{@org_id}"} active={@active == :crm_contacts}>
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item label="Gallery" href={"#{@crm_path}/gallery?org=#{@org_id}"} active={@active == :crm_gallery}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
         </:icon>
       </.nav_item>
       <.nav_item label="Pipeline" href={"#{@crm_path}/pipeline?org=#{@org_id}"} active={@active == :crm_pipeline}>
@@ -236,6 +278,11 @@ defmodule Samen.UI.Nav do
       <.nav_item label="Plans" href={"#{@billing_path}/plans?org=#{@org_id}"} active={@active == :billing_plans}>
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item label="Settings" href={"#{@billing_path}/settings?org=#{@org_id}"} active={@active == :billing_settings}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h4M12 7h8M4 14h10M18 14h2" /><circle cx="10" cy="7" r="2" /><circle cx="16" cy="14" r="2" /></svg>
         </:icon>
       </.nav_item>
     </.nav_group>
@@ -307,6 +354,45 @@ defmodule Samen.UI.Nav do
   # members. Correct for ANY subset with no per-app fork.
   defp surface_mounted?(:all, _surface), do: true
   defp surface_mounted?(surfaces, surface) when is_list(surfaces), do: surface in surfaces
+
+  # The ERP surface glyphs (presentation only — `Samen.Web.Erp.label/1` drives the nav
+  # TEXT, so the registry stays the single source of truth for "the nav + heading"; an
+  # exhaustive clause per surface means a registry addition fails loudly here first).
+  defp erp_icon(:coa),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="5" r="2.2" /><circle cx="5" cy="19" r="2.2" /><circle cx="19" cy="19" r="2.2" /><path d="M12 7.2V12M5 12h14M5 12v4.8M19 12v4.8" /></svg>)
+      )
+
+  defp erp_icon(:entries),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></svg>)
+      )
+
+  defp erp_icon(:ap_invoices),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /><path d="M10 12h5M10 16h5" /></svg>)
+      )
+
+  defp erp_icon(:stock),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>)
+      )
+
+  defp erp_icon(:purchase_orders),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="20" r="1.6" /><circle cx="18" cy="20" r="1.6" /><path d="M3 4h2l2.5 11h10l2-7H6" /></svg>)
+      )
+
+  defp erp_icon(:work_orders),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.5 4.5l5 5-2.5 2.5-5-5z" /><path d="M12.5 9.5L4 18v2.5h2.5L15 12" /></svg>)
+      )
 
   # ---------------------------------------------------------------------------
   # Host nav extra (PP-10) — data-driven vertical nav, rendered identically from

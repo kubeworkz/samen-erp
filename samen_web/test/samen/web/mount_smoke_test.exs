@@ -53,6 +53,9 @@ defmodule Samen.Web.MountSmokeTest do
       {"billing/overview", Billing.OverviewLive, build_mount(:billing), %{"org" => org}},
       {"billing/invoices", Billing.InvoicesLive, build_mount(:billing), %{"org" => org}},
       {"billing/plans", Billing.PlansLive, build_mount(:billing), %{"org" => org}},
+      # WS-ERP E8 — the generic ERP surface (mounted only by `samen_erp_routes/3` hosts);
+      # the smoke drives its real mount/handle_params/render lifecycle, now inside the app shell.
+      {"erp/coa", Samen.Web.Erp.SurfaceLive, build_mount(:erp), %{"org" => org, "surface" => "coa"}},
       # Support
       {"support/tickets", Support.TicketsLive, build_mount(:support), %{"org" => org}},
       {"support/ticket", Support.TicketLive, build_mount(:support), %{"org" => org, "id" => t.support.ticket.id}},

@@ -62,12 +62,17 @@ defmodule SamenerpWeb.Router do
   # reads for the workspace switcher + the RESOLVED org display name — without it every
   # sidebar header + topbar breadcrumb fell back to the static "Workspace" string
   # (`Samenerp.Directory.orgs/0` — tenant orgs only, operator/debris excluded).
+  # `:erp_path` is the WS-ERP E8 nav seam: its PRESENCE is what makes
+  # `Samen.UI.module_nav/1` render the six-item ERP group on every framework sidebar (the
+  # X1 dead-link guard — a host that never calls `samen_erp_routes/3` never sets it, so it
+  # never emits `/erp/*` links). MUST match the `samen_erp_routes(:erp, …)` path below.
   # Module attributes (compile-time literals) so they are usable inside the framework
   # route-macro expansions; all values are session-safe.
   @current_org_labels %{
     authn: {:app_env, :samenerp, :auth_required?},
     identity_namespace: Samenerp.Operator,
-    org_directory: {Samenerp.Directory, :orgs, []}
+    org_directory: {Samenerp.Directory, :orgs, []},
+    erp_path: "/erp"
   }
 
   pipeline :browser do

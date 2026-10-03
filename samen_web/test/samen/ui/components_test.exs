@@ -184,6 +184,76 @@ defmodule Samen.UI.ComponentsTest do
     assert full =~ "/automation?org=ORG-123"
   end
 
+  # WS-ERP E8 / the remaining nav islands — three surfaces that SHIP with an inherited
+  # route macro yet had NO nav entry anywhere (hand-typed-URL-only, the PP-8 defect class):
+  # `/crm/gallery` rides `__routes__(:crm, …)`, `/billing/settings` rides
+  # `__routes__(:billing, …)`, `/notifications/settings` rides
+  # `__routes__(:notifications, …)`. Each is therefore safe inside its OWN group — the X1
+  # gate above already hides the whole group when the host doesn't mount the macro.
+  test "module_nav/1 links the Gallery, Billing settings, and Notification preferences islands" do
+    html =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: nil,
+        extra: []
+      })
+
+    assert html =~ ~s(href="/crm/gallery?org=ORG-123")
+    assert html =~ ~s(href="/billing/settings?org=ORG-123")
+    assert html =~ ~s(href="/notifications/settings?org=ORG-123")
+
+    # Each island's own active state highlights ITS item.
+    gallery = render_component(&Samen.UI.module_nav/1, %{org_id: "ORG-123", active: :crm_gallery, extra: []})
+    assert gallery =~ ~s(href="/crm/gallery?org=ORG-123" class="on")
+
+    billing = render_component(&Samen.UI.module_nav/1, %{org_id: "ORG-123", active: :billing_settings, extra: []})
+    assert billing =~ ~s(href="/billing/settings?org=ORG-123" class="on")
+
+    prefs =
+      render_component(&Samen.UI.module_nav/1, %{org_id: "ORG-123", active: :notifications_settings, extra: []})
+
+    assert prefs =~ ~s(href="/notifications/settings?org=ORG-123" class="on")
+  end
+
+  # WS-ERP E8 — all six ERP surfaces were mounted (`samen_erp_routes/3`) but linked from
+  # NOWHERE: a total nav island. The group renders ONLY when the host threads a non-nil
+  # `erp_path` (the `:erp_path` mount label set alongside the macro), so a host that never
+  # mounts `/erp/:surface` never emits it — the X1 posture for a route macro no generated
+  # `--modules` subset selects (there is no `surfaces` atom for it).
+  test "module_nav/1 renders the six ERP surface items only when the host mounts ERP" do
+    # Default (no :erp_path label threaded): the whole group is absent — zero dead links.
+    hidden =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: nil,
+        extra: []
+      })
+
+    refute hidden =~ ">ERP<"
+    refute hidden =~ "/erp/"
+
+    html =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: :erp_stock,
+        erp_path: "/erp",
+        extra: []
+      })
+
+    assert html =~ ">ERP<"
+
+    for surface <- Samen.Web.Erp.surfaces() do
+      assert html =~ ~s(href="/erp/#{surface}?org=ORG-123")
+    end
+
+    # The labels come from the registry (`Erp.label/1` — "the nav + heading").
+    assert html =~ "Chart of Accounts"
+    assert html =~ "Purchase Orders"
+
+    # The active surface is highlighted.
+    assert html =~ ~s(href="/erp/stock?org=ORG-123" class="on")
+  end
+
   # PP-10 (Batch 3 NAV-REACHABILITY) — `host_nav_extra/1` is the shared, DATA-driven way
   # a host's own vertical nav (e.g. driftwood's freight "Operations") renders identically
   # from every framework sidebar, instead of only the host's own bespoke page.
