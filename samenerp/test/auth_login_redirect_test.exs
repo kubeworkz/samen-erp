@@ -22,16 +22,14 @@ defmodule Samenerp.AuthLoginRedirectTest do
   @endpoint SamenerpWeb.Endpoint
   @password "LoginLanding!2026x9"
 
-  setup_all do
-    # The harness's test_helper.exs boots the Repo directly, and the web children
-    # (PubSub + Endpoint) are siblings of the repo in the app supervisor — so the
-    # `@endpoint` persistent term may not exist yet. Start the endpoint (plain HTTP
-    # dispatch needs no PubSub), tolerating an earlier test having started it.
-    case SamenerpWeb.Endpoint.start_link() do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
-
+  setup do
+    # ExUnit-owned endpoint lifecycle (see DirectoryTest's setup): `start_supervised!`
+    # runs the endpoint under THIS test's supervisor — alive for the whole test,
+    # stopped after. A setup_all-owned `start_link` can die with the setup_all
+    # process (order-dependent "ETS table missing" at dispatch in CI), and the app
+    # supervisor starts no web children under test (`start_repo?: false`), so this
+    # is the only stable owner.
+    start_supervised!(SamenerpWeb.Endpoint)
     :ok
   end
 

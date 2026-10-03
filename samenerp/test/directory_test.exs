@@ -22,15 +22,14 @@ defmodule Samenerp.DirectoryTest do
 
   @endpoint SamenerpWeb.Endpoint
 
-  setup_all do
-    # test_helper.exs boots the Repo directly; the web children are siblings of
-    # the repo in the app supervisor, so start the endpoint the same way
-    # AuthLoginRedirectTest does (plain HTTP dispatch needs no PubSub).
-    case SamenerpWeb.Endpoint.start_link() do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
-
+  setup do
+    # ExUnit-owned endpoint lifecycle: `start_supervised!` runs the endpoint under
+    # THIS test's supervisor — guaranteed alive for the whole test, stopped after.
+    # A setup_all-owned `start_link` can die with the setup_all process (CI hit
+    # "table identifier does not refer to an existing ETS table" at dispatch), and
+    # the app supervisor starts NO web children under test (`start_repo?: false`
+    # gates `web_children` to []), so this is the only stable owner.
+    start_supervised!(SamenerpWeb.Endpoint)
     :ok
   end
 
