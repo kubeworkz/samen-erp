@@ -19,6 +19,17 @@ defmodule Samen.Web.Erp.Live do
 
   defdelegate assign_mount(socket, session), to: Samen.Web.Live
 
+  @doc """
+  The UI write posture — write affordances are offered on the TENANT plane only
+  (the same `writable?/1` CRM and Billing carry). The kernel enforces
+  `OrgScope` + `RoleAtLeast :member` on every write regardless; this only
+  keeps the operator/impersonation DOM free of forms an operator must never
+  author into a tenant's books.
+  """
+  @spec writable?(Mount.t()) :: boolean()
+  def writable?(%Mount{plane: %{kind: :operator}}), do: false
+  def writable?(_), do: true
+
   attr :mount, Mount, required: true
   attr :org_id, :string, default: nil
   attr :active, :atom, default: nil

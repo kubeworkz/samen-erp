@@ -56,6 +56,10 @@ defmodule Samen.Web.MountSmokeTest do
       # WS-ERP E8 — the generic ERP surface (mounted only by `samen_erp_routes/3` hosts);
       # the smoke drives its real mount/handle_params/render lifecycle, now inside the app shell.
       {"erp/coa", Samen.Web.Erp.SurfaceLive, build_mount(:erp), %{"org" => org, "surface" => "coa"}},
+      # The record DETAIL twin — an id that resolves nothing smoke-tests the whole
+      # mount → load → not-found render path (the same shape every real drill-in runs).
+      {"erp/coa/99999999-9999-4999-8999-999999999999", Samen.Web.Erp.DetailLive, build_mount(:erp),
+       %{"org" => org, "surface" => "coa", "id" => "99999999-9999-4999-8999-999999999999"}},
       # Support
       {"support/tickets", Support.TicketsLive, build_mount(:support), %{"org" => org}},
       {"support/ticket", Support.TicketLive, build_mount(:support), %{"org" => org, "id" => t.support.ticket.id}},

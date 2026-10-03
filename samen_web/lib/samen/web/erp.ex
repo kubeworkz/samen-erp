@@ -3,8 +3,10 @@ defmodule Samen.Web.Erp do
   The WS-ERP E8 TENANT SURFACE REGISTRY (design §6.4; build-plan E8 — "mountable
   tenant surfaces … declared in the router macros").
 
-  ONE generic surface LiveView (`Samen.Web.Erp.SurfaceLive`) serves the six ERP
-  surfaces a host mounts with a single router line:
+  TWO generic LiveViews serve the six ERP surfaces a host mounts with a
+  single router line — `Samen.Web.Erp.SurfaceLive` (the bounded list at
+  `<path>/<surface>`) and `Samen.Web.Erp.DetailLive` (the record page at
+  `<path>/<surface>/<id>`):
 
       samen_erp_routes(:erp, SamenCore.Support.FinanceFixture, repo: SamenCore.TestRepo)
 
@@ -32,13 +34,21 @@ defmodule Samen.Web.Erp do
   the rollup's business (`shc_headcount_by_org`), the employee ledger's is the
   E7 surface's — this registry simply does not carry a people surface.
 
-  ## Writes
+  ## Writes — the resources' OWN governed actions, never a surface-local path
 
-  These surfaces are READ-ONLY by construction: the mounted resources' writes
-  ride their governed actions (the E1–E7 red paths prove them); the ERP surface
-  adds no write affordance and its reads pass the caller's org-pinned scope
-  (`Samen.Web.Mount.scope/2`) to the kernel's `OrgScope` policy — the org
-  boundary is the policy, exactly as every other mounted surface.
+  Every write the ERP surfaces offer is a form or button over the mounted
+  resource's EXISTING action: `create_fields/1` and `edit_fields/1` mirror the
+  actions' `accept` lists, `line_fields/1` mirrors the line argument shapes
+  (journal lines, AP lines, PO lines), and `transitions/1` names only the
+  `accept([])` state actions (`:post`/`:void`/`:approve`/`:release`/…). The
+  LiveViews pass the caller's org-pinned scope (`Samen.Web.Mount.scope/2`) to
+  `AshPhoenix.Form` — so the kernel's `OrgScope` + `RoleAtLeast :member`
+  policies govern every write exactly as they govern a direct API call; the UI
+  posture (`Samen.Web.Erp.Live.writable?/1`, tenant plane only) is cosmetic
+  over that. There is still no destroy and no export path anywhere on these
+  surfaces, and the DETAIL field lists stay bounded the same way `columns/1`
+  bounds the table (no PII column exists on any ERP surface; `Employee` remains
+  the E7 roster's business).
   """
 
   alias Samen.Web.Mount
@@ -135,6 +145,208 @@ defmodule Samen.Web.Erp do
   def sortable(:stock), do: [:sku, :qty_on_hand]
   def sortable(:purchase_orders), do: [:order_date, :status]
   def sortable(:work_orders), do: [:number, :status]
+
+  @doc """
+  The singular human label for one record of a surface — the "New …" button,
+  the detail page's heading, and its not-found copy.
+  """
+  @spec record_label(surface()) :: String.t()
+  def record_label(:coa), do: "Account"
+  def record_label(:entries), do: "Journal entry"
+  def record_label(:ap_invoices), do: "AP invoice"
+  def record_label(:stock), do: "Item"
+  def record_label(:purchase_orders), do: "Purchase order"
+  def record_label(:work_orders), do: "Work order"
+
+  @doc """
+  The DETAIL page's bounded field list — the same mask-by-omission discipline
+  as `columns/1`, one level deeper: the record page renders exactly these
+  facts, never a caller's selection. Still no PII (INV-1): every field is a
+  code/number/date/enum/foreign-key id.
+  """
+  @spec detail_fields(surface()) :: [atom()]
+  def detail_fields(:coa), do: [:code, :name, :kind, :normal_side, :currency, :parent_id]
+  def detail_fields(:entries), do: [:entry_date, :status, :memo, :source_key, :source_id, :posted_at, :inserted_at]
+  def detail_fields(:ap_invoices), do: [:number, :vendor_id, :bill_date, :due_date, :memo, :status, :posted_at, :inserted_at]
+  def detail_fields(:stock), do: [:sku, :name, :kind, :uom, :reorder_point, :inserted_at]
+  def detail_fields(:purchase_orders), do: [:number, :vendor_id, :order_date, :memo, :status, :warehouse_id, :inserted_at]
+  def detail_fields(:work_orders), do: [:number, :status, :qty, :scheduled_for, :memo, :item_id, :bom_id, :warehouse_id, :labor_cents, :overhead_cents, :released_at, :completed_at]
+
+  @doc """
+  A form field spec `{field, type, opts}` for the create modal — `type` is one
+  of `:text | :number | :date | :select` (`opts` carries `options:` for a
+  select). Every field here is in the surface's `:create` action's `accept`
+  (server-derived facts like `org_id` are merged by the LiveView, never by the
+  form); a field NOT accepted by the action can never appear here.
+  """
+  @spec create_fields(surface()) :: [{atom(), atom(), keyword()}, ...]
+  def create_fields(:coa) do
+    [
+      {:code, :text, []},
+      {:name, :text, []},
+      {:kind, :select, [options: ~w(asset liability equity income expense)]},
+      {:normal_side, :select, [options: ~w(debit credit)]},
+      {:currency, :text, []}
+    ]
+  end
+
+  def create_fields(:entries), do: [{:entry_date, :date, []}, {:memo, :text, []}]
+
+  def create_fields(:ap_invoices) do
+    [
+      {:vendor_id, :text, [placeholder: "Vendor id (uuid)"]},
+      {:number, :text, []},
+      {:bill_date, :date, []},
+      {:due_date, :date, []},
+      {:memo, :text, []}
+    ]
+  end
+
+  def create_fields(:stock) do
+    [
+      {:sku, :text, []},
+      {:name, :text, []},
+      {:kind, :select, [options: ~w(stocked non_stocked service)]},
+      {:uom, :select, [options: ~w(unit case kg hour)]},
+      {:reorder_point, :number, []}
+    ]
+  end
+
+  def create_fields(:purchase_orders) do
+    [
+      {:vendor_id, :text, [placeholder: "Vendor id (uuid)"]},
+      {:number, :text, []},
+      {:order_date, :date, []},
+      {:warehouse_id, :text, [placeholder: "Warehouse id (uuid)"]},
+      {:memo, :text, []}
+    ]
+  end
+
+  def create_fields(:work_orders) do
+    [
+      {:item_id, :text, [placeholder: "Item id (uuid)"]},
+      {:bom_id, :text, [placeholder: "BOM id (uuid)"]},
+      {:warehouse_id, :text, [placeholder: "Warehouse id (uuid)"]},
+      {:number, :text, []},
+      {:qty, :number, []},
+      {:scheduled_for, :date, []},
+      {:memo, :text, []},
+      {:labor_cents, :number, []},
+      {:overhead_cents, :number, []}
+    ]
+  end
+
+  @doc """
+  The bounded field list for the DETAIL page's Edit form — again exactly the
+  surface's `:update` action's `accept`. Deliberately narrower than
+  `create_fields/1` where the action is (e.g. a stock item's SKU and an
+  account's code are identity fields the actions keep off the update path).
+  """
+  @spec edit_fields(surface()) :: [{atom(), atom(), keyword()}, ...]
+  def edit_fields(:coa) do
+    [
+      {:name, :text, []},
+      {:kind, :select, [options: ~w(asset liability equity income expense)]},
+      {:normal_side, :select, [options: ~w(debit credit)]},
+      {:currency, :text, []}
+    ]
+  end
+
+  def edit_fields(:entries), do: [{:entry_date, :date, []}, {:memo, :text, []}]
+  def edit_fields(:ap_invoices), do: [{:due_date, :date, []}, {:memo, :text, []}]
+
+  def edit_fields(:stock) do
+    [
+      {:name, :text, []},
+      {:kind, :select, [options: ~w(stocked non_stocked service)]},
+      {:uom, :select, [options: ~w(unit case kg hour)]},
+      {:reorder_point, :number, []}
+    ]
+  end
+
+  def edit_fields(:purchase_orders) do
+    [{:order_date, :date, []}, {:memo, :text, []}, {:warehouse_id, :text, [placeholder: "Warehouse id (uuid)"]}]
+  end
+
+  def edit_fields(:work_orders) do
+    [
+      {:scheduled_for, :date, []},
+      {:memo, :text, []},
+      {:labor_cents, :number, []},
+      {:overhead_cents, :number, []}
+    ]
+  end
+
+  @doc """
+  The bounded column spec for one LINE row — used BOTH by the detail page's
+  line table and the create form's line repeater. The three line-bearing
+  surfaces name exactly the shape their action's line argument/attribute
+  declares (journal lines, the AP bill's embedded lines, the PO's materialized
+  lines); the other three carry no lines and render an empty list.
+  """
+  @spec line_fields(surface()) :: [{atom(), atom(), keyword()}, ...]
+  def line_fields(:entries) do
+    [
+      {:account_id, :text, [placeholder: "Account id (uuid)"]},
+      {:debit_cents, :number, []},
+      {:credit_cents, :number, []},
+      {:memo, :text, []}
+    ]
+  end
+
+  def line_fields(:ap_invoices) do
+    [
+      {:account_id, :text, [placeholder: "Account id (uuid)"]},
+      {:amount_cents, :number, []},
+      {:memo, :text, []}
+    ]
+  end
+
+  def line_fields(:purchase_orders) do
+    [
+      {:item_id, :text, [placeholder: "Item id (uuid)"]},
+      {:qty, :number, []},
+      {:unit_cost_cents, :number, []}
+    ]
+  end
+
+  def line_fields(_surface), do: []
+
+  @doc """
+  The surface's GOVERNED state transitions as `{action, label, from_statuses}`
+  — only `accept([])` actions (no caller inputs; the state machine guard owns
+  the pre-state), rendered as detail-page buttons when the record's status is
+  in `from_statuses`. Gate-guarded actions (`:approve`) honestly surface the
+  opened approval as an inline banner when refused. `[]` for surfaces whose
+  records have no direct transition (the CoA and the item master are config).
+  """
+  @spec transitions(surface()) :: [{atom(), String.t(), [atom()]}, ...]
+  def transitions(:entries) do
+    [
+      {:post, "Post entry", [:draft]},
+      {:void, "Void entry", [:posted]}
+    ]
+  end
+
+  def transitions(:ap_invoices), do: [{:approve, "Approve bill", [:draft]}]
+
+  def transitions(:purchase_orders) do
+    [
+      {:approve, "Approve PO", [:draft]},
+      {:close, "Close PO", [:received]},
+      {:void, "Void PO", [:draft, :approved, :sent]}
+    ]
+  end
+
+  def transitions(:work_orders) do
+    [
+      {:release, "Release order", [:draft]},
+      {:complete, "Complete order", [:released]},
+      {:cancel, "Cancel order", [:draft, :released]}
+    ]
+  end
+
+  def transitions(_surface), do: []
 
   @doc "The human label for a surface (the nav + heading)."
   @spec label(surface()) :: String.t()

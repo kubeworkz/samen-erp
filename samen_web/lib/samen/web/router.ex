@@ -844,12 +844,15 @@ defmodule Samen.Web.Router do
   `namespace` is the host's mounted ERP namespace (a domain that mounted the
   Finance + Inventory scopes — their resources materialize under it by the
   ADR-004 `Module.concat(namespace, name)` convention). The route table IS the
-  boundary: the six paths map onto the CLOSED `Samen.Web.Erp` allowlist, the
+  boundary: the six paths map onto the CLOSED  `Samen.Web.Erp` allowlist, the
   generic `Samen.Web.Erp.SurfaceLive` resolves the surface name through it,
   derives the resource from the mount (never caller input), renders only the
   registry's bounded column lists, and reads through `Samen.Web.Reads.page!/3`
-  with the org-pinned scope — no host-authored LiveView exists to mis-wire, and
-  no surface carries a write affordance or an export path. Options as
+  with the org-pinned scope; `Samen.Web.Erp.DetailLive` serves
+  `/:surface/:id` over the SAME allowlist. No host-authored LiveView exists to
+  mis-wire, there is no export path, and every write affordance (create/edit/
+  transition) is a form over the resource's OWN governed action, scoped by the
+  same org-pinned scope. Options as
   `samen_module_routes/3` (`:repo` required; `:domain`, `:plane`, `:path`,
   `:labels`, `:session_name`).
   """
@@ -889,6 +892,12 @@ defmodule Samen.Web.Router do
         # six literal paths here would bypass the LiveView's `%{"surface" => ...}`
         # contract and make the generic surface unable to mount.
         live("#{path}/:surface", Samen.Web.Erp.SurfaceLive)
+        # The record DETAIL twin — same closed allowlist, one more `:id` segment
+        # (declared after the 2-segment list route; Phoenix dispatches by segment
+        # count, so the two never shadow each other). Detail + the governed
+        # create/edit/transition affordances ride this same live_session, so the
+        # `:require_tenant` gate owns them exactly as it owns the list read.
+        live("#{path}/:surface/:id", Samen.Web.Erp.DetailLive)
       end
     end
   end

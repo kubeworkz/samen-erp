@@ -207,10 +207,11 @@ defmodule Samen.WebTest.DataCase do
   # T155 (ADR-043 §5.3) — the tenant AI UI kit rides the CRM test host, so the CRM-AI
   # surface can ground on `Samen.WebTest.Crm.Person` (its vault fields drive the masking proof).
   defp namespace(:ai), do: Samen.WebTest.Crm
-  # WS-ERP E8 — there is no dedicated WebTest ERP domain: point the generic surface at the
-  # CRM test host so `Erp.resource/2` honestly resolves NOTHING (the unmounted card) while
-  # the mount/handle_params/render lifecycle — now including the app shell — is still smoked.
-  defp namespace(:erp), do: Samen.WebTest.Crm
+  # WS-ERP E8 — the dedicated WebTest ERP domain: the Finance + Inventory scope
+  # blueprints mounted over the scratch repo (test/support/erp.ex), so the generic
+  # surfaces run against the REAL action shapes — list reads, detail loads, and the
+  # governed create/edit/transition writes the ERP detail pages drive.
+  defp namespace(:erp), do: Samen.WebTest.Erp
   # T78 (spec §I5) — the public portal mount kind: points DIRECTLY at the CMS
   # namespace (no Support needed — the portal browses/deflects on `Post` alone).
   defp namespace(:kb), do: Samen.WebTest.Cms
