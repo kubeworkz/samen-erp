@@ -268,6 +268,60 @@ defmodule Samen.Web.ErpDetailTest do
     assert html =~ ~s(href="/erp/entries/#{entry.id}?org=#{@org}")
   end
 
+  # The browser roundtrip differs from what a direct handler call hands us:
+  # LiveView serializes `lines[0][field]` through `Plug.Conn.Query.decode/1`,
+  # which delivers lines as a MAP keyed by row index (with `_unused_*`
+  # sibling markers), not as a list. This exact shape crashed the repeater
+  # on prod with `BadMapError expected a map, got: {"0", %{...}}`.
+  test "journal-entry create survives the browser's index-keyed lines map" do
+    account = seed_account()
+    params = %{"org" => @org, "surface" => "entries"}
+    socket = open(SurfaceLive, params)
+    socket = event(SurfaceLive, socket, "new_record", %{})
+
+    form = %{
+      "entry_date" => "2026-10-02",
+      "memo" => "Opening entry",
+      "_unused_id" => "ignored",
+      "lines" => %{
+        "0" => %{
+          "account_id" => account.id,
+          "debit_cents" => "50000",
+          "credit_cents" => "0",
+          "_unused_memo" => ""
+        },
+        "1" => %{
+          "account_id" => account.id,
+          "debit_cents" => "0",
+          "credit_cents" => "50000",
+          "_unused_memo" => ""
+        }
+      }
+    }
+
+    socket = event(SurfaceLive, socket, "validate_new", %{"form" => form})
+    # The re-render reads `line_values` back through the repeater — the exact
+    # code path that raised BadMapError.
+    _ = render_html(SurfaceLive, socket.assigns)
+
+    socket = event(SurfaceLive, socket, "save_new", %{"form" => form})
+
+    assert count(Samen.WebTest.Erp.JournalEntry) == 1
+    assert count(Samen.WebTest.Erp.JournalLine) == 2
+
+    [entry] =
+      Samen.WebTest.Erp.JournalEntry
+      |> Ash.Query.ensure_selected([:org_id])
+      |> Ash.read!(authorize?: false)
+
+    assert entry.status == :draft
+
+    # The modal closed and the fresh row links onward to its detail page.
+    html = render_html(SurfaceLive, socket.assigns)
+    refute html =~ ~s(id="new-record-modal")
+    assert html =~ ~s(href="/erp/entries/#{entry.id}?org=#{@org}")
+  end
+
   test "an unbalanced entry create is refused honestly by the balance guard" do
     account = seed_account()
     params = %{"org" => @org, "surface" => "entries"}

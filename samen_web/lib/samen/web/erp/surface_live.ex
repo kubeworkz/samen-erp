@@ -204,22 +204,59 @@ defmodule Samen.Web.Erp.SurfaceLive do
   # entirely empty is not a line (submitting it would fail the item's
   # allow_nil fields with a confusing per-row error); a surface whose action
   # REQUIRES lines then fails honestly on the `lines` argument itself.
+  #
+  # The client's `_unused_<field>` siblings (LiveView's used-input markers)
+  # are stripped — they are metadata, never values.
   defp prepare(params, socket) do
     params
+    |> Map.reject(fn {key, _} -> match?("_unused_" <> _, key) end)
     |> Map.put("org_id", socket.assigns.org_id)
     |> prune_lines()
   end
 
-  defp prune_lines(%{"lines" => lines} = params) when is_list(lines) do
+  defp prune_lines(%{"lines" => lines} = params) when is_list(lines) or is_map(lines) do
     kept =
       lines
-      |> Enum.map(fn row -> Map.reject(row, fn {_k, v} -> is_nil(v) or v == "" end) end)
+      |> normalize_lines()
+      |> Enum.filter(&is_map/1)
+      |> Enum.map(fn row ->
+        Map.reject(row, fn {key, value} ->
+          match?("_unused_" <> _, key) or is_nil(value) or value == ""
+        end)
+      end)
       |> Enum.reject(&(&1 == %{}))
 
     if kept == [], do: Map.delete(params, "lines"), else: Map.put(params, "lines", kept)
   end
 
   defp prune_lines(params), do: params
+
+  # The browser's form serializer decodes `lines[0][field]` through
+  # `Plug.Conn.Query.decode/1` as a MAP keyed by the row index
+  # (`%{"0" => row, "1" => row}`), while a direct caller (the tests) hands us
+  # a list. Normalize BOTH into the list-of-row-maps, in index order, that the
+  # action's `{:array, :map}` argument and the repeater's `line_values` expect.
+  defp normalize_lines(lines) when is_list(lines) do
+    Enum.map(lines, fn
+      {_index, row} when is_map(row) -> row
+      row when is_map(row) -> row
+    end)
+  end
+
+  defp normalize_lines(lines) when is_map(lines) do
+    lines
+    |> Enum.sort_by(fn
+      {index, _row} when is_binary(index) ->
+        case Integer.parse(index) do
+          {number, _rest} -> number
+          :error -> 0
+        end
+
+      _other ->
+        0
+    end)
+    |> Enum.map(fn {_index, row} -> row end)
+  end
 
   defp default_line_rows(surface), do: if(Erp.line_fields(surface) != [], do: [nil], else: [])
 
@@ -391,9 +428,10 @@ defmodule Samen.Web.Erp.SurfaceLive do
   defp input_type(:select), do: "select"
 
   defp line_input_value(line_values, index, field) do
-    line_values
-    |> Enum.at(index, %{})
-    |> Map.get(to_string(field), "")
+    case Enum.at(line_values, index, %{}) do
+      row when is_map(row) -> Map.get(row, to_string(field), "")
+      _other -> ""
+    end
   end
 
   defp line_errors(form) do
