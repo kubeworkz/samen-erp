@@ -988,7 +988,11 @@ td.right { text-align: right; }
   .dash-grid { grid-template-columns: 1fr; }
   .dash-tile.span-2 { grid-column: span 1; }
 }
-.chart { margin: 0; min-width: 0; }
+/* position + clip: the sr-only fallback table inside is absolutely positioned;
+   without a positioned ancestor its containing block is the viewport, so its box
+   (width: 100% from .chart-data, plus table-inflated height) escapes every card
+   and adds horizontal/vertical page scroll. Here it is clipped and inert. */
+.chart { margin: 0; min-width: 0; position: relative; overflow: hidden; }
 .chart-title { font-size: 12.5px; font-weight: 600; color: var(--ink, #1b1c22); margin: 0 0 8px; }
 .chart-svg { width: 100%; height: auto; display: block; }
 .chart-svg-pie { width: 130px; height: 130px; flex-shrink: 0; }
@@ -1008,7 +1012,7 @@ td.right { text-align: right; }
 .chart-data td { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Map view (G7, T55) — self-contained SVG basemap + projected pins. No external tiles/CDN. */
-.geo-map { margin: 0; min-width: 0; }
+.geo-map { margin: 0; min-width: 0; position: relative; overflow: hidden; }
 .geo-map-title { font-size: 12.5px; font-weight: 600; color: var(--ink, #1b1c22); margin: 0 0 8px; }
 .geo-map-canvas { width: 100%; border: 1px solid var(--line, #E7E7EC); border-radius: 6px; overflow: hidden; }
 .geo-map-svg { width: 100%; height: auto; display: block; }
