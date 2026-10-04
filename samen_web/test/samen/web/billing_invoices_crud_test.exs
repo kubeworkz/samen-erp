@@ -172,6 +172,17 @@ defmodule Samen.Web.BillingInvoicesCrudTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Row → the invoice DETAIL page (org-threaded)
+  # ---------------------------------------------------------------------------
+
+  test "each invoice row's number links to the invoice DETAIL page" do
+    %{org_id: org_id, billing: billing} = Seeds.seed_all()
+    socket = mount_socket(org_id)
+
+    assert html(socket) =~ ~s(href="/billing/invoices/#{billing.invoice.id}?org=#{org_id}")
+  end
+
+  # ---------------------------------------------------------------------------
   # Operator posture (belt) — masked list, no write affordance
   # ---------------------------------------------------------------------------
 

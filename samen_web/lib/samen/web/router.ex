@@ -1902,8 +1902,13 @@ defmodule Samen.Web.Router do
     [
       {"#{path}", Samen.Web.Billing.OverviewLive},
       {"#{path}/invoices", Samen.Web.Billing.InvoicesLive},
+      # The invoice DETAIL twin — same live_session, one more `:id` segment (Phoenix
+      # dispatches by segment count, so list and detail never shadow each other).
+      {"#{path}/invoices/:id", Samen.Web.Billing.InvoiceLive},
       {"#{path}/dunning", Samen.Web.Billing.DunningLive},
       {"#{path}/plans", Samen.Web.Billing.PlansLive},
+      # The plan DETAIL twin (facts · feature map · prices · enable/archive).
+      {"#{path}/plans/:id", Samen.Web.Billing.PlanLive},
       # B10/T26 — the billing SETTINGS page: plan picker + T23 hosted payment-method
       # portal + T22 invoice history when `Samen.Billing.Provider.configured?/1` is
       # true, the honest "bring your billing" empty state when false. Inherited by

@@ -175,6 +175,46 @@ defmodule Samen.Web.Billing.Reads do
   end
 
   @doc """
+  Read a single billing invoice by id for `scope`, joined to its PII-resolved
+  customer (the DETAIL read behind `Samen.Web.Billing.InvoiceLive`). The bounded
+  field list is the facts + the edit form's prefill needs, nothing else
+  (mask-by-omission one level down). `{:ok, invoice}` or `:error` — the not-found
+  state is honest absence, never a raise.
+  """
+  def get_invoice(mount, scope, id) do
+    result =
+      Mount.resource(mount, Invoice)
+      |> Ash.Query.ensure_selected([
+        :status,
+        :amount_due_cents,
+        :amount_paid_cents,
+        :currency,
+        :period_start,
+        :period_end,
+        :due_date,
+        :paid_at,
+        :line_items,
+        :tax_amount_cents,
+        :tax_lines,
+        :hosted_invoice_url,
+        :hosted_receipt_url,
+        :provider_invoice_ref,
+        :customer_id,
+        :inserted_at
+      ])
+      |> Ash.Query.filter(id == ^id)
+      |> Ash.Query.limit(1)
+      |> Ash.read!(scope: scope)
+
+    case result do
+      [invoice | _] -> {:ok, hd(join_invoices([invoice], mount, scope))}
+      [] -> :error
+    end
+  rescue
+    _ -> :error
+  end
+
+  @doc """
   Read Tier-0 billing plans for `scope`. Non-PII config rows. BOUNDED to
   #{@detail_limit} rows; the Plans page itself reads through `plans_page/3`.
   """
@@ -211,6 +251,38 @@ defmodule Samen.Web.Billing.Reads do
     |> Samen.Web.Reads.page!(state, scope: scope, filter_fields: [:name, :label])
   rescue
     _ -> %Samen.Web.Page{items: [], page_size: Samen.Web.Reads.bounded_page_size(state.page_size)}
+  end
+
+  @doc """
+  Read a single billing plan by id for `scope` (the DETAIL read behind
+  `Samen.Web.Billing.PlanLive`). Bounded field list = the facts + the edit form's
+  prefill needs. The default read already excludes archived rows (Plan is
+  `archivable: true`), so an archived plan is an honest `:error` here — the same
+  trash/live split the plans list's view toggle applies. `{:ok, plan}` or `:error`.
+  """
+  def get_plan(mount, scope, id) do
+    result =
+      Mount.resource(mount, Plan)
+      |> Ash.Query.ensure_selected([
+        :name,
+        :label,
+        :description,
+        :interval,
+        :enabled,
+        :features,
+        :provider_plan_ref,
+        :inserted_at
+      ])
+      |> Ash.Query.filter(id == ^id)
+      |> Ash.Query.limit(1)
+      |> Ash.read!(scope: scope)
+
+    case result do
+      [plan | _] -> {:ok, plan}
+      [] -> :error
+    end
+  rescue
+    _ -> :error
   end
 
   @doc "Read plans with their prices joined: `[%{plan: plan, prices: [price]}]`. BOUNDED."

@@ -250,7 +250,9 @@ defmodule Samen.Web.Billing.InvoicesLive do
                 </:head>
                 <:row :let={inv}>
                   <td class="inv-number" style="font-size:12px;color:var(--muted);font-family:monospace">
-                    INV-{String.slice(inv.id, 0, 8)}
+                    <a href={invoice_detail_path(inv.id, @org_id)} class="inv-detail-link" style="color:inherit">
+                      INV-{String.slice(inv.id, 0, 8)}
+                    </a>
                   </td>
                   <td class="inv-customer" style="font-weight:500;color:#3a3b45">
                     {render_billing_name(inv.__customer__)}
@@ -321,6 +323,11 @@ defmodule Samen.Web.Billing.InvoicesLive do
   # -- helpers (MASKING INVARIANT) -------------------------------------------
 
   defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :billing), leaf]
+
+  # Row → the invoice DETAIL page (`Samen.Web.Billing.InvoiceLive`), `?org=`
+  # threaded exactly like every other in-app link.
+  defp invoice_detail_path(id, nil), do: "/billing/invoices/#{id}"
+  defp invoice_detail_path(id, org_id), do: "/billing/invoices/#{id}?org=#{org_id}"
 
   defp plane_note(%Mount{plane: %{kind: :operator}}), do: "operator plane · masked"
   defp plane_note(_), do: "your org in the clear"

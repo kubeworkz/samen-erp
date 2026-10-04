@@ -330,7 +330,11 @@ defmodule Samen.Web.Billing.PlansLive do
                         {String.slice(plan.label || plan.name || "?", 0, 1) |> String.upcase()}
                       </div>
                       <div>
-                        <div style="font-weight:600;color:#3a3b45">{plan.label || plan.name}</div>
+                        <div style="font-weight:600">
+                          <a href={plan_detail_path(plan.id, @org_id)} class="plan-detail-link" style="color:#3a3b45;text-decoration:none">
+                            {plan.label || plan.name}
+                          </a>
+                        </div>
                         <div style="font-size:11px;color:var(--muted)">{plan.description || plan.name}</div>
                       </div>
                     </div>
@@ -480,6 +484,11 @@ defmodule Samen.Web.Billing.PlansLive do
   # -- helpers -----------------------------------------------------------------
 
   defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :billing), leaf]
+
+  # Row → the plan DETAIL page (`Samen.Web.Billing.PlanLive`), `?org=` threaded
+  # exactly like every other in-app link.
+  defp plan_detail_path(id, nil), do: "/billing/plans/#{id}"
+  defp plan_detail_path(id, org_id), do: "/billing/plans/#{id}?org=#{org_id}"
 
   defp primary_price([]), do: "—"
   defp primary_price([price | _]), do: dollars(price.unit_amount)

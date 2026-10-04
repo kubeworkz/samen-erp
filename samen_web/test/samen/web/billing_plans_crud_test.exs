@@ -219,6 +219,17 @@ defmodule Samen.Web.BillingPlansCrudTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Row → the plan DETAIL page (org-threaded)
+  # ---------------------------------------------------------------------------
+
+  test "each plan row's name links to the plan DETAIL page" do
+    %{org_id: org_id, billing: billing} = Seeds.seed_all()
+    socket = mount_socket(org_id)
+
+    assert html(socket) =~ ~s(href="/billing/plans/#{billing.plan.id}?org=#{org_id}")
+  end
+
+  # ---------------------------------------------------------------------------
   # Operator posture (belt) — no write affordance in the DOM
   # ---------------------------------------------------------------------------
 
