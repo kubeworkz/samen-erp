@@ -75,6 +75,9 @@ defmodule Samen.Web.MountSmokeTest do
       {"marketing/segments", Marketing.SegmentsLive, build_mount(:marketing), %{"org" => org}},
       {"marketing/leads", Marketing.LeadsLive, build_mount(:marketing), %{"org" => org}},
       {"marketing/campaign", Marketing.CampaignLive, build_mount(:marketing), %{"org" => org, "id" => t.marketing.campaign.id}},
+      # Marketing DETAIL twins (segment + lead record pages)
+      {"marketing/segment", Marketing.SegmentLive, build_mount(:marketing), %{"org" => org, "id" => t.marketing.segment.id}},
+      {"marketing/lead", Marketing.LeadLive, build_mount(:marketing), %{"org" => org, "id" => t.crm.person.id}},
       # Chat (ADR-012)
       {"chat/threads", Chat.ThreadsLive, build_mount(:chat), %{"org" => org}},
       {"chat/thread", Chat.ThreadLive, build_mount(:chat), %{"org" => org, "id" => chat.thread.id}},

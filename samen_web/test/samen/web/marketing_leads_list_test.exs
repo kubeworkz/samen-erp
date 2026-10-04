@@ -180,4 +180,16 @@ defmodule Samen.Web.MarketingLeadsListTest do
     refute rendered =~ Seeds.contact_phone()
     refute rendered =~ "vt_"
   end
+
+  # ---------------------------------------------------------------------------
+  # Drill-in — each row's name links to the lead DETAIL page (still read-only)
+  # ---------------------------------------------------------------------------
+
+  test "each row's lead name drills into the lead DETAIL page (org-threaded)" do
+    %{org_id: org_id, crm: %{person: lead}} = Seeds.seed_all()
+    rendered = html(mount_socket(org_id))
+
+    assert rendered =~ ~s(class="lead-detail-link")
+    assert rendered =~ ~s(href="/marketing/leads/#{lead.id}?org=#{org_id}")
+  end
 end

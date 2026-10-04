@@ -74,4 +74,28 @@ defmodule Samen.Web.Marketing.Live do
 
   @doc "The mount's Marketing path prefix (labels-driven, default `/marketing`)."
   def marketing_path(mount), do: Mount.label(mount, :marketing_path, "/marketing")
+
+  @doc """
+  Derive a CRM-kind mount from the Marketing mount + the host's `:crm_namespace` label
+  (same repo + plane, so PII resolves identically). `nil` when the host hasn't wired the
+  label — the leads surfaces stay inert rather than crashing (ADR-011 §8).
+
+  Shared by `Samen.Web.Marketing.LeadsLive` (the lens) and `Samen.Web.Marketing.LeadLive`
+  (the read-only detail twin) so both read through the SAME derivation seam.
+  """
+  def crm_mount(%Mount{} = mount) do
+    case Mount.label(mount, :crm_namespace, nil) do
+      nil ->
+        nil
+
+      crm_ns when is_atom(crm_ns) ->
+        Mount.new(:crm, crm_ns, mount.repo, plane: mount.plane, domain: crm_ns, labels: mount.labels)
+
+      crm_ns when is_binary(crm_ns) ->
+        ns = String.to_existing_atom(crm_ns)
+        Mount.new(:crm, ns, mount.repo, plane: mount.plane, domain: ns, labels: mount.labels)
+    end
+  rescue
+    _ -> nil
+  end
 end

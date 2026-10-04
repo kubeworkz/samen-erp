@@ -15,7 +15,10 @@ defmodule Samen.Web.Marketing.SegmentsLive do
   `AshPhoenix.Form`-backed `simple_form/1` create (`name` required); each row carries a
   `delete_confirm/1`. Write affordances are tenant-plane only
   (`Samen.Web.Marketing.Live.writable?/1`); enforcement stays in the kernel (OrgScope +
-  admin role gate).
+  admin role gate). Each row's name drills into `Samen.Web.Marketing.SegmentLive` (the
+  record page), and the topbar's view toggle swaps the list to the E6 archived (trash)
+  read — archived rows carry a Restore button (the same §5.8/T37h shape the billing
+  plans list ships).
 
   ## The subscribers audience panel (BOUNDED companion list)
 
@@ -61,7 +64,12 @@ defmodule Samen.Web.Marketing.SegmentsLive do
     reads: &Samen.Web.Marketing.Reads.segments_page/3,
     sortable: [:name, :subscriber_count],
     filter_fields: [:name, :description],
-    default_sort: {:name, :asc}
+    default_sort: {:name, :asc},
+    # E6 (ADR-040 §5.8, T37h) — Segment writes are RoleAtLeast :admin-gated (same elevation
+    # every other write event here already applies via Reads.write_scope/3). ADR-045 §4.4
+    # (S1a): the `(scope, socket)` elevator re-derives the admin scope from the socket's
+    # pinned principal.
+    write_scope: &Samen.Web.Marketing.Reads.restore_admin_scope/2
 
   @impl true
   def mount(params, session, socket) do
@@ -177,6 +185,9 @@ defmodule Samen.Web.Marketing.SegmentsLive do
 
         <.topbar title="Segments" crumbs={crumbs(@samen_mount, @org_id, "Segments")}>
           <:actions>
+            <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-segments">
+              {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
+            </.button>
             <a href={leads_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Leads</a>
             <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_segment" id="new-segment">
               <:icon>
@@ -228,13 +239,19 @@ defmodule Samen.Web.Marketing.SegmentsLive do
                   <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
                 </:head>
                 <:row :let={s}>
-                  <td style="font-weight:500">{s.name}
+                  <td style="font-weight:500">
+                    <a href={segment_detail_path(@samen_mount, @org_id, s.id)} class="segment-detail-link" style="color:#3B4CCA;text-decoration:none">{s.name}</a>
                     <div :if={s.description} style="font-size:12px;color:var(--muted)">{s.description}</div>
                   </td>
                   <td style="color:var(--muted)">{s.subscriber_count}</td>
                   <td style="font-size:12px;color:var(--muted)">{filter_summary(s.filter_criteria)}</td>
                   <td :if={writable?(@samen_mount)} class="segment-actions">
-                    <.delete_confirm phx-click="delete" phx-value-id={s.id} />
+                    <%= if Map.get(s, :archived_at) do %>
+                      <.pill variant="mut">archived</.pill>
+                      <.button phx-click="restore" phx-value-id={s.id} class="restore-segment">Restore</.button>
+                    <% else %>
+                      <.delete_confirm phx-click="delete" phx-value-id={s.id} />
+                    <% end %>
                   </td>
                 </:row>
               </.list_view>
@@ -299,6 +316,10 @@ defmodule Samen.Web.Marketing.SegmentsLive do
   defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :marketing), leaf]
 
   defp leads_path(mount, org_id), do: "#{marketing_path(mount)}/leads?org=#{org_id}"
+
+  # Row → the segment DETAIL page (`Samen.Web.Marketing.SegmentLive`), `?org=` threaded
+  # exactly like every other in-app link.
+  defp segment_detail_path(mount, org_id, id), do: "#{marketing_path(mount)}/segments/#{id}?org=#{org_id}"
 
   defp filter_summary(criteria) when is_map(criteria) and map_size(criteria) > 0 do
     criteria

@@ -1986,7 +1986,9 @@ defmodule Samen.Web.Router do
       {"#{path}/campaigns", Samen.Web.Marketing.CampaignsLive},
       {"#{path}/campaigns/:id", Samen.Web.Marketing.CampaignLive},
       {"#{path}/segments", Samen.Web.Marketing.SegmentsLive},
-      {"#{path}/leads", Samen.Web.Marketing.LeadsLive}
+      {"#{path}/segments/:id", Samen.Web.Marketing.SegmentLive},
+      {"#{path}/leads", Samen.Web.Marketing.LeadsLive},
+      {"#{path}/leads/:id", Samen.Web.Marketing.LeadLive}
     ]
   end
 

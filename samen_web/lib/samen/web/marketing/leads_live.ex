@@ -31,7 +31,7 @@ defmodule Samen.Web.Marketing.LeadsLive do
   use Phoenix.LiveView
 
   import Samen.UI
-  import Samen.Web.Marketing.Live, only: [assign_mount: 2, marketing_sidebar: 1, marketing_path: 1, marketing_plane_note: 1]
+  import Samen.Web.Marketing.Live, only: [assign_mount: 2, marketing_sidebar: 1, marketing_path: 1, marketing_plane_note: 1, crm_mount: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.Crumbs
@@ -84,24 +84,6 @@ defmodule Samen.Web.Marketing.LeadsLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  # Derive a CRM-kind mount from the Marketing mount + the host's `:crm_namespace` label.
-  # Same repo, same plane (so PII resolves identically), CRM namespace for resource derivation.
-  defp crm_mount(mount) do
-    case Mount.label(mount, :crm_namespace, nil) do
-      nil ->
-        nil
-
-      crm_ns when is_atom(crm_ns) ->
-        Mount.new(:crm, crm_ns, mount.repo, plane: mount.plane, domain: crm_ns, labels: mount.labels)
-
-      crm_ns when is_binary(crm_ns) ->
-        ns = String.to_existing_atom(crm_ns)
-        Mount.new(:crm, ns, mount.repo, plane: mount.plane, domain: ns, labels: mount.labels)
-    end
-  rescue
-    _ -> nil
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -148,7 +130,11 @@ defmodule Samen.Web.Marketing.LeadsLive do
                   <th scope="col" style="width:22%">Stage</th>
                 </:head>
                 <:row :let={p}>
-                  <td class="lead-name" style="font-weight:500">{render_full_name(p.full_name, p.display_name)}</td>
+                  <td class="lead-name" style="font-weight:500">
+                    <a href={lead_detail_path(@samen_mount, @org_id, p.id)} class="lead-detail-link" style="color:#3B4CCA;text-decoration:none">
+                      {render_full_name(p.full_name, p.display_name)}
+                    </a>
+                  </td>
                   <td class="lead-email" style="font-size:12px;color:var(--muted)">{render_email(p.emails)}</td>
                   <td style="font-size:12px;color:var(--muted)">{p.job_title || "—"}</td>
                   <td><.lifecycle_pill stage={lifecycle_stage(p)} /></td>
@@ -165,6 +151,10 @@ defmodule Samen.Web.Marketing.LeadsLive do
   defp crumbs(mount, org_id, leaf), do: [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :marketing), leaf]
 
   defp segments_path(mount, org_id), do: "#{marketing_path(mount)}/segments?org=#{org_id}"
+
+  # Row → the lead DETAIL page (`Samen.Web.Marketing.LeadLive`), `?org=` threaded
+  # exactly like every other in-app link.
+  defp lead_detail_path(mount, org_id, id), do: "#{marketing_path(mount)}/leads/#{id}?org=#{org_id}"
 
   defp lifecycle_stage(%{custom: %{"lifecycle_stage" => stage}}) when is_binary(stage), do: stage
   defp lifecycle_stage(_), do: nil

@@ -75,6 +75,9 @@ defmodule Samen.Web.RouterTest do
     assert {"/marketing/campaigns/:id", Samen.Web.Marketing.CampaignLive} in marketing
     assert {"/marketing/segments", Samen.Web.Marketing.SegmentsLive} in marketing
     assert {"/marketing/leads", Samen.Web.Marketing.LeadsLive} in marketing
+    # The DETAIL twins (segment + lead record pages).
+    assert {"/marketing/segments/:id", Samen.Web.Marketing.SegmentLive} in marketing
+    assert {"/marketing/leads/:id", Samen.Web.Marketing.LeadLive} in marketing
   end
 
   test "__plane__/1 defaults to tenant and honors :operator" do
@@ -98,7 +101,9 @@ defmodule Samen.Web.RouterTest do
     assert "/marketing/campaigns" in paths
     assert "/marketing/campaigns/:id" in paths
     assert "/marketing/segments" in paths
+    assert "/marketing/segments/:id" in paths
     assert "/marketing/leads" in paths
+    assert "/marketing/leads/:id" in paths
     # T78 (spec §I5) — the unauthenticated portal route registered from the same macro.
     assert "/portal/:org" in paths
     # T79 (spec §I6) — the unauthenticated CSAT survey-response route.

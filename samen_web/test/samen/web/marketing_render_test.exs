@@ -4,7 +4,8 @@ defmodule Samen.Web.MarketingRenderTest do
   standalone test-support host. Proves the ADR-011 Phase-4/5 contract:
 
     1. `/marketing/campaigns`, `/marketing/campaigns/:id`, `/marketing/segments`,
-       `/marketing/leads` all render 200 with the seeded data.
+       `/marketing/segments/:id`, `/marketing/leads`, `/marketing/leads/:id` all
+       render 200 with the seeded data.
     2. CONSENT/SUPPRESSION red path — a send to a SUPPRESSED subscriber REFUSES
        (`{:error, :suppressed}`): no send row, no Oban job. A send to a DELIVERABLE
        subscriber succeeds.
@@ -25,6 +26,7 @@ defmodule Samen.Web.MarketingRenderTest do
       campaign_id: seeded.marketing.campaign.id,
       segment: seeded.marketing.segment,
       template_id: seeded.marketing.template.id,
+      lead_id: seeded.crm.person.id,
       active_subscriber_id: seeded.marketing.active_subscriber.id,
       suppressed_subscriber_id: seeded.marketing.suppressed_subscriber.id
     }
@@ -82,6 +84,37 @@ defmodule Samen.Web.MarketingRenderTest do
     # The seeded CRM person has lifecycle_stage "lead" → appears in the leads lens, clear.
     assert html =~ Seeds.contact_full_name()
     assert html =~ Seeds.contact_email()
+  end
+
+  test "TENANT: /marketing/segments/:id renders the segment record page + its audience", %{
+    org_id: org_id,
+    segment: segment
+  } do
+    mount = build_mount(:marketing)
+    html = render_live(Samen.Web.Marketing.SegmentLive, mount, [org_id, segment.id])
+
+    assert html =~ ~s(id="segment-facts")
+    assert html =~ Seeds.segment_name()
+    # The audience preview carries the seeded active subscriber, clear on tenant.
+    assert html =~ Seeds.active_subscriber_email()
+    # Back link + breadcrumb, org-threaded.
+    assert html =~ "Back to segments"
+    assert html =~ ~s(href="/marketing/segments?org=#{org_id}")
+  end
+
+  test "TENANT: /marketing/leads/:id renders the lead record page (read-only)", %{
+    org_id: org_id,
+    lead_id: lead_id
+  } do
+    mount = build_mount(:marketing)
+    html = render_live(Samen.Web.Marketing.LeadLive, mount, [org_id, lead_id])
+
+    assert html =~ ~s(id="lead-facts")
+    assert html =~ Seeds.contact_full_name()
+    # Read-only doctrine: no write affordance on the detail twin either.
+    refute html =~ "data-confirm"
+    assert html =~ "Back to leads"
+    assert html =~ ~s(href="/marketing/leads?org=#{org_id}")
   end
 
   # ==========================================================================

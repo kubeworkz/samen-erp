@@ -153,20 +153,36 @@ defmodule Samen.Web.Marketing.Reads do
   contract, built on `Samen.Web.Reads.page!/3` so the read is BOUNDED BY
   CONSTRUCTION. Segment is non-PII; sort/filter fields are bounded plain attributes.
   On any read error the page is EMPTY — never unbounded.
+
+  ADR-040 §5.8 (T37h) — `state.show_archived` (the `Samen.Web.ListLive` archived-
+  filter toggle) switches the base query to the `:archived` read (Segment IS
+  `archivable: true`, E6). `Samen.Archival.OnlyArchived` backs that read — a TRASH
+  view (archived rows ONLY), so the toggle is "View: live | archived", matching the
+  billing plans list's convention. `false` (the default) is the plain default read.
   """
   def segments_page(mount, scope, state) do
-    Mount.resource(mount, Segment)
-    |> Ash.Query.ensure_selected([:name, :description, :filter_criteria, :subscriber_count, :custom])
+    base = Mount.resource(mount, Segment)
+    base = if state.show_archived, do: Ash.Query.for_read(base, :archived), else: base
+
+    base
+    |> Ash.Query.ensure_selected([:name, :description, :filter_criteria, :subscriber_count, :custom, :archived_at])
     |> Samen.Web.Reads.page!(state, scope: scope, filter_fields: [:name, :description])
   rescue
     _ -> %Samen.Web.Page{items: [], page_size: Samen.Web.Reads.bounded_page_size(state.page_size)}
   end
 
-  @doc "Read a single segment by id. Non-PII. `{:ok, segment}` or `:error`."
+  @doc """
+  Read a single segment by id for `scope` (the DETAIL read behind
+  `Samen.Web.Marketing.SegmentLive`). Bounded field list = the facts + the edit
+  form's prefill needs. Non-PII. The default read already excludes archived rows
+  (Segment is `archivable: true`), so an archived segment is an honest `:error`
+  here — the same trash/live split the segments list's view toggle applies.
+  `{:ok, segment}` or `:error`.
+  """
   def get_segment(mount, scope, id) do
     result =
       Mount.resource(mount, Segment)
-      |> Ash.Query.ensure_selected([:name, :description, :filter_criteria, :subscriber_count, :custom])
+      |> Ash.Query.ensure_selected([:name, :description, :filter_criteria, :subscriber_count, :custom, :inserted_at])
       |> Ash.Query.filter(id == ^id)
       |> Ash.Query.limit(1)
       |> Ash.read!(scope: scope)
@@ -329,6 +345,24 @@ defmodule Samen.Web.Marketing.Reads do
   """
   def write_scope(mount, org_id, principal \\ nil),
     do: Samen.Web.TenantRole.admin_scope(mount, org_id, principal)
+
+  @doc """
+  The `Samen.Web.ListLive` `restore` elevator (ADR-040 §5.8, T37h) — the archived-Segment
+  restore is `RoleAtLeast :admin`-gated, stricter than the plain list `scope` reads use.
+  `(scope, socket)`: re-derives the tenant-ADMIN scope for the list's org through
+  `Samen.Web.TenantRole.admin_scope/3` using the socket's pinned principal, so ADR-045
+  §4.4 (S1a) governs it exactly as every other write path — disarmed → `:admin`; armed →
+  the REAL `Identity.Membership` role, fail-closed `:member`.
+  """
+  def restore_admin_scope(%Samen.Scope{actor: %{org_id: org_id}}, socket) when is_binary(org_id) do
+    Samen.Web.TenantRole.admin_scope(
+      socket.assigns.samen_mount,
+      org_id,
+      socket.assigns[:samen_tenant_principal]
+    )
+  end
+
+  def restore_admin_scope(scope, _socket), do: scope
 
   @doc "Destroy one Marketing campaign for `scope` (A3 CRUD wiring). `:ok` or `{:error, reason}`."
   def delete_campaign(mount, scope, id), do: delete_record(mount, scope, Campaign, id)

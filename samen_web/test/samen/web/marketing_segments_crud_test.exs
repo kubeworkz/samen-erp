@@ -313,4 +313,77 @@ defmodule Samen.Web.MarketingSegmentsCrudTest do
     refute rendered =~ ~s(phx-click="delete")
     refute rendered =~ "data-confirm"
   end
+
+  # ---------------------------------------------------------------------------
+  # Drill-in — each row's name links to the segment DETAIL page
+  # ---------------------------------------------------------------------------
+
+  test "each row's segment name drills into the segment DETAIL page (org-threaded)" do
+    %{org_id: org_id, marketing: %{segment: segment}} = Seeds.seed_all()
+    rendered = html(mount_socket(org_id))
+
+    assert rendered =~ ~s(class="segment-detail-link")
+    assert rendered =~ ~s(href="/marketing/segments/#{segment.id}?org=#{org_id}")
+  end
+
+  # ---------------------------------------------------------------------------
+  # E6 (ADR-040 §5.8 / T37h) — archive → hidden → toggle shows it → restore →
+  # visible again. The toggle + restore events ride `Samen.Web.ListLive` (the
+  # framework mixin); `restore` elevates through the NEW
+  # `Reads.restore_admin_scope/2` (RoleAtLeast :admin, plane-preserving).
+  # ---------------------------------------------------------------------------
+
+  describe "E6 archive/restore — the archived-view toggle swaps live|trash" do
+    test "the toggle starts OFF (archived rows hidden by default)" do
+      socket = mount_socket(Ash.UUID.generate())
+
+      refute socket.assigns.list_state.show_archived
+      rendered = html(socket)
+      assert rendered =~ ~s(phx-click="toggle_archived")
+      assert rendered =~ "Show archived"
+    end
+
+    test "an archived segment hides by default, appears with Restore once toggled on, and restore returns it to the live view" do
+      org_id = seed_segments(Ash.UUID.generate(), 2)
+      socket = mount_socket(org_id)
+      [first | _] = socket.assigns.page.items
+
+      # Archive through the list's own delete event (E6 soft destroy — the row
+      # leaves the default read instead of being hard-deleted).
+      socket = event(socket, "delete", %{"id" => first.id})
+      refute html(socket) =~ ~s(phx-value-id="#{first.id}")
+
+      # Toggle ON: the archived-filter switches Reads.segments_page/3 to the
+      # `:archived` read — a TRASH view (archived rows ONLY). The row appears,
+      # marked, with Restore (not Edit/Delete — those don't make sense on an
+      # archived row).
+      socket = list_event(socket, "toggle_archived", %{})
+      assert socket.assigns.list_state.show_archived
+      rendered = html(socket)
+      assert rendered =~ ~s(phx-value-id="#{first.id}")
+      assert rendered =~ "archived"
+      assert rendered =~ ~s(phx-click="restore" phx-value-id="#{first.id}")
+      refute rendered =~ ~s(phx-click="delete" phx-value-id="#{first.id}")
+      assert rendered =~ "Hide archived"
+
+      # Restore — through the mixin's `restore` event (Samen.Archival.restore/2),
+      # scoped via Reads.restore_admin_scope/2 — Segment writes are RoleAtLeast
+      # :admin, never authorize?: false.
+      socket = list_event(socket, "restore", %{"id" => first.id})
+      restored = Ash.get!(Samen.WebTest.Marketing.Segment, first.id, authorize?: false)
+      refute restored.archived_at
+
+      # Still viewing the TRASH (toggle still ON): the now-live row graduated OUT
+      # of the archived-only view.
+      refute html(socket) =~ ~s(phx-value-id="#{first.id}")
+
+      # Toggle back OFF — the restored segment is a normal live row again, with
+      # the usual delete interlock, no Restore/archived pill.
+      socket = list_event(socket, "toggle_archived", %{})
+      refute socket.assigns.list_state.show_archived
+      rendered = html(socket)
+      assert rendered =~ ~s(phx-click="delete" phx-value-id="#{first.id}")
+      refute rendered =~ ~s(phx-click="restore" phx-value-id="#{first.id}")
+    end
+  end
 end
