@@ -158,7 +158,19 @@ defmodule SamenerpWeb.Router do
     samen_module_routes(:crm, Samenerp.Crm, repo: Samenerp.Repo, labels: @current_org_labels)
 
     # 1b. Marketing — Campaigns, Segments, Subscribers, Templates (inherited from samen_core)
-    samen_module_routes(:marketing, Samenerp.Marketing, repo: Samenerp.Repo, labels: @current_org_labels)
+    #
+    #     `:crm_namespace` is the Marketing↔CRM namespace BRIDGE the framework reads in
+    #     `Samen.Web.Marketing.Live.crm_mount/1` — it is what lets the Marketing mount
+    #     derive a CRM-kind mount (same repo + plane → identical PiiResolution) for the
+    #     Leads lens (`/marketing/leads`) and the read-only Lead detail page
+    #     (`/marketing/leads/:id`). The label is EXPANDED AT COMPILE TIME into this
+    #     live_session, so a host that omits it gets the honest-ABSENT posture by
+    #     design: an always-empty leads list and an always-"Lead not found." detail
+    #     page, never a crash. Wiring it is the host's job, not the framework's.
+    samen_module_routes(:marketing, Samenerp.Marketing,
+      repo: Samenerp.Repo,
+      labels: Map.put(@current_org_labels, :crm_namespace, Samenerp.Crm)
+    )
 
     # 1c. Support — Tickets + detail + KB (inherited from samen_core's Support
     #     scope, mounted on the Samenerp.Support domain).
