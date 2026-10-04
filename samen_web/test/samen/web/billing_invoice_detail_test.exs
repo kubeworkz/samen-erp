@@ -183,7 +183,7 @@ defmodule Samen.Web.BillingInvoiceDetailTest do
     socket = mount_socket(org_id, draft.id)
     assert html(socket) =~ ~s(id="transition-open")
 
-    socket = event(socket, "transition", %{"action" => "open"})
+    _socket = event(socket, "transition", %{"action" => "open"})
     assert raw_invoice(draft.id).status == :open
   end
 
