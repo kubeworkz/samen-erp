@@ -65,6 +65,14 @@ defmodule Samen.Web.CRM.CompanyLive do
     {:noreply, assign(socket, active_tab: tab)}
   end
 
+  # No Work scope mounted for this host → no composer rendered and no form in assigns
+  # (see activity_form/2). A stray event aimed at that ABSENT surface is a no-op, never
+  # a crash.
+  def handle_event(ev, %{"activity" => _}, %{assigns: %{activity_form: nil}} = socket)
+      when ev in ["validate_activity", "log_activity"] do
+    {:noreply, socket}
+  end
+
   # Log-activity composer — the A2 kit form (AshPhoenix.Form-backed, inline errors).
   # Tenant plane only in the UI; the kernel enforces OrgScope + member gate + SameOrgFk.
   # `company_id`/`org_id`/`status`/`completed_at` are server-side facts, never client input.
@@ -266,10 +274,21 @@ defmodule Samen.Web.CRM.CompanyLive do
 
   # The composer writes a canonical Work Task (ADR-041 §6.1); the Task resource is
   # derived from this CRM mount's host root (Reads.work_task_resource/1).
+  #
+  # `nil` = this host mounts no Work scope (the framework-documented outcome every
+  # other caller already handles) → no composer: the form is `nil` and the render slot
+  # checks it. `for_create(nil, …)` RAISED during mount, 500ing the detail page — the
+  # same crash the contact page had. See contact_live.ex activity_form/2.
   defp activity_form(mount, scope) do
-    Reads.work_task_resource(mount)
-    |> AshPhoenix.Form.for_create(:create, scope: scope, as: "activity")
-    |> to_form()
+    case Reads.work_task_resource(mount) do
+      nil ->
+        nil
+
+      task_mod ->
+        task_mod
+        |> AshPhoenix.Form.for_create(:create, scope: scope, as: "activity")
+        |> to_form()
+    end
   end
 
   defp ensure_return_to(socket) do
@@ -465,9 +484,9 @@ defmodule Samen.Web.CRM.CompanyLive do
                   <div class="card" style="padding:8px 4px 12px">
                     <.timeline
                       entries={merge_timeline(timeline_entries(@activities), mail_timeline_entries(@mail))}
-                      empty="No activity yet — log the first call or note below."
+                      empty={timeline_empty(assigns)}
                     >
-                      <:composer :if={composer?(@samen_mount)}>
+                      <:composer :if={composer?(@samen_mount) and @activity_form != nil}>
                         {activity_composer(assigns)}
                       </:composer>
                     </.timeline>
@@ -597,6 +616,15 @@ defmodule Samen.Web.CRM.CompanyLive do
 
   defp composer?(%Mount{plane: %{kind: :operator}}), do: false
   defp composer?(_), do: true
+
+  # The default empty copy NAMES the composer ("log the first call or note below") —
+  # only honest while a composer will actually render: tenant plane AND a Work scope
+  # mounted (activity_form/2 is nil without one). Otherwise the plainer copy.
+  defp timeline_empty(%{samen_mount: mount, activity_form: form}) do
+    if composer?(mount) and form != nil,
+      do: "No activity yet — log the first call or note below.",
+      else: "No activity yet."
+  end
 
   defp companies_path(mount, org_id), do: "#{crm_path(mount)}/companies?org=#{org_id}"
   defp contact_path(mount, org_id, id), do: "#{crm_path(mount)}/contacts/#{id}?org=#{org_id}"
