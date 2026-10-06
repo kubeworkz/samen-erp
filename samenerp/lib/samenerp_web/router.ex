@@ -239,6 +239,19 @@ defmodule SamenerpWeb.Router do
       labels: @current_org_labels
     )
 
+    # 1i. Phase 2 — ADR-012 flagship cross-plane CHAT, TENANT plane (the org's own
+    #     chat console; bodies + identities in the clear on this plane). Over this
+    #     host's materialized `Samenerp.Chat` scope (tables from migration
+    #     20261006130000). `:pubsub` names the running PubSub server the realtime
+    #     path broadcasts on; the Presence server rides the same PubSub in
+    #     `Samenerp.Application`. No `:object_cards` — this host catalogs no bespoke
+    #     unfurl card; every catalogued resource unfurls via the framework default
+    #     cards with zero cards written.
+    samen_chat_routes(:chat, Samenerp.Chat,
+      repo: Samenerp.Repo,
+      labels: Map.merge(@current_org_labels, %{pubsub: Samenerp.PubSub})
+    )
+
     # 2. Notifications (WS-A A4/A5) — the framework inbox (+ /notifications/settings),
     #    mounted over the Primitives mount in ONE line. Realtime rides
     #    `Samenerp.PubSub` (id-only envelopes).

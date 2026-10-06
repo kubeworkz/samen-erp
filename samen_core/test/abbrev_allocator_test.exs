@@ -279,8 +279,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # unchanged, owners retargeted): 33_111 bytes, 713 flat.
       # +2 E15 host mounts (wsp/wst — Samenerp.Work.Project/Task,
       # `mix samen.abbrev.reserve --propose`): 33_184 bytes, 715 flat.
-      assert byte_size(committed) == 33184
-      assert map_size(R.load()) == 715
+      # +4 Phase-2 Chat mount (cth/chp/cmg/cds — Samenerp.Chat.* canonical
+      # ADR-012 §11 family, allocator-reserved): 33_365 bytes, 719 flat.
+      assert byte_size(committed) == 33365
+      assert map_size(R.load()) == 719
     end
   end
 

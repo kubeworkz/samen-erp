@@ -128,11 +128,12 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 86, samen_web 70, samenerp 70 (the WS-ERP E8 host proof —
-      # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst)
-      # = 310 host entries across six hosts.
+      # samen_core 86, samen_web 70, samenerp 74 (the WS-ERP E8 host proof —
+      # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst and
+      # the Phase-2 Chat mount cth/chp/cmg/cds, the canonical ADR-012 §11 family)
+      # = 314 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 70
+      assert map_size(hosts["samenerp"]) == 74
       assert map_size(hosts["samen_core"]) == 86
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -681,7 +682,11 @@ defmodule Samen.AbbrevRegistryTest do
                  "rne" => "Samenerp.Vertical.Record",
                  # Samenerp.Work (2) — the E15 Work mount (allocator-reserved):
                  "wsp" => "Samenerp.Work.Project",
-                 "wst" => "Samenerp.Work.Task"
+                 "wst" => "Samenerp.Work.Task",
+                 "cds" => "Samenerp.Chat.ChatDisclosureSetting",
+                 "chp" => "Samenerp.Chat.ChatParticipant",
+                 "cmg" => "Samenerp.Chat.ChatMessage",
+                 "cth" => "Samenerp.Chat.ChatThread"
                }
              }
 
@@ -773,7 +778,9 @@ defmodule Samen.AbbrevRegistryTest do
       # first real ERP domain (`Samen.WebTest.Erp`, the Finance + Inventory
       # scope blueprints) = 405 + 310 = 715 flat.
       # (+2 E15 host mounts: wsp/wst — Samenerp.Work.Project/Task, allocator-reserved)
-      assert map_size(Reg.load()) == 715
+      # (+4 Phase-2 Chat mount: cth/chp/cmg/cds — Samenerp.Chat.* canonical
+      # ADR-012 §11 family, allocator-reserved = 405 + 314 = 719 flat.)
+      assert map_size(Reg.load()) == 719
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

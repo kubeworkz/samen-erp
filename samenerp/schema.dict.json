@@ -345,6 +345,276 @@
     {
       "fields": [
         {
+          "column_name": "cds_expose_identity_to_support",
+          "logical_name": "expose_identity_to_support",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "cds_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cds_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "cds_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cds_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Chat.ChatDisclosureSetting",
+      "table_name": "cds_disclosure_setting"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "chp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "chp_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "chp_handle",
+          "logical_name": "handle",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "chp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "chp_identity_shared",
+          "logical_name": "identity_shared",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "chp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "chp_online_at",
+          "logical_name": "online_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "chp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "chp_party",
+          "logical_name": "party",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "chp_principal_id",
+          "logical_name": "principal_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "chp_principal_kind",
+          "logical_name": "principal_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "chp_role",
+          "logical_name": "role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "chp_thread_id",
+          "logical_name": "thread_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "chp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Chat.ChatParticipant",
+      "table_name": "chp_participant"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "cmg_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "cmg_attachments",
+          "logical_name": "attachments",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "cmg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cmg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "cmg_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "cmg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cmg_participant_id",
+          "logical_name": "participant_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cmg_refs",
+          "logical_name": "refs",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "cmg_sender_party",
+          "logical_name": "sender_party",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "cmg_thread_id",
+          "logical_name": "thread_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cmg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_cmg_body",
+          "logical_name": "body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Chat.ChatMessage",
+      "table_name": "cmg_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "cth_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "cth_context_ref",
+          "logical_name": "context_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "cth_disclosure_mode",
+          "logical_name": "disclosure_mode",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "cth_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cth_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "cth_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "cth_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cth_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "cth_subject",
+          "logical_name": "subject",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "cth_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Chat.ChatThread",
+      "table_name": "cth_thread"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ebl_bom_id",
           "logical_name": "bom_id",
           "pii": false,

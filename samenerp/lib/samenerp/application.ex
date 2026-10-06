@@ -50,9 +50,16 @@ defmodule Samenerp.Application do
 
     # The web plane (PubSub + Endpoint) starts whenever the repo runs (mirrors
     # pawchart/driftwood; the endpoint only SERVES when `server: true` — dev/prod).
+    # ADR-012 (Phase 2) — the flagship chat needs the framework Presence server
+    # (who's-online/typing) alongside PubSub. Presence rides the host's PubSub, so
+    # it starts after it — the driftwood application.ex shape verbatim.
     web_children =
       if Application.get_env(:samenerp, :start_repo?, true) do
-        [{Phoenix.PubSub, name: Samenerp.PubSub}, SamenerpWeb.Endpoint]
+        [
+          {Phoenix.PubSub, name: Samenerp.PubSub},
+          {Samen.Web.Chat.Presence, pubsub_server: Samenerp.PubSub},
+          SamenerpWeb.Endpoint
+        ]
       else
         []
       end
