@@ -3,6 +3,348 @@
     {
       "fields": [
         {
+          "column_name": "bka_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bka_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "bka_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bka_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bka_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bka_is_active",
+          "logical_name": "is_active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "bka_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bka_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bka_statement_balance_cents",
+          "logical_name": "statement_balance_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bka_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Banking.BankAccount",
+      "table_name": "bka_bank_account"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "bki_bank_account_id",
+          "logical_name": "bank_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bki_duplicate_count",
+          "logical_name": "duplicate_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bki_file_hash",
+          "logical_name": "file_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bki_filename",
+          "logical_name": "filename",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bki_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bki_imported_at",
+          "logical_name": "imported_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bki_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bki_line_count",
+          "logical_name": "line_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bki_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bki_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Banking.StatementImport",
+      "table_name": "bki_statement_import"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "bkl_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bkl_bank_account_id",
+          "logical_name": "bank_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkl_counterparty",
+          "logical_name": "counterparty",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bkl_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bkl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkl_import_hash",
+          "logical_name": "import_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bkl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bkl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkl_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bkl_reconciled_at",
+          "logical_name": "reconciled_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bkl_reference",
+          "logical_name": "reference",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bkl_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "bkl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Banking.StatementLine",
+      "table_name": "bkl_statement_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "bkm_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bkm_matched_at",
+          "logical_name": "matched_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bkm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkm_statement_line_id",
+          "logical_name": "statement_line_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Banking.Match",
+      "table_name": "bkm_match"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "bkr_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkr_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "bkr_bank_account_id",
+          "logical_name": "bank_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "bkr_is_active",
+          "logical_name": "is_active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "bkr_max_amount_cents",
+          "logical_name": "max_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bkr_min_amount_cents",
+          "logical_name": "min_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bkr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "bkr_pattern",
+          "logical_name": "pattern",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "bkr_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "bkr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Banking.Rule",
+      "table_name": "bkr_rule"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ebl_bom_id",
           "logical_name": "bom_id",
           "pii": false,
@@ -5201,6 +5543,174 @@
       ],
       "resource": "Samenerp.Vertical.Record",
       "table_name": "rne_record"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "wsp_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "wsp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wsp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "wsp_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "wsp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wsp_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wsp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "wsp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Work.Project",
+      "table_name": "wsp_project"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "wst_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "wst_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "wst_completed_at",
+          "logical_name": "completed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "wst_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "wst_due_at",
+          "logical_name": "due_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "wst_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wst_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "wst_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "wst_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wst_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wst_parent_id",
+          "logical_name": "parent_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wst_priority",
+          "logical_name": "priority",
+          "pii": false,
+          "type": "Samen.Type.Priority"
+        },
+        {
+          "column_name": "wst_project_id",
+          "logical_name": "project_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wst_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "wst_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "wst_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "wst_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "wst_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Work.Task",
+      "table_name": "wst_task"
     },
     {
       "fields": [

@@ -84,7 +84,8 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # +26 ERP detail pages + write affordances: the samen_web test host's first
       # real ERP domain (`Samen.WebTest.Erp` — the Finance + Inventory scope
       # blueprints, test/support/erp.ex), allocator-reserved = 713 flat.
-      assert map_size(flat) == 713
+      # (+2 wsp/wst — Samenerp.Work.Project/Task — = 715 flat.)
+      assert map_size(flat) == 715
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

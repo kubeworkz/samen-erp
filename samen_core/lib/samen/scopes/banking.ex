@@ -35,8 +35,10 @@ defmodule Samen.Scopes.Banking do
 
   Banking depends on Finance: categorization creates journal entries, matching
   resolves against posted journal entries, reconciliation verifies GL balances.
-  The host wires `finance: [entry: ..., posting_account: ...]` like Inventory
-  does.
+  The host wires `finance: [entry: ..., account: ...]`: `entry:` is the
+  JournalEntry module `Match.entry_id` targets; `account:` is the Finance.Account
+  (chart-of-accounts) module `BankAccount.account_id` references — wired to the
+  host's REAL CoA row (same-org-guarded via `SameOrgFk`), never to JournalEntry.
 
   ## PII map — EMPTY (INV-1)
 
@@ -45,13 +47,23 @@ defmodule Samen.Scopes.Banking do
   """
 
   defmacro __using__(opts) do
-    otp_app = Keyword.fetch!(opts, :otp_app)
-    repo = Keyword.fetch!(opts, :repo)
-    domain = Keyword.fetch!(opts, :namespace)
+    # Macro.expand the caller's opts AT EXPANSION TIME (mirroring
+    # Samen.Scopes.Work/Finance/Inventory): `use` passes keyword values as AST,
+    # so `namespace: MyHost.Banking` arrives as an {:__aliases__, …} tuple and
+    # Module.concat/2 below would raise. A mount written the documented way must
+    # compile.
+    otp_app = Keyword.fetch!(opts, :otp_app) |> Macro.expand(__CALLER__)
+    repo = Keyword.fetch!(opts, :repo) |> Macro.expand(__CALLER__)
+    domain = Keyword.fetch!(opts, :namespace) |> Macro.expand(__CALLER__)
 
     finance_opts = Keyword.get(opts, :finance, [])
     entry_mod = Keyword.get(finance_opts, :entry)
-    _posting_account_mod = Keyword.get(finance_opts, :posting_account)
+
+    # The CoA Account module BankAccount's `account_id` FK points at (the
+    # mount's own moduledoc contract: "FK to Finance.Account"). Required — a
+    # missing seam fails HERE with a clear key error rather than a cryptic
+    # `belongs_to ..., nil` deep inside the Ash DSL.
+    account_mod = Keyword.fetch!(finance_opts, :account)
 
     abbrevs = resolve_abbrevs(Keyword.get(opts, :abbrevs), __CALLER__)
 
@@ -78,7 +90,7 @@ defmodule Samen.Scopes.Banking do
         unquote(domain),
         unquote(repo),
         unquote(abbrevs.bank_account),
-        unquote(entry_mod)
+        unquote(account_mod)
       )
 
       Samen.Scopes.Banking.Blueprint.define_statement_line(

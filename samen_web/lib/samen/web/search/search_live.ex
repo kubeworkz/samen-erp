@@ -106,7 +106,7 @@ defmodule Samen.Web.Search.SearchLive do
           <:search>
             <.search_box org_id={@org_id} />
           </:search>
-          <.module_nav org_id={@org_id} active={:search} erp_path={Mount.label(@samen_mount, :erp_path, nil)}>
+          <.module_nav org_id={@org_id} active={:search} erp_path={Mount.label(@samen_mount, :erp_path, nil)} banking_path={Mount.label(@samen_mount, :banking_path, nil)} work_path={Mount.label(@samen_mount, :work_path, nil)}>
             <:extra><.host_nav_extra mount={@samen_mount} org_id={@org_id} /></:extra>
           </.module_nav>
         </.sidebar>

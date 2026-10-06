@@ -158,6 +158,22 @@ defmodule Samen.UI.Nav do
     dead-link guard; every pre-existing caller and generated app defaults to `nil`).
     """
 
+  attr :banking_path, :string,
+    default: nil,
+    doc: """
+    The Banking route prefix — non-nil ONLY on a host whose router calls
+    `samen_module_routes(:banking, …)` and threads the `:banking_path` mount label
+    (same X1 dead-link guard posture as `erp_path`; `nil` hides the group).
+    """
+
+  attr :work_path, :string,
+    default: nil,
+    doc: """
+    The Work route prefix — non-nil ONLY on a host whose router calls
+    `samen_module_routes(:work, …)` and threads the `:work_path` mount label (X1
+    dead-link guard; `nil` hides the group — every pre-existing caller passes nothing).
+    """
+
   attr :notifications_unread, :any,
     default: nil,
     doc: "unread count feeding the nav_item badge (nil → unlit; AC-G2-7)"
@@ -191,6 +207,37 @@ defmodule Samen.UI.Nav do
         active={@active == :"erp_#{surface}"}
       >
         <:icon>{erp_icon(surface)}</:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@banking_path} label="Banking">
+      <.nav_item label="Accounts" href={"#{@banking_path}?org=#{@org_id}"} active={@active == :banking_accounts}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-6 9 6" /><path d="M5 10v9M9.5 10v9M14.5 10v9M19 10v9M3 21h18" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item label="Rules" href={"#{@banking_path}/rules?org=#{@org_id}"} active={@active == :banking_rules}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h13" /><circle cx="18" cy="12" r="2" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@work_path} label="Work">
+      <.nav_item label="Tasks" href={"#{@work_path}?org=#{@org_id}"} active={@active == :work_tasks}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item label="Projects" href={"#{@work_path}/projects?org=#{@org_id}"} active={@active == :work_projects}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 4v5" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item label="Timeline" href={"#{@work_path}/timeline?org=#{@org_id}"} active={@active == :work_timeline}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="8" cy="6" r="1.6" /><circle cx="14" cy="12" r="1.6" /><circle cx="10" cy="18" r="1.6" /></svg>
+        </:icon>
       </.nav_item>
     </.nav_group>
 

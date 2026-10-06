@@ -51,7 +51,7 @@ defmodule Samen.Web.Marketing.Live do
         <.search_box org_id={@org_id} placeholder="Search campaigns, segments…" />
       </:search>
 
-      <.module_nav org_id={@org_id} active={@active} erp_path={Mount.label(@mount, :erp_path, nil)}>
+      <.module_nav org_id={@org_id} active={@active} erp_path={Mount.label(@mount, :erp_path, nil)} banking_path={Mount.label(@mount, :banking_path, nil)} work_path={Mount.label(@mount, :work_path, nil)}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

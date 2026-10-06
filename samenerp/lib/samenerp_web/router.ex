@@ -72,7 +72,16 @@ defmodule SamenerpWeb.Router do
     authn: {:app_env, :samenerp, :auth_required?},
     identity_namespace: Samenerp.Operator,
     org_directory: {Samenerp.Directory, :orgs, []},
-    erp_path: "/erp"
+    erp_path: "/erp",
+    # WS-ERP E9/E15-nav seams — same presence-is-the-guard posture as `erp_path`:
+    # non-nil ONLY because the routes below are mounted, so every framework sidebar
+    # renders the Banking/Work groups with links this router actually serves.
+    banking_path: "/banking",
+    work_path: "/work",
+    # The Banking↔Finance bridge (same shape as marketing's `:crm_namespace`): the
+    # banking mount resolves its GL account / journal-entry references through THIS
+    # host's Finance namespace (BankAccount.account_id → Account, Match → JournalEntry).
+    erp_namespace: Samenerp.Erp
   }
 
   pipeline :browser do
@@ -111,6 +120,10 @@ defmodule SamenerpWeb.Router do
     get("/", PageController, :index)
     get("/healthz", PageController, :healthz)
     get("/readyz", PageController, :readyz)
+
+    # API Docs (README "API Documentation" card) — the generated OpenAPI 3.0
+    # spec for the `/api/v1` JSON:API surface. Static JSON, no actor/org data.
+    get("/api/openapi.json", PageController, :openapi)
   end
 
   # The inherited product UI, MOUNTED from samen_web. BARE `scope "/"` (no
@@ -201,6 +214,30 @@ defmodule SamenerpWeb.Router do
     #    `Samen.Web.Erp` (the registry IS the boundary), the generic
     #    read-only `Samen.Web.Erp.SurfaceLive` serves every path.
     samen_erp_routes(:erp, Samenerp.Erp, repo: Samenerp.Repo, labels: @current_org_labels)
+
+    # 1f. WS-ERP E9 — Banking (bank accounts · statement lines · guarded match ·
+    #     rules) over the `Samenerp.Banking` mount: the five bka/bkl/bki/bkm/bkr
+    #     tables already exist from migration 20260918010000; this mount + the
+    #     catalog-sync migration make them governed and reachable in ONE line.
+    samen_module_routes(:banking, Samenerp.Banking,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    # 1g. Work (F1 / ADR-041) — tasks · projects · timeline · tree, over the
+    #     `Samenerp.Work` mount (the same scope pawchart/driftwood/pawchart mount).
+    samen_module_routes(:work, Samenerp.Work,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    # 1h. Files (G8/ADR-009) — the framework upload/preview surface over this host's
+    #     Primitives mount (`Samenerp.Primitives.File`, efl_file already exists).
+    #     Same one-line adoption driftwood ships.
+    samen_files_routes(:files, Samenerp.Primitives,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
 
     # 2. Notifications (WS-A A4/A5) — the framework inbox (+ /notifications/settings),
     #    mounted over the Primitives mount in ONE line. Realtime rides

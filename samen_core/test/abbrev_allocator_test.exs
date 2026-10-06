@@ -274,8 +274,13 @@ defmodule Samen.Abbrev.AllocatorTest do
       # real ERP domain (`Samen.WebTest.Erp` — the Finance + Inventory scope
       # blueprints, test/support/erp.ex), all allocator-reserved via the sanctioned
       # `mix samen.abbrev.reserve` loop: 33_026 bytes, 713 flat.
-      assert byte_size(committed) == 33026
-      assert map_size(R.load()) == 713
+      # +E9 banking host-mount retarget (bka/bkl/bki/bkm/bkr owners → the
+      # Samenerp.Banking.* modules; scope-authoring §10 / ADR-023 §1 — counts
+      # unchanged, owners retargeted): 33_111 bytes, 713 flat.
+      # +2 E15 host mounts (wsp/wst — Samenerp.Work.Project/Task,
+      # `mix samen.abbrev.reserve --propose`): 33_184 bytes, 715 flat.
+      assert byte_size(committed) == 33184
+      assert map_size(R.load()) == 715
     end
   end
 

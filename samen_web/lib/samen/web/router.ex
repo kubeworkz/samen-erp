@@ -1978,6 +1978,19 @@ defmodule Samen.Web.Router do
     ]
   end
 
+  # WS-ERP E9 — the Banking route table (bank accounts → detail with the guarded
+  # statement-line match, plus the auto-categorization rules). Mounted by a host
+  # with `samen_module_routes(:banking, MyHost.Banking, …)`; the `:banking` kind
+  # also carries the `banking_path` nav seam (the X1 dead-link guard: hosts that
+  # never mount this table never set the label, so no sidebar renders the group).
+  def __routes__(:banking, path) do
+    [
+      {"#{path}", Samen.Web.Banking.AccountsLive},
+      {"#{path}/accounts/:id", Samen.Web.Banking.AccountLive},
+      {"#{path}/rules", Samen.Web.Banking.RulesLive}
+    ]
+  end
+
   # ADR-011 §7 — the Marketing / outreach route table. Mounts the previously-unmounted
   # Marketing scope's surfaces: a campaigns/sequences list, a compose+send campaign page,
   # a segments/prospecting view, and a leads lens.
@@ -2101,6 +2114,7 @@ defmodule Samen.Web.Router do
   defp default_path(:billing), do: "/billing"
   defp default_path(:support), do: "/support"
   defp default_path(:work), do: "/work"
+  defp default_path(:banking), do: "/banking"
   defp default_path(:marketing), do: "/marketing"
   defp default_path(:chat), do: "/chat"
   defp default_path(:notifications), do: "/notifications"

@@ -25,7 +25,24 @@ defmodule Mix.Tasks.SamenWeb.TestSetup do
     repo = Module.concat([Samen.WebTest, Repo])
 
     # Drop + create the scratch DB (ignore "does not exist" on drop).
-    _ = repo.__adapter__().storage_down(repo.config())
+    #
+    # Hardened against ci.sh's final tier, where 5 app gates run CONCURRENTLY against one
+    # local Postgres: a contended DROP can outlast Ecto's DEFAULT 15s run_query timeout,
+    # and a discarded `{:error, "command timed out"}` used to let the server-side DROP land
+    # AFTER `storage_up` reported the DB present — the migrate below then died with
+    # `FATAL 3D000 ... database "samen_web_test" does not exist` (observed 2026-10-05).
+    # So: give the storage ops a generous timeout, surface unexpected drop errors, and let
+    # ensure_created/2 VERIFY the final state (retrying) before anyone migrates.
+    cfg = storage_cfg(repo)
+
+    case repo.__adapter__().storage_down(cfg) do
+      :ok -> :ok
+      {:error, :already_down} -> :ok
+      {:error, reason} ->
+        # Possibly still in flight server-side; ensure_created/2 reconciles the real state.
+        Mix.shell().info("#{inspect(__MODULE__)}: storage_down -> #{inspect(reason)}; reconciling")
+    end
+
     :ok = ensure_created(repo)
 
     {:ok, _} = repo.start_link(pool_size: 2)
@@ -56,11 +73,64 @@ defmodule Mix.Tasks.SamenWeb.TestSetup do
     :ok
   end
 
-  defp ensure_created(repo) do
-    case repo.__adapter__().storage_up(repo.config()) do
-      :ok -> :ok
-      {:error, :already_up} -> :ok
-      {:error, reason} -> Mix.raise("Could not create #{inspect(repo)}: #{inspect(reason)}")
+  # Storage ops get a generous timeout: see run/1 for the concurrent-gate DROP-timeout race.
+  defp storage_cfg(repo), do: Keyword.merge(repo.config(), timeout: 60_000)
+
+  defp ensure_created(repo, attempts \\ 20)
+
+  defp ensure_created(repo, 0) do
+    Mix.raise("Could not create #{inspect(repo)}: database is not up after retries")
+  end
+
+  defp ensure_created(repo, attempts) do
+    cfg = storage_cfg(repo)
+    adapter = repo.__adapter__()
+
+    up_result =
+      case adapter.storage_up(cfg) do
+        :ok -> :ok
+        {:error, :already_up} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+
+    # storage_status/1 answers with BARE :up | :down in this ecto_sql version; normalize
+    # both contract shapes so a version bump can't silently break the guard.
+    status =
+      case adapter.storage_status(cfg) do
+        state when state in [:up, {:ok, :up}] -> :up
+        state when state in [:down, {:ok, :down}] -> :down
+        other -> {:error, other}
+      end
+
+    case {status, up_result} do
+      {:up, :ok} ->
+        :ok
+
+      {:up, {:error, reason}} ->
+        # storage_up reported a problem, but the DB verifiably exists (e.g. a concurrently
+        # finishing CREATE after a timed-out drop) — safe to migrate.
+        Mix.shell().info(
+          "#{inspect(__MODULE__)}: storage_up -> #{inspect(reason)} but DB reports :up; continuing"
+        )
+
+        :ok
+
+      {:down, _} when attempts > 1 ->
+        # A timed-out DROP can land between storage_up's existence check and now; retry.
+        Process.sleep(500)
+        ensure_created(repo, attempts - 1)
+
+      {:down, up_result} ->
+        Mix.raise(
+          "Could not create #{inspect(repo)}: DB reports :down (storage_up: #{inspect(up_result)})"
+        )
+
+      {{:error, _status_error}, _} when attempts > 1 ->
+        Process.sleep(500)
+        ensure_created(repo, attempts - 1)
+
+      {{:error, status_error}, _} ->
+        Mix.raise("Could not create #{inspect(repo)}: storage_status failed: #{inspect(status_error)}")
     end
   end
 

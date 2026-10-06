@@ -43,6 +43,7 @@ defmodule Samen.Web.Mount do
             :crm
             | :billing
             | :support
+            | :banking
             | :marketing
             | :aggregate
             | :operator
@@ -128,6 +129,9 @@ defmodule Samen.Web.Mount do
   defp scope_kind("crm"), do: :crm
   defp scope_kind("billing"), do: :billing
   defp scope_kind("support"), do: :support
+  # E15 — the Banking mount (bank accounts · statement lines · reconciliation
+  # matches · rules). Closes the 20260918010000 migration's orphaned tables.
+  defp scope_kind("banking"), do: :banking
   # F1 / ADR-041 §3 (T43) — the Work scope (Project + the canonical Task).
   defp scope_kind("work"), do: :work
   defp scope_kind("marketing"), do: :marketing
@@ -248,6 +252,7 @@ defmodule Samen.Web.Mount do
     ai_path ai_crm_resource ai_aggregate_resource
     signup_path verify_path resend_path reset_path invite_path totp_path totp_issuer
     work_path work_logo_style
+    banking_path banking_logo_style erp_namespace
     __principal__
   )a
 

@@ -18,6 +18,8 @@ defmodule Samen.Scopes.Banking.ReconcileGuard do
   """
   use Ash.Resource.Change
 
+  require Ash.Query
+
   @impl true
   def change(changeset, _opts, _context) do
     Ash.Changeset.before_action(changeset, fn changeset ->
@@ -32,20 +34,58 @@ defmodule Samen.Scopes.Banking.ReconcileGuard do
   end
 
   # A statement line that is already :matched or :reconciled cannot receive
-  # another match.
+  # another match — AND neither can a line that already HAS a Match row. The
+  # status column is not transitioned by the match create itself (the line
+  # stays :unmatched until period close), so without this second check the
+  # guard would pass and only the DB unique index would refuse (an opaque
+  # constraint error instead of the honest message). Belt AND braces.
   defp prevent_double_match(changeset, statement_line_id) do
     line_resource = resolve_statement_line_resource(changeset)
 
-    case Ash.get(line_resource, statement_line_id, authorize?: false) do
-      {:ok, %{status: status}} when status in [:matched, :reconciled] ->
+    status_check =
+      case Ash.get(line_resource, statement_line_id, authorize?: false) do
+        {:ok, %{status: status}} when status in [:matched, :reconciled] ->
+          Ash.Changeset.add_error(changeset,
+            field: :statement_line_id,
+            message: "Statement line is already #{status}",
+            variable: statement_line_id
+          )
+
+        _ ->
+          :ok
+      end
+
+    if status_check == :ok do
+      match_exists_check(changeset, statement_line_id)
+    else
+      status_check
+    end
+  end
+
+  defp match_exists_check(changeset, statement_line_id) do
+    match_resource = changeset.resource
+
+    # Existence probe as a SCALAR AGGREGATE (T132 read-scope lint): `exists?`
+    # transfers a boolean, never a cross-tenant row set, so it needs no org pin
+    # — the sanctioned aggregate form for an `authorize?: false` check. The
+    # SameOrgFk change has already proven `statement_line_id` belongs to this
+    # changeset's org before this guard runs. `Ash.exists?/2` is the RAISING
+    # form (bare boolean); a query error must REFUSE the match, never fall
+    # through to `:ok`.
+    existing? =
+      match_resource
+      |> Ash.Query.filter(statement_line_id == ^statement_line_id)
+      |> Ash.exists?(authorize?: false)
+
+    case existing? do
+      true ->
         Ash.Changeset.add_error(changeset,
           field: :statement_line_id,
-          message: "Statement line is already #{status}",
+          message: "Statement line already has a match",
           variable: statement_line_id
         )
-        |> tap_error()
 
-      _ ->
+      false ->
         :ok
     end
   end

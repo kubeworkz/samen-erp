@@ -2,23 +2,36 @@ defmodule Samen.Scopes.Banking.MatchAmountGuard do
   @moduledoc """
   The amount-strict match guard for Banking.Match (WS-ERP E9).
 
-  When a match is created, this guard sums the statement line's amount and
-  the GL entry's total (Σ debit_cents − Σ credit_cents over the entry's
-  posted lines) and verifies they are within ±0.01 (1 cent) of each other.
+  When a match is created, this guard verifies the statement line's amount against
+  the journal entry's effect on the BANK ACCOUNT'S OWN GL cash account — the cash
+  LEG of the entry (Σ debit − credit over the entry's lines whose `account_id` is
+  the BankAccount's GL `account_id`). The bank statement sees exactly that leg:
+  money out is a credit on cash (negative leg), money in a debit (positive leg),
+  matching the statement line's signed `amount_cents` convention.
 
-  This prevents:
-  - Matching a $100.00 bank line to a $50.00 invoice (under-match)
-  - Matching a $100.00 bank line to a $150.00 invoice (over-match)
+  ## Why not Σ over the WHOLE entry
 
-  The tolerance handles floating-point precision in multi-currency scenarios.
-  For single-currency, the amounts are exact integer cents.
+  A balanced double-entry totals Σ(debit − credit) = 0 by construction (the
+  Finance blueprint's `UnbalancedEntry` change refuses anything else), so a
+  whole-entry sum could never equal a non-zero statement line — the check would
+  refuse every match. The cash leg is the semantically correct comparison.
 
-  The guard is a `before_action` change — the match row is never created
-  if the amounts don't reconcile.
+  ## Why Ash reads, not raw SQL
+
+  The original implementation queried `SELECT amount_cents FROM <table>` with
+  unprefixed column names — against this system's `<abbrev>_`-prefixed storage
+  (`bkl_amount_cents`, `bkl_id`, …) every such query ERRORS, the error branch
+  returned 0, and the guard compared 0 to 0: a tautology that could never fail.
+  Ash reads resolve attribute→column mapping themselves, so they are
+  prefix-proof on every host. A missing/indeterminate row REFUSES the match
+  (fail-closed) — never a silent pass.
+
+  The tolerance is ±1 cent (integer cents; the slack covers multi-currency
+  rounding on the leg sum).
   """
   use Ash.Resource.Change
 
-  @tolerance 1  # 1 cent
+  @tolerance 1
 
   @impl true
   def change(changeset, _opts, _context) do
@@ -28,61 +41,69 @@ defmodule Samen.Scopes.Banking.MatchAmountGuard do
 
       line_resource = resolve_statement_line_resource(changeset)
       entry_resource = resolve_entry_resource(changeset)
-      line_table = AshPostgres.DataLayer.Info.table(line_resource)
-      entry_table = AshPostgres.DataLayer.Info.table(entry_resource)
+      bank_account_resource = resolve_bank_account_resource(line_resource)
 
-      # Get the statement line amount
-      line_amount = get_statement_line_amount(line_resource, line_table, statement_line_id)
+      with {:ok, line} <- fetch(line_resource, statement_line_id),
+           {:ok, bank_account} <- fetch(bank_account_resource, line.bank_account_id),
+           {:ok, cash_account_id} when not is_nil(cash_account_id) <- {:ok, bank_account.account_id},
+           {:ok, entry} <- fetch(entry_resource, entry_id, load: [:lines]),
+           {:ok, line_amount} when is_integer(line_amount) <- {:ok, line.amount_cents},
+           {:ok, cash_total} <- cash_leg_total(entry, cash_account_id) do
+        diff = abs(line_amount - cash_total)
 
-      # Get the GL entry total (Σ debit - Σ credit over posted lines)
-      entry_total = get_entry_total(entry_resource, entry_table, entry_id)
-
-      # Amount-strict: within tolerance
-      diff = abs(line_amount - entry_total)
-
-      if diff > @tolerance do
-        Ash.Changeset.add_error(changeset,
-          field: :entry_id,
-          message:
-            "Amount mismatch: statement line is #{format_cents(line_amount)} but " <>
-              "journal entry totals #{format_cents(entry_total)} (difference: #{format_cents(diff)})",
-          variable: entry_id
-        )
+        if diff > @tolerance do
+          Ash.Changeset.add_error(changeset,
+            field: :entry_id,
+            message:
+              "Amount mismatch: statement line is #{format_cents(line_amount)} but the entry's " <>
+                "cash-account leg totals #{format_cents(cash_total)} (difference: #{format_cents(diff)})",
+            variable: entry_id
+          )
+        else
+          changeset
+        end
       else
-        changeset
+        {:error, :amount_unknown, detail} ->
+          Ash.Changeset.add_error(changeset,
+            field: :entry_id,
+            message: "Cannot verify the match amount: #{detail}",
+            variable: entry_id
+          )
+
+        {:error, _} ->
+          Ash.Changeset.add_error(changeset,
+            field: :entry_id,
+            message: "Cannot verify the match amount: a referenced row is missing",
+            variable: entry_id
+          )
       end
     end)
   end
 
-  defp get_statement_line_amount(resource, table, id) do
-    repo = AshPostgres.DataLayer.Info.repo(resource, :mutate)
+  # Σ (debit − credit) over the entry's lines that hit the bank account's GL
+  # cash account. An entry with no leg on that account totals 0 — which then
+  # fails the comparison against any non-zero line (correct: nothing in this
+  # entry moves that bank's money).
+  defp cash_leg_total(entry, cash_account_id) do
+    lines = entry.lines || []
 
-    sql = "SELECT amount_cents FROM #{table} WHERE id = $1"
+    if Enum.any?(lines, &is_nil(&1.account_id)) do
+      {:error, :amount_unknown, "a journal line has no account"}
+    else
+      total =
+        lines
+        |> Enum.filter(&(&1.account_id == cash_account_id))
+        |> Enum.reduce(0, fn l, acc -> acc + (l.debit_cents || 0) - (l.credit_cents || 0) end)
 
-    case repo.query(sql, [dump_uuid(id)]) do
-      {:ok, %{rows: [[amount]]}} -> amount
-      _ -> 0
+      {:ok, total}
     end
   end
 
-  defp get_entry_total(resource, _table, entry_id) do
-    repo = AshPostgres.DataLayer.Info.repo(resource, :mutate)
-
-    # We need to sum over the entry's journal lines, not the entry itself.
-    # The entry table doesn't have debit/credit — the line table does.
-    # We join through the entry's lines.
-    line_resource = resolve_line_resource(resource)
-    line_table = AshPostgres.DataLayer.Info.table(line_resource)
-
-    sql = """
-    SELECT COALESCE(SUM(l.debit_cents - l.credit_cents), 0)::bigint
-    FROM #{line_table} l
-    WHERE l.entry_id = $1
-    """
-
-    case repo.query(sql, [dump_uuid(entry_id)]) do
-      {:ok, %{rows: [[total]]}} -> total
-      _ -> 0
+  defp fetch(resource, id, opts \\ []) do
+    case Ash.get(resource, id, Keyword.merge([authorize?: false], opts)) do
+      {:ok, nil} -> {:error, :missing}
+      {:ok, record} -> {:ok, record}
+      {:error, _} -> {:error, :missing}
     end
   end
 
@@ -100,19 +121,16 @@ defmodule Samen.Scopes.Banking.MatchAmountGuard do
     |> Map.fetch!(:destination)
   end
 
-  defp resolve_line_resource(entry_resource) do
-    entry_resource
+  defp resolve_bank_account_resource(line_resource) do
+    line_resource
     |> Ash.Resource.Info.relationships()
-    |> Enum.find(&(&1.name == :lines))
+    |> Enum.find(&(&1.name == :bank_account))
     |> Map.fetch!(:destination)
   end
 
   defp format_cents(cents) do
     dollars = div(cents, 100)
-    remainder = rem(cents, 100) |> abs()
+    remainder = cents |> rem(100) |> abs()
     "$#{dollars}.#{String.pad_leading(Integer.to_string(remainder), 2, "0")}"
   end
-
-  defp dump_uuid(nil), do: nil
-  defp dump_uuid(id), do: Ecto.UUID.dump!(id)
 end

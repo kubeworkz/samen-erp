@@ -27,13 +27,13 @@ defmodule Samen.Scopes.Banking.Blueprint do
   # ---------------------------------------------------------------------------
   # BankAccount — a bank/credit card account linked to a Finance.Account
   # ---------------------------------------------------------------------------
-  defmacro define_bank_account(module, otp_app, domain, repo, abbrev, entry_mod) do
+  defmacro define_bank_account(module, otp_app, domain, repo, abbrev, account_mod) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
         Banking.BankAccount — a bank/credit card account linked to a
         Finance.Account (the GL cash account; WS-ERP E9). `name`,
-        `account_id` (FK to the host's JournalEntry's account — the GL
+        `account_id` (FK to the host's Finance.Account — the GL
         cash/bank account), `statement_balance_cents` (the last imported
         statement balance), `currency`. Org-scoped. No PII. Archivable.
         """
@@ -66,13 +66,22 @@ defmodule Samen.Scopes.Banking.Blueprint do
         end
 
         relationships do
-          belongs_to :account, unquote(entry_mod) do
-            # This is a Finance.Account, not a JournalEntry — but we use
-            # the same resource reference pattern. The host wires the
-            # actual Finance.Account module.
+          belongs_to :account, unquote(account_mod) do
+            # The host's Finance.Account (chart-of-accounts) row — the GL
+            # cash/bank account this bank account settles into. Wired by the
+            # mount's `finance: [account: ...]` seam; the resource-level
+            # SameOrgFk below proves it same-org on every write.
             public?(true)
             attribute_type(:uuid)
           end
+        end
+
+        # F3.2 same-org FK (scope-authoring §10): the GL account link is
+        # org-scoped — a cross-org FK write would store a dangling
+        # cross-tenant reference. Resource-level so the F3.5 verifier
+        # (`mix samen.verify.same_org_fk`) sees it.
+        changes do
+          change({Samen.Policy.SameOrgFk, relationships: [:account]})
         end
 
         actions do
@@ -159,6 +168,15 @@ defmodule Samen.Scopes.Banking.Blueprint do
           end
         end
 
+        # F3.2 same-org FK (scope-authoring §10): a statement line always
+        # belongs to a bank account of the SAME org. Resource-level so the
+        # F3.5 verifier sees it (this scope exposes no write actions — lines
+        # land via StatementImport's bulk path — but the FK guard is declared
+        # for the invariant posture regardless).
+        changes do
+          change({Samen.Policy.SameOrgFk, relationships: [:bank_account]})
+        end
+
         actions do
           # Read-only: append-only after import. No create/update/destroy
           # exposed as Ash actions — imports go through StatementImport's
@@ -170,7 +188,19 @@ defmodule Samen.Scopes.Banking.Blueprint do
 
           read :unmatched do
             argument(:bank_account_id, :uuid, allow_nil?: false)
-            filter(status: :unmatched, bank_account_id: ^bank_account_id)
+
+            # prepare + Ash.Query.do_filter (runtime, keyword) — NOT the
+            # `filter(expr(...))` macro: inside a blueprint-generated module the
+            # expr macro's var hygiene fails closed ("undefined variable …
+            # context Samen.Scopes.Banking.Blueprint"); this is the same
+            # do_filter idiom the Marketing blueprint documents for exactly this
+            # reason. The pinned-keyword form raised "misplaced operator ^".
+            prepare(fn query, context ->
+              Ash.Query.do_filter(query,
+                status: :unmatched,
+                bank_account_id: context.arguments.bank_account_id
+              )
+            end)
           end
 
           read :for_reconcile do
@@ -178,7 +208,15 @@ defmodule Samen.Scopes.Banking.Blueprint do
             argument(:from_date, :date, allow_nil?: false)
             argument(:to_date, :date, allow_nil?: false)
 
-            filter(expr(bank_account_id == ^bank_account_id and posted_at >= ^from_date and posted_at <= ^to_date))
+            prepare(fn query, context ->
+              Ash.Query.do_filter(query,
+                bank_account_id: context.arguments.bank_account_id,
+                posted_at: [
+                  greater_than_or_equal_to: context.arguments.from_date,
+                  less_than_or_equal_to: context.arguments.to_date
+                ]
+              )
+            end)
           end
         end
 
@@ -229,6 +267,14 @@ defmodule Samen.Scopes.Banking.Blueprint do
             public?(true)
             attribute_type(:uuid)
           end
+        end
+
+        # F3.2 same-org FK (scope-authoring §10): an import batch may only
+        # target a bank account of the SAME org. Resource-level so the F3.5
+        # verifier (`mix samen.verify.same_org_fk`) sees it; it prepends to
+        # the create action's own changes.
+        changes do
+          change({Samen.Policy.SameOrgFk, relationships: [:bank_account]})
         end
 
         actions do
@@ -293,12 +339,29 @@ defmodule Samen.Scopes.Banking.Blueprint do
           end
         end
 
+        # F3.2 same-org FK guard (scope-authoring §10): a match may never LINK
+        # an org's statement line to another org's journal entry. Declared at
+        # resource level (not inside `create_match`) because the F3.5 verifier
+        # (`mix samen.verify.same_org_fk`) only inspects the resource-level
+        # `changes` block. Global changes PREPEND to each action's own list, so
+        # it still runs BEFORE the ReconcileGuard/MatchAmountGuard below.
+        changes do
+          change({Samen.Policy.SameOrgFk, relationships: [:statement_line, :entry]})
+        end
+
         actions do
           defaults([:read])
 
           create :create_match do
-            accept([:statement_line_id, :entry_id])
+            # `org_id` rides the changeset (the house create idiom — OrgScope's
+            # FilterCheck pins it to the actor's org); the caller never supplies
+            # the clock: the action stamps `matched_at` itself.
+            accept([:statement_line_id, :entry_id, :org_id])
 
+            change(set_attribute(:matched_at, &DateTime.utc_now/0))
+
+            # SameOrgFk (resource-level `changes` above) has already proven
+            # the FKs same-org before these invariant guards run.
             change(Samen.Scopes.Banking.ReconcileGuard)
             change(Samen.Scopes.Banking.MatchAmountGuard)
           end
