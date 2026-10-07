@@ -112,6 +112,45 @@ defmodule Samen.Web.RouterTest do
     assert "/mcp" in paths
   end
 
+  # The `on_mount` hooks a COMPILED router attached to the `live_session` that owns
+  # `path` — read off `Phoenix.Router.routes/1` metadata, where Phoenix stamps
+  # `metadata.phoenix_live_view` as `{view, action, opts, %{extra: %{session: …,
+  # on_mount: …}, name: …}}`. Enumerated off the compiled router (the
+  # `TenantAuthnCoverageTest` discipline) rather than a hand-maintained list.
+  # Hooks come back in their PREPARED form (`%{function:, id:, stage:}`), so this
+  # projects them to the `{module, fun}` identity a reader recognizes.
+  defp session_on_mount_ids(router, path) do
+    {_view, _action, _opts, live} =
+      router
+      |> Phoenix.Router.routes()
+      |> Enum.find(&(&1.path == path))
+      |> Map.fetch!(:metadata)
+      |> Map.fetch!(:phoenix_live_view)
+
+    Enum.map(live.extra.on_mount, & &1.id)
+  end
+
+  # T78/T79 + Phase 5 — the two PRE-ACTOR PUBLIC kinds must NOT carry the B-SEC tenant
+  # gate. Both authorize themselves by construction (`Post.read_public` runs with no
+  # actor at all; the CSAT token derives org/ticket from its own match), so attaching
+  # `{Samen.Web.TenantAuthz, :require_tenant}` would `:halt` an anonymous visitor on an
+  # ARMED host and redirect the help center and every survey link to `/login` — the
+  # documented "public router scope" posture would be a lie in production. The
+  # framework's own KB/CSAT tests could not catch that: they build the `Mount` struct
+  # directly and bypass the router, which is exactly the blind spot this pins.
+  test "the public :kb/:csat kinds carry NO tenant on_mount; every tenant kind keeps it" do
+    assert session_on_mount_ids(HostRouter, "/portal/:org") == []
+    assert session_on_mount_ids(HostRouter, "/support/csat/:token") == []
+
+    # Positive control — the gate still rides every TENANT-bearing kind, so the
+    # assertion above is a real difference and not a vacuous "no hooks anywhere".
+    assert session_on_mount_ids(HostRouter, "/crm/contacts") ==
+             [{Samen.Web.TenantAuthz, :require_tenant}]
+
+    assert session_on_mount_ids(HostRouter, "/billing") ==
+             [{Samen.Web.TenantAuthz, :require_tenant}]
+  end
+
   # T142 — samen_mcp_route is safe-by-construction: no :actor_resolver ⇒ compile-time refusal.
   describe "T142: samen_mcp_route requires an :actor_resolver (no insecure default)" do
     test "the guard refuses opts with no :actor_resolver and accepts opts with one" do

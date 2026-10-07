@@ -6,6 +6,15 @@
 # UNAUTHENTICATED tenant request instead of redirecting to /login. The named LiveView-DRIVING
 # red paths (a cookieless `GET /crm/contacts?org=<victim>` and its `live/2` twin, against a REAL
 # compiled router + endpoint) MUST flip.
+#
+# RE-ANCHORED (Phase 5): the defect is unchanged (the tenant gate is dropped, no gate reaches any
+# tenant `live_session`), but the anchor moved. Phase 5 made the gate a computed `on_mount` value
+# — `[]` for the pre-actor PUBLIC `:kb`/`:csat` kinds, `[{Samen.Web.TenantAuthz, :require_tenant}]`
+# for every tenant kind — so pinning the old literal `on_mount:` line inside `live_session` no
+# longer applies. Emptying the tenant branch's list removes the gate for every tenant kind exactly
+# as before, and (unlike deleting the `live_session` option) leaves the generated `on_mount`
+# variable USED, so the sabotaged tree still compiles under `--warnings-as-errors` and the named
+# tests fail on their ASSERTIONS rather than on an unused-variable compile error.
 # APP: samen_web
 # TEST_FILES: test/samen/web/tenant_authz_live_test.exs
 # MUST_FAIL: the DEAD RENDER (plain HTTP GET, no cookies) is REFUSED, not served
@@ -13,11 +22,12 @@
 diff --git a/samen_web/lib/samen/web/router.ex b/samen_web/lib/samen/web/router.ex
 --- a/samen_web/lib/samen/web/router.ex
 +++ b/samen_web/lib/samen/web/router.ex
-@@ -71,7 +71,6 @@
-       # authority so a client `?org=` can only SELECT among the authenticated
-       # principal's authorized orgs (`Samen.Web.CurrentOrg.reresolve/2`).
-       live_session session_name,
--        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
-         session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
-         for {sub_path, module} <- Samen.Web.Router.__routes__(kind, path) do
-           live(sub_path, module)
+@@ -63,7 +63,7 @@
+       if kind in [:kb, :csat] do
+         []
+       else
+-        [{Samen.Web.TenantAuthz, :require_tenant}]
++        []
+       end
+ 
+     quote bind_quoted: [

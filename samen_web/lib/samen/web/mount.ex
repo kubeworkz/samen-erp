@@ -59,7 +59,8 @@ defmodule Samen.Web.Mount do
             | :ai
             |            :analytics
             | :erp
-            | :kb,
+            | :kb
+            | :csat,
           namespace: module(),
           repo: module(),
           domain: module(),
@@ -163,6 +164,15 @@ defmodule Samen.Web.Mount do
   # mount (mounted in a host's PUBLIC router scope, no on_mount auth gate —
   # the `samen_auth_routes` posture, never the `samen_operator_routes` one).
   defp scope_kind("kb"), do: :kb
+
+  # T79 (spec §I6) — the UNAUTHENTICATED, tokenized CSAT survey-response mount
+  # (`samen_module_routes :csat, Host.Support, repo: ...`, the `:kb` public-portal
+  # posture). Registered here for the SAME reason `:kb` is: `from_session/1` runs in
+  # a fresh host LiveView `mount/3` process off the serialized live_session, so an
+  # unregistered kind raised `FunctionClauseError` on the DEAD RENDER for EVERY
+  # host that mounted `:csat` — a crash T79's own test could not catch, because it
+  # built the `Mount` struct directly and bypassed the session round-trip.
+  defp scope_kind("csat"), do: :csat
   defp scope_kind(k) when is_atom(k), do: k
 
   # Module atoms serialize as "Elixir.Driftwood.Crm". Host modules are COMPILED, so their

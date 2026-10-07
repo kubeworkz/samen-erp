@@ -5817,6 +5817,648 @@
     {
       "fields": [
         {
+          "column_name": "scb_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "scb_block_type",
+          "logical_name": "block_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "scb_content",
+          "logical_name": "content",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "scb_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "scb_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scb_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scb_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scb_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scb_page_id",
+          "logical_name": "page_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scb_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "scb_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Cms.Block",
+      "table_name": "scb_block"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "sbv_changes",
+          "logical_name": "changes",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "sbv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sbv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sbv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sbv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sbv_version_action_type",
+          "logical_name": "version_action_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sbv_version_inserted_at",
+          "logical_name": "version_inserted_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "sbv_version_source_id",
+          "logical_name": "version_source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sbv_version_updated_at",
+          "logical_name": "version_updated_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        }
+      ],
+      "resource": "Samenerp.Cms.Block.Version",
+      "table_name": "scb_block_versions"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "scd_alt_text",
+          "logical_name": "alt_text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scd_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "scd_content_type",
+          "logical_name": "content_type",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scd_file_name",
+          "logical_name": "file_name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scd_media_type",
+          "logical_name": "media_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "scd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scd_size_bytes",
+          "logical_name": "size_bytes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "scd_storage_key",
+          "logical_name": "storage_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Cms.Media",
+      "table_name": "scd_media"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "scf_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "scf_canonical_url",
+          "logical_name": "canonical_url",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scf_description",
+          "logical_name": "description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scf_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scf_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scf_meta_title",
+          "logical_name": "meta_title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scf_no_follow",
+          "logical_name": "no_follow",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "scf_no_index",
+          "logical_name": "no_index",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "scf_og_description",
+          "logical_name": "og_description",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scf_og_title",
+          "logical_name": "og_title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scf_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scf_page_id",
+          "logical_name": "page_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scf_post_id",
+          "logical_name": "post_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scf_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Cms.SeoMeta",
+      "table_name": "scf_seo_meta"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "scg_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "scg_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scg_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "scg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scg_published_at",
+          "logical_name": "published_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scg_slug",
+          "logical_name": "slug",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scg_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "scg_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Cms.Page",
+      "table_name": "scg_page"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "spv_changes",
+          "logical_name": "changes",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "spv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "spv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "spv_version_action_type",
+          "logical_name": "version_action_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "spv_version_inserted_at",
+          "logical_name": "version_inserted_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "spv_version_source_id",
+          "logical_name": "version_source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spv_version_updated_at",
+          "logical_name": "version_updated_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        }
+      ],
+      "resource": "Samenerp.Cms.Page.Version",
+      "table_name": "scg_page_versions"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "scn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "scn_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "scn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scn_label",
+          "logical_name": "label",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "scn_nav_type",
+          "logical_name": "nav_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "scn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "scn_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "scn_target",
+          "logical_name": "target",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "scn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "scn_url",
+          "logical_name": "url",
+          "pii": false,
+          "type": "String"
+        }
+      ],
+      "resource": "Samenerp.Cms.Navigation",
+      "table_name": "scn_navigation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "sct_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "sct_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sct_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "sct_excerpt",
+          "logical_name": "excerpt",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sct_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sct_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sct_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sct_published_at",
+          "logical_name": "published_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sct_slug",
+          "logical_name": "slug",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sct_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sct_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sct_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sct_visibility",
+          "logical_name": "visibility",
+          "pii": false,
+          "type": "Atom"
+        }
+      ],
+      "resource": "Samenerp.Cms.Post",
+      "table_name": "sct_post"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "stv_changes",
+          "logical_name": "changes",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "stv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "stv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "stv_version_action_type",
+          "logical_name": "version_action_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "stv_version_inserted_at",
+          "logical_name": "version_inserted_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "stv_version_source_id",
+          "logical_name": "version_source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "stv_version_updated_at",
+          "logical_name": "version_updated_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        }
+      ],
+      "resource": "Samenerp.Cms.Post.Version",
+      "table_name": "sct_post_versions"
+    },
+    {
+      "fields": [
+        {
           "column_name": "wsp_archived_at",
           "logical_name": "archived_at",
           "pii": false,

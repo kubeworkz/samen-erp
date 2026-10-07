@@ -198,8 +198,15 @@ defmodule SamenerpWeb.Router do
     )
 
     # 1c. Support — Tickets + detail + KB (inherited from samen_core's Support
-    #     scope, mounted on the Samenerp.Support domain).
-    samen_module_routes(:support, Samenerp.Support, repo: Samenerp.Repo, labels: @current_org_labels)
+    #     scope, mounted on the Samenerp.Support domain). Phase 5 wires the
+    #     `:kb_namespace` sibling-mount seam so the agent-facing KB
+    #     (`/support/kb`) reads THIS host's CMS articles (`Samenerp.Cms`, the
+    #     Phase-5 mount below) instead of rendering the honest "KB not set up"
+    #     empty state.
+    samen_module_routes(:support, Samenerp.Support,
+      repo: Samenerp.Repo,
+      labels: Map.put(@current_org_labels, :kb_namespace, Samenerp.Cms)
+    )
 
     # 1d. Automation — the tenant workflow builder (ADR-039/T118), mounted on
     #     the Samenerp.Automation domain. Tenant plane ONLY (INV-2).
@@ -308,6 +315,36 @@ defmodule SamenerpWeb.Router do
     #     the framework sidebar/settings nav's "Feature flags" item (default href
     #     `/flags`) resolves instead of dead-linking.
     samen_flags_routes(:flags, Samenerp.Primitives,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    # 1l. Phase 5 — the two PUBLIC portal kinds (the KB + CSAT module groups),
+    #     mounted in this router's one public scope (the `samen_auth_routes`
+    #     posture: pre-actor, no session-derived org). Both are kernel-safe by
+    #     construction, so neither needs a tenant auth gate:
+    #
+    #     * `:kb` — the UNAUTHENTICATED self-serve help center
+    #       (`GET /portal/:org` → `Samen.Web.Support.PortalKbLive`) over the
+    #       `Samenerp.Cms` mount. It reads ONLY `Post.read_public`
+    #       (visibility: :public AND status: :published — the action's own
+    #       baked-in filter is the whole authorization surface), and `:org`
+    #       comes from the URL path because an anonymous visitor has no session
+    #       to derive it from.
+    #     * `:csat` — the UNAUTHENTICATED tokenized CSAT survey response
+    #       (`GET /support/csat/:token` → `Samen.Web.Support.CsatRespondLive`)
+    #       over the `Samenerp.Support` mount (the zct/zca tables already exist
+    #       from the 20260922020000 support-scope mount — no migration needed).
+    #       The single-use 256-bit token in the path IS the entire authorization
+    #       surface (org/ticket derive FROM the token match, never a client
+    #       `?org=`), and the write fires only from the score-form submit.
+    samen_module_routes(:kb, Samenerp.Cms,
+      repo: Samenerp.Repo,
+      path: "/portal",
+      labels: @current_org_labels
+    )
+
+    samen_module_routes(:csat, Samenerp.Support,
       repo: Samenerp.Repo,
       labels: @current_org_labels
     )

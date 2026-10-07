@@ -131,9 +131,9 @@ defmodule Samen.AbbrevRegistryTest do
       # samen_core 86, samen_web 70, samenerp 74 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst and
       # the Phase-2 Chat mount cth/chp/cmg/cds, the canonical ADR-012 §11 family)
-      # = 314 host entries across six hosts.
+      # = 323 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 74
+      assert map_size(hosts["samenerp"]) == 83
       assert map_size(hosts["samen_core"]) == 86
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -604,6 +604,8 @@ defmodule Samen.AbbrevRegistryTest do
                # Aggregate allocations, all allocator-reserved via the sanctioned
                # allocator (priv/reserve_samenerp_abbrevs.exs + the generator's own
                # reserve_abbrevs!). 68 entries.
+               # +9 Phase-5 CMS mount (samenerp scg/sct/scb/scd/scn/scf + the
+               # three E7 Version abbrevs spv/stv/sbv), allocator-reserved.
                "samenerp" => %{
                  # Samenerp.Aggregate (1):
                  "era" => "Samenerp.Aggregate.RecordCountBySegment",
@@ -686,7 +688,19 @@ defmodule Samen.AbbrevRegistryTest do
                  "cds" => "Samenerp.Chat.ChatDisclosureSetting",
                  "chp" => "Samenerp.Chat.ChatParticipant",
                  "cmg" => "Samenerp.Chat.ChatMessage",
-                 "cth" => "Samenerp.Chat.ChatThread"
+                 "cth" => "Samenerp.Chat.ChatThread",
+                 # Samenerp.Cms (9) — the Phase-5 CMS mount backing the KB module
+                 # group (the `:kb` portal + the agent KB read the CMS namespace).
+                 # All allocator-reserved.
+                 "scb" => "Samenerp.Cms.Block",
+                 "scd" => "Samenerp.Cms.Media",
+                 "scf" => "Samenerp.Cms.SeoMeta",
+                 "scg" => "Samenerp.Cms.Page",
+                 "scn" => "Samenerp.Cms.Navigation",
+                 "sct" => "Samenerp.Cms.Post",
+                 "sbv" => "Samenerp.Cms.Block.Version",
+                 "spv" => "Samenerp.Cms.Page.Version",
+                 "stv" => "Samenerp.Cms.Post.Version"
                }
              }
 
@@ -780,7 +794,9 @@ defmodule Samen.AbbrevRegistryTest do
       # (+2 E15 host mounts: wsp/wst — Samenerp.Work.Project/Task, allocator-reserved)
       # (+4 Phase-2 Chat mount: cth/chp/cmg/cds — Samenerp.Chat.* canonical
       # ADR-012 §11 family, allocator-reserved = 405 + 314 = 719 flat.)
-      assert map_size(Reg.load()) == 719
+      # (+9 Phase-5 CMS mount: samenerp scg/sct/scb/scd/scn/scf + spv/stv/sbv
+      # E7 Version abbrevs, allocator-reserved = 405 + 323 = 728 flat.)
+      assert map_size(Reg.load()) == 728
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

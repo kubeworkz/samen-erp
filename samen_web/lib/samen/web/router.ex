@@ -45,12 +45,34 @@ defmodule Samen.Web.Router do
     path = Keyword.get(opts, :path, default_path(kind))
     session_name = Keyword.get(opts, :session_name, session_name(kind, path))
 
+    # T78/T79 — the two PRE-ACTOR PUBLIC kinds: `:kb` (the unauthenticated tenant
+    # help-center portal) and `:csat` (the tokenized survey-response link). Both are
+    # mounted in a PUBLIC router scope and authorize themselves BY CONSTRUCTION —
+    # `Post.read_public` runs with no actor at all (its baked-in filter is the whole
+    # authorization surface), and the CSAT token derives org/ticket FROM the match,
+    # never from a session or a `?org=`. Attaching
+    # `{Samen.Web.TenantAuthz, :require_tenant}` to their `live_session` would `:halt`
+    # an anonymous visitor on an ARMED host and redirect the help center and every
+    # survey link to `/login` — the documented public posture would be a lie in
+    # production (and the framework's own KB/CSAT tests could not catch it: they
+    # build the `Mount` directly and bypass the router, exactly the blind spot
+    # T78/T79 shipped with). They therefore carry NO tenant on_mount — the
+    # `samen_auth_routes` pre-actor-public posture. Every other kind keeps the
+    # B-SEC gate below, byte-for-byte.
+    on_mount =
+      if kind in [:kb, :csat] do
+        []
+      else
+        [{Samen.Web.TenantAuthz, :require_tenant}]
+      end
+
     quote bind_quoted: [
             kind: kind,
             namespace: namespace,
             opts: opts,
             path: path,
-            session_name: session_name
+            session_name: session_name,
+            on_mount: on_mount
           ] do
       # Build the mount at compile-of-the-router time, serialize to a session-safe map.
       # This runs in the host router module context, so `namespace`/`repo` are resolved.
@@ -71,7 +93,7 @@ defmodule Samen.Web.Router do
       # authority so a client `?org=` can only SELECT among the authenticated
       # principal's authorized orgs (`Samen.Web.CurrentOrg.reresolve/2`).
       live_session session_name,
-        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        on_mount: on_mount,
         session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
         for {sub_path, module} <- Samen.Web.Router.__routes__(kind, path) do
           live(sub_path, module)
