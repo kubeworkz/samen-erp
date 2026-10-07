@@ -747,9 +747,15 @@ defmodule Samen.Web.Router do
       end
 
       # The byte-serve route is a plain controller action — outside the live_session block.
-      # The host's :browser pipeline (which wraps this scope) supplies the session plug so
-      # the mount and current-org are readable in the controller.
-      get("#{path}/:id/bytes", Samen.Web.Files.BytesController, :serve)
+      # The mount rides the ROUTE ASSIGNS (the same posture as the ICS export
+      # route below): BytesController reads `conn.assigns[:samen_mount]`, and a
+      # bare `get/3` would leave it nil — every real byte download would 503
+      # ("no mount") even though the LiveViews beside it mount fine. The host's
+      # :browser pipeline still supplies the session plug so CurrentOrg can
+      # resolve the org.
+      get("#{path}/:id/bytes", Samen.Web.Files.BytesController, :serve,
+        assigns: %{samen_mount: mount}
+      )
     end
   end
 
@@ -823,9 +829,15 @@ defmodule Samen.Web.Router do
       end
 
       # The export download is a plain controller action — outside the live_session
-      # block. The host's :browser pipeline supplies the session plug so the mount
-      # and current-org are readable (same posture as the files byte-serve route).
-      get("#{path}/export/:resource", Samen.Web.Csv.ExportController, :export)
+      # block. The mount rides the ROUTE ASSIGNS (the same posture as the ICS
+      # export route): ExportController reads `conn.assigns[:samen_mount]`, and a
+      # bare `get/3` would leave it nil — every real export download would 503
+      # ("no mount") even though the import LiveView beside it mounts fine. The
+      # host's :browser pipeline still supplies the session plug so CurrentOrg
+      # can resolve the org (same posture as the files byte-serve route).
+      get("#{path}/export/:resource", Samen.Web.Csv.ExportController, :export,
+        assigns: %{samen_mount: mount}
+      )
     end
   end
 

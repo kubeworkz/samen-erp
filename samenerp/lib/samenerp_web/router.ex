@@ -252,6 +252,43 @@ defmodule SamenerpWeb.Router do
       labels: Map.merge(@current_org_labels, %{pubsub: Samenerp.PubSub})
     )
 
+    # 1j. Phase 3 — Search & Discovery, three one-liners and zero authored
+    #     LiveViews:
+    #
+    #     * `samen_search_routes` — the ⌘K search page (WS-E E4 / ADR-027) over
+    #       this host's Primitives registry (`esh_search_index` — rows the
+    #       engine reads per-scope; the tsvector is built at QUERY TIME from
+    #       the registered non-PII columns, so results are org-scoped +
+    #       PiiResolution-projected by the kernel, never by this router).
+    #       This is also what makes the framework sidebar's search box (whose
+    #       action defaults to `/search`) resolve instead of dead-linking.
+    #     * `samen_csv_routes` — the CSV import LiveView + masked export
+    #       download (WS-E E3 / ADR-028) over the CRM domain, the same
+    #       driftwood/pawchart adoption: resolve_resource/2 is DENY-BY-DEFAULT
+    #       onto Samenerp.Crm's registered resources only (`/csv/export/company`
+    #       serves; anything else 404s — no module minting).
+    #     * `samen_tenant_analytics_routes` — the P17 own-org activation funnel
+    #       (ADR-045 §3) over the raw `paf_product_event_rollup` (migration
+    #       20261006140000; samenerp had NO rollup tables before Phase 3 —
+    #       the mounted /operator/analytics and /operator/revenue read those
+    #       tables by name, so that migration closes those latent holes too).
+    #       Floored (k-anonymity) + role-gated by the framework reads; an empty
+    #       table renders the honest empty state, never fabricated counts.
+    samen_search_routes(:search, Samenerp.Primitives,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    samen_csv_routes(:csv, Samenerp.Crm,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    samen_tenant_analytics_routes(Samenerp.Primitives,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
     # 2. Notifications (WS-A A4/A5) — the framework inbox (+ /notifications/settings),
     #    mounted over the Primitives mount in ONE line. Realtime rides
     #    `Samenerp.PubSub` (id-only envelopes).

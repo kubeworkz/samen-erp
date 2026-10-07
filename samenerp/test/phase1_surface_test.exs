@@ -50,6 +50,39 @@ defmodule Samenerp.Phase1SurfaceTest do
     assert body =~ "quarantined"
   end
 
+  test "the byte-serve route arrives with its mount and refuses a fresh upload at the quarantine gate" do
+    tenant = create_org!("Phase1 Bytes QA")
+
+    root =
+      Path.join(System.tmp_dir!(), "phase1_bytes_#{System.unique_integer([:positive])}")
+
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    {:ok, file} =
+      Samen.Files.upload(
+        %{org_id: tenant.id},
+        %{filename: "quarantined-report.pdf", content_type: "application/pdf", binary: "x"},
+        file_module: Samenerp.Primitives.File,
+        repo: Samenerp.Repo,
+        storage_config: %{root: root},
+        allowed_content_types: ~w(application/pdf)
+      )
+
+    conn = get(build_conn(), "/files/#{file.id}/bytes?org=#{tenant.id}")
+
+    # The load-bearing part of this assertion is that the controller GOT its
+    # mount: `samen_files_routes/3` used to emit this route bare, so
+    # `conn.assigns[:samen_mount]` was nil and EVERY real byte download 503'd
+    # ("no mount"). With the mount riding the route assigns, the fail-closed
+    # quarantine gate is what answers for a fresh upload — 403 + "quarantined",
+    # never bytes.
+    assert conn.status == 403,
+           "expected the quarantine gate to refuse a fresh upload (status=#{conn.status} body=#{inspect(conn.resp_body)})"
+
+    assert conn.resp_body =~ "quarantined",
+           "the byte-serve route must answer with the honest quarantine refusal"
+  end
+
   test "GET /api/openapi.json serves the generated OpenAPI 3.0 document" do
     conn = get(build_conn(), "/api/openapi.json")
 

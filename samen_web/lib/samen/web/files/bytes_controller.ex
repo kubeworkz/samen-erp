@@ -25,8 +25,11 @@ defmodule Samen.Web.Files.BytesController do
 
   ## Mount / session
 
-  The mount is read from `conn.assigns[:samen_mount]` (populated by the host's
-  `live_session` plug chain — the same mount the LiveViews receive). The `org_id` is
+  The mount is read from `conn.assigns[:samen_mount]`, which the route macro
+  sets on the ROUTE ASSIGNS (`samen_files_routes/3` emits this `get/4` with
+  `assigns: %{samen_mount: mount}` — the same posture as the ICS/CSV export
+  routes; a bare `get/3` would leave it nil and every byte download would 503).
+  The `org_id` is
   resolved from the session via `Samen.Web.CurrentOrg.resolve/3` so the byte-serve
   route participates in the SAME org-scoping as the LiveViews.
 
