@@ -96,6 +96,18 @@ defmodule SamenerpWeb.Router do
     plug(Samen.Web.Auth.Plug, namespace: Samenerp.Operator)
   end
 
+  # Phase 4 — the SHARED webhook ingress pipeline (ADR-038 §5.1). Deliberately NOT
+  # the `:browser` pipeline: external providers cannot carry a CSRF token and this
+  # route does no session/org reads — the HMAC over the EXACT raw bytes is the
+  # authentication (the endpoint already wires `Samen.Web.Webhook.RawBodyReader`
+  # into `Plug.Parsers`, so the signed bytes survive decoding; same body_reader
+  # every `samen_webhook_routes/1` host wires). NO `protect_from_forgery`, NO
+  # session plug — a forged/unsigned delivery is refused by the ingress's own
+  # verify step (400 "invalid_signature"), not by a token the vendor never had.
+  pipeline :webhook_ingress do
+    plug(:accepts, ["json", "html"])
+  end
+
   # T117/ADR-031 — the OPERATOR control-plane auth gate. `Samen.Web.AuthGate` is a NO-OP in
   # dev/test (`:auth_required?` false — the query-param convenience identity stays) and, in
   # prod, redirects any UNAUTHENTICATED request to `/login` before the SaaS-internal operator
@@ -289,6 +301,17 @@ defmodule SamenerpWeb.Router do
       labels: @current_org_labels
     )
 
+    # 1k. Phase 4 — the TENANT feature-flag admin (WS-B B6 / ADR-020): ONE line
+    #     over this host's Primitives mount (`eff_feature_flag` rows already
+    #     exist from mount_primitives_scope). Writes are kernel-enforced
+    #     (OrgScope + RoleAtLeast :admin + the NonPiiTargeting write refusal);
+    #     the framework sidebar/settings nav's "Feature flags" item (default href
+    #     `/flags`) resolves instead of dead-linking.
+    samen_flags_routes(:flags, Samenerp.Primitives,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
     # 2. Notifications (WS-A A4/A5) — the framework inbox (+ /notifications/settings),
     #    mounted over the Primitives mount in ONE line. Realtime rides
     #    `Samenerp.PubSub` (id-only envelopes).
@@ -310,6 +333,21 @@ defmodule SamenerpWeb.Router do
     # network) — this is what makes the J5 zero-config probe pass without the
     # generated app knowing what a fleet is.
     samen_fleet_routes(otp_app: :samenerp)
+  end
+
+  # Phase 4 — the SHARED webhook ingress (ADR-038 §5.1 / B9): `POST
+  # /webhooks/:provider`, vendor-generic — the provider module + config resolve
+  # from HOST config at runtime (`config :samen_web, Samen.Web.Webhook,
+  # providers: %{...}, repo: Samenerp.Repo}`), so this router stays vendor-free.
+  # samenerp ships NO provider config (secrets live in runtime config, never in
+  # the repo), so every delivery currently answers the honest fail-closed 404
+  # `unknown_provider` — nothing verified, nothing persisted. Mounting on its
+  # OWN CSRF-exempt pipeline (vendors cannot carry tokens; the signature is the
+  # gate) — the one scope here outside `:browser`.
+  scope "/" do
+    pipe_through(:webhook_ingress)
+
+    samen_webhook_routes()
   end
 
   # ADR-010 — the OPERATOR / SaaS-company workspace, mounted in ONE line over the
