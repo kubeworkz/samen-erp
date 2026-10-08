@@ -58,7 +58,43 @@ gen_probe_restore() {
   fi
   GEN_PROBE_RESTORED=1
 
-  cp "$GEN_PROBE_SNAP" "$GEN_PROBE_REGISTRY"
+  # Restore with a BOUNDED RETRY. The probe restores the registry itself at the
+  # Elixir level on normal exit, so this copy lands immediately after a BEAM
+  # process wrote and closed the same file. On Windows that window is not
+  # always closed yet — the exiting writer (or a real-time scanner picking up a
+  # file written twice in a row) can still hold it, and MSYS `cp` then fails
+  # with `EACCES` ("cannot create regular file ...: Permission denied"). That
+  # abort says nothing about the registry's CONTENT, and it killed the whole
+  # root gate (observed 2026-10-07, deploy probe, corrupting nothing — the file
+  # was already byte-exact). The retry does NOT weaken the T107 guarantee: the
+  # SHA-256 byte-exact assertion below still runs on EVERY path, and a copy
+  # that never lands still halts loudly (exit 2) instead of leaving corruption.
+  local restored=0
+  local attempt
+
+  for attempt in 1 2 3 4 5; do
+    if [[ "$attempt" == 5 ]]; then
+      # Final attempt keeps stderr visible — an operator needs the real reason.
+      if cp "$GEN_PROBE_SNAP" "$GEN_PROBE_REGISTRY"; then
+        restored=1
+        break
+      fi
+    else
+      if cp "$GEN_PROBE_SNAP" "$GEN_PROBE_REGISTRY" 2>/dev/null; then
+        restored=1
+        break
+      fi
+    fi
+
+    sleep 1
+  done
+
+  if [[ "$restored" != 1 ]]; then
+    echo "==> FATAL: ${GEN_PROBE_LABEL:-gen_app probe} could not WRITE $GEN_PROBE_REGISTRY" \
+      "after 5 attempts — the destination stayed locked. MANUAL RECHECK REQUIRED." >&2
+    exit 2
+  fi
+
   local post_sha
   post_sha="$(gen_probe_sha256 "$GEN_PROBE_REGISTRY")"
   rm -f "$GEN_PROBE_SNAP"

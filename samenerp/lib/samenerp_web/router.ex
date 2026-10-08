@@ -349,6 +349,20 @@ defmodule SamenerpWeb.Router do
       labels: @current_org_labels
     )
 
+    # 1m. Phase 6 — the Calendar & Scheduling group: the framework `.ics`
+    #     (RFC-5545) export surface over this host's materialized
+    #     `Samenerp.Calendar` mount (`evt_event`, migration 20261007090000).
+    #     ONE line, zero authored controllers: `Samen.Web.Ics.ExportController`
+    #     serves `GET /calendar.ics` org-scoped and keyset-bounded, resolving
+    #     every row through `Samen.Api.PiiResolution` on the acting plane — so
+    #     the downloaded feed and the pixel show the SAME attendee value
+    #     (INV-1). A plain controller route, hence `:browser` (it reads the
+    #     session for the org) rather than a `live_session`.
+    samen_ics_routes(:ics, Samenerp.Calendar,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
     # 2. Notifications (WS-A A4/A5) — the framework inbox (+ /notifications/settings),
     #    mounted over the Primitives mount in ONE line. Realtime rides
     #    `Samenerp.PubSub` (id-only envelopes).

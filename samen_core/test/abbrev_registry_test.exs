@@ -128,12 +128,13 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 86, samen_web 70, samenerp 74 (the WS-ERP E8 host proof —
-      # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst and
-      # the Phase-2 Chat mount cth/chp/cmg/cds, the canonical ADR-012 §11 family)
-      # = 323 host entries across six hosts.
+      # samen_core 86, samen_web 70, samenerp 84 (the WS-ERP E8 host proof —
+      # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst, the
+      # Phase-2 Chat mount cth/chp/cmg/cds, the Phase-5 CMS mount scg/sct/scb/
+      # scd/scn/scf + spv/stv/sbv, and the Phase-6 Calendar mount `evt`)
+      # = 324 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 83
+      assert map_size(hosts["samenerp"]) == 84
       assert map_size(hosts["samen_core"]) == 86
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -700,7 +701,10 @@ defmodule Samen.AbbrevRegistryTest do
                  "sct" => "Samenerp.Cms.Post",
                  "sbv" => "Samenerp.Cms.Block.Version",
                  "spv" => "Samenerp.Cms.Page.Version",
-                 "stv" => "Samenerp.Cms.Post.Version"
+                 "stv" => "Samenerp.Cms.Post.Version",
+                 # Samenerp.Calendar (1) — the Phase-6 Calendar & Scheduling mount
+                 # (`evt_event`), allocator-reserved.
+                 "evt" => "Samenerp.Calendar.Event"
                }
              }
 
@@ -796,7 +800,9 @@ defmodule Samen.AbbrevRegistryTest do
       # ADR-012 §11 family, allocator-reserved = 405 + 314 = 719 flat.)
       # (+9 Phase-5 CMS mount: samenerp scg/sct/scb/scd/scn/scf + spv/stv/sbv
       # E7 Version abbrevs, allocator-reserved = 405 + 323 = 728 flat.)
-      assert map_size(Reg.load()) == 728
+      # (+1 Phase-6 Calendar mount: samenerp `evt` (Samenerp.Calendar.Event),
+      # allocator-reserved = 405 + 324 = 729 flat.)
+      assert map_size(Reg.load()) == 729
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

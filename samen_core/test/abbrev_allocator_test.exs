@@ -283,8 +283,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # ADR-012 §11 family, allocator-reserved): 33_365 bytes, 719 flat.
       # +9 Phase-5 CMS mount (samenerp scg/sct/scb/scd/scn/scf + the three E7
       # Version abbrevs spv/stv/sbv), allocator-reserved: 33_707 bytes, 728 flat.
-      assert byte_size(committed) == 33707
-      assert map_size(R.load()) == 728
+      # +1 Phase-6 Calendar mount (samenerp `evt` — Samenerp.Calendar.Event),
+      # allocator-reserved: 33_747 bytes, 729 flat.
+      assert byte_size(committed) == 33747
+      assert map_size(R.load()) == 729
     end
   end
 

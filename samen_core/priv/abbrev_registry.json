@@ -683,6 +683,7 @@
       "eqk": "Samenerp.Operator.Ticket",
       "enl": "Samenerp.Erp.StockLedger",
       "scf": "Samenerp.Cms.SeoMeta",
+      "evt": "Samenerp.Calendar.Event",
       "ers": "Samenerp.Billing.Subscription",
       "epi": "Samenerp.Operator.Invoice",
       "eqs": "Samenerp.Operator.Csat",
