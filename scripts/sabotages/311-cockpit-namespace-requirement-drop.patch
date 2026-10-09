@@ -1,0 +1,31 @@
+# SABOTAGE: T84b (ADR-044 §9.2) — the cockpit mount's own namespace requirement. The guard CALL
+# is deleted from `samen_operator_routes/2`'s macro body (the guard function stays defined), so
+# `fleet_cockpit: true` with no — or a `nil` — `:fleet_namespace` compiles again. That is exactly
+# the half-named cockpit this task exists to refuse: the label is what
+# `Samen.Web.Operator.Fleet.gate/2` hands the cockpit, so the mount compiles, boots, renders as a
+# mounted cockpit and reads nothing — a `nil` reaching `Samen.Fleet.read/2`, whose `Keyword.fetch/2`
+# SUCCEEDS on `namespace: nil` and passes it into `Registry.read_rows(nil, _)`. Nothing red
+# anywhere: the failure is a production request, not a build.
+# HONEST DISCLOSURE: the RUNTIME layer (`Samen.Fleet.read/2` treating a nil VALUE like a missing
+# KEY) stays intact here, so this patch pins the COMPILE-time refusal specifically — the property
+# the macro body owns. The registry-reached positive control and the guard's own unit table
+# (including the `fleet_namespace: nil` anti-tautology pin) also stay green, which is what makes
+# the flip attributable to the deleted call rather than to a broken suite.
+# APP: samen_web
+# TEST_FILES: test/samen/web/router_test.exs
+# MUST_FAIL: NO :fleet_namespace RAISES at macro expansion
+diff --git a/samen_web/lib/samen/web/router.ex b/samen_web/lib/samen/web/router.ex
+--- a/samen_web/lib/samen/web/router.ex
++++ b/samen_web/lib/samen/web/router.ex
+@@ -186,11 +186,6 @@
+   Impersonation.gate_socket/3`, wired by T84a).
+   """
+   defmacro samen_operator_routes(namespace, opts \\ []) do
+-    # T84b — the operator-side twin of `samen_mcp_route`'s `:actor_resolver` refusal (T142):
+-    # `fleet_cockpit: true` without `:fleet_namespace` fails the BUILD. See
+-    # `__require_fleet_namespace__!/1`, called here so the omission is caught at expansion.
+-    __require_fleet_namespace__!(opts)
+-
+     path = Keyword.get(opts, :path, "/operator")
+     session_name = Keyword.get(opts, :session_name, :samen_operator)
+     include_aggregate = Keyword.get(opts, :include_aggregate, false)

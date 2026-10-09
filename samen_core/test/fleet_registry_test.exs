@@ -1070,6 +1070,31 @@ defmodule Samen.Fleet.RegistryTest do
       assert Samen.Fleet.mode(app) == :manual
       assert {:error, {:missing_namespace, :manual}} = Samen.Fleet.read(app)
     end
+
+    test "a nil-VALUE namespace fails as honestly as a missing key (RP-J-10, the cockpit twin)" do
+      # `Keyword.fetch/2` SUCCEEDS on `namespace: nil`, so a cockpit whose mount carries a nil
+      # `:fleet_namespace` label used to skip the documented error branch and hand the registry a
+      # nil namespace — `Module.concat(nil, App)` is the bare `App`, and `Ash.read/2` raised
+      # ArgumentError out of the caller instead. `samen_operator_routes/2` refuses that label at
+      # COMPILE time (`Samen.Web.Router.__require_fleet_namespace__!/1`, T84b); this is the
+      # runtime layer that keeps a directly-built `%Mount{}` (Mount.new/4 in a test or a
+      # hand-built session) from crashing the same way.
+      app = :another_app_in_manual_mode_with_a_nil_namespace
+      Application.put_env(app, :fleet, mode: :manual)
+      on_exit(fn -> Application.delete_env(app, :fleet) end)
+
+      assert {:error, {:missing_namespace, :manual}} = Samen.Fleet.read(app, namespace: nil)
+      assert {:error, {:missing_namespace, :manual}} = Samen.Fleet.read(app, [])
+
+      # Both non-embedded modes, so the clause cannot be right for only one of them.
+      Application.put_env(app, :fleet, mode: :heartbeat)
+      assert {:error, {:missing_namespace, :heartbeat}} = Samen.Fleet.read(app, namespace: nil)
+
+      # POSITIVE CONTROL — the same app, mode and call with a REAL namespace still reaches the
+      # registry, so the clause above narrows the nil case rather than blanketing the branch.
+      assert {:ok, %{rows: rows, reporting: _, total: _}} = Samen.Fleet.read(app, namespace: @ns)
+      assert is_list(rows)
+    end
   end
 
   defp read_credentials(app_id) do

@@ -135,11 +135,29 @@ defmodule Mix.Tasks.Samen.Verify.AgentCoverage do
 
   @agent_run_resource Samen.AI.Agent.Run
 
+  # `--root` points at the tree to walk; `--format` selects the report (`Samen.Verifier`
+  # owns both names, so a new adopter cannot spell them differently). The switch list is ONE
+  # place, so a mistyped `--rrot` lands in `invalid` and is reported rather than ignored.
+  @cli_switches [root: :string] ++ [Samen.Verifier.format_switch()]
+  @cli_switch_names ~w(--root --format)
+  @cli_switches_text "--root <path> and --format <text|json>"
+
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
-    {opts, _rest, _} = OptionParser.parse(args, strict: [root: :string])
-    Samen.Verifier.halt_if_violations(@task_name, violations(opts))
+
+    {opts, _rest, invalid} = OptionParser.parse(args, strict: @cli_switches)
+    {format, format_violations} = Samen.Verifier.resolve_format(opts)
+
+    violations =
+      format_violations ++
+        Samen.Verifier.cli_argument_violations(
+          invalid,
+          @cli_switch_names,
+          @cli_switches_text
+        ) ++ violations(opts)
+
+    Samen.Verifier.halt_if_violations(@task_name, violations, format: format)
   end
 
   @doc "The full violation list (human-readable strings) without halting — the test seam."
@@ -760,14 +778,25 @@ defmodule Mix.Tasks.Samen.Verify.AgentCoverage do
   defp lib_paths(root) do
     # Windows: backslash-carrying paths make Path.wildcard match nothing —
     # every dir glob goes through the normalized expansion helper.
-    @app_lib_globs
-    |> Enum.flat_map(fn glob -> Samen.SourceGlob.expand!(root, glob) end)
+    app_lib_dirs(root)
     |> Enum.filter(&File.dir?/1)
     |> Enum.flat_map(fn dir -> Samen.SourceGlob.expand!(dir, "**/*.ex") end)
   end
 
+  # A root that IS an app (it carries its own `lib/`) is walked too, so `--root <single app>`
+  # gates that app instead of discovering nothing — the same "the root itself may be the single
+  # host app" semantics `fleet_wire`'s `--root` documents, and what makes the shared
+  # `mix samen.verify.fleet --root` contract uniform across the tree-scoped set. A monorepo top
+  # has no `root/lib`, so this is a NO-OP there and the shipped whole-tree scan is unchanged.
+  defp app_lib_dirs(root) do
+    Samen.SourceGlob.expand!(root, "lib") ++
+      Enum.flat_map(@app_lib_globs, fn glob -> Samen.SourceGlob.expand!(root, glob) end)
+  end
+
   defp test_paths(root) do
-    Samen.SourceGlob.expand!(root, "*/test/**/*.exs") ++
+    Samen.SourceGlob.expand!(root, "test/**/*.exs") ++
+      Samen.SourceGlob.expand!(root, "test/**/*.ex") ++
+      Samen.SourceGlob.expand!(root, "*/test/**/*.exs") ++
       Samen.SourceGlob.expand!(root, "*/test/**/*.ex")
   end
 

@@ -35,6 +35,34 @@ defmodule Samen.Web.RouterTest do
     end
   end
 
+  # T84b's compile-time POSITIVE CONTROLS (see the describe far below). The namespace/repo values
+  # are labels only (a fake `Some.Host.*` atom is never loaded); the cockpit's own LiveView modules
+  # are the framework's real ones, which is why a successful compile here means exactly what it
+  # says. Declared up here so the tests below can name them bare, like `HostRouter`.
+  defmodule CockpitWithNamespaceProbeRouter do
+    use Phoenix.Router
+    import Phoenix.LiveView.Router
+    import Samen.Web.Router
+
+    scope "/" do
+      samen_operator_routes(Some.Host.Operator,
+        repo: Some.Host.Repo,
+        fleet_cockpit: true,
+        fleet_namespace: Some.Host.Fleet
+      )
+    end
+  end
+
+  defmodule PlainOperatorProbeRouter do
+    use Phoenix.Router
+    import Phoenix.LiveView.Router
+    import Samen.Web.Router
+
+    scope "/" do
+      samen_operator_routes(Some.Host.Operator, repo: Some.Host.Repo)
+    end
+  end
+
   test "the CRM route table maps the three CRM pages to the framework LiveViews" do
     routes = Samen.Web.Router.__routes__(:crm, "/crm")
 
@@ -228,5 +256,72 @@ defmodule Samen.Web.RouterTest do
 
     paths = AutomationOperatorAttemptRouter.__routes__() |> Enum.map(& &1.path)
     assert "/automation" in paths
+  end
+
+  # T84b (ADR-044 §9.2) — the cockpit mount is safe-by-construction, in the T142 shape: mounting
+  # `fleet_cockpit: true` with no `:fleet_namespace` is a BUILD failure, not a runtime surprise.
+  # The three proofs below are the accept/refuse table, a real `defmodule` that must NOT compile,
+  # and the positive controls that keep the refusal from being over-broad (the SAME macro compiles
+  # WITH a namespace, and a NON-cockpit operator mount still needs none).
+  describe "T84b: samen_operator_routes requires :fleet_namespace when fleet_cockpit: true" do
+    test "the guard refuses a cockpit with no (or a nil) :fleet_namespace and accepts one" do
+      # Not a cockpit — the plain operator mount this macro has always emitted.
+      assert :ok = Samen.Web.Router.__require_fleet_namespace__!([repo: Some.Host.Repo])
+
+      assert :ok =
+               Samen.Web.Router.__require_fleet_namespace__!(
+                 repo: Some.Host.Repo,
+                 fleet_cockpit: false
+               )
+
+      assert_raise ArgumentError, ~r/fleet_namespace/, fn ->
+        Samen.Web.Router.__require_fleet_namespace__!(repo: Some.Host.Repo, fleet_cockpit: true)
+      end
+
+      # A `nil` VALUE is the same hole as a missing KEY — the label would still be nil. This is
+      # the anti-tautology pin: a guard written with `Keyword.has_key?/2` (the T142 spelling)
+      # would ACCEPT this and quietly pass a nil namespace through to the cockpit.
+      assert_raise ArgumentError, ~r/fleet_namespace/, fn ->
+        Samen.Web.Router.__require_fleet_namespace__!(
+          repo: Some.Host.Repo,
+          fleet_cockpit: true,
+          fleet_namespace: nil
+        )
+      end
+
+      assert :ok =
+               Samen.Web.Router.__require_fleet_namespace__!(
+                 repo: Some.Host.Repo,
+                 fleet_cockpit: true,
+                 fleet_namespace: Some.Host.Fleet
+               )
+    end
+
+    test "mounting with fleet_cockpit: true and NO :fleet_namespace RAISES at macro expansion (won't compile)" do
+      assert_raise ArgumentError, ~r/fleet_namespace/, fn ->
+        defmodule CockpitNoNamespaceProbeRouter do
+          use Phoenix.Router
+          import Phoenix.LiveView.Router
+          import Samen.Web.Router
+
+          scope "/" do
+            samen_operator_routes(Some.Host.Operator, repo: Some.Host.Repo, fleet_cockpit: true)
+          end
+        end
+      end
+    end
+
+    test "positive control: WITH :fleet_namespace the SAME mount compiles, and a non-cockpit mount needs none" do
+      # Both modules below compile at load time — if the guard were over-broad (requiring a
+      # namespace unconditionally, or refusing any cockpit), THIS TEST MODULE would not compile.
+      cockpit = CockpitWithNamespaceProbeRouter.__routes__() |> Enum.map(& &1.path)
+      assert "/operator/fleet" in cockpit
+      assert "/operator/accounts" in cockpit
+
+      plain = PlainOperatorProbeRouter.__routes__() |> Enum.map(& &1.path)
+      assert "/operator/accounts" in plain
+      # ...and the cockpit routes are genuinely gated behind the opt, not always emitted.
+      refute "/operator/fleet" in plain
+    end
   end
 end

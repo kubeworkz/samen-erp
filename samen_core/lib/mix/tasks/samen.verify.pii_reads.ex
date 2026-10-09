@@ -63,11 +63,15 @@ defmodule Mix.Tasks.Samen.Verify.PiiReads do
   @impl Mix.Task
   def run(args) do
     {opts, _rest} =
-      OptionParser.parse!(args, strict: [source_dirs: [:string, :keep]])
+      OptionParser.parse!(args,
+        strict: [source_dirs: [:string, :keep]] ++ [Samen.Verifier.format_switch()]
+      )
 
     # app.start compiles + starts the app so resource modules are loaded and the
     # registry can introspect their `pii do` blocks.
     Mix.Task.run("app.start")
+
+    {format, format_violations} = Samen.Verifier.resolve_format(opts)
 
     registry = Registry.build()
     halt_if_registry_empty!(registry)
@@ -79,11 +83,12 @@ defmodule Mix.Tasks.Samen.Verify.PiiReads do
     print_hints(hints)
 
     violations =
-      findings
-      |> Harness.failing()
-      |> Enum.map(&Harness.format/1)
+      format_violations ++
+        (findings
+         |> Harness.failing()
+         |> Enum.map(&Harness.format/1))
 
-    Samen.Verifier.halt_if_violations(@task_name, violations)
+    Samen.Verifier.halt_if_violations(@task_name, violations, format: format)
   end
 
   @doc """

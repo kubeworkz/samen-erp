@@ -1,0 +1,35 @@
+# SABOTAGE: rule 2's INGEST LEG — the third signature-verifying receiver. The two
+# `wire_side_call?(@ingest_macro, ...)` clauses are deleted, so `samen_fleet_ingest_routes/1`
+# stops counting as a wire side: an app mounting POST /fleet/enroll + POST /fleet/heartbeat with
+# NO raw-bytes seam is no longer reported, even though the macro's own @doc says it "Needs the
+# SAME raw-body reader samen_fleet_routes/1 documents" and the code earns the obligation —
+# `Samen.Fleet.Registry.verify_and_ingest_heartbeat/2` signs `Crypto.body_digest(raw_body)`, which
+# `Samen.Web.Fleet.CockpitIngress.heartbeat/2` reads through `RawBodyReader.raw_body/1`. Without
+# the endpoint's reader a correctly-signed heartbeat is refused as if forged — indistinguishable,
+# from the vendor's side, from a broken integration.
+# WHY HERE AND NOT THE MACRO LIST: `mount_locations/4`'s `macros` argument is only the text hint
+# for the FAIL-CLOSED branch (which rule an unparsable file gets attributed to); the predicate is
+# what actually decides engagement. So the defect has to sit in `wire_side_call?/1` — dropping
+# `@ingest_macro` from the macro list instead leaves the leg fully enforced and merely blinds the
+# fail-closed path, which is what the first cut of this patch did (the harness caught it: the named
+# test did not flip).
+# HONEST DISCLOSURE: the other two receivers (samen_webhook_routes/1, samen_fleet_routes/1) keep
+# the rule intact, so rule 2's own RED/control/anti-tautology/fail-closed tests stay green, as do
+# rules 1, 3 and 4 and every other check in the task. Exactly the ingest leg loses enforcement —
+# two tests witness that: the named ingest-leg RED and the rule-1 RED, whose fixture mounts the
+# ingest alongside a cockpit and asserts the pair (cockpit violation + ingest-leg seam violation).
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: RED (rule 2, ingest leg): the cockpit-side ingest is a wire side too, so it needs the seam
+diff --git a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+--- a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+@@ -781,8 +781,6 @@
+   # The third receiver (its @doc: "Needs the SAME raw-body reader samen_fleet_routes/1
+   # documents"): the heartbeat pipe signs `Crypto.body_digest(raw_body)`, so it needs the
+   # exact bytes exactly as the other two do. Same []/keyword-list argument discipline.
+-  defp wire_side_call?({@ingest_macro, _meta, []}), do: true
+-  defp wire_side_call?({@ingest_macro, _meta, [kw]}), do: is_list(kw)
+   defp wire_side_call?(_), do: false
+ 
+   # The counterpart of rule 2: the app caches the exact request bytes before Plug.Parsers

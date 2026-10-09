@@ -30,8 +30,10 @@ defmodule Samen.Fleet do
 
   @doc """
   Read the fleet as this host sees it. `:embedded` ⇒ the single honest self-row,
-  zero DB/network. `:manual`/`:heartbeat` ⇒ the registry rows for the cockpit
-  `namespace` given via `opts[:namespace]` (required in those modes) — staleness
+  zero DB/network.  `:manual`/`:heartbeat` ⇒ the registry rows for the cockpit
+  `namespace` given via `opts[:namespace]` (required in those modes — a missing key AND a `nil`
+  value alike fail closed to `{:error, {:missing_namespace, mode}}`, never a registry call with a
+  non-resource module) — staleness
   computed cockpit-side (§4.6/§8.2 rule 3), n-of-m disclosure included.
 
   Returns `{:ok, %{rows: [row], reporting: n, total: m}}` or `{:error, reason}`.
@@ -54,9 +56,17 @@ defmodule Samen.Fleet do
         {:ok, %{rows: rows, reporting: reporting, total: length(rows)}}
 
       mode when mode in [:manual, :heartbeat] ->
+        # A nil-VALUE namespace is the same hole as a missing KEY. `Keyword.fetch/2` SUCCEEDS on
+        # `namespace: nil`, so this branch used to hand the registry a nil namespace, whose
+        # `Module.concat(nil, App)` is the bare `App` — `Ash.read/2` then raised `ArgumentError:
+        # Expected an `%Ash.Query{}` or an `Ash.Resource` in `Ash.read/2`, got: App` straight out
+        # of the caller (a cockpit mount 500s) instead of returning this documented error.
+        # `samen_operator_routes/2` refuses the nil label at COMPILE time
+        # (`Samen.Web.Router.__require_fleet_namespace__!/1`); this is the runtime layer that
+        # keeps a directly-built `%Mount{}` (e.g. `Samen.Web.Mount.new/4` in a test) honest too.
         case Keyword.fetch(opts, :namespace) do
-          {:ok, namespace} -> Registry.read_rows(namespace, opts)
-          :error -> {:error, {:missing_namespace, mode}}
+          {:ok, namespace} when not is_nil(namespace) -> Registry.read_rows(namespace, opts)
+          _missing_or_nil -> {:error, {:missing_namespace, mode}}
         end
 
       other ->

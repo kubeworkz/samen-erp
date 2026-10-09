@@ -1,0 +1,30 @@
+# SABOTAGE: rule 4 of the co-adoption table — the realtime PubSub (ADR-012 §6.3 chat / ADR-016 §4
+# notifications). The counterpart signal is short-circuited to `[true]`, so no app can be reported
+# as mounting a chat/notifications surface on a bus it does not run: both macros' @docs say the
+# realtime path "needs a running Phoenix.PubSub", the chat room's connected mount subscribes and
+# tracks presence on it, and the framework's own default is a VERTICAL's name (`Driftwood.PubSub`).
+# A mount that names no `:pubsub` label therefore broadcasts on the wrong bus — or crashes the room
+# on connect — with nothing red in the build.
+# HONEST DISCLOSURE: the scan still computes the signal (label, supervised children, name match), so
+# the green real-tree proof stays green; the rule-4 RED test plus the name-mismatch and missing-roster
+# anti-tautology assertions flip. Rules 1-3 and every other check are untouched.
+# RE-ANCHORED (`--root`): the hunk's TRAILING context used to be `app_dirs/1`'s comment, which the
+# `--root` work rewrote (the `rule_signal/2` clauses above it are untouched). Only the context and
+# line numbers move: the removed and added lines, the defect and the MUST_FAIL target are
+# byte-identical to the original. The hunk was regenerated with `diff -u` rather than re-typed, so
+# its workspace-context bytes (including the blank context line) are the file's own.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: RED (rule 4): a chat mount with no supervision tree in the app is a violation
+diff --git a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+--- a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+@@ -707,7 +707,7 @@
+   defp rule_signal(%{org_session: mounts}, :org_session_mount), do: mounts
+   defp rule_signal(%{session_plug: plugs}, :session_plug), do: plugs
+   defp rule_signal(%{realtime: mounts}, :realtime_mount), do: mounts
+-  defp rule_signal(%{pubsub_ready: ready}, :realtime_pubsub_ready), do: ready
++  defp rule_signal(%{pubsub_ready: _ready}, :realtime_pubsub_ready), do: [true]
+ 
+   # Every dir under the walked root carrying a mix.exs, by app name. A root that IS an
+   # app counts too (its own `mix.exs` + `lib/`), so `--root` can gate ONE standalone

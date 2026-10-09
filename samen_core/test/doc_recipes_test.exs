@@ -286,7 +286,14 @@ defmodule Samen.Gen.DocRecipesTest do
      "against the CDC analytics repo in a module NOT marked"},
     {"samen_core/lib/samen/cdc/never_read_current.ex", "(doc line 635)"},
     {"samen_core/lib/mix/tasks/samen.verify.never_read_current.ex",
-     "Nothing to lint — never-read-current is vacuously satisfied (tier default off)"}
+     "Nothing to lint — never-read-current is vacuously satisfied (tier default off)"},
+    # the TREE-SCOPED AGGREGATE (`mix samen.verify.fleet`) — its summary line and the two
+    # fail-closed halves the index quotes: an unevaluable member's `runner_error` and the
+    # roster's own definition.
+    {"samen_core/lib/mix/tasks/samen.verify.fleet.ex", "verifier(s) failed"},
+    {"samen_core/lib/samen/verifier/fleet.ex", "could not be evaluated"},
+    {"samen_core/lib/samen/verifier/fleet.ex", "no JSON report on stdout"},
+    {"samen_core/lib/samen/verifier/registry.ex", "tree-scoped"}
   ]
 
   test "AC-G10-4: every quoted load-bearing error string exists in its verifier source" do

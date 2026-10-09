@@ -1264,8 +1264,9 @@ samen_fleet_routes(otp_app: :pawchart)
 # config.exs — mode. Omit entirely for the zero-config :embedded default.
 config :pawchart, :fleet, mode: :heartbeat   # + SAMEN_FLEET_ENROLL_TOKEN, SAMEN_FLEET_COCKPIT_URL
 
-# router.ex — cockpit side, on whichever product hosts the cockpit
-samen_operator_routes(MyAppWeb, fleet_cockpit: true)
+# router.ex — cockpit side, on whichever product hosts the cockpit. `fleet_namespace:`
+# is compile-REQUIRED alongside `fleet_cockpit: true` (the guard documented below).
+samen_operator_routes(MyAppWeb, fleet_cockpit: true, fleet_namespace: MyApp.Fleet)
 samen_fleet_ingest_routes(namespace: MyApp.Fleet)
 ```
 
@@ -1279,6 +1280,80 @@ types it. Two lines to report, two more to host a cockpit, zero to be honest
 with one product. The generator (ADR-022) emits `samen_fleet_routes(otp_app:
 ...)` by default, which is what makes the J5 zero-config probe pass without
 the generated app knowing what a fleet is.
+
+**Adoption-status ruling (audit, 2026-10-08).** The cockpit-side pair in the snippet above
+is specified, built, and certified but adopted by **no shipped product**: `git grep -l
+samen_fleet_ingest_routes` finds only the macro and `samen_web`'s test-support cockpit
+router (`Samen.WebTest.FleetCockpitRouter`), no host mounts `fleet_cockpit: true`, and no
+host holds the `flt_*` scope. That is consistent with §9.3 (the cockpit's own proof lives
+in `samen_web`, and the ≥2-vertical proof must not require a vertical to host one) —
+reporting-only products mount the app side only. Its certification is `samen_web/ci.sh`'s
+`mix samen.verify.fleet_wire --router Samen.WebTest.FleetCockpitRouter` (RP-J-4b, both
+directions) plus `samen_web/test/samen/web/fleet_ingress_test.exs`. Structural note:
+RP-J-4b compares the FULL declared route table, so it cannot be green for a reporting-only
+router — in practice each vertical's tier-(a) evidence is its Plug-layer
+`test/fleet_wire_test.exs`. Ledger: `docs/samenerp-mount-ledger.md`.
+
+**The co-location invariant is GATE-enforced, not documented (audit follow-up,
+2026-10-08).** It is rule 1 of `mix samen.verify.fleet_wire`'s CO-ADOPTION RULES
+(`co_adoption_rules/0` — a data table of mounts that are only sound alongside a counterpart in
+the same app, each carrying its `:why`/`:fix`). The scan walks every app's shipped `lib/` and
+fails when the cockpit-side ingest is mounted without a cockpit — the one-directional
+`ingest ⇒ cockpit` rule from §3.1/§9.2, matched by AST on the mount CALL (so this section's own
+snippet and the macro's `@doc` are never read as adoptions), fail-closed on empty discovery.
+`samen_web/ci.sh` already ran that verifier, so enforcement needed no new gate step; the
+adversarial twin is `scripts/sabotages/309-fleet-ingest-cockpit-colocation-drop.patch`.
+
+**Its sibling rule enforces the raw-bytes seam this ADR leans on (§4.4a).** Rule 2 of the same
+table requires the endpoint's `Plug.Parsers` `Samen.Web.Webhook.RawBodyReader` alongside a
+signature-verifying receiver — all THREE of them (`samen_webhook_routes/1`,
+`samen_fleet_routes/1`, and `samen_fleet_ingest_routes/1`, whose own `@doc` says “Needs the SAME
+raw-body reader”; `Samen.Web.Webhook.IngressController` states it as MUST), because
+`POST /fleet/directive` verifies its HMAC over the EXACT signed bytes — and so does the
+heartbeat pipe (`Samen.Fleet.Registry.verify_and_ingest_heartbeat/2` signs
+`Crypto.body_digest(raw_body)`, which `Samen.Web.Fleet.CockpitIngress.heartbeat/2` reads through
+`RawBodyReader.raw_body/1`). A host that skips the one-line endpoint change compiles, boots, and
+refuses correctly-signed pushes as if forged. Twins:
+`scripts/sabotages/310-raw-body-seam-missing.patch` (rule 2 as a whole) and
+`scripts/sabotages/314-fleet-ingest-dropped-from-seam-side.patch` (the ingest leg specifically).
+
+**The table is the output of an audit, not a wish list.** Every `samen_*` mount macro's `@doc`
+was read for obligations stated as MUST/required/“needs”, and each was traced to whatever enforces
+it. That is how rule 2 gained its third receiver, and how two further rules were found: the
+org-session plug (rule 3 — the files/CSV/ICS byte and export controllers resolve the org from the
+session, ADR-026/ADR-028/F2) and the realtime PubSub (rule 4 — chat/notifications broadcast on a
+`Phoenix.PubSub` the app must actually supervise, ADR-012 §6.3/ADR-016 §4). Both were stated as
+MUST and enforced by nothing; both hold on the real tree. The full per-macro table — including
+what is compile-enforced, `Keyword.fetch!`-enforced, fail-closed by construction, or not
+statically checkable at all — is in `docs/guides/gate-failures.md` under
+`mix samen.verify.fleet_wire`.
+
+**The cockpit mount's own namespace is compile-enforced, not hoped for (audit follow-up,
+2026-10-08).** Rule 1 above insists only that a cockpit EXISTS; the cockpit itself now refuses to
+compile without the namespace it reads: `fleet_cockpit: true` with no (or a `nil`)
+`:fleet_namespace` raises `ArgumentError` at macro expansion
+(`Samen.Web.Router.__require_fleet_namespace__!/1`, called from the macro body — the refusal shape
+T142 gives `samen_mcp_route`'s missing `:actor_resolver`), so §9.2's own snippet is no longer a
+compiling example without its namespace. The requirement is deliberately NOT conditioned on the
+host's `:fleet` mode: the mode is RUNTIME config (`config :app, :fleet, mode:`, typically
+`runtime.exs`/deploy env), so a macro cannot see it, and naming the namespace at the mount is what
+keeps an `:embedded` → `:manual`/`:heartbeat` flip (a config edit, no code edit) from landing a live
+cockpit on a nil label.
+
+The consequence it prevents is specific, and was measured before the guard existed:
+`Samen.Web.Operator.Fleet.gate/2` reads the label into the cockpit context and `FleetLive.load/2`
+passes it to `Samen.Fleet.read/2`, whose `Keyword.fetch/2` SUCCEEDS on `namespace: nil` — so the nil
+reached `Registry.read_rows(nil, _)`, where `Module.concat(nil, App)` is the bare `App`, and
+`Ash.read/2` raised `ArgumentError` ("Expected an %Ash.Query{} or an Ash.Resource in Ash.read/2,
+got: App") out of the cockpit's `mount/3` — instead of `read/2`'s documented
+`{:error, {:missing_namespace, mode}}`. Both layers are now closed: the compile-time refusal in the
+router, and `read/2` treating a nil VALUE like a missing KEY (T142's "fail-closed at both layers"
+shape). Proof: `samen_web/test/samen/web/router_test.exs` (the guard's accept/refuse table including
+the `fleet_namespace: nil` anti-tautology pin, a real `defmodule` that must NOT compile, and two
+positive controls — the same mount WITH a namespace, and a non-cockpit operator mount without one)
+and `samen_core/test/fleet_registry_test.exs` (the read-path twin, with its registry-reached
+positive control); adversarial twin
+`scripts/sabotages/311-cockpit-namespace-requirement-drop.patch`.
 
 **No per-vertical projection MFA is required.** The `{Driftwood.OperatorAggregate,
 :load, []}` pattern (the existing `AggregateLive` seam) remains available as an

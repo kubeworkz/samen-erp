@@ -51,17 +51,17 @@ defmodule Mix.Tasks.Samen.Verify.NeverReadCurrent do
   @impl Mix.Task
   def run(args) do
     {opts, _rest} =
-      OptionParser.parse!(args, strict: [source_dirs: [:string, :keep]])
+      OptionParser.parse!(args,
+        strict: [source_dirs: [:string, :keep]] ++ [Samen.Verifier.format_switch()]
+      )
 
     Mix.Task.run("app.start")
 
+    {format, format_violations} = Samen.Verifier.resolve_format(opts)
     repo = NeverReadCurrent.cdc_repo()
 
     if is_nil(repo) do
-      IO.puts(
-        "#{@task_name}: CDC analytics tier is OFF (no `config :samen_core, :cdc, repo: …`). " <>
-          "Nothing to lint — never-read-current is vacuously satisfied (tier default off)."
-      )
+      tier_off(format, format_violations)
     else
       dirs =
         case Keyword.get_values(opts, :source_dirs) do
@@ -83,8 +83,26 @@ defmodule Mix.Tasks.Samen.Verify.NeverReadCurrent do
         |> Enum.filter(&(&1.kind in [:current_read, :parse_error]))
         |> Enum.map(fn f -> "#{f.file}:#{f.line} — #{f.message}" end)
 
-      Samen.Verifier.halt_if_violations(@task_name, violations)
+      Samen.Verifier.halt_if_violations(@task_name, format_violations ++ violations, format: format)
     end
+  end
+
+  # The CDC analytics tier is OFF: there is no analytics repo to read, so the lint is
+  # vacuously satisfied. A BAD `--format` is still reported (fail-closed) rather than swallowed
+  # by this early return; absent that, a `--format json` run prints an OK DOCUMENT — because a
+  # member that exits 0 with PROSE only would read to the aggregate as an unevaluable child (a
+  # `runner_error`), which is the one outcome a vacuous-but-green tier must not produce.
+  defp tier_off(_format, format_violations) when format_violations != [] do
+    Samen.Verifier.halt_if_violations(@task_name, format_violations, format: :text)
+  end
+
+  defp tier_off(:json, []), do: IO.puts(Jason.encode!(Samen.Verifier.document(@task_name, [])))
+
+  defp tier_off(:text, []) do
+    IO.puts(
+      "#{@task_name}: CDC analytics tier is OFF (no `config :samen_core, :cdc, repo: …`). " <>
+        "Nothing to lint — never-read-current is vacuously satisfied (tier default off)."
+    )
   end
 
   defp print_hints([]), do: :ok

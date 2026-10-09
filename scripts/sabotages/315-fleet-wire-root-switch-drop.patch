@@ -1,0 +1,33 @@
+# SABOTAGE: the CLI's `--root <tree>` switch itself. `@cli_switches` is the ONE strict list
+# `parse_cli/1` feeds to OptionParser; dropping `root: :string` from it makes OptionParser hand
+# `--root <path>` back in `invalid`, so `cli_opts/1` reports NO `:root` and `run/1` reverts to the
+# cwd-discovery default — the command can then gate only the tree it happens to run inside, which
+# is the whole regression `--root` exists to remove.
+#
+# HONEST DISCLOSURE (re-anchored after the `--format` work): the defect is the same line-level
+# change, but the run's FAILURE MODE is now louder than it was. The argument guard added with
+# `--format` sees the stray `--root` and reports it as an unrecognized argument, so this sabotage
+# exits 1 rather than exiting 0 over the wrong tree. The switch is still load-bearing and only the
+# named test says so: every other `--root` assertion drives `adoption_violations(adoption_root: …)`
+# directly and stays green when the switch is unrecognized.
+#
+# SECOND RE-ANCHOR (the shared format spec): the context lines moved again when
+# `@cli_switches` was rewritten to source `--format` from `Samen.Verifier.format_switch()`
+# (one switch name, one type, for every verifier CLI) instead of spelling `format: :string`
+# inline. The REMOVED and ADDED lines and the MUST_FAIL target are unchanged in meaning; the
+# hunk was regenerated with `diff -u`, not re-typed.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: the CLI still RECOGNIZES --root (a dropped switch would revert to discovery)
+diff --git a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+--- a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+@@ -155,7 +155,7 @@
+   # `cli_invalid/1` reports what it could not (an unrecognized switch, or a value-less one).
+   # `--format` comes from the shared harness spec, so a new adopter cannot spell it
+   # differently and silently drop it.
+-  @cli_switches [host: :string, router: :string, root: :string] ++
++  @cli_switches [host: :string, router: :string] ++
+                   [Samen.Verifier.format_switch()]
+ 
+   @impl Mix.Task

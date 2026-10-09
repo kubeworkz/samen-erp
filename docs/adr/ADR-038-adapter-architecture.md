@@ -302,6 +302,14 @@ the adapters behind `verify_and_parse_event/3`.
   mount per INV-5) → a raw-body-capturing plug pipeline (signature verification requires the
   raw bytes; the pipeline runs BEFORE `Plug.Parsers` consumes the body) → the ingress
   controller.
+- **That raw-bytes dependency is GATE-enforced** (audit follow-up, 2026-10-08): rule 2 of
+  `mix samen.verify.fleet_wire`'s co-adoption table requires the endpoint's `Plug.Parsers`
+  `Samen.Web.Webhook.RawBodyReader` in every app that mounts `samen_webhook_routes/1`, the
+  fleet's `samen_fleet_routes/1`, or the cockpit-side ingest `samen_fleet_ingest_routes/1`
+  (all three are signature-verifying receivers — the ingest signs `Crypto.body_digest(raw_body)`
+  too). It was document-only before — a host that skipped the one-line
+  endpoint change compiled, booted, and refused correctly-signed deliveries *as if forged*,
+  indistinguishable from a vendor problem (`scripts/sabotages/310-raw-body-seam-missing.patch`).
 - The provider module is resolved from HOST config
   (`config :samen_web, :webhook_providers, %{"stripe" => {SamenStripe.Provider, config}, …}`) —
   runtime dispatch through the behaviour, so `samen_web` (like `samen_core`) compiles with zero

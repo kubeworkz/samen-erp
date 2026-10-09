@@ -1,0 +1,32 @@
+# SABOTAGE: the JSON report's STRUCTURED FIELDS — the whole point of `--format json`. The record
+# branch of `Samen.Verifier.violation_document/1` is reduced to the bare message, so a co-adoption
+# violation reaches a consumer as `"kind": null, "app": null, "rule": null` and a dashboard can no
+# longer tell WHICH app or WHICH rule fired without parsing the prose — exactly the prose-parsing
+# the format exists to remove.
+#
+# The document still parses, still counts, still exits 1, and the TEXT report is byte-identical
+# (the strings never moved), so nothing catches this except the field-level assertions. That is
+# why the named test is the pairing test rather than a smoke check: the failure is a data-shape
+# regression, not a crash.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: a co-adoption violation carries app + rule, from the SAME construction as the prose
+diff --git a/samen_core/lib/samen/verifier.ex b/samen_core/lib/samen/verifier.ex
+--- a/samen_core/lib/samen/verifier.ex
++++ b/samen_core/lib/samen/verifier.ex
+@@ -101,14 +101,7 @@
+ 
+   defp violation_document(v) when is_binary(v), do: shape(v)
+ 
+-  defp violation_document(%{} = v) do
+-    %{
+-      "message" => Map.fetch!(v, :message),
+-      "kind" => textifiable(Map.get(v, :kind)),
+-      "app" => textifiable(Map.get(v, :app)),
+-      "rule" => textifiable(Map.get(v, :rule))
+-    }
+-  end
++  defp violation_document(%{} = v), do: %{"message" => Map.fetch!(v, :message)}
+ 
+   defp shape(message), do: %{"message" => message, "kind" => nil, "app" => nil, "rule" => nil}
+ 

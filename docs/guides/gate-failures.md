@@ -616,6 +616,15 @@ Samen.Fleet.Report.Schema.bounded_types/0 [...] is NOT a subset of Samen.WideEve
 P8 smoke-check FAILED for <sentinel>: a label (...) that is NOT a member of the declared closed catalog [...] was ACCEPTED by Schema.validate/2 ...
 route <VERB> <PATH> is mounted on <Router> but is NOT in Samen.Fleet.RouteTable.declared/0 (ADR-044 §4.4a) — an undeclared fleet route was added.
 Samen.Fleet.RouteTable.declared/0 promises <VERB> <PATH> but <Router> does not mount it.
+<app>: mounts the cockpit-side fleet ingest (...) at <path>:<line> but mounts NO cockpit (samen_operator_routes(..., fleet_cockpit: true)) anywhere in its shipped lib/ ...
+<app>: mounts a signature-verifying receiver (...) at <path>:<line> but mounts NO raw-bytes seam (Plug.Parsers with body_reader: {Samen.Web.Webhook.RawBodyReader, :read_body, []}) anywhere in its shipped lib/ ...
+<app>: mounts an org-session-reading surface (...) at <path>:<line> but mounts NO session plug (plug :fetch_session, the `:browser`-pipeline shape the macros' @docs show) in that app's router ...
+<app>: mounts a realtime surface (samen_chat_routes/3, samen_notifications_routes/3) at <path>:<line> but mounts NO supervised Phoenix.PubSub whose name matches the mount's :pubsub label (the framework default being Driftwood.PubSub) — plus, for a CHAT mount, its {Samen.Web.Chat.Presence, pubsub_server: <that name>} roster server anywhere in its shipped lib/ ...
+the co-adoption scan found NO app dirs under <root> — a scan that discovers nothing certifies nothing (fail-closed ...)
+--root <path> is not a directory — a tree that cannot be walked certifies nothing (fail-closed: point --root at the checkout root that holds the app dirs).
+--format "<value>" is not supported — use text or json.
+unrecognized argument <switch> — this task takes --host <app>, --router <Module>, --root <path> and --format <text|json>; refusing to run with an ignored argument (fail-closed).
+<switch> requires a value — this task takes --host <app>, ... ; refusing to run with an ignored argument (fail-closed).
 ```
 
 **Meaning:** ADR-044 §5.2 point 4 / §5.2b's "closed member list" premise (WS-J J2,
@@ -632,12 +641,189 @@ not merely shape-checks it — an empty/malformed declared catalog fails outrigh
 host that has not adopted cohort/catalog data at all is untouched (opt-in); (3)
 RP-J-4b, the route-surface cross-check against `Samen.Fleet.RouteTable.declared/0`
 (ADR-044 §4.4a + §5.3's tier-2 resolve routes) — only runs with `--router
-MyAppWeb.Router`, skipped (not a violation) otherwise. Not wired into any
+MyAppWeb.Router`, skipped (not a violation) otherwise; and (4) the CO-ADOPTION
+RULES — `Samen.Verify.FleetWire.co_adoption_rules/0`, a small DATA table (the
+`Samen.Fleet.RouteTable.declared/0` pattern) of mounts that are only sound alongside a  counterpart in the SAME app, scanned across every app's shipped `lib/`. FOUR rules ship:
+(a) the ADR-044 §3.1/§9.2 fleet cockpit pair — the cockpit-side ingest
+(`samen_fleet_ingest_routes/1`) requires a cockpit (`samen_operator_routes(...,
+fleet_cockpit: true)`), because enroll/heartbeat are that role's own side of the wire and
+a host that mounts them with no cockpit ships endpoints nothing in it reads, off the
+operator-plane gate the cockpit's LiveViews inherit; (b) the ADR-038 §5.1 / §4.4a
+raw-bytes seam — ALL THREE signature-verifying receivers (`samen_webhook_routes/1`,
+`samen_fleet_routes/1` AND `samen_fleet_ingest_routes/1`, whose own `@doc` says
+"Needs the SAME raw-body reader") require the endpoint's `Plug.Parsers` body reader,
+because the HMAC is verified over the exact bytes
+(`Registry.verify_and_ingest_heartbeat/2` signs `Crypto.body_digest(raw_body)`) and a host
+that skips that one-line change compiles, boots, and refuses correctly-signed deliveries as
+if forged; (c) the org-session plug — a files/CSV/ICS mount (`samen_files_routes/3`,
+`samen_csv_routes/3`, `samen_ics_routes/3`) requires `plug :fetch_session` in the app's
+router, because those byte/export controllers sit OUTSIDE the `live_session` and resolve
+the org from the session (`Samen.Web.CurrentOrg.resolve/3`), so without it every download
+503s while the LiveViews beside it mount fine; and (d) the realtime PubSub — a chat or
+notifications mount requires a supervised `Phoenix.PubSub` whose name MATCHES the mount's
+`:pubsub` label (the framework default being `Driftwood.PubSub`) plus, for chat, its
+`Samen.Web.Chat.Presence` roster server on that same bus, because the chat room's connected
+mount subscribes and tracks presence on it — so a mount that names no label silently
+broadcasts on a vertical's bus. Every rule is
+ONE-DIRECTIONAL (the counterpart without its side is fine — a mode-A `pull` cockpit needs
+no ingest), matched by AST on the mount CALL so a `defmacro` head and the docs' example
+snippets are never read as adoptions, app-scoped where the counterpart lives elsewhere (the
+seam belongs in the endpoint, the session plug in the router, the PubSub in the supervision
+tree), and fail-closed on empty app discovery while SKIPPING (not violating) outside a
+monorepo checkout. That skip is only the DEFAULT walk, though: `--root PATH` names the tree to
+walk instead, and it is walked AS GIVEN — so a scratch copy that carries no `samen_core/lib`
+probe at all, and ONE standalone host whose own root is the app (`mix.exs` + `lib/`, which the
+`*/mix.exs` discovery can never produce), both gate through the same command. An explicitly
+named path that is not a directory is itself a violation, never a silent skip — a mistyped
+`--root` must not read as "outside a monorepo: nothing to answer for" (adversarial twin:
+`scripts/sabotages/315-fleet-wire-root-switch-drop.patch`, which drops `root:` from the
+`strict:` switch list so the switch reverts to a no-op). (Measured on the real
+hosts: stripping the seam from driftwood's endpoint, the session plug from pawchart's router,
+or the supervised PubSub from samenerp's supervision tree, and adopting the ingest in a host
+with no cockpit, each produces exactly one violation naming that app and that mount line.)
+A new rule is a data edit plus its proof, never another bespoke check.
+
+**Machine-readable output (`--format json`).** The same violations are available as ONE line of
+JSON on stdout for CI and dashboards — printed BEFORE the process halts, so a failing run still
+emits a readable document:
+
+```json
+{"status":"fail","task":"samen.verify.fleet_wire","violation_count":1,"violations":[{"app":"driftwood","kind":"co_adoption","message":"…","rule":"raw_body_seam"}]}
+```
+
+Every violation carries the same four keys, so the schema a consumer keys on never changes
+shape: `kind` names the check that failed (`class_discipline` / `subset` / `nested_closed_member`
+/ `catalog` / `route` / `co_adoption` / `bad_root` / `empty_discovery` / `cli_argument`) and
+`app` / `rule` — populated on the co-adoption family, `null` elsewhere — attribute a failure
+WITHOUT any consumer parsing the prose. That pairing is structural rather than maintained by
+hand: prose and identity come from ONE construction (`violation_record/3`), so the text report
+and the JSON cannot disagree about which app and which rule fired, and `violation_records/1`
+exposes the same list to in-process callers. The format is opt-in at the harness level
+(`Samen.Verifier.halt_if_violations/3`'s `:format`), so any verifier gains JSON by passing
+the keyword; `Samen.Verifier.document/2` is the pure form a test can assert without spawning a
+task. EVERY tree-scoped member offers it now (`agent_coverage`, `pii_reads` and
+`never_read_current` gained `--format` alongside `fleet_wire`), and the resolver, the switch
+spec and both fail-closed guards live ONCE in `Samen.Verifier` (`format_switch/0`,
+`parse_format/1`, `format_violation/1`, `resolve_format/1`, `cli_argument_violations/3`) so a
+new adopter cannot spell the switch differently or inherit a weaker guard. Three fail-closed guards ride with it: an unsupported `--format` VALUE is a violation
+rather than a silent fall back to text (a JSON-parsing CI agent must never be handed prose with
+a green exit code), and any argument OptionParser cannot place — a mistyped switch, or a switch
+that lost its value — is a violation rather than being silently ignored, because an ignored
+`--root`/`--format` would let the run exit 0 over the wrong tree in the wrong format
+(adversarial twin: `scripts/sabotages/316-fleet-wire-json-fields-drop.patch`, which reduces the
+record branch of `violation_document/1` to the bare message — the document still parses, still
+counts and still exits 1, so only the field-level pairing test catches it).
+
+Each shipped file is read and parsed exactly ONCE per scan (every signal shares the parsed
+ASTs) — the first cut re-parsed once per signal, which tripled the gate's runtime.
+
+**The rules come from an audit of every mount macro's `@doc`, not from guesswork.** Each row
+below is an obligation a macro states as MUST/required/“needs”, and what enforces it today —
+all 22 `samen_*` mount macros in `samen_web/lib/samen/web/router.ex`:
+
+| macro | obligation stated in its `@doc` | enforced by |
+|---|---|---|
+| `samen_module_routes/3` | the host router must `import Phoenix.LiveView.Router`; `:repo` required | Elixir compile (undefined `live_session`); `Keyword.fetch!/2` |
+| `samen_operator_routes/2` | `:repo` required | `Keyword.fetch!/2` |
+| `samen_operator_routes/2` | `:fleet_namespace` required when `fleet_cockpit: true` | `Samen.Web.Router.__require_fleet_namespace__!/1` — compile refusal (T84b) |
+| `samen_webhook_routes/1` | “the endpoint MUST cache the raw body BEFORE `Plug.Parsers` decodes it” | rule `:raw_body_seam` |
+| `samen_fleet_routes/1` | “the host's endpoint must wire the SAME raw-body reader” | rule `:raw_body_seam` |
+| `samen_fleet_ingest_routes/1` | “Needs the SAME raw-body reader `samen_fleet_routes/1` documents” | rule `:raw_body_seam` — added as its THIRD receiver by this audit |
+| `samen_fleet_ingest_routes/1` | “Mount it ONLY together with `samen_operator_routes(..., fleet_cockpit: true)`”; `:namespace` required | rule `:fleet_cockpit_pair`; `Keyword.fetch!/2` |
+| `samen_chat_routes/3` | “One-time host supervision-tree add”: a running `Phoenix.PubSub` + `{Samen.Web.Chat.Presence, pubsub_server: …}` | rule `:realtime_pubsub` |
+| `samen_chat_routes/3` | an operator-plane chat `:on_mount` “Requires an `:operator_authority` label” | `Samen.Web.Operator.Authz` deny-by-default (fail-CLOSED: an absent seam denies, never admits) |
+| `samen_notifications_routes/3` | a running `Phoenix.PubSub` (+ the broadcaster config) | rule `:realtime_pubsub` for the bus; the `config` half is not statically checkable from `lib/` |
+| `samen_files_routes/3` | “the host's `:browser` pipeline must include the session plug so the mount and current-org are readable” | rule `:org_session_plug` |
+| `samen_csv_routes/3` | the export controller resolves the org from the session | rule `:org_session_plug` |
+| `samen_ics_routes/3` | the `.ics` download resolves the org from the session | rule `:org_session_plug` |
+| `samen_settings_routes/3` | wire `:spine_sessions`/`:spine_totp` ONLY when the namespace mounts the spine's `Identity.Session`/`Credential` | host-declared opt-in BY DESIGN (“never inferred … same posture as `:spine_sessions`”), with honest placeholders when off — deliberately not statically inferred |
+| `samen_onboarding_routes/2` | `:repo` REQUIRED; an absent `:plan_labels` renders the honest “no plans configured” state | `Keyword.fetch!/2`; honest empty state |
+| `samen_auth_routes/1` | "`:repo` is required" (the spine writes it resolves) | `Keyword.fetch!/2` (compile-enforced) |
+| `samen_session_routes/1` | none stated (two current-org session writes; no `:repo` awaited) | route table is the boundary; no obligation to enforce |
+| `samen_metrics_route/1` | `:name` REQUIRED, and it “must match the `prometheus_name` `Samen.Observability` was configured with” | `Keyword.fetch!/2` for presence; the NAME MATCH is config-side (not statically checkable) and self-gates to `404` |
+| `samen_mcp_route/1` | `:actor_resolver` REQUIRED, and it “MUST be constant-time and org-scoped” | `Samen.Web.Router.__require_actor_resolver__!/1` — compile refusal (T142) — plus `McpPlug`'s 401 fail-closed; constant-time-ness is semantic |
+| the remaining mount macros (`samen_flags_routes`, `samen_search_routes`, `samen_ai_routes`, `samen_tenant_analytics_routes`, `samen_erp_routes`, `samen_automation_routes`) | `:repo` required; plane posture (INV-2) | `Keyword.fetch!/2`; plane by construction (`samen_automation_routes/3` takes no `:plane` at all) |
+
+The load-bearing result: the four rules above are the obligations that were stated as MUST and
+enforced by NOTHING — and every one of them HOLDS on the real tree (all four are green and
+genuinely ENGAGED: `driftwood`, `pawchart` and `samenerp` each mount a wire, an org-session
+surface and a realtime surface, and each wires the counterpart). Everything else in the table
+is enforced by a compile-time refusal, `Keyword.fetch!/2`, fail-closed-by-construction, an
+honest empty state, or is not statically checkable — and saying which is which is the point of
+the table. Not wired into any
 generated-app gate step (fleet cohorts are opt-in, ADR-044 §5.3); a host that
-adopts the fleet wire runs it directly (`mix samen.verify.fleet_wire`), and
+adopts the fleet wire runs it directly (`mix samen.verify.fleet_wire`, or with
+`--root <tree>` to gate a tree other than the one it runs inside), and
 `samen_web/ci.sh` runs it against the framework's own test fixtures.
 **Fix:** for (1), remove/replace the offending field type with one of
 `:opaque_id`/`:token`/`:enum`/`:number`; for (2), populate the declared catalog
 with the real per-vertical member list (or remove the empty declaration); for (3),
 mount the missing route via `samen_fleet_routes`/`samen_operator_routes(...,
-fleet_cockpit: true)`, or remove the undeclared one.
+fleet_cockpit: true)`, or remove the undeclared one; for (4), mount the counterpart the
+rule names — the cockpit alongside the ingest (`samen_operator_routes(...)`, plus the
+`Samen.Fleet.Scope`-mounted namespace the ingest needs), the raw-body reader in the app's
+endpoint, `plug :fetch_session` in the router, or the matching supervised `Phoenix.PubSub`
+(plus chat's `Samen.Web.Chat.Presence` roster server) in the supervision tree — or remove the
+side the rule flags. No shipped host mounts the cockpit
+side today, and that ruling is recorded in `docs/samenerp-mount-ledger.md`.
+
+**One half of rule (4)'s cockpit pair is enforced EARLIER than this gate — in the build.** The
+counterpart `samen_operator_routes(..., fleet_cockpit: true)` must name the namespace the cockpit
+reads: `fleet_cockpit: true` with no — or a `nil` — `:fleet_namespace` raises `ArgumentError` at
+macro expansion (`Samen.Web.Router.__require_fleet_namespace__!/1`, the
+`samen_mcp_route`/`:actor_resolver` refusal shape, T84b), so a host cannot even compile a
+half-named cockpit mount and reach this gate. A nil namespace that still arrives at RUNTIME (a
+directly-built `%Mount{}` from `Mount.new/4`) fails closed in `Samen.Fleet.read/2` as
+`{:error, {:missing_namespace, mode}}` rather than raising out of the cockpit's `mount/3`.
+Adversarial twin: `scripts/sabotages/311-cockpit-namespace-requirement-drop.patch`.
+
+The four co-adoption rules have adversarial twins too — one per rule (plus one for rule 2's third
+receiver): `scripts/sabotages/309-fleet-ingest-cockpit-colocation-drop.patch` (rule 1, the cockpit
+pair), `310-raw-body-seam-missing.patch` (rule 2) and `314-fleet-ingest-dropped-from-seam-side.patch`
+(rule 2's ingest leg specifically), `312-org-session-plug-rule-drop.patch` (rule 3) and
+`313-realtime-pubsub-rule-drop.patch` (rule 4). Each short-circuits only its own rule's counterpart
+signal and names the test that must flip, so a rule that stopped being enforced is caught by the
+harness rather than by a reader noticing.
+
+---
+
+## Any step — `mix samen.verify.fleet` (the tree-scoped aggregate)
+
+**Shared failure shape** (`samen_core/lib/mix/tasks/samen.verify.fleet.ex`), one line per member:
+
+```text
+FAIL: samen.verify.fleet — 1 of 4 verifier(s) failed (2 violation(s) total).
+```
+
+**Meaning:** the AGGREGATE ran every TREE-SCOPED verifier against one tree and at least one
+member failed. The roster is `Samen.Verifier.Registry.tree_scoped/0` (`agent_coverage`,
+`fleet_wire`, `pii_reads`, `never_read_current` — the verifiers whose findings come from
+reading SOURCE FILES under a tree); its moduledoc at
+`samen_core/lib/samen/verifier/registry.ex` names the DB- and module-introspecting tiers it
+deliberately EXCLUDES, and why. Each member runs as its own OS process
+(`mix <task> --format json <tree args>`) and the aggregate is a consumer of the per-verifier
+JSON, so a member that halts the VM, boots the app, or exits 1 WITH a report is a VERDICT, not
+a crash:
+
+```json
+{"status":"fail","task":"samen.verify.fleet","root":"…","failed_count":1,"verifier_count":4,"violation_count":2,"verifiers":[{"task":"samen.verify.agent_coverage","status":"fail","violation_count":2,"violations":[{"app":null,"kind":null,"message":"…","rule":null}]}]}
+```
+
+`status` is `"ok"` only when the roster is non-empty and every member is `"ok"`. A member that
+produced no parseable report is recorded as a `runner_error` — `could not be evaluated: exit 1,
+no JSON report on stdout` — and FAILS the aggregate, so an UNEVALUABLE verifier is never a
+silent pass. An empty roster fails too: an aggregate over nothing certifies nothing.
+
+**Fix:** run `mix samen.verify.fleet` in the cwd, read the `[FAIL]` member(s), then follow THAT
+member's own entry in this index. `--root <path>` points the whole roster at another tree (a
+scratch copy, a standalone host); it defaults to the cwd and must be a DIRECTORY (a root that
+is not one is refused BEFORE any member runs, because the `--source-dirs` members would drop
+the missing dirs and report `ok` — a tree that cannot be walked certifies nothing). A MALFORMED
+invocation — an unsupported `--format` value, or a mistyped `--rrot` — is reported and exits 1
+rather than gating the default tree by accident. `--format json` prints the aggregate as ONE
+line of JSON above.
+
+Adversarial twins: `scripts/sabotages/317-fleet-aggregate-status-ignores-failure.patch` (the
+aggregate's `status` stops consulting its members, so a failed verifier reads as an `ok` fleet)
+and `scripts/sabotages/318-fleet-runner-error-becomes-ok.patch` (an unevaluable member is
+reported `ok`, so the fail-closed guarantee is gone). Each names the test that must flip.

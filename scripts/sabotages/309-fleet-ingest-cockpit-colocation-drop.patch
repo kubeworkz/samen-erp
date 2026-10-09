@@ -1,0 +1,32 @@
+# SABOTAGE: rule 1 of the co-adoption table — the ADR-044 §3.1/§9.2 fleet cockpit pair. The
+# cockpit leg of the scan is short-circuited to `true`, so `mix samen.verify.fleet_wire` can no
+# longer report ANY app that mounts the cockpit-side ingest (`samen_fleet_ingest_routes/1`:
+# POST /fleet/enroll + POST /fleet/heartbeat) without hosting a cockpit. That is the exact
+# divergence the rule exists to refuse: enroll/heartbeat are the cockpit's own side of the wire,
+# so a host shipping them with no cockpit accepts reports nothing in that app reads, and skips the
+# operator-plane gate the cockpit's LiveViews inherit.
+# Rule 2 (the raw-bytes seam — which also covers this macro as its third receiver now) and every
+# other check in the task (class discipline, nested closed membership, catalogs, route surface)
+# stay intact — only this rule's counterpart signal is dropped — so the rule-1 assertions flip
+# while the GREEN real-tree proof stays green (a sabotage that broke everything would prove
+# nothing).
+# RE-ANCHORED (rule audit): the walker now reads+parses each shipped file ONCE and hands every
+# signal a `sources` list (`%{path, text, ast}`) rather than a file list, which moved this hunk's
+# CONTEXT lines from `files` to `sources` (and to a slightly different line number). The defect
+# (the cockpit leg short-circuited to `true`), the added line and the MUST_FAIL target are
+# byte-identical to the original.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: RED: a host that mounts the cockpit-side ingest without a cockpit is a violation
+diff --git a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+--- a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+@@ -693,7 +693,7 @@
+           [@webhook_macro, @fleet_report_macro, @ingest_macro],
+           &wire_side_call?/1
+         ),
+-      cockpit: Enum.any?(sources, &mounts_cockpit?/1),
++      cockpit: true or Enum.any?(sources, &mounts_cockpit?/1),
+       seam: Enum.any?(sources, &wires_raw_body_reader?/1),
+       org_session:
+         mount_locations(sources, [@files_macro, @csv_macro, @ics_macro], &org_session_call?/1),

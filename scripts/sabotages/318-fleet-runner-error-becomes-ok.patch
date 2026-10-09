@@ -1,0 +1,29 @@
+# SABOTAGE: the fail-closed half of the aggregate — an UNEVALUABLE member. A verifier whose
+# child produced no parseable report (a crash, a missing task, a compile error) must FAIL the
+# fleet. Returning an empty violation list instead makes that member a normal `"ok"` document,
+# so a tree the fleet could not fully evaluate reports a green aggregate — the exact
+# "passing but proving nothing" outcome the runner_error path exists to refuse. The document
+# still parses and the aggregate still folds, so only the test that injects an `{:error, _}`
+# runner catches it.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_test.exs
+# MUST_FAIL: an UNEVALUABLE member is a runner_error and fails the fleet
+diff --git a/samen_core/lib/samen/verifier/fleet.ex b/samen_core/lib/samen/verifier/fleet.ex
+--- a/samen_core/lib/samen/verifier/fleet.ex
++++ b/samen_core/lib/samen/verifier/fleet.ex
+@@ -105,13 +105,8 @@
+   reported violation and needs no special case.
+   """
+   @spec error_document(map(), String.t()) :: map()
+-  def error_document(entry, reason) do
+-    Samen.Verifier.document(entry.task, [
+-      %{
+-        kind: :runner_error,
+-        message: "`mix #{entry.task}` could not be evaluated: #{reason}"
+-      }
+-    ])
++  def error_document(entry, _reason) do
++    Samen.Verifier.document(entry.task, [])
+   end
+ 
+   @doc """

@@ -1,0 +1,25 @@
+# SABOTAGE: rule 3 of the co-adoption table — the org-session plug (ADR-026 files / ADR-028 CSV /
+# F2 ICS). The rule's counterpart signal is short-circuited to `[true]`, so no app can ever be
+# reported as mounting a files/CSV/ICS surface without the session plug those byte and export
+# controllers need: they sit OUTSIDE the live_session and resolve the org from the SESSION
+# (`Samen.Web.CurrentOrg.resolve/3`), so a host that skips `plug :fetch_session` 503s every
+# download while the LiveViews beside it mount fine — nothing red anywhere.
+# HONEST DISCLOSURE: only the RULE's reading of the signal is dropped; the scan still computes it,
+# which is why the green real-tree proof (which asserts the SIGNAL is engaged and discriminating)
+# stays green while the rule-3 RED test and its anti-tautology twin flip. Rules 1, 2 and 4 and every
+# other check in this task are untouched.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: RED (rule 3): a files mount with no session plug anywhere in the app is a violation
+diff --git a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+--- a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+@@ -662,7 +662,7 @@
+   defp rule_signal(%{cockpit: cockpit}, :fleet_cockpit), do: if(cockpit, do: [true], else: [])
+   defp rule_signal(%{seam: seam}, :raw_body_seam), do: if(seam, do: [true], else: [])
+   defp rule_signal(%{org_session: mounts}, :org_session_mount), do: mounts
+-  defp rule_signal(%{session_plug: plugs}, :session_plug), do: plugs
++  defp rule_signal(%{session_plug: _plugs}, :session_plug), do: [true]
+   defp rule_signal(%{realtime: mounts}, :realtime_mount), do: mounts
+   defp rule_signal(%{pubsub_ready: ready}, :realtime_pubsub_ready), do: ready
+ 

@@ -1,0 +1,22 @@
+# SABOTAGE: the aggregate's STATUS. `aggregate/2` is the whole point of the fleet command — a
+# roll-up whose `status` is a real function of its members. Dropping the `Enum.all?` makes the
+# fleet report `"ok"` whenever the roster is non-empty, so a FAILED verifier (or an unevaluable
+# one) reads as a green fleet and a CI job keying on the aggregate's status is told nothing is
+# wrong while a member is red. The document still parses, still counts, and `verifiers` still
+# carries the failing entry — nothing catches this except an assertion on the TOP-LEVEL status,
+# which is exactly what a dashboard keys on.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_test.exs
+# MUST_FAIL: ONE failing member makes the whole fleet fail
+diff --git a/samen_core/lib/samen/verifier/fleet.ex b/samen_core/lib/samen/verifier/fleet.ex
+--- a/samen_core/lib/samen/verifier/fleet.ex
++++ b/samen_core/lib/samen/verifier/fleet.ex
+@@ -51,7 +51,7 @@
+   """
+   @spec aggregate(Path.t(), [map()]) :: map()
+   def aggregate(root, documents) when is_list(documents) do
+-    ok? = documents != [] and Enum.all?(documents, &(&1["status"] == "ok"))
++    ok? = documents != []
+ 
+     %{
+       "task" => @task_name,

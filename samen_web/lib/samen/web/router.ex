@@ -164,10 +164,14 @@ defmodule Samen.Web.Router do
       `on_mount` gate (RP-J-12) — there is no separate fleet auth hook to forget. A further
       `roles[:fleet]` check (ADR-044 §6.3, the J3 args-carrier) runs INSIDE each fleet LiveView's
       own `mount/3` (role-gated, not session-gated — §5.4's tier-1/2 ladder).
-    * `:fleet_namespace` — the `Samen.Fleet.Scope`-mounted Ash domain the cockpit reads
-      (`Samen.Fleet.read/2`'s `namespace:` opt) — required when `:fleet_cockpit` is `true` and
-      the host's `:fleet` mode is `:manual`/`:heartbeat`; irrelevant (and harmless) for the
-      zero-config `:embedded` default (§8.1).
+    * `:fleet_namespace` — **REQUIRED whenever `:fleet_cockpit` is `true`** (compile-enforced,
+      the `samen_mcp_route`/`:actor_resolver` refusal shape): the `Samen.Fleet.Scope`-mounted Ash
+      domain the cockpit reads (`Samen.Fleet.read/2`'s `namespace:` opt). The requirement is
+      deliberately NOT conditioned on the `:fleet` mode: the mode is RUNTIME config
+      (`config :app, :fleet, mode:` — typically `runtime.exs`/deploy env), so a macro cannot see
+      it, and the mount naming its namespace is what keeps an `:embedded` → `:manual`/`:heartbeat`
+      flip (a config edit, no code edit) from landing a live cockpit on a nil namespace. Even in
+      `:embedded`, where `read/2` never consults it, the mount must still name it.
     * `:session_name`    — override the `live_session` name (default `:samen_operator`).
 
   ## The tier-2 deep-link RESOLVE routes (always mounted, ADR-044 §5.3)
@@ -182,6 +186,11 @@ defmodule Samen.Web.Router do
   Impersonation.gate_socket/3`, wired by T84a).
   """
   defmacro samen_operator_routes(namespace, opts \\ []) do
+    # T84b — the operator-side twin of `samen_mcp_route`'s `:actor_resolver` refusal (T142):
+    # `fleet_cockpit: true` without `:fleet_namespace` fails the BUILD. See
+    # `__require_fleet_namespace__!/1`, called here so the omission is caught at expansion.
+    __require_fleet_namespace__!(opts)
+
     path = Keyword.get(opts, :path, "/operator")
     session_name = Keyword.get(opts, :session_name, :samen_operator)
     include_aggregate = Keyword.get(opts, :include_aggregate, false)
@@ -386,14 +395,27 @@ defmodule Samen.Web.Router do
   @doc """
   Mount the **cockpit-side ingest** of the fleet (ADR-044 §4.4a, WS-J J1) —
   `POST /fleet/enroll` + `POST /fleet/heartbeat`. Only a fleet COCKPIT mounts
-  this (§3.1). ≈0-LOC adoption on whichever product hosts the cockpit:
+  this (§3.1); no shipped host does yet (see "Adoption status" below). ≈0-LOC
+  adoption on whichever product hosts the cockpit:
 
       import Samen.Web.Router
 
       samen_fleet_ingest_routes(namespace: MyApp.Fleet)
 
   `namespace` is a `Samen.Fleet.Scope`-mounted Ash domain (see that module).
-  Needs the SAME raw-body reader `samen_fleet_routes/1` documents.
+  Needs the SAME raw-body reader `samen_fleet_routes/1` documents — the heartbeat pipe
+  signs `Crypto.body_digest(raw_body)`, so mount this ONLY alongside the endpoint's
+  `Samen.Web.Webhook.RawBodyReader` (gate-enforced as co-adoption rule `:raw_body_seam` of
+  `mix samen.verify.fleet_wire`, which covers this macro as its third receiver).
+
+  **Adoption status (2026-10-08):** no shipped host mounts this, deliberately — a
+  reporting-only app must not (§3.1/§9.3), and mounting it is a product *becoming a
+  cockpit* (it needs the `flt_*` scope too, which no shipped app has). Its certified
+  mount is `samen_web`'s test-support cockpit router, cross-checked against
+  `Samen.Fleet.RouteTable.declared/0` in both directions by
+  `mix samen.verify.fleet_wire --router` in `samen_web/ci.sh` (RP-J-4b), with the HTTP
+  behavior pinned by `fleet_ingress_test.exs`. Mount it ONLY together with
+  `samen_operator_routes(..., fleet_cockpit: true)`. See `docs/samenerp-mount-ledger.md`.
 
   ## Options
 
@@ -443,6 +465,11 @@ defmodule Samen.Web.Router do
 
       {Phoenix.PubSub, name: Driftwood.PubSub},        # already present in a Phoenix app
       {Samen.Web.Chat.Presence, pubsub_server: Driftwood.PubSub}
+
+  Both entries are gate-enforced: co-adoption rule `:realtime_pubsub` of
+  `mix samen.verify.fleet_wire` fails a mount whose `:pubsub` label names a PubSub the app
+  does not supervise (and, for chat, a missing `Samen.Web.Chat.Presence` roster server on
+  that same bus) — including the silent default to `Driftwood.PubSub`.
 
   ## Options
 
@@ -529,6 +556,10 @@ defmodule Samen.Web.Router do
       config :samen_core, Samen.Notifications.Engine,
         broadcaster: Samen.Web.Notifications.PubSubBroadcaster
       config :samen_web, Samen.Web.Notifications.PubSubBroadcaster, pubsub: MyApp.PubSub
+
+  The PubSub half of that list is gate-enforced (co-adoption rule `:realtime_pubsub` of
+  `mix samen.verify.fleet_wire`: the mount's `:pubsub` label must name a PubSub the app
+  actually supervises); the broadcaster config is not statically checkable from `lib/`.
 
   Options: as `samen_chat_routes/3` (`:repo` required; `:domain`, `:plane`,
   `:operator_id`/`:target_org_id`, `:path` (default `/notifications`), `:labels`,
@@ -724,7 +755,9 @@ defmodule Samen.Web.Router do
   The LiveViews share a `live_session` carrying the mount. The `BytesController` route
   is mounted outside the `live_session` block (it is a plain controller action, not a
   LiveView); the host's `:browser` pipeline must include the session plug so the mount
-  and current-org are readable.
+  and current-org are readable. (Gate-enforced: co-adoption rule `:org_session_plug` of
+  `mix samen.verify.fleet_wire` — the CSV and ICS export twins below carry the same
+  obligation.)
 
   Options: as `samen_notifications_routes/3` (`:repo` required; `:domain`, `:plane`,
   `:operator_id`/`:target_org_id`, `:path` (default `/files`), `:labels`,
@@ -807,6 +840,12 @@ defmodule Samen.Web.Router do
     * `GET /<path>/import/:resource` → `Samen.Web.Csv.ImportLive`
     * `GET /<path>/export/:resource` → `Samen.Web.Csv.ExportController, :export`
       (org-scoped, keyset-bounded, per-plane masked CSV download)
+
+  The download is a plain controller action OUTSIDE the `live_session`: it resolves the
+  org from the SESSION (`Samen.Web.CurrentOrg.resolve/3`), so the host's router must
+  supply the session plug (`plug :fetch_session` in the `:browser` pipeline) — the same
+  MUST `samen_files_routes/3` states, gate-enforced as co-adoption rule
+  `:org_session_plug` of `mix samen.verify.fleet_wire`.
 
   Options: as `samen_files_routes/3` (`:repo` required; `:domain`, `:plane`,
   `:operator_id`/`:target_org_id`, `:path` (default `/csv`), `:labels`,
@@ -959,8 +998,12 @@ defmodule Samen.Web.Router do
 
   Mounts `GET <path>` (default `/calendar.ics`) → `Samen.Web.Ics.ExportController,
   :export` (org-scoped, keyset-bounded, per-plane masked `text/calendar`
-  download). Options: as `samen_csv_routes/3` (`:repo` required; `:domain`,
-  `:plane`, `:operator_id`/`:target_org_id`, `:path`, `:labels`).
+  download) — a plain controller action outside the `live_session` that resolves the org
+  from the SESSION, so the host's router must supply the session plug (`plug
+  :fetch_session` in the `:browser` pipeline); gate-enforced as co-adoption rule
+  `:org_session_plug` of `mix samen.verify.fleet_wire`. Options: as `samen_csv_routes/3`
+  (`:repo` required; `:domain`, `:plane`, `:operator_id`/`:target_org_id`, `:path`,
+  `:labels`).
   """
   defmacro samen_ics_routes(kind, namespace, opts \\ []) do
     kind = Macro.expand(kind, __CALLER__)
@@ -1881,6 +1924,42 @@ defmodule Samen.Web.Router do
     end
 
     :ok
+  end
+
+  @doc false
+  # T84b (ADR-044 §9.2) — refuse (at compile time) to mount the fleet cockpit with no
+  # `:fleet_namespace`: the seam that names the `Samen.Fleet.Scope`-mounted domain the cockpit
+  # reads (`Samen.Fleet.read/2`'s `namespace:` opt). No blank default, for the reason the T142
+  # guard gives: the label IS the value `Samen.Web.Operator.Fleet.gate/2` puts into the cockpit's
+  # context, so a nil there is a cockpit that renders as mounted and reads nothing — and in
+  # `:manual`/`:heartbeat` it is worse than empty, because `Samen.Fleet.read/2` hands the nil
+  # through to the registry (`Keyword.fetch/2` SUCCEEDS on `namespace: nil`) instead of taking
+  # its documented `{:error, {:missing_namespace, mode}}` branch. Called from the macro body
+  # (expansion time), so a missing/blank namespace fails the BUILD, not a production request.
+  def __require_fleet_namespace__!(opts) do
+    if Keyword.keyword?(opts) and cockpit_mount?(opts) and is_nil(Keyword.get(opts, :fleet_namespace)) do
+      raise ArgumentError,
+            "samen_operator_routes/2 mounts the fleet cockpit (fleet_cockpit: true) with no " <>
+              ":fleet_namespace — the `Samen.Fleet.Scope`-mounted Ash domain the cockpit reads " <>
+              "(Samen.Fleet.read/2's `namespace:` opt). There is no blank default: the label is " <>
+              "what Samen.Web.Operator.Fleet.gate/2 hands the cockpit, and a nil one is a cockpit " <>
+              "that renders as mounted and reads nothing. Wire `fleet_namespace: MyApp.Fleet` " <>
+              "(mount `Samen.Fleet.Scope` to get it), or drop `fleet_cockpit: true`. Got: " <>
+              "#{inspect(opts)}"
+    end
+
+    :ok
+  end
+
+  @doc false
+  # `fleet_cockpit: true` is what engages the cockpit; a `false`/absent opt is the plain operator
+  # mount this macro has always emitted, and is untouched by the guard above.
+  defp cockpit_mount?(opts) do
+    case Keyword.get(opts, :fleet_cockpit, false) do
+      false -> false
+      nil -> false
+      _requested -> true
+    end
   end
 
   @doc false

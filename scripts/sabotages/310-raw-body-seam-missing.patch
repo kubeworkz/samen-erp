@@ -1,0 +1,31 @@
+# SABOTAGE: rule 2 of the co-adoption table — the ADR-038 §5.1 / ADR-044 §4.4a raw-bytes seam.
+# The seam leg of the scan is short-circuited to `true`, so no app can ever be reported as
+# mounting a signature-verifying receiver (`samen_webhook_routes/1`, `samen_fleet_routes/1`,
+# `samen_fleet_ingest_routes/1`) while lacking the endpoint's `Plug.Parsers` raw-body reader. That
+# half-adoption is precisely what the rule exists to catch: the macros' own @docs say the endpoint
+# MUST cache the exact bytes (the ingest's says it "Needs the SAME raw-body reader"), and a host
+# that skips it compiles, boots, and refuses correctly-signed deliveries as if forged —
+# indistinguishable from a vendor problem, with nothing red anywhere.
+# Rule 1 (the fleet cockpit pair) and every other check in the task stay intact, so the rule-2
+# RED tests, their anti-tautology twins, and the GREEN real-tree discriminator assertion flip while
+# the rest of the suite stays green.
+# RE-ANCHORED (rule audit): the walker now reads+parses each shipped file ONCE and hands every
+# signal a `sources` list (`%{path, text, ast}`) rather than a file list, which moved this hunk's
+# CONTEXT lines from `files` to `sources` (and to a slightly different line number). The defect
+# (the seam leg short-circuited to `true`), the added line and the MUST_FAIL target are
+# byte-identical to the original.
+# APP: samen_core
+# TEST_FILES: test/verify_fleet_wire_test.exs
+# MUST_FAIL: RED (rule 2): a wire-mounting app with no raw-bytes seam is a violation
+diff --git a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+--- a/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex
+@@ -694,7 +694,7 @@
+           &wire_side_call?/1
+         ),
+       cockpit: Enum.any?(sources, &mounts_cockpit?/1),
+-      seam: Enum.any?(sources, &wires_raw_body_reader?/1),
++      seam: true or Enum.any?(sources, &wires_raw_body_reader?/1),
+       org_session:
+         mount_locations(sources, [@files_macro, @csv_macro, @ics_macro], &org_session_call?/1),
+       session_plug: mount_locations(sources, [], &fetch_session_plug?/1),
