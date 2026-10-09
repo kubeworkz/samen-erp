@@ -1,6 +1,6 @@
 # Samenerp mount ledger — the seven host-adoption phases
 
-**As of:** 2026-10-08 · **Host:** `samenerp` · **What it covers:** the seven numbered *mount phases*
+**As of:** 2026-10-09 · **Host:** `samenerp` · **What it covers:** the seven numbered *mount phases*
 that adopted the framework's remaining surface groups in this host at ≈0 authored LOC.
 
 ## Why this file exists
@@ -32,7 +32,7 @@ never a hand-built mount.
 | 4 | Integrations (feature flags · webhook ingress) | `samen_flags_routes(:flags, …)`<br>`samen_webhook_routes()` (own CSRF-exempt `:webhook_ingress` pipeline) | `Samenerp.Primitives`<br>`20260722100000_webhook_event` (`whk_event` replay-store/DLQ delegate) | `test/phase4_surface_test.exs` (4) | `42b7db2` |
 | 5 | Knowledge Base · CSAT (the two PUBLIC portal kinds) | `samen_module_routes(:kb, …, path: "/portal")`<br>`samen_module_routes(:csat, …)` | `Samenerp.Cms` · `Samenerp.Support`<br>`20261006150000_mount_cms_scope` | `test/phase5_surface_test.exs` (5) | `58dda56` |
 | 6 | Calendar & Scheduling (framework `.ics` export) | `samen_ics_routes(:ics, …)` | `Samenerp.Calendar`<br>`20261007090000_mount_calendar_scope` | `test/phase6_surface_test.exs` (5) | `16732a7` |
-| 7 | AI plane (ADR-043 §5.3 / ADR-047 A6) | `samen_ai_routes(:ai, Samenerp.Crm, …)` | `Samen.AI.Domain` + 7 repo seams<br>`20261007120000_mount_ai_domain` | `test/phase7_surface_test.exs` (4) | *uncommitted* |
+| 7 | AI plane (ADR-043 §5.3 / ADR-047 A6) | `samen_ai_routes(:ai, Samenerp.Crm, …)` | `Samen.AI.Domain` + 7 repo seams<br>`20261007120000_mount_ai_domain` | `test/phase7_surface_test.exs` (4) | `9ec9171` |
 
 30 tests across the seven files; the `samenerp` gate runs 61 in total.
 
@@ -229,9 +229,6 @@ for `:billing`, `:crm`, `:marketing`, `:support` · `samen_automation_routes` ·
 
 ## Open items (2026-10-08)
 
-- **Phase 7 is not yet committed.** Its five files (migration, `config.exs`, `router.ex`,
-  `phase7_surface_test.exs`, `schema.dict.json`) are on disk and verified; the host's own gate is
-  green (`==> samenerp CI gate: ALL PASSED`, 61 tests). Update the `Shipped` column when it lands.
 - **`samen_fleet_ingest_routes` is unadopted — ruled, not open** (see the ruling above). The
   completeness-check delta is deliberate: a cockpit-side surface, certified in `samen_web`'s own gate,
   adopted only by a product that becomes a cockpit.
