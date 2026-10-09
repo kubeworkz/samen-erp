@@ -84,6 +84,12 @@ serialized, session-sized execution plan). WS-A = "Product Reality" (ADR-014/015
 "Operator Cockpit v1" (ADR-017–021), WS-D = "Builder Joy" (ADR-022–024), WS-E = "Table Stakes
 UX" (ADR-026–030).
 
+## Host adoption ledger
+
+| Doc | What it is |
+|---|---|
+| [samenerp-mount-ledger.md](samenerp-mount-ledger.md) | The seven numbered mount phases the `samenerp` host used to adopt the framework's remaining surface groups at ≈0 authored LOC: the macro each phase mounted, its migration, its surface proof, its commit, and a re-derivable check for whether any framework mount macro is still unadopted. |
+
 ## Build / verification reports (root of `docs/`)
 
 Point-in-time reports from when a feature landed — read for "how was this actually built and

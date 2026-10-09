@@ -21,7 +21,13 @@ config :samenerp,
     Samenerp.Vertical,
     Samenerp.Aggregate,
     Samenerp.Primitives,
-    Samenerp.Operator
+    Samenerp.Operator,
+    # Phase 7 — the framework AI plane (Samen.AI.Prompt / SupportReplyDraft /
+    # Agent.{Run,Turn,Kill} / Assistant / AssistantConversation). KERNEL resources
+    # with host-invariant abbrevs AND table names, materialized here by the
+    # MountAiDomain migration; adding the domain is the host's only authored line
+    # (ADR-043 §5.2, INV-5).
+    Samen.AI.Domain
   ]
 
 # The samen_core verifiers discover domains from :samen_core :ash_domains. Register
@@ -42,7 +48,8 @@ config :samen_core, :ash_domains, [
   Samenerp.Vertical,
   Samenerp.Aggregate,
   Samenerp.Primitives,
-  Samenerp.Operator
+  Samenerp.Operator,
+  Samen.AI.Domain
 ]
 
 # ADR-039 §3.1 — the Automation engine seams (driftwood's exact wiring): the
@@ -85,8 +92,41 @@ config :samen_core, Samen.Approvals.Registry,
     # decision transaction). Unregistered kinds would refuse at write —
     # fail-honest, but these actions are governed-approve by design.
     (Atom.to_string(Samenerp.Erp.ApInvoice) <> ":approve") => {:tenant, Samen.Approvals.Gate},
-    (Atom.to_string(Samenerp.Erp.PurchaseOrder) <> ":approve") => {:tenant, Samen.Approvals.Gate}
+    (Atom.to_string(Samenerp.Erp.PurchaseOrder) <> ":approve") => {:tenant, Samen.Approvals.Gate},
+    # Phase 7 (ADR-043 §6.3 D5) — the AI support operator's human-gated send.
+    # Operator plane; the requester (the AI service principal) is never the
+    # decider (distinct-party by construction).
+    "ai_support_reply" => {:operator, Samen.AI.SupportOperator.ReplyHandler},
+    # Phase 7 (ADR-047 A4/A6) — the ONE agent-write kind. An `effect: :write`
+    # agent tool never executes inside the turn: it opens this tenant-plane
+    # approval and the run parks `:awaiting_approval` until a DISTINCT human (the
+    # clicking principal resolved against a REAL membership row in the RUN's org)
+    # approves, and the write then executes with the APPROVER's authority. An
+    # UNREGISTERED kind is refused at request time — an unwired host is honest
+    # ("the agent cannot propose") but its decision card can never do anything.
+    "ai_agent_write" => {:tenant, Samen.AI.Agent.WriteProposal}
   }
+
+# Phase 7 (ADR-043 §5.2 / §6.3 / §7.5; ADR-047 §4.1/§6) — point the reusable
+# AI-plane resources (mounted via `Samen.AI.Domain` above) at Samenerp.Repo so
+# prompts, support-reply drafts, agent runs/turns, the kill switch, and the
+# OpenClaw-lite assistant + its conversation thread all PERSIST in this host.
+# COMPILE-TIME (the resources read them via `Application.compile_env`, the
+# `tnt_record_repo` / `samen_ai_*_repo` precedent in samen_core/config/config.exs).
+config :samen_core, :samen_ai_prompt_repo, Samenerp.Repo
+config :samen_core, :samen_ai_support_reply_draft_repo, Samenerp.Repo
+config :samen_core, :samen_ai_agent_run_repo, Samenerp.Repo
+config :samen_core, :samen_ai_agent_turn_repo, Samenerp.Repo
+config :samen_core, :samen_ai_agent_kill_repo, Samenerp.Repo
+config :samen_core, :samen_ai_assistant_repo, Samenerp.Repo
+config :samen_core, :samen_ai_assistant_conversation_repo, Samenerp.Repo
+
+# Phase 7 (ADR-047 A5/A6 §5.3) — the APPROVER-MEMBERSHIP seam. `Identity.Membership`
+# is materialized INTO the host namespace (ADR-004), so samen_core cannot name it;
+# the host does. At decision time the clicking principal is resolved against a REAL
+# membership row in the RUN's org (pinned from the durable run row, never a caller
+# argument). An UNWIRED host refuses `:approver_unresolvable` (fail-closed).
+config :samen_core, Samen.AI.Agent, approver_membership: Samenerp.Operator.Membership
 
 # T4.5 aggregate-privacy floors. samen_core defaults are k=5/l=2; a fresh app's
 # dogfood datasets are small, so — exactly as demo/driftwood/pawchart — use a

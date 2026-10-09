@@ -363,6 +363,40 @@ defmodule SamenerpWeb.Router do
       labels: @current_org_labels
     )
 
+    # 1n. Phase 7 — the framework AI plane (ADR-043 §5.3 / ADR-047 A6), the LAST
+    #     unmounted module group. ONE macro call mounts all NINE tenant AI surfaces
+    #     over this host's materialized `Samenerp.Crm` mount + the AI domain tables
+    #     from migration 20261007120000:
+    #
+    #       * `/ai` — the verbs; `/ai/search` — semantic search; `/ai/crm` — the CRM
+    #         ask surface; `/ai/analytics` — the aggregate ask-box; `/ai/support` —
+    #         the support-reply draft (persisted via the `ai_support_reply` approval
+    #         kind registered in config);
+    #       * `/ai/agents` + `/ai/agents/:id` — the ADR-047 A5 agent runs (list, run
+    #         detail with the bounded turn log + the 🔒 vaulted transcript resolved on
+    #         the caller's plane, cancel, and the approve/reject decision card for a
+    #         run parked `:awaiting_approval`);
+    #       * `/ai/assistant` (+ `:assistant_id` / `:id`) — the OpenClaw-lite
+    #         assistant threads over the vault-routed conversation transcript.
+    #
+    #     `Samen.Web.TenantAuthz`'s `:require_tenant` rides INSIDE the macro, so the
+    #     new routes carry the same tenant gate every other framework surface has.
+    #     Every surface is fail-honest by construction: with no provider configured
+    #     (this host wires none — secrets live in runtime config, never the repo) each
+    #     renders `Samen.AI.configuration_hint/0` and the SIMULATED badge rather than a
+    #     fabricated answer. The `ai_*` labels are the GROUNDING seams the kit reads
+    #     (the `flags_namespace`/`:kb_namespace` pattern): the CRM surface grounds on
+    #     this host's Company resource, the analytics ask-box on its token-blind
+    #     aggregate projection.
+    samen_ai_routes(:ai, Samenerp.Crm,
+      repo: Samenerp.Repo,
+      labels:
+        Map.merge(@current_org_labels, %{
+          ai_crm_resource: Samenerp.Crm.Company,
+          ai_aggregate_resource: Samenerp.Aggregate.RecordCountBySegment
+        })
+    )
+
     # 2. Notifications (WS-A A4/A5) — the framework inbox (+ /notifications/settings),
     #    mounted over the Primitives mount in ONE line. Realtime rides
     #    `Samenerp.PubSub` (id-only envelopes).
