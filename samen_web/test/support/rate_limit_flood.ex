@@ -40,9 +40,18 @@ defmodule Samen.WebTest.RateLimitFlood do
   every request accumulated in the flipped window are gone (so the re-run behaves as a fresh
   flood). Do NOT wrap a flood whose assertion counts persisted rows (e.g. "exactly 3 deliveries
   stored") — a re-run would add its own rows; rely on `pin!/1` alone there.
+
+  ## The guard this feeds
+
+  `pin!/1` also DECLARES each surface straddle-safe for the calling test, so the suite-wide
+  `Samen.Web.RateLimit.FloodGuard` (armed by `test_helper.exs`, and enforced on the real HTTP
+  surfaces by the guard's own suite) lets the flood through instead of failing it. A test that
+  floods a limiter bucket on an unpinned window — the pre-fix shape of every file above — is
+  failed by that guard, with this module named in the message.
   """
 
   alias Samen.Web.RateLimit
+  alias Samen.Web.RateLimit.FloodGuard
 
   # One day. Orders of magnitude longer than any test flood (they run in well under a second,
   # so the odds of crossing an aligned boundary collapse from ~1-in-100 to ~1-in-10^8), and
@@ -67,9 +76,21 @@ defmodule Samen.WebTest.RateLimitFlood do
       |> then(&Map.merge(Keyword.get(previous, :limits, %{}), &1))
 
     Application.put_env(:samen_web, RateLimit, Keyword.put(previous, :limits, pinned))
+    # Tell the suite-wide flood guard this test's floods on these surfaces cannot be reset
+    # mid-count (`Samen.Web.RateLimit.FloodGuard`).
+    FloodGuard.declare_straddle_safe(Map.keys(limits))
     ExUnit.Callbacks.on_exit(fn -> Application.put_env(:samen_web, RateLimit, previous) end)
     :ok
   end
+
+  @doc """
+  Declare `surfaces` straddle-safe for THIS test WITHOUT touching the seam's config — for the rare
+  test that IS about the window boundary (it deliberately crosses a window edge, e.g. to prove the
+  counter resets, and so must not pin). Every other flood should use `pin!/1`.
+  """
+  @spec straddle_safe!([atom()]) :: :ok
+  def straddle_safe!(surfaces) when is_list(surfaces),
+    do: FloodGuard.declare_straddle_safe(surfaces)
 
   @doc "The pinned window (ms) — public so a call site can name the number it relies on."
   @spec window_ms() :: pos_integer()

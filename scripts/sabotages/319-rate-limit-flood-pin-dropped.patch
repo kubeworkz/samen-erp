@@ -1,0 +1,32 @@
+# SABOTAGE: the rate-limit flood GUARD (`Samen.Web.RateLimit.FloodGuard`, armed for the WHOLE
+# samen_web suite by test/test_helper.exs). Drops the WINDOW PIN from the resend flood — the exact
+# pre-fix shape that flaked: four requests against `:token_request_account` ({3, 900_000}, the
+# SHIPPED wall-clock-ALIGNED window) with no pin, so a boundary (`div(now, window)`) can fall inside
+# the flood, reset the counter, and leave the asserted `?throttled=1` refusal never happening
+# (observed shape: fleet_ingress_test's `assert over_limit != []` read `[]` at 12:22:00.0 — the
+# minute boundary itself).
+#
+# Why this certifies the GUARD rather than just shipping an unpinned flood: with the guard armed the
+# removal is no longer SILENT. The (limit + 1)th consultation of that bucket raises
+# `Samen.Web.RateLimit.FloodGuard.Violation` inside the test, naming the surface, the limit, the
+# window and the fix — deterministic red instead of a rare, load-dependent flake. A guard that had
+# stopped biting (disarmed, un-declared, or unhooked from the seam) would leave this file GREEN and
+# this sabotage vacuous, which is exactly what the MUST_FAIL below detects.
+# APP: samen_web
+# TEST_FILES: test/samen/web/auth/account_controller_test.exs
+# MUST_FAIL: the 4th attempt inside the window redirects ?throttled=1 (token_request_account 3/15min)
+diff --git a/samen_web/test/samen/web/auth/account_controller_test.exs b/samen_web/test/samen/web/auth/account_controller_test.exs
+--- a/samen_web/test/samen/web/auth/account_controller_test.exs
++++ b/samen_web/test/samen/web/auth/account_controller_test.exs
+@@ -304,11 +304,6 @@ defmodule Samen.Web.Auth.AccountControllerTest do
+       email = unique_email()
+       private = %{samen_mount: mount(), samen_resend_path: "/verify/resend"}
+ 
+-      # The four requests below must land in ONE window — that IS the claim, and the shipped
+-      # 900_000 ms window would occasionally turn mid-test on the wall clock. The LIMIT stays
+-      # the shipped 3 (`Samen.WebTest.RateLimitFlood` pins only the window).
+-      RateLimitFlood.pin!(%{token_request_account: {3, 900_000}})
+-
+       for _ <- 1..3 do
+         conn =
+           arc_conn(:post, "/verify/resend", private)

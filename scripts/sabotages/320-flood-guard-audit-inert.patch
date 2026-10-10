@@ -1,0 +1,32 @@
+# SABOTAGE: the rate-limit flood guard's BITE (`Samen.Web.RateLimit.FloodGuard.straddle_safe?/2`).
+# Every surface reports straddle-safe, whoever asks and whatever the test declared, so `gate/5`
+# can never reach its raise and an unpinned flood passes silently — the pre-guard behaviour. The
+# audit table is still created (`arm!/0`), every caller is still wired, and the guard's GREEN paths
+# still pass: what is on trial is the guard's ASSERTIONS, not its plumbing.
+#
+# The twin of 319-*: 319 proves the guard BITES a reintroduced unpinned flood on a real surface;
+# this one proves the guard's own suite cannot pass by the guard being inert. With the mutation
+# applied the suite's red assertions MUST fail — a guard that never raises cannot satisfy
+# `assert_raise FloodGuard.Violation` — and the declaration-state assertion goes with them (the
+# armed test `refute`s a surface being straddle-safe). A twin that left this suite GREEN would mean
+# the suite asserted nothing at all.
+# APP: samen_web
+# TEST_FILES: test/samen/web/rate_limit/flood_guard_test.exs
+# MUST_FAIL: the (limit + 1)th consultation of ONE bucket on an unpinned window raises, with the fix in the message
+# MUST_FAIL: a REAL surface flood (POST /verify/resend for ONE email) fails the same way
+diff --git a/samen_web/lib/samen/web/rate_limit/flood_guard.ex b/samen_web/lib/samen/web/rate_limit/flood_guard.ex
+--- a/samen_web/lib/samen/web/rate_limit/flood_guard.ex
++++ b/samen_web/lib/samen/web/rate_limit/flood_guard.ex
+@@ -127,7 +127,11 @@
+   """
+   @spec straddle_safe?(pid(), atom()) :: boolean()
+   def straddle_safe?(pid, surface) when is_pid(pid) and is_atom(surface) do
+-    armed?() and :ets.member(@table, {:declared, pid, surface})
++    # SABOTAGE (reintroduced defect): every surface reports straddle-safe, whoever asks and
++    # whatever the test declared, so `gate/5` can never reach its raise and an unpinned flood
++    # passes silently — the pre-guard behaviour.
++    _ = {pid, surface}
++    true
+   end
+ 
+   @doc """

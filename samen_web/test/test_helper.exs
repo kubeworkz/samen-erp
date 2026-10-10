@@ -16,6 +16,14 @@ System.at_exit(fn _ -> File.rm_rf!(kms_key_dir) end)
 
 ExUnit.start()
 
+# The rate-limit FLOOD GUARD (`Samen.Web.RateLimit.FloodGuard`), armed for the WHOLE suite rather
+# than opt-in: Hammer's fixed-window buckets are `div(now_ms, window_ms)`, so a test that consults
+# one limiter bucket more times than that surface's limit is asserting a count a wall-clock
+# boundary can RESET mid-flood (the `fleet_ingress_test` flake). Arming here means a new flood
+# cannot reintroduce the hazard silently — it fails at the offending consultation, naming the
+# surface and the fix. Prod never arms it, so the seam stays a no-op there.
+Samen.Web.RateLimit.FloodGuard.arm!()
+
 # Start the scratch repo for the render tests. `mix samen_web.test_setup` (run by the test
 # alias) has already created + migrated samen_web_test; it may also have left the repo
 # started in the same VM, so tolerate `already_started`.

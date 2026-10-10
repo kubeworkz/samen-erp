@@ -52,9 +52,21 @@ defmodule Samen.Web.RateLimit do
 
       config :samen_web, Samen.Web.RateLimit,
         limits: %{signin_account: {10, 60_000}, signin_ip: {100, 3_600_000}}
+
+  ## Test discipline — the flood guard
+
+  Hammer's `:fix_window` buckets are `div(now_ms, window_ms)`, so the window is aligned to the
+  WALL CLOCK and can turn in the middle of a test: a test that floods one bucket more times than
+  its limit can have its count RESET mid-flood, and the refusal it asserts then never happens.
+  `Samen.Web.RateLimit.FloodGuard` (test-only, armed by `samen_web`'s test helper) fails such a
+  test at the offending consultation, naming the surface and the fix (`Samen.WebTest.RateLimitFlood.pin!/1`
+  pins the window while keeping the limit verbatim). Production is untouched: the guard's audit
+  table is never armed there, so `check/3` and `over_limit?/3` pay one `:ets.whereis/1` that
+  returns immediately.
   """
 
   alias Samen.Web.RateLimit.Backend
+  alias Samen.Web.RateLimit.FloodGuard
 
   # {limit, window_ms} defaults — used when config does not override the surface.
   @default_limits %{
@@ -114,6 +126,7 @@ defmodule Samen.Web.RateLimit do
   def check(surface, kind, value) do
     {limit, window_ms} = limit_for(surface)
     ensure_started()
+    audit_gate(surface, kind, value, limit, window_ms)
 
     case Backend.hit(bucket(surface, kind, value), window_ms, limit) do
       {:allow, _count} -> :ok
@@ -130,6 +143,7 @@ defmodule Samen.Web.RateLimit do
   def over_limit?(surface, kind, value) do
     {limit, window_ms} = limit_for(surface)
     ensure_started()
+    audit_gate(surface, kind, value, limit, window_ms)
     Backend.get(bucket(surface, kind, value), window_ms) >= limit
   end
 
@@ -165,12 +179,24 @@ defmodule Samen.Web.RateLimit do
   def reset do
     ensure_started()
     :ets.delete_all_objects(Backend)
+    # A wipe genuinely starts a fresh budget, so the caller's flood-guard audit starts over with
+    # it (declarations are kept — they are about the test, not the counters).
+    FloodGuard.clear(self())
     :ok
   end
 
   # ---------------------------------------------------------------------------
   # Private
   # ---------------------------------------------------------------------------
+
+  # Every GATE consultation (check/3, over_limit?/3 — one per request per limited surface) is
+  # audited while the guard is armed, so a test that consults one bucket more times than the
+  # surface's limit on an unpinned window fails loudly instead of flaking (see FloodGuard). In
+  # production the audit table is never created, so this is one `:ets.whereis/1` and a return.
+  defp audit_gate(surface, kind, value, limit, window_ms) do
+    if FloodGuard.armed?(), do: FloodGuard.gate(surface, kind, value, limit, window_ms)
+    :ok
+  end
 
   # The non-PII key discipline (§6.2): surface:kind:value — value is provider/ip/bidx/id.
   # Hammer stamps the fixed window internally; this string is the "bucket name" the
