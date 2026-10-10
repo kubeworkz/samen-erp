@@ -125,9 +125,11 @@ defmodule Samen.UI.Nav do
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
     * `settings_path` / `automation_path` — the mount path prefix for the Settings (PP-8) /
-      Automation (PP-9) surfaces (default `/settings`, `/automation`) — both real shipped
-      framework surfaces that otherwise have NO nav entry anywhere (they were total nav
-      islands, hand-typed-URL-only).
+      Automation (PP-9) surfaces — both real shipped framework surfaces that otherwise have no
+      nav entry anywhere (they were total nav islands, hand-typed-URL-only). `settings_path`
+      keeps its historical `/settings` default; `automation_path` is LABEL-GATED (`nil` hides the
+      item) because a shipped host mounts no automation route, so a defaulted link was a live
+      dead link (see the attr's own doc).
     * `erp_path` — the mount path prefix for the six WS-ERP E8 surfaces (default `nil` = the
       ERP group is NOT rendered). Presence IS the X1 dead-link guard for ERP: a host threads
       its `:erp_path` mount label (set alongside `samen_erp_routes/3` in the router) through
@@ -148,7 +150,6 @@ defmodule Samen.UI.Nav do
   attr :marketing_path, :string, default: "/marketing"
   attr :notifications_path, :string, default: "/notifications"
   attr :settings_path, :string, default: "/settings"
-  attr :automation_path, :string, default: "/automation"
 
   attr :erp_path, :string,
     default: nil,
@@ -172,6 +173,87 @@ defmodule Samen.UI.Nav do
     The Work route prefix — non-nil ONLY on a host whose router calls
     `samen_module_routes(:work, …)` and threads the `:work_path` mount label (X1
     dead-link guard; `nil` hides the group — every pre-existing caller passes nothing).
+    """
+
+  # ---------------------------------------------------------------------------
+  # The phase-module groups (banking/work + the seven host-adoption phases, see
+  # docs/samenerp-mount-ledger.md). Same X1 posture as `erp_path` above: each is non-nil ONLY on
+  # a host whose router mounts the module AND threads the matching path label, so `nil` hides the
+  # group and a host that never mounted a module never emits a link to it. Resolve them all in one
+  # shot from a mount with `nav_paths/1` — the single call-site seam.
+  # ---------------------------------------------------------------------------
+
+  attr :files_path, :string,
+    default: nil,
+    doc: """
+    The Files route prefix (Phase 1) — non-nil ONLY on a host whose router calls
+    `samen_files_routes(:files, …)` and threads the `:files_path` mount label (X1 dead-link
+    guard; `nil` hides the Documents group).
+    """
+
+  attr :chat_path, :string,
+    default: nil,
+    doc: """
+    The TENANT Chat route prefix (Phase 2) — non-nil ONLY on a host whose router calls
+    `samen_chat_routes(:chat, …)` on the TENANT plane and threads the `:chat_path` mount label
+    (X1 dead-link guard; `nil` hides the Chat group). NOTE the plane: a chat mount can also be an
+    OPERATOR-plane desk chat (driftwood's `/operator/desk-chat`), whose label must never reach a
+    tenant sidebar — `nav_paths/1` only resolves this key for a `:tenant`-plane mount.
+    """
+
+  attr :search_path, :string,
+    default: nil,
+    doc: """
+    The Search (⌘K) route prefix (Phase 3) — non-nil ONLY on a host whose router calls
+    `samen_search_routes(:search, …)` and threads the `:search_path` mount label (X1 dead-link
+    guard; `nil` hides the Discover group).
+    """
+
+  attr :analytics_path, :string,
+    default: nil,
+    doc: """
+    The own-org analytics route prefix (Phase 3 / P17) — non-nil ONLY on a host whose router calls
+    `samen_tenant_analytics_routes(…)` and threads the `:analytics_path` mount label (X1 dead-link
+    guard; `nil` hides the Insights group).
+    """
+
+  attr :ics_path, :string,
+    default: nil,
+    doc: """
+    The `.ics` export route (Phase 6) — non-nil ONLY on a host whose router calls
+    `samen_ics_routes(:ics, …)` and threads the `:ics_path` mount label (X1 dead-link guard;
+    `nil` hides the Calendar group). The route is a plain controller DOWNLOAD (`/calendar.ics`),
+    not a LiveView, so the nav item is a feed export.
+    """
+
+  attr :ai_path, :string,
+    default: nil,
+    doc: """
+    The AI plane route prefix (Phase 7) — non-nil ONLY on a host whose router calls
+    `samen_ai_routes(:ai, …)` and threads the `:ai_path` mount label (X1 dead-link guard; `nil`
+    hides the AI group). `samen_ai_routes/3` sets this label ITSELF, so a host mounting AI needs
+    no bookkeeping here.
+    """
+
+  attr :flags_path, :string,
+    default: nil,
+    doc: """
+    The tenant feature-flag admin route prefix (Phase 4) — non-nil ONLY on a host whose router
+    calls `samen_flags_routes(:flags, …)` and threads the `:flags_path` mount label (X1 dead-link
+    guard; `nil` hides the Workspace group's Feature-flags item).
+    """
+
+  attr :automation_path, :string,
+    default: nil,
+    doc: """
+    The tenant Automation (workflow builder) route prefix — non-nil ONLY on a host whose router
+    calls `samen_automation_routes(:automation, …)` and threads the `:automation_path` mount label
+    (X1 dead-link guard; `nil` hides the Workspace group's Automation item).
+
+    Label-gated rather than defaulted because it is a real, OBSERVED dead link: `pawchart` mounts
+    no automation surface, and a defaulted `/automation` item put a `NoRouteError` one click away
+    in its sidebar on every tenant page. `mix samen.verify.nav_links` now fails any host whose
+    label points at a route its router does not mount (see the task's moduledoc).
     """
 
   attr :notifications_unread, :any,
@@ -365,8 +447,68 @@ defmodule Samen.UI.Nav do
       </.nav_item>
     </.nav_group>
 
+    <.nav_group :if={@files_path} label="Documents">
+      <.nav_item label="Files" href={"#{@files_path}?org=#{@org_id}"} active={@active == :files}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6z" /><path d="M14 2v4h4" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@chat_path} label="Chat">
+      <.nav_item
+        label="Conversations"
+        href={"#{@chat_path}?org=#{@org_id}"}
+        active={@active == :chat}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z" /><path d="M9 11h.01M12.5 11h.01M16 11h.01" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@search_path} label="Discover">
+      <.nav_item label="Search" href={"#{@search_path}?org=#{@org_id}"} active={@active == :search}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@analytics_path} label="Insights">
+      <.nav_item
+        label="Activation"
+        href={"#{@analytics_path}?org=#{@org_id}"}
+        active={@active == :analytics}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 3v9h9" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@ics_path} label="Calendar">
+      <.nav_item label="Export .ics" href={@ics_path} active={@active == :ics}>
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M12 12.5v5M9.5 15L12 17.5 14.5 15" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
+    <.nav_group :if={@ai_path} label="AI">
+      <.nav_item
+        label="AI workspace"
+        href={"#{@ai_path}?org=#{@org_id}"}
+        active={@active == :ai}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 3l1.7 4.4L17 9l-4.3 1.6L11 15l-1.7-4.4L5 9l4.3-1.6z" /><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" /></svg>
+        </:icon>
+      </.nav_item>
+    </.nav_group>
+
     <.nav_group
-      :if={surface_mounted?(@surfaces, :settings) or surface_mounted?(@surfaces, :automation)}
+      :if={surface_mounted?(@surfaces, :settings) or @automation_path or @flags_path}
       label="Workspace"
     >
       <.nav_item
@@ -380,7 +522,7 @@ defmodule Samen.UI.Nav do
         </:icon>
       </.nav_item>
       <.nav_item
-        :if={surface_mounted?(@surfaces, :automation)}
+        :if={@automation_path}
         label="Automation"
         href={"#{@automation_path}?org=#{@org_id}"}
         active={@active == :automation}
@@ -389,9 +531,80 @@ defmodule Samen.UI.Nav do
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" /></svg>
         </:icon>
       </.nav_item>
+      <.nav_item
+        :if={@flags_path}
+        label="Feature flags"
+        href={"#{@flags_path}?org=#{@org_id}"}
+        active={@active == :flags}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 21V4M6 5h11l-1.6 4L17 13H6" /></svg>
+        </:icon>
+      </.nav_item>
     </.nav_group>
     """
   end
+
+  @doc """
+  Resolve EVERY gated module-group path for `module_nav/1` from a mounted `Samen.Web.Mount` — the
+  single seam a host opts a module into its sidebar through.
+
+  The nav groups are X1-gated on path labels (see the attrs above): the label's PRESENCE is the
+  dead-link guard, because a host that never mounted `/chat` never sets `:chat_path`. Those labels
+  live on the host's TENANT mount labels map, which every framework LiveView already carries as
+  `@mount` — so the sidebar of ANY tenant page (CRM, Billing, Files, …) can render every module
+  the host mounted, instead of each call site threading the same paths by hand.
+
+  ```heex
+  <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+    <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
+  </.module_nav>
+  ```
+
+  The TENANT-only module groups (Files/Chat/Search/Insights/Calendar/AI/Feature flags) resolve
+  ONLY for a `:tenant`-plane mount. That is not cosmetic: `:chat_path` is also what an
+  OPERATOR-plane desk chat carries (driftwood's `/operator/desk-chat`), and an operator-plane
+  sidebar linking a bare tenant surface is the silent plane crossing T116 bars. The pre-existing
+  ERP/Banking/Work paths keep their historical resolution (label presence alone) so no existing
+  caller's nav changes.
+
+  `overrides` replaces individual resolved paths — the escape hatch for a call site whose OWN page
+  implies a default the generic seam cannot know (the ERP sidebar defaults `:erp_path` to `/erp`,
+  because that page exists only on a host that mounted ERP).
+  """
+  @spec nav_paths(Samen.Web.Mount.t(), keyword()) :: keyword()
+  def nav_paths(%Mount{} = mount, overrides \\ []) when is_list(overrides) do
+    base = [
+      erp_path: Mount.label(mount, :erp_path, nil),
+      banking_path: Mount.label(mount, :banking_path, nil),
+      work_path: Mount.label(mount, :work_path, nil)
+    ]
+
+    paths = if tenant_plane?(mount), do: base ++ tenant_module_paths(mount), else: base
+
+    Keyword.merge(paths, overrides)
+  end
+
+  # Every label read is LITERAL here on purpose: `label_keys_completeness_test.exs` scans this
+  # source for `Mount.label/3` call sites and asserts each literal key argument is whitelisted in
+  # `Samen.Web.Mount.@label_keys/0` (a key read but not whitelisted is dropped on `from_session/1`
+  # on a cold BEAM). A dynamic read — passing the key in as a variable — would be invisible to that
+  # scan, so the whitelist would go stale without anyone noticing until the sidebar group vanished.
+  defp tenant_module_paths(mount) do
+    [
+      files_path: Mount.label(mount, :files_path, nil),
+      automation_path: Mount.label(mount, :automation_path, nil),
+      chat_path: Mount.label(mount, :chat_path, nil),
+      search_path: Mount.label(mount, :search_path, nil),
+      analytics_path: Mount.label(mount, :analytics_path, nil),
+      ics_path: Mount.label(mount, :ics_path, nil),
+      ai_path: Mount.label(mount, :ai_path, nil),
+      flags_path: Mount.label(mount, :flags_path, nil)
+    ]
+  end
+
+  defp tenant_plane?(%Mount{plane: %{kind: :tenant}}), do: true
+  defp tenant_plane?(_), do: false
 
   # X1 (ADR-045 §4.1) — the dead-link guard. A nav GROUP/item renders ONLY when the host
   # actually mounts its surface, so a `mix samen.gen.app --modules …` subset app never emits a

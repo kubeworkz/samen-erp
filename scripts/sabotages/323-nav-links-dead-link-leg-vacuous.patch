@@ -1,0 +1,28 @@
+# SABOTAGE: SIDEBAR-REACHABILITY (2026-10-10) — the dead-link leg of `mix samen.verify.nav_links`.
+# Defeats the segment matcher so EVERY declared route is treated as matching any link of the same
+# segment count, restoring the exact defect the verifier was written to close: a host whose nav
+# label drifted from its route macro (`path: "/conversations"` mounted while `chat_path` still
+# says `/chat`) passes the gate and ships a sidebar link that raises
+# `Phoenix.Router.NoRouteError` on the user's first click. The coverage leg, the label scan and
+# every host's own clean run stay intact, so a sabotage that broke the whole task would prove
+# nothing; this isolates the DEAD-LINK guarantee (the RED cases in the two named tests flip,
+# their green controls and the anti-vacuity assertions do not).
+# APP: samen_web
+# TEST_FILES: test/samen/verify/nav_links_test.exs
+# MUST_FAIL: fails, and the failure names the href, the label and its source line
+# MUST_FAIL: the real command exits 1 with a machine-readable document on a drifted label
+--- a/samen_web/lib/mix/tasks/samen.verify.nav_links.ex
++++ b/samen_web/lib/mix/tasks/samen.verify.nav_links.ex
+@@ -389,7 +389,11 @@
+     end)
+   end
+ 
+-  defp dynamic?(segment), do: String.starts_with?(segment, ":") or String.starts_with?(segment, "*")
++  # SABOTAGE: every declared segment counts as "dynamic", so its VALUE is ignored — a link whose
++  # path has the same segment COUNT as ANY declared route is accepted. The dead-link leg can no
++  # longer fail, so a host whose nav label drifted from its route macro ships the
++  # `Phoenix.Router.NoRouteError` the verifier exists to stop.
++  defp dynamic?(_segment), do: true
+ 
+   defp segments(path), do: path |> String.split("/") |> Enum.reject(&(&1 == ""))
+ 

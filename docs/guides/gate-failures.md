@@ -787,6 +787,80 @@ harness rather than by a reader noticing.
 
 ---
 
+### `mix samen.verify.nav_links`
+
+**Errors** (`samen_web/lib/mix/tasks/samen.verify.nav_links.ex`):
+
+```text
+lib/acme_web/router.ex:412 calls samen_automation_routes with a :labels expression this verifier cannot resolve statically — an uncertifiable mount is reported rather than skipped (pass a literal, a module-attribute literal, or a Map.put/Map.merge chain over one)
+lib/acme_web/router.ex:412 calls samen_chat_routes with a gated path label whose value this verifier cannot resolve statically — ...
+lib/acme_web/router.ex:88 mounts :files on the tenant plane without threading :files_path — the surface would be reachable only by hand-typing its URL (no nav group renders). Add `files_path: "…"` to that mount's labels, or pass --allow-unlabelled files if the host links it from its own pages.
+lib/acme_web/router.ex:91 threads :files_path = 42, which is not a path string — module_nav/1 interpolates that label into an href, so a page rendering this nav would raise.
+the sidebar links /conversations?org=… (label chat_path from lib/acme_web/router.ex:77) but AcmeWeb.Router declares no matching GET route — Phoenix.Router.NoRouteError on the user's first click
+no TENANT-plane mount calls found — the scan found nothing to certify (wrong --source-dir?)
+no gated nav label is declared on any tenant mount (checked: flags, search, files, …) — the sidebar would render no module group, so this run certifies nothing
+gated labels are declared but the nav emitted no link for them — a nav regression (mounts: <file>:<line> (files_path="/files", …))
+source dir(s) not found: <dir> — refusing to certify a tree it could not read (fail-closed)
+could not parse <file> at line <N>: <error> / could not read <file>: <reason>
+could not load <Router> — check the --router value (a host's router must be compiled in this env before it can be certified)
+--router MODULE is required: this task certifies one host against the router it actually serves (switches: --router MODULE [--host NAME] [--source-dir DIR] [--allow-unlabelled KINDS] [--format text|json]).
+--allow-unlabelled <name> is not a gated module kind — expected a comma-separated subset of: erp, banking, work, files, chat, search, analytics, ics, ai, flags, automation.
+--format "<value>" is not supported — use text or json.
+unrecognized argument <switch> — this task takes --router MODULE [--host NAME] [--source-dir DIR] [--allow-unlabelled KINDS] [--format text|json]; refusing to run with an ignored argument (fail-closed).
+<switch> requires a value — this task takes --router MODULE … ; refusing to run with an ignored argument (fail-closed).
+```
+
+**Meaning:** the SIDEBAR-REACHABILITY build gate (2026-10-10) — the framework's inherited
+navigation must never link a route the host did not mount, and must never leave a surface it DID
+mount unreachable. `Samen.UI.Nav.module_nav/1` renders each gated module group (ERP · Banking ·
+Work · Documents · Chat · Discover · Insights · Calendar · AI · Feature flags · Automation) off the
+HOST's mount labels: a label's PRESENCE is the dead-link guard, because a host that never mounted
+`/chat` never sets `:chat_path`. That convention had no enforcement — a label drifting from its
+route macro (a mount moved to `path: "/conversations"` while `chat_path` still says `/chat`), or a
+group defaulted instead of gated, ships a sidebar link that raises `Phoenix.Router.NoRouteError`
+on the user's first click (the PP-8/PP-9 class this navigation has been repaired for twice;
+`pawchart` carried a live `/automation` instance until it became label-gated). Two legs, both
+fail-closed: (1) the links the host's mounts would emit for the gated groups are RENDERED with the
+real `module_nav/1` from the label maps those mounts actually carry, and every emitted `href` must
+match a `GET` route the compiled router declares — the link set is rendered, never re-declared in
+the task, so a new nav item is covered the moment it exists; (2) a TENANT-plane mount of a module
+that OWNS a group (`samen_files_routes(:files, …)` → `:files_path`, `samen_module_routes(:work, …)`
+→ `:work_path`, …) with no path label is reported too, because no label means no group — the
+surface is live and shipped but reachable only by hand-typing its URL. The framework's defaulted
+groups (CRM/Billing/Support/Marketing, the Inbox, Workspace Settings) and the public
+`:kb`/`:csat` portals and `:csv` (an action on a per-resource route, not a destination) own no
+host label and are out of scope by construction.
+
+**Fix:** for a `dead_link`, make the label name the route the mount actually serves (or move the
+nav item); for an `unlabelled_mount`, thread the label the message names on that mount's labels
+map — or, if the host reaches that route from its own pages instead, declare it with
+`--allow-unlabelled <kind>` (never leave it silent); for an `unresolvable` finding, pass a literal
+map, a module-attribute literal, or a `Map.put`/`Map.merge` chain over one, because a mount the
+verifier cannot reason about certifies nothing. `--source-dir` (repeatable, default `lib`) points
+the scan at the HOST's router tree; `--host NAME` only names the host in the reports.
+
+**Wiring.** Every host gate that serves a framework sidebar runs it as its own step — `samenerp`
+(`--router SamenerpWeb.Router`), `driftwood` (`--router DriftwoodWeb.Router`), `pawchart`
+(`--router PawChartWeb.Router`), and `samen_web` against its reference full-mount fixture
+(`--router Samen.WebTest.NavLinksHost.Router --source-dir test/support/nav_links_host`), which
+mounts EVERY gated group so the framework's own leg cannot pass vacuously. `demo` mounts no
+framework UI (API-only), so it has no sidebar to certify and no such step. The task is deliberately
+NOT in `Samen.Verifier.Registry.tree_scoped/0` (and so not in `mix samen.verify.fleet`): it is
+HOST-scoped, needing that host's `--router` to resolve a compiled route table, rather than
+parameterized by a tree root the aggregate could pass.
+
+**Adversarial twins:** `scripts/sabotages/323-nav-links-dead-link-leg-vacuous.patch` (the segment
+matcher accepts any route of the same shape, so a drifted label passes and ships the
+`NoRouteError`) and `scripts/sabotages/324-nav-links-unlabelled-mount-leg-dropped.patch` (a mount
+carrying no path label is accepted silently — the nav island the coverage leg exists for). Each
+names the test(s) that must flip, and both restore byte-exact. The nav ITEMS themselves have their
+own twins: `173-pp8-pp9-settings-automation-nav-items-removed.patch` (the whole Workspace group),
+`321-phase-module-nav-groups-removed.patch` (the six X1-gated phase groups) and
+`322-samenerp-files-nav-label-dropped.patch` (samenerp's `:files_path` label).
+
+---
+
+
 ## Any step — `mix samen.verify.fleet` (the tree-scoped aggregate)
 
 **Shared failure shape** (`samen_core/lib/mix/tasks/samen.verify.fleet.ex`), one line per member:

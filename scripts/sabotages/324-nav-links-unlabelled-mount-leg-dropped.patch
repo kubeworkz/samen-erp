@@ -1,0 +1,31 @@
+# SABOTAGE: SIDEBAR-REACHABILITY (2026-10-10) — the coverage leg of `mix samen.verify.nav_links`.
+# Accepts a mount that carries NO nav label, so a host that MOUNTS a gated module
+# (`samen_files_routes(:files, …)`) without threading its path label passes the gate — the exact
+# nav-island defect the leg exists for: the surface is live and shipped but reachable only by
+# hand-typing its URL, because `module_nav/1` renders a group only when the label is present.
+# The dead-link leg and the non-string-label leg stay intact, so a sabotage that broke the whole
+# task would prove nothing; this isolates the COVERAGE guarantee (the RED case in the named test
+# flips, its green `--allow-unlabelled` control and the `:labels` case do not).
+# APP: samen_web
+# TEST_FILES: test/samen/verify/nav_links_test.exs
+# MUST_FAIL: fails, and tells the host exactly which label to add
+--- a/samen_web/lib/mix/tasks/samen.verify.nav_links.ex
++++ b/samen_web/lib/mix/tasks/samen.verify.nav_links.ex
+@@ -296,13 +296,10 @@
+           []
+ 
+         nil ->
+-          [
+-            violation(:unlabelled_mount, app, "#{where} mounts :#{mount.kind} on the tenant " <>
+-              "plane without threading #{inspect(key)} — the surface would be reachable only by " <>
+-              "hand-typing its URL (no nav group renders). Add `#{key}: \"…\"` to that mount's " <>
+-              "labels, or pass --allow-unlabelled #{mount.kind} if the host links it from its own " <>
+-              "pages.")
+-          ]
++          # SABOTAGE: a mount with NO nav label is accepted silently, so a mounted gated module
++          # (a nav island: live and shipped, reachable only by hand-typing its URL) is never
++          # reported.
++          []
+ 
+         other ->
+           [

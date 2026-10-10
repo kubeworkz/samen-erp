@@ -76,7 +76,11 @@ defmodule Samen.UI do
     * `nav_group/1`      — a labelled group of nav items (`:label` + inner `nav_item`s)
     * `nav_item/1`       — one sidebar link (icon slot, `:active`, optional `:count`/`:dot`)
     * `module_nav/1`     — the INHERITED CRM/Billing/Support/Marketing/Workspace
-      (Settings/Automation) nav (framework); host 20% nav via the `:extra` slot
+      (Settings/Automation) nav plus every X1-gated module group the host mounts
+      (ERP/Banking/Work/Documents/Chat/Discover/Insights/Calendar/AI — see
+      `nav_paths/1`); host 20% nav via the `:extra` slot
+    * `nav_paths/1`      — resolves those gated group paths from a `%Samen.Web.Mount{}`'s
+      labels, so one call site covers every module (splatted into `module_nav/1`)
     * `host_nav_extra/1` — renders a host's `:host_nav_extra` mount-label DATA (e.g.
       driftwood's freight "Operations") into that `:extra` slot identically from every
       framework sidebar (PP-10)
@@ -130,6 +134,10 @@ defmodule Samen.UI do
   defdelegate logout_form(assigns), to: Samen.UI.Nav
   defdelegate module_nav(assigns), to: Samen.UI.Nav
   defdelegate host_nav_extra(assigns), to: Samen.UI.Nav
+  # The module-group path attrs for `module_nav/1`, resolved from a mount's labels — NOT a
+  # component: `{Samen.UI.nav_paths(@mount)}` splats them into `<.module_nav>`.
+  defdelegate nav_paths(mount), to: Samen.UI.Nav
+  defdelegate nav_paths(mount, overrides), to: Samen.UI.Nav
   defdelegate topbar(assigns), to: Samen.UI.Nav
   defdelegate tabs(assigns), to: Samen.UI.Nav
   defdelegate tab(assigns), to: Samen.UI.Nav

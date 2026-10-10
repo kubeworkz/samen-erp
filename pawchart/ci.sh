@@ -156,6 +156,14 @@ mix samen.verify.ai_prompt_masking
 echo "    PASSED"
 
 # 16. Default test suite (the four red paths + Billing reuse + dogfood walkthrough).
+# SIDEBAR-REACHABILITY (2026-10-10) — the inherited sidebar must never link a route this
+# app's router does not mount, and every gated module this app DOES mount must own its nav label
+# (a mounted surface with no label is a nav island: reachable only by hand-typing its URL).
+# Tree-scoped: this app's OWN router source + its compiled route table, so a label drifting from
+# its route macro ships a NoRouteError no more.
+echo "--- step 15c/17: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)"
+mix samen.verify.nav_links --router PawChartWeb.Router --host pawchart
+echo "    PASSED"
 echo "--- step 16/17: mix test (default suite)"
 mix test --warnings-as-errors
 echo "    PASSED"

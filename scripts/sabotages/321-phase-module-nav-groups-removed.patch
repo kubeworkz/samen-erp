@@ -1,0 +1,84 @@
+# SABOTAGE: SIDEBAR-REACHABILITY (2026-10-10) — the phase-module nav groups themselves.
+# Removes the six X1-gated phase groups (Documents · Chat · Discover · Insights · Calendar · AI)
+# from `Samen.UI.Nav.module_nav/1`, restoring the exact defect they were added to close: every
+# mount phase's surface (Files/`/files`, Chat, Search, own-org analytics, the `.ics` export, the
+# AI plane) is a real shipped page reachable ONLY by hand-typing its URL — a total nav island,
+# the PP-8/PP-9 class multiplied by six. The paths (and the host's `*_path` labels) are
+# untouched, so this isolates the RENDERING guarantee: labels present, groups gone, tests flip.
+# The pre-existing ERP/Banking/Work/Workspace groups and the `surfaces` filter stay intact, so a
+# sabotage that broke every group would prove nothing.
+# (The hunk must not begin by deleting a blank line — see the note in patch 173.)
+# RE-ANCHORED (2026-10-10, SIDEBAR-REACHABILITY follow-up): the Workspace group above grew its
+# `@automation_path` label leg, shifting this block; the six groups deleted, their intent and
+# the MUST_FAIL target are unchanged.
+# APP: samen_web
+# TEST_FILES: test/samen/ui/components_test.exs
+# MUST_FAIL: renders one group per mounted phase module, org-threaded
+--- a/samen_web/lib/samen/ui/nav.ex
++++ b/samen_web/lib/samen/ui/nav.ex
+@@ -447,65 +447,6 @@
+       </.nav_item>
+     </.nav_group>
+ 
+-    <.nav_group :if={@files_path} label="Documents">
+-      <.nav_item label="Files" href={"#{@files_path}?org=#{@org_id}"} active={@active == :files}>
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6z" /><path d="M14 2v4h4" /></svg>
+-        </:icon>
+-      </.nav_item>
+-    </.nav_group>
+-
+-    <.nav_group :if={@chat_path} label="Chat">
+-      <.nav_item
+-        label="Conversations"
+-        href={"#{@chat_path}?org=#{@org_id}"}
+-        active={@active == :chat}
+-      >
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z" /><path d="M9 11h.01M12.5 11h.01M16 11h.01" /></svg>
+-        </:icon>
+-      </.nav_item>
+-    </.nav_group>
+-
+-    <.nav_group :if={@search_path} label="Discover">
+-      <.nav_item label="Search" href={"#{@search_path}?org=#{@org_id}"} active={@active == :search}>
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" /></svg>
+-        </:icon>
+-      </.nav_item>
+-    </.nav_group>
+-
+-    <.nav_group :if={@analytics_path} label="Insights">
+-      <.nav_item
+-        label="Activation"
+-        href={"#{@analytics_path}?org=#{@org_id}"}
+-        active={@active == :analytics}
+-      >
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 3v9h9" /></svg>
+-        </:icon>
+-      </.nav_item>
+-    </.nav_group>
+-
+-    <.nav_group :if={@ics_path} label="Calendar">
+-      <.nav_item label="Export .ics" href={@ics_path} active={@active == :ics}>
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M12 12.5v5M9.5 15L12 17.5 14.5 15" /></svg>
+-        </:icon>
+-      </.nav_item>
+-    </.nav_group>
+-
+-    <.nav_group :if={@ai_path} label="AI">
+-      <.nav_item
+-        label="AI workspace"
+-        href={"#{@ai_path}?org=#{@org_id}"}
+-        active={@active == :ai}
+-      >
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 3l1.7 4.4L17 9l-4.3 1.6L11 15l-1.7-4.4L5 9l4.3-1.6z" /><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z" /></svg>
+-        </:icon>
+-      </.nav_item>
+-    </.nav_group>
+ 
+     <.nav_group
+       :if={surface_mounted?(@surfaces, :settings) or @automation_path or @flags_path}

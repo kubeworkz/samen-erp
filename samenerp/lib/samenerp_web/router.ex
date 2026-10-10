@@ -81,7 +81,28 @@ defmodule SamenerpWeb.Router do
     # The Banking↔Finance bridge (same shape as marketing's `:crm_namespace`): the
     # banking mount resolves its GL account / journal-entry references through THIS
     # host's Finance namespace (BankAccount.account_id → Account, Match → JournalEntry).
-    erp_namespace: Samenerp.Erp
+    erp_namespace: Samenerp.Erp,
+    # SIDEBAR-REACHABILITY (2026-10-10) — the seven mount phases' module groups, made
+    # reachable from the app's OWN sidebar. Same presence-is-the-guard posture as
+    # `erp_path`/`banking_path`/`work_path` above: `Samen.UI.Nav.nav_paths/1` resolves each
+    # of these off EVERY tenant mount (they ride this shared label map), and a group renders
+    # exactly when its label is non-nil — so deleting a line here removes that module's nav
+    # group rather than emitting a link to a route this router does not serve. Each path MUST
+    # match the mount macro below it (`samen_files_routes(:files, …)` etc.); they are TENANT
+    # paths, and `nav_paths/1` only resolves them on a tenant-plane mount, so they can never
+    # leak into operator chrome.
+    files_path: "/files",
+    chat_path: "/chat",
+    search_path: "/search",
+    analytics_path: "/analytics",
+    ics_path: "/calendar.ics",
+    ai_path: "/ai",
+    flags_path: "/flags",
+    # PP-9 (Batch 3 NAV-REACHABILITY) — the T118 workflow builder. The SAME
+    # presence-is-the-guard posture as every path above: the Workspace group's Automation item
+    # renders exactly because this host mounted `samen_automation_routes(:automation, …)` below,
+    # and `mix samen.verify.nav_links` fails any host whose label outruns its router.
+    automation_path: "/automation"
   }
 
   pipeline :browser do

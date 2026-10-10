@@ -9,20 +9,31 @@
 # the flip isolates exactly the Settings/Automation nav-item guarantee.
 # Re-anchored (X1 / ADR-045 §4.1): the Workspace group is now `:if`-gated on the mounted
 # `surfaces` set and its items are multi-line; the deletion targets that current shape.
+# RE-ANCHORED AGAIN (SIDEBAR-REACHABILITY, 2026-10-10): the group's `:if` gained the
+# `@flags_path` leg and a Feature-flags item (the phase-4 nav seam), so the whole deleted block
+# moved; the DEFECT, the deleted lines' intent and every MUST_FAIL target are unchanged.
+# (Regenerated with `diff -u` against the new shape: the hunk must NOT begin by deleting a blank
+# line, or `git apply --reverse --check` — the residue detector — reports a clean tree as
+# carrying this patch.)
+# RE-ANCHORED AGAIN (2026-10-10, SIDEBAR-REACHABILITY follow-up): the Automation item is now
+# gated on the `@automation_path` LABEL rather than on the `surfaces` set (the pawchart
+# dead-link fix), so the deleted block's `:if` legs moved; the DEFECT, the deleted lines'
+# intent and both MUST_FAIL targets are unchanged.
+# (Regenerated with `diff -u` against the new shape: the hunk must NOT begin by deleting a
+# blank line, or `git apply --reverse --check` — the residue detector — reports a clean tree
+# as carrying this patch.)
 # APP: samen_web
 # TEST_FILES: test/samen/ui/components_test.exs
 # MUST_FAIL: module_nav/1 renders a Settings nav item pointing at the settings route (PP-8)
 # MUST_FAIL: module_nav/1 renders an Automation nav item pointing at the automation route (PP-9)
-diff --git a/samen_web/lib/samen/ui/nav.ex b/samen_web/lib/samen/ui/nav.ex
-index f51ca98..06bd15e 100644
 --- a/samen_web/lib/samen/ui/nav.ex
 +++ b/samen_web/lib/samen/ui/nav.ex
-@@ -258,31 +258,6 @@ defmodule Samen.UI.Nav do
+@@ -507,41 +507,6 @@
        </.nav_item>
      </.nav_group>
  
 -    <.nav_group
--      :if={surface_mounted?(@surfaces, :settings) or surface_mounted?(@surfaces, :automation)}
+-      :if={surface_mounted?(@surfaces, :settings) or @automation_path or @flags_path}
 -      label="Workspace"
 -    >
 -      <.nav_item
@@ -36,13 +47,23 @@ index f51ca98..06bd15e 100644
 -        </:icon>
 -      </.nav_item>
 -      <.nav_item
--        :if={surface_mounted?(@surfaces, :automation)}
+-        :if={@automation_path}
 -        label="Automation"
 -        href={"#{@automation_path}?org=#{@org_id}"}
 -        active={@active == :automation}
 -      >
 -        <:icon>
 -          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" /></svg>
+-        </:icon>
+-      </.nav_item>
+-      <.nav_item
+-        :if={@flags_path}
+-        label="Feature flags"
+-        href={"#{@flags_path}?org=#{@org_id}"}
+-        active={@active == :flags}
+-      >
+-        <:icon>
+-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 21V4M6 5h11l-1.6 4L17 13H6" /></svg>
 -        </:icon>
 -      </.nav_item>
 -    </.nav_group>

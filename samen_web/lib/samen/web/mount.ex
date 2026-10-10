@@ -224,6 +224,13 @@ defmodule Samen.Web.Mount do
   #   * `spine_totp` / `host_nav_extra` (PP-17 / Batch 3+5b) — the Settings 2FA opt-in and the
   #     host-supplied nav-extras group; both ride tenant mounts a cold LiveView deserializes.
   #   * `analytics_ask_resource` (T149/B2b) — the operator AnalyticsLive ask-scope resource.
+  #   * `automation_path` (SIDEBAR-REACHABILITY, 2026-10-10) — the tenant Automation nav seam,
+  #     label-gated because a shipped host (pawchart) mounts no automation surface at all.
+  #   * `files_path`/`search_path`/`analytics_path`/`ics_path` (SIDEBAR-REACHABILITY, 2026-10-10)
+  #     — the phase-module nav seams `Samen.UI.Nav.nav_paths/1` resolves for the phase-1/3/6
+  #     groups (Files · Search · own-org analytics · `.ics`). Same class as `chat_path`/`ai_path`
+  #     above: read off a mount by a framework sidebar, so they MUST round-trip through a cold
+  #     `from_session/1` (`nav_path_roundtrip_test.exs` covers the tenant-plane set).
   #   * `signup_path`/`verify_path`/`reset_path`/`invite_path`/`totp_path` (luminary A4) — the
   #     five ADR-035 identity-spine path labels `samen_auth_routes/1` merges alongside
   #     `login_path` (already whitelisted); `totp_issuer` (`auth/totp_enroll_live.ex`) and
@@ -263,6 +270,7 @@ defmodule Samen.Web.Mount do
     signup_path verify_path resend_path reset_path invite_path totp_path totp_issuer
     work_path work_logo_style
     banking_path banking_logo_style erp_namespace
+    files_path search_path analytics_path ics_path
     __principal__
   )a
 

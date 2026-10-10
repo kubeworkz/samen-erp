@@ -1,0 +1,20 @@
+# SABOTAGE: SIDEBAR-REACHABILITY (2026-10-10) — the HOST half of the phase-module nav.
+# Drops `files_path` from samenerp's shared tenant label map. The framework seam is untouched
+# (so `samen_web`'s component tests stay green) — this isolates the HOST wiring: with the label
+# gone, `Samen.UI.Nav.nav_paths/1` resolves no Documents group on ANY tenant mount, so the whole
+# Files surface (Phase 1, a mounted `/files` route) silently disappears from the app's sidebar
+# and goes back to being reachable only by hand-typing the URL. That is exactly the state the
+# seven phases shipped in, and the host-side reachability leg must FLIP.
+# APP: samenerp
+# TEST_FILES: test/nav_reachability_test.exs
+# MUST_FAIL: the app's own sidebar reaches every phase module the router mounts
+--- a/samenerp/lib/samenerp_web/router.ex
++++ b/samenerp/lib/samenerp_web/router.ex
+@@ -91,7 +91,6 @@
+     # match the mount macro below it (`samen_files_routes(:files, …)` etc.); they are TENANT
+     # paths, and `nav_paths/1` only resolves them on a tenant-plane mount, so they can never
+     # leak into operator chrome.
+-    files_path: "/files",
+     chat_path: "/chat",
+     search_path: "/search",
+     analytics_path: "/analytics",

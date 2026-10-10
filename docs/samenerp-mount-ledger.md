@@ -34,7 +34,81 @@ never a hand-built mount.
 | 6 | Calendar & Scheduling (framework `.ics` export) | `samen_ics_routes(:ics, …)` | `Samenerp.Calendar`<br>`20261007090000_mount_calendar_scope` | `test/phase6_surface_test.exs` (5) | `16732a7` |
 | 7 | AI plane (ADR-043 §5.3 / ADR-047 A6) | `samen_ai_routes(:ai, Samenerp.Crm, …)` | `Samen.AI.Domain` + 7 repo seams<br>`20261007120000_mount_ai_domain` | `test/phase7_surface_test.exs` (4) | `9ec9171` |
 
-30 tests across the seven files; the `samenerp` gate runs 61 in total.
+30 tests across the seven files; the `samenerp` gate runs 65 in total (the seven phase files'
+30, the framework flood-guard tripwire, the three SIDEBAR-REACHABILITY legs below, and the rest of
+the host suite).
+
+## Sidebar reachability — the phases' module groups in the app's own nav (2026-10-10)
+
+A mount is not a REACHABLE surface. Every phase added a route group that the app rendered nowhere
+but its own page: `/files`, `/chat`, `/search`, `/analytics`, `/calendar.ics`, `/ai` and `/flags`
+were hand-typed-URL-only from the rest of the product (the PP-8/PP-9 nav-island defect class). The
+framework now carries them in the INHERITED sidebar, and this host opts in with DATA — not code.
+
+**Framework side (`samen_web`).** `Samen.UI.Nav.module_nav/1` grew one X1-gated group per phase
+module (Documents · Chat · Discover · Insights · Calendar · AI, plus a Feature-flags item in the
+existing Workspace group). Each renders exactly when its path label is set, so a host that never
+mounted a module never emits a link to it — the same presence-is-the-guard posture as the
+pre-existing `erp_path`/`banking_path`/`work_path` seams. `Samen.UI.Nav.nav_paths/1` resolves every
+gated path from a `%Samen.Web.Mount{}`'s labels, and all nine `module_nav/1` call sites now splat it
+(`<.module_nav {Samen.UI.nav_paths(@mount)} …>`), so the NEXT module is one label plus one group
+instead of nine hand-threaded triples.
+
+Two properties of that seam are load-bearing:
+
+- **Tenant-plane only.** The new groups resolve ONLY for a `:tenant`-plane mount. `:chat_path` is
+also what driftwood's OPERATOR-plane desk chat carries (`/operator/desk-chat`), and an
+operator-plane sidebar linking a bare tenant surface is the silent plane crossing T116 bars.
+ERP/Banking/Work keep their historical resolution, so no existing host's nav changes.
+- **Round-trip safe.** The new label keys are whitelisted in `Samen.Web.Mount.@label_keys/0`; a key
+read off a mount but not whitelisted is DROPPED by `from_session/1` on a cold BEAM, which would
+silently disarm the whole group. `samen_web/test/samen/web/nav_path_roundtrip_test.exs` pins both
+the round trip and the whitelist, and the source-grep guard (`label_keys_completeness_test.exs`)
+covers the new `Mount.label/3` call sites.
+
+**Host side.** Seven lines in `@current_org_labels` (`files_path` … `flags_path`), each naming the
+path the mount macro below it actually serves.
+
+**The host proof** — `test/nav_reachability_test.exs` (3 legs, driven through the REAL router):
+
+1. the sidebar of an ORDINARY tenant page (CRM Companies, which mounts none of these modules
+   itself) lists every phase module — the groups are inherited chrome, so this must hold on every
+   tenant page, not only on the module's own;
+2. every `href` that sidebar emits resolves to a route `SamenerpWeb.Router` declares — the leg that
+   catches a label drifting from its macro (rename the chat path to `/conversations` and the nav
+   points at a route this host no longer serves) — with the resolver's refutability asserted
+   against a fabricated path;
+3. the groups are DATA on the tenant mount: `nav_paths/1` resolves all seven from the labels and
+   none without them.
+
+**Registered in the sabotage harness** (all three verified with
+`bash scripts/sabotage.sh --from 321 --to 322` / `--range 173-173`: flip confirmed, restore
+byte-exact): `321-phase-module-nav-groups-removed.patch` deletes the six phase groups and flips
+the component test (`samen_web`); `322-samenerp-files-nav-label-dropped.patch` drops `files_path`
+from this host's label map and flips leg 1 (`samenerp`); and the pre-existing
+`173-pp8-pp9-settings-automation-nav-items-removed.patch` was **re-anchored** to the new Workspace
+shape (its `:if` gained the `@flags_path` leg and a Feature-flags item) — same defect, same two
+PP-8/PP-9 MUST_FAIL targets. Live spot-checks before that: drifting `search_path` to
+`/nosuchsearch` failed leg 2 with the route-table diagnosis, and the tree was restored byte-exact.
+The same green/red/plane cases are pinned at component level in
+`samen_web/test/samen/ui/components_test.exs`.
+
+**Deliberately NOT in the sidebar.** Phase 5's `:kb`/`:csat` are PUBLIC pre-actor portals (a
+visitor with no session has no sidebar to render them in); Phase 3's CSV is an ACTION on a
+per-resource route (`/csv/import/:resource`), not a destination; Phase 4's webhook ingress is
+vendor-facing (its operator-side DLQ already rides the operator nav). Only the flag admin joins the
+nav from Phase 4.
+
+**Other hosts opt in the same way** — one label per mounted module in their shared tenant labels
+map, and only for modules they actually mount. `driftwood` labels the five groups it mounts
+(`files_path`/`chat_path`/`search_path`/`ai_path`/`automation_path`) and `pawchart` the four it
+mounts (`work_path`/`files_path`/`search_path`/`ics_path`); neither declares a label for a module
+it does not mount, because `mix samen.verify.nav_links` would report it as the dead link it is.
+`pawchart` is the sharper case: it mounts no automation surface, so it must NOT carry
+`:automation_path` — the item that put a `/automation` `NoRouteError` one click away until the
+framework label-gated it (that host is why `mix samen.verify.nav_links` exists). Each host's own
+gate runs the verifier against its real router (`--router …`), so the labels and the mounts below
+them can never drift apart.
 
 ## What each proof actually pins
 

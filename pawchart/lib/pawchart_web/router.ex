@@ -70,7 +70,18 @@ defmodule PawChartWeb.Router do
     identity_namespace: PawChart.Operator,
     host_nav_extra: {PawChartWeb.ClinicLive, :clinic_nav_data, []},
     operator_workspace: "PawChart Ops",
-    seed_command: "mix pawchart.seed"
+    seed_command: "mix pawchart.seed",
+    # SIDEBAR-REACHABILITY (2026-10-10) — the framework module groups this host MOUNTS below,
+    # made reachable from the app's OWN sidebar. Same presence-is-the-guard posture as every
+    # label above: the group renders exactly because this host mounted the route, and
+    # `mix samen.verify.nav_links` fails any host whose label outruns its router (each path MUST
+    # match its mount macro below it). NOTE the deliberate ABSENCES: no `:automation_path` (this
+    # host mounts no automation surface — the label would be the exact dead link the verifier
+    # exists to catch) and no `:erp_path`/`:banking_path`/`:flags_path`/`:ai_path` either.
+    work_path: "/work",
+    files_path: "/files",
+    search_path: "/search",
+    ics_path: "/calendar.ics"
   }
 
   # PP-7 / PP-4 (Batch 5b CLINIC-SURFACE) — where a fresh pawchart tenant lands after

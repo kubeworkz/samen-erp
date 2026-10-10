@@ -67,7 +67,18 @@ defmodule DriftwoodWeb.Router do
     # `:object_cards`/`:aggregate_loader` — every framework module sidebar now renders this
     # group identically (via `Samen.UI.host_nav_extra/1` in `module_nav/1`'s `:extra` slot),
     # so Operations is reachable from every tenant page, not only `/broker`.
-    host_nav_extra: {DriftwoodWeb.BrokerLive, :operations_nav_data, []}
+    host_nav_extra: {DriftwoodWeb.BrokerLive, :operations_nav_data, []},
+    # SIDEBAR-REACHABILITY (2026-10-10) — the framework module groups this host MOUNTS below,
+    # made reachable from the app's OWN sidebar. Same presence-is-the-guard posture as every
+    # label above: the group renders exactly because this host mounted the route, and
+    # `mix samen.verify.nav_links` fails any host whose label outruns its router (each path MUST
+    # match its mount macro below it). These ride the TENANT-plane shared map, so they can never
+    # leak into operator chrome (`nav_paths/1` resolves them on tenant mounts only).
+    files_path: "/files",
+    chat_path: "/chat",
+    search_path: "/search",
+    ai_path: "/ai",
+    automation_path: "/automation"
   }
 
   # B-SEC / S4 — the session-transported mount for the freight tenant console (`/broker`).

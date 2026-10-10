@@ -138,6 +138,14 @@ echo "--- step 17/19: mix samen.verify.ai_prompt_masking (INV-7 no-PII-egress st
 mix samen.verify.ai_prompt_masking
 echo "    PASSED"
 
+# SIDEBAR-REACHABILITY (2026-10-10) — the inherited sidebar must never link a route this
+# app's router does not mount, and every gated module this app DOES mount must own its nav label
+# (a mounted surface with no label is a nav island: reachable only by hand-typing its URL).
+# Tree-scoped: this app's OWN router source + its compiled route table, so a label drifting from
+# its route macro ships a NoRouteError no more.
+echo "--- step 17b/19: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)"
+mix samen.verify.nav_links --router SamenerpWeb.Router --host samenerp
+echo "    PASSED"
 echo "--- step 18/19: mix test (default suite)"
 mix test --warnings-as-errors
 echo "    PASSED"

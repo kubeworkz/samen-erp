@@ -8,7 +8,7 @@ defmodule Samen.UI.ComponentsTest do
 
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
-  alias Samen.Web.Mount
+  alias Samen.Web.{Mount, Plane}
 
   test "app_shell/1 renders the two-pane grid" do
     html =
@@ -127,11 +127,15 @@ defmodule Samen.UI.ComponentsTest do
 
   # PP-9 (Batch 3 NAV-REACHABILITY) — same class of defect as PP-8: the shipped T118
   # workflow builder had no discoverable entry point anywhere in `module_nav/1`.
+  # SIDEBAR-REACHABILITY (2026-10-10) — the item is now LABEL-gated (`@automation_path`), not
+  # `surfaces`-gated, so a host that mounts no automation surface cannot emit a dead link
+  # (pawchart); a host that DID mount it threads the label exactly as this fixture does.
   test "module_nav/1 renders an Automation nav item pointing at the automation route (PP-9)" do
     html =
       render_component(&Samen.UI.module_nav/1, %{
         org_id: "ORG-123",
         active: :automation,
+        automation_path: "/automation",
         extra: []
       })
 
@@ -176,7 +180,14 @@ defmodule Samen.UI.ComponentsTest do
     # Positive control (anti-tautology): with the default `:all`, every inherited group still
     # renders — a full vertical that mounts them all. Proves the refutes above are the FILTER
     # doing work, not a group that never renders.
-    full = render_component(&Samen.UI.module_nav/1, %{org_id: "ORG-123", active: nil, extra: []})
+    full =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: nil,
+        automation_path: "/automation",
+        extra: []
+      })
+
     assert full =~ ">CRM<"
     assert full =~ ">Support<"
     assert full =~ ">Marketing<"
@@ -252,6 +263,165 @@ defmodule Samen.UI.ComponentsTest do
 
     # The active surface is highlighted.
     assert html =~ ~s(href="/erp/stock?org=ORG-123" class="on")
+  end
+
+  # SIDEBAR-REACHABILITY (2026-10-10) — the seven host-adoption PHASES
+  # (`docs/samenerp-mount-ledger.md`) each mounted a module group whose surfaces were reachable
+  # only by hand-typing a URL (Files · Chat · Search · own-org analytics · `.ics` · AI · flags).
+  # `nav_paths/1` is the single seam that resolves every gated group path from a host mount's
+  # labels, so `module_nav/1` renders a group exactly when the host mounted that module — the X1
+  # dead-link posture, extended from the `erp_path`/`banking_path`/`work_path` trio.
+  describe "module_nav/1 phase-module groups (SIDEBAR-REACHABILITY)" do
+    def phase_labels do
+      %{
+        files_path: "/files",
+        chat_path: "/chat",
+        search_path: "/search",
+        analytics_path: "/analytics",
+        ics_path: "/calendar.ics",
+        ai_path: "/ai",
+        flags_path: "/flags"
+      }
+    end
+
+    defp tenant_mount(labels) do
+      Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo,
+        plane: Plane.tenant(),
+        labels: labels
+      )
+    end
+
+    defp nav_assigns(mount, extra) do
+      mount
+      |> Samen.UI.nav_paths()
+      |> Enum.into(Map.merge(%{active: nil, extra: []}, extra))
+    end
+
+    test "renders one group per mounted phase module, org-threaded" do
+      html =
+        render_component(
+          &Samen.UI.module_nav/1,
+          nav_assigns(tenant_mount(phase_labels()), %{org_id: "ORG-123"})
+        )
+
+      for {group, item, href} <- [
+            {"Documents", "Files", "/files?org=ORG-123"},
+            {"Chat", "Conversations", "/chat?org=ORG-123"},
+            {"Discover", "Search", "/search?org=ORG-123"},
+            {"Insights", "Activation", "/analytics?org=ORG-123"},
+            {"Calendar", "Export .ics", "/calendar.ics"},
+            {"AI", "AI workspace", "/ai?org=ORG-123"},
+            {"Workspace", "Feature flags", "/flags?org=ORG-123"}
+          ] do
+        assert html =~ ">#{group}<", "the #{group} group must render when its path label is set"
+
+        assert html =~ ~r/>\s*#{Regex.escape(item)}\s*<\/a>/,
+               "the #{item} item (link text) must render in the #{group} group"
+
+        assert html =~ ~s(href="#{href}"), "the #{item} item must link #{href}"
+      end
+    end
+
+    test "the phase module's own page atom highlights its item (:files / :search)" do
+      files =
+        render_component(
+          &Samen.UI.module_nav/1,
+          nav_assigns(tenant_mount(phase_labels()), %{org_id: "ORG-123", active: :files})
+        )
+
+      assert files =~ ~s(href="/files?org=ORG-123" class="on")
+
+      # `/search` already passed `active: :search` into `module_nav/1` before this group existed,
+      # so the item it had nothing to light up now highlights.
+      search =
+        render_component(
+          &Samen.UI.module_nav/1,
+          nav_assigns(tenant_mount(phase_labels()), %{org_id: "ORG-123", active: :search})
+        )
+
+      assert search =~ ~s(href="/search?org=ORG-123" class="on")
+    end
+
+    test "omits every phase group when the host's mount labels carry no path (X1 red half)" do
+      html =
+        render_component(
+          &Samen.UI.module_nav/1,
+          nav_assigns(tenant_mount(%{}), %{org_id: "ORG-123"})
+        )
+
+      for marker <- [
+            "Documents",
+            "Conversations",
+            "Discover",
+            "Activation",
+            "Export .ics",
+            "AI workspace",
+            "Feature flags",
+            # SIDEBAR-REACHABILITY (2026-10-10) — the Automation item is label-gated too: the
+            # pawchart host mounts no automation surface, so an unlabelled mount must emit NO
+            # `/automation` link (this is the live dead link the verifier was written for).
+            "Automation"
+          ] do
+        refute html =~ ">#{marker}<", "#{marker} must NOT render without its path label"
+      end
+
+      refute html =~ "/files"
+      refute html =~ "/chat"
+      refute html =~ "/search?org="
+      refute html =~ "/analytics"
+      refute html =~ "/calendar.ics"
+      refute html =~ "/ai?org="
+      refute html =~ "/flags?org="
+      refute html =~ "/automation"
+    end
+
+    # A chat mount can be an OPERATOR-plane desk chat (driftwood's `/operator/desk-chat`, which
+    # carries `chat_path` on ITS OWN labels). An operator-plane sidebar must never emit a bare
+    # tenant-plane module link (the silent-crossing class T116 bars), so `nav_paths/1` resolves
+    # the tenant-only groups for a `:tenant`-plane mount and nothing else.
+    test "nav_paths/1 resolves the tenant-only groups ONLY on the tenant plane" do
+      labels = Map.put(phase_labels(), :erp_path, "/erp")
+
+      operator =
+        Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo,
+          plane: Plane.operator("sb-operator", "11111111-0000-4000-8000-000000000001", "sb-session"),
+          labels: labels
+        )
+
+      paths = Samen.UI.nav_paths(operator)
+
+      for key <- [
+            :files_path,
+            :chat_path,
+            :search_path,
+            :analytics_path,
+            :ics_path,
+            :ai_path,
+            :flags_path
+          ] do
+        assert paths[key] == nil, "#{key} must not resolve on an operator-plane mount"
+      end
+
+      # Pre-existing ERP/Banking/Work resolution is deliberately unchanged (label presence only).
+      assert paths[:erp_path] == "/erp"
+
+      operator_html =
+        render_component(&Samen.UI.module_nav/1, nav_assigns(operator, %{org_id: "ORG-123"}))
+
+      refute operator_html =~ "/files?org="
+      refute operator_html =~ "Conversations"
+      refute operator_html =~ "AI workspace"
+
+      # Anti-tautology: the SAME labels on a tenant-plane mount DO render the groups.
+      tenant_html =
+        render_component(
+          &Samen.UI.module_nav/1,
+          nav_assigns(tenant_mount(labels), %{org_id: "ORG-123"})
+        )
+
+      assert tenant_html =~ "/files?org=ORG-123"
+      assert tenant_html =~ "AI workspace"
+    end
   end
 
   # PP-10 (Batch 3 NAV-REACHABILITY) — `host_nav_extra/1` is the shared, DATA-driven way

@@ -47,14 +47,7 @@ defmodule Samen.Web.Notifications.Live do
         <.switcher mount={@mount} org_id={@org_id} return_to={@return_to} compact />
       </:switcher>
 
-      <.module_nav
-        org_id={@org_id}
-        active={@active}
-        notifications_unread={@unread}
-        erp_path={Mount.label(@mount, :erp_path, nil)}
-        banking_path={Mount.label(@mount, :banking_path, nil)}
-        work_path={Mount.label(@mount, :work_path, nil)}
-      >
+      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active} notifications_unread={@unread}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

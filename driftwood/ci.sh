@@ -175,6 +175,14 @@ echo "    PASSED"
 
 # 17. Default test suite (settlement property test, FMCSA gate red paths, CDL vault
 #     round-trip, cross-org denial, dispatch worker).
+# SIDEBAR-REACHABILITY (2026-10-10) — the inherited sidebar must never link a route this
+# app's router does not mount, and every gated module this app DOES mount must own its nav label
+# (a mounted surface with no label is a nav island: reachable only by hand-typing its URL).
+# Tree-scoped: this app's OWN router source + its compiled route table, so a label drifting from
+# its route macro ships a NoRouteError no more.
+echo "--- step 16d/20: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)"
+mix samen.verify.nav_links --router DriftwoodWeb.Router --host driftwood
+echo "    PASSED"
 echo "--- step 17/20: mix test (default suite)"
 mix test --warnings-as-errors
 echo "    PASSED"

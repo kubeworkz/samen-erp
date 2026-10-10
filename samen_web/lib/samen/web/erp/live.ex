@@ -61,11 +61,9 @@ defmodule Samen.Web.Erp.Live do
       </:search>
 
       <.module_nav
+        {Samen.UI.nav_paths(@mount, erp_path: Mount.label(@mount, :erp_path, "/erp"))}
         org_id={@org_id}
         active={@active}
-        erp_path={Mount.label(@mount, :erp_path, "/erp")}
-        banking_path={Mount.label(@mount, :banking_path, nil)}
-        work_path={Mount.label(@mount, :work_path, nil)}
       >
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>

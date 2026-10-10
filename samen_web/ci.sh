@@ -39,4 +39,10 @@ MIX_ENV=test mix samen.verify.fleet_wire --host samen_web --router Samen.WebTest
 echo "==> samen_web: mix samen.verify.migrations (T2.4 expand-migration down/0 check)"
 MIX_ENV=test mix samen.verify.migrations --min-expand 1
 
+# SIDEBAR-REACHABILITY (2026-10-10) — mix samen.verify.nav_links against the framework reference
+# tenant host (test/support/nav_links_host): it mounts EVERY gated module group, so the framework
+# leg of the verifier cannot pass vacuously. Product hosts certify their own subset in their own
+# gate (samenerp/driftwood/pawchart ci.sh).
+echo "==> samen_web: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)"
+MIX_ENV=test mix samen.verify.nav_links --router Samen.WebTest.NavLinksHost.Router --host samen_web --source-dir test/support/nav_links_host
 echo "==> samen_web: PASSED"
