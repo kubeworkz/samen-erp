@@ -43,6 +43,7 @@ defmodule Samen.Web.Auth.RateLimitTest do
   alias Samen.WebTest.Operator.Membership
   alias Samen.WebTest.Operator.Org
   alias Samen.WebTest.Operator.User
+  alias Samen.WebTest.RateLimitFlood
 
   @secret_key_base String.duplicate("a", 64)
 
@@ -58,7 +59,10 @@ defmodule Samen.Web.Auth.RateLimitTest do
 
   setup do
     prev = Application.get_env(:samen_web, RateLimit)
-    Application.put_env(:samen_web, RateLimit, limits: @limits)
+    # The LIMITS are exactly as authored below; only the WINDOW is pinned, so the floods in
+    # this module can never be reset mid-count by a wall-clock boundary
+    # (`Samen.WebTest.RateLimitFlood`).
+    RateLimitFlood.pin!(@limits)
     RateLimit.reset()
 
     # Reset.request/2 dispatches through the Delivery chokepoint; pin the test env
@@ -98,14 +102,16 @@ defmodule Samen.Web.Auth.RateLimitTest do
       {totp_mount, pending} = arm_totp_pending!()
 
       surfaces = [
-        {"sign-in (per-account #{elem(@limits.signin_account, 0)}/win)", elem(@limits.signin_account, 0),
+        {"sign-in (per-account #{elem(@limits.signin_account, 0)}/win)",
+         elem(@limits.signin_account, 0),
          fn -> login_outcome(m, known.email, "wrong-password", {192, 0, 2, 1}) end},
-        {"registration (per-IP #{elem(@limits.registration_ip, 0)}/win)", elem(@limits.registration_ip, 0),
-         fn -> registration_outcome() end},
+        {"registration (per-IP #{elem(@limits.registration_ip, 0)}/win)",
+         elem(@limits.registration_ip, 0), fn -> registration_outcome() end},
         {"reset-request (per-account #{elem(@limits.token_request_account, 0)}/win)",
          elem(@limits.token_request_account, 0), fn -> reset_request_outcome(reset_email) end},
         {"2FA-verify (per-credential #{elem(@limits.totp_verify_credential, 0)}/win)",
-         elem(@limits.totp_verify_credential, 0), fn -> totp_verify_outcome(totp_mount, pending) end}
+         elem(@limits.totp_verify_credential, 0),
+         fn -> totp_verify_outcome(totp_mount, pending) end}
       ]
 
       for {label, limit, attempt} <- surfaces do
@@ -229,8 +235,14 @@ defmodule Samen.Web.Auth.RateLimitTest do
     test "N >> limit failed attempts produce O(window) edge rows, not O(N) — but the counter tracks the burst" do
       # High sign-in limits so every failed attempt REACHES the audit path (isolating
       # the audit-bounding from the rate-limit gate — otherwise 429s would also bound it).
-      Application.put_env(:samen_web, RateLimit,
-        limits: Map.merge(@limits, %{signin_account: {10_000, 60_000}, signin_ip: {10_000, 3_600_000}})
+      # `:login_failed_audit` is pinned too: its window EDGE is what gates the bounded audit
+      # row, so a boundary crossing mid-flood would append a SECOND edge row.
+      RateLimitFlood.pin!(
+        Map.merge(@limits, %{
+          signin_account: {10_000, 60_000},
+          signin_ip: {10_000, 3_600_000},
+          login_failed_audit: {1, 900_000}
+        })
       )
 
       RateLimit.reset()
@@ -290,7 +302,14 @@ defmodule Samen.Web.Auth.RateLimitTest do
   defp unique_email, do: "rl-#{System.unique_integer([:positive])}@example.test"
 
   defp register_mods,
-    do: %{org: Org, credential: Credential, user: User, membership: Membership, auth_token: AuthToken, repo: Repo}
+    do: %{
+      org: Org,
+      credential: Credential,
+      user: User,
+      membership: Membership,
+      auth_token: AuthToken,
+      repo: Repo
+    }
 
   defp register!(email \\ nil) do
     email = email || unique_email()
@@ -313,7 +332,13 @@ defmodule Samen.Web.Auth.RateLimitTest do
   # -- sign-in (controller) ----------------------------------------------------
 
   defp session_conn(method, path) do
-    opts = Plug.Session.init(store: :cookie, key: "_test", signing_salt: "salt", encryption_salt: "esalt")
+    opts =
+      Plug.Session.init(
+        store: :cookie,
+        key: "_test",
+        signing_salt: "salt",
+        encryption_salt: "esalt"
+      )
 
     conn(method, path)
     |> Map.put(:secret_key_base, @secret_key_base)
@@ -330,7 +355,9 @@ defmodule Samen.Web.Auth.RateLimitTest do
   end
 
   defp do_login(mount, email, password, ip) do
-    SessionController.create(login_conn(mount, ip), %{"login" => %{"email" => email, "password" => password}})
+    SessionController.create(login_conn(mount, ip), %{
+      "login" => %{"email" => email, "password" => password}
+    })
   end
 
   # `:allowed` = the request was processed (wrong-password redirect back to login);
@@ -364,7 +391,10 @@ defmodule Samen.Web.Auth.RateLimitTest do
   defp enroll_totp!(credential_id) do
     secret = Totp.generate_secret()
     code = NimbleTOTP.verification_code(secret)
-    {:ok, _credential, _recovery} = Totp.confirm_enrollment(%{credential: Credential, repo: Repo}, credential_id, secret, code)
+
+    {:ok, _credential, _recovery} =
+      Totp.confirm_enrollment(%{credential: Credential, repo: Repo}, credential_id, secret, code)
+
     secret
   end
 
@@ -420,7 +450,9 @@ defmodule Samen.Web.Auth.RateLimitTest do
   end
 
   defp reset_request_outcome(email) do
-    conn = AccountController.request_reset(reset_request_conn(), %{"reset" => %{"email" => email}})
+    conn =
+      AccountController.request_reset(reset_request_conn(), %{"reset" => %{"email" => email}})
+
     # Uniform no-oracle redirect either way; the limiter is observable via the
     # `?throttled=1` flag (keyed on the supplied email — no existence signal).
     if location(conn) =~ "throttled", do: :refused, else: :allowed

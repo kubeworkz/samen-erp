@@ -27,6 +27,7 @@ defmodule Samen.Web.WebhookSecurityTest do
 
   alias Samen.Web.RateLimit
   alias Samen.Web.Webhook.Ingress
+  alias Samen.WebTest.RateLimitFlood
   alias Samen.WebTest.Repo
   alias Samen.Webhook.{Event, IngestWorker}
   alias Samen.Webhook.Signer
@@ -50,7 +51,8 @@ defmodule Samen.Web.WebhookSecurityTest do
     }
 
     @impl true
-    def configured?(c), do: is_binary(Map.get(c, :webhook_secret)) and Map.get(c, :webhook_secret) != ""
+    def configured?(c),
+      do: is_binary(Map.get(c, :webhook_secret)) and Map.get(c, :webhook_secret) != ""
 
     @impl true
     def verify_and_parse_event(raw, headers, config) do
@@ -129,8 +131,10 @@ defmodule Samen.Web.WebhookSecurityTest do
       max_body_bytes: 4096
     )
 
-    # Default (high) limits so ordinary cases never trip; rate-limit tests override.
-    Application.put_env(:samen_web, RateLimit, limits: %{webhook_ingress: {1000, 60_000}, webhook_bad_sig: {60, 60_000}})
+    # Default (high) limits so ordinary cases never trip; the rate-limit tests below override
+    # their own. The WINDOW is pinned (`Samen.WebTest.RateLimitFlood`) so no flood in this
+    # module can be reset mid-count by the wall clock.
+    RateLimitFlood.pin!(%{webhook_ingress: {1000, 60_000}, webhook_bad_sig: {60, 60_000}})
     RateLimit.reset()
 
     on_exit(fn ->
@@ -313,7 +317,11 @@ defmodule Samen.Web.WebhookSecurityTest do
 
   describe "rate limits" do
     test "per-provider flood guard ⇒ 429 over limit; nothing persisted for the over-limit request" do
-      Application.put_env(:samen_web, RateLimit, limits: %{webhook_ingress: {3, 60_000}, webhook_bad_sig: {60, 60_000}})
+      # 3/min, WINDOW PINNED: the 4-request flood below must trip its 4th request — a claim
+      # about the LIMIT, never about where the wall-clock minute falls. Not wrapped in
+      # `RateLimitFlood.flood/2` because this test counts the rows the flood PERSISTED, so a
+      # re-run would add its own (see the helper's moduledoc) — the pin alone is the fix here.
+      RateLimitFlood.pin!(%{webhook_ingress: {3, 60_000}, webhook_bad_sig: {60, 60_000}})
       RateLimit.reset()
 
       statuses =
@@ -328,7 +336,9 @@ defmodule Samen.Web.WebhookSecurityTest do
     end
 
     test "per-IP invalid-signature budget ⇒ 429 before crypto, isolated per IP (control)" do
-      Application.put_env(:samen_web, RateLimit, limits: %{webhook_ingress: {1000, 60_000}, webhook_bad_sig: {2, 60_000}})
+      # 2/min bad-sig budget, WINDOW PINNED as above: the three requests below claim the 3rd
+      # crosses the budget, not that the minute happened not to turn.
+      RateLimitFlood.pin!(%{webhook_ingress: {1000, 60_000}, webhook_bad_sig: {2, 60_000}})
       RateLimit.reset()
 
       body = event_body()
@@ -379,16 +389,30 @@ defmodule Samen.Web.WebhookSecurityTest do
       refute dead.last_error =~ @pii_email
     end
 
-    test "the default dispatch processes the envelope (control — DLQ is not the only outcome)", %{event: event} do
-      job = %Oban.Job{args: %{"event_id" => event.id, "repo" => to_string(Repo)}, attempt: 1, max_attempts: 1}
+    test "the default dispatch processes the envelope (control — DLQ is not the only outcome)", %{
+      event: event
+    } do
+      job = %Oban.Job{
+        args: %{"event_id" => event.id, "repo" => to_string(Repo)},
+        attempt: 1,
+        max_attempts: 1
+      }
+
       assert :ok = IngestWorker.perform(job)
       assert Event.get(Repo, event.id).status == "processed"
     end
 
-    test "the operator DLQ view lists the dead envelope TOKEN-BLIND (no plaintext PII, no vt_ token)", %{event: event} do
+    test "the operator DLQ view lists the dead envelope TOKEN-BLIND (no plaintext PII, no vt_ token)",
+         %{event: event} do
       # Force it dead.
       Application.put_env(:samen_core, :webhook_dispatch, CrashingDispatch)
-      job = %Oban.Job{args: %{"event_id" => event.id, "repo" => to_string(Repo)}, attempt: 1, max_attempts: 1}
+
+      job = %Oban.Job{
+        args: %{"event_id" => event.id, "repo" => to_string(Repo)},
+        attempt: 1,
+        max_attempts: 1
+      }
+
       IngestWorker.perform(job)
 
       html =
@@ -410,7 +434,8 @@ defmodule Samen.Web.WebhookSecurityTest do
       refute html =~ ~r/\bvt_/
     end
 
-    test "sabotage twin — the token-blind probe is refutable: an un-redacted payload WOULD be caught", %{event: event} do
+    test "sabotage twin — the token-blind probe is refutable: an un-redacted payload WOULD be caught",
+         %{event: event} do
       # Prove the DOM scan is non-vacuous: seed a sibling envelope whose stored payload
       # still carries the PII (a modeled redaction failure) and show the SAME scan trips.
       {:ok, :inserted, leaked} =
@@ -426,17 +451,31 @@ defmodule Samen.Web.WebhookSecurityTest do
       _ = event
 
       html =
-        render_live(Samen.Web.Operator.WebhookDlqLive, build_operator_mount(Ecto.UUID.generate()), [])
+        render_live(
+          Samen.Web.Operator.WebhookDlqLive,
+          build_operator_mount(Ecto.UUID.generate()),
+          []
+        )
 
       # The leak IS detected by the same assertion the real test relies on — so the
       # real test's `refute html =~ @pii_email` is a genuine gate, not a tautology.
-      assert html =~ @pii_email, "the scan must be able to detect a leak, else the token-blind assertion is vacuous"
+      assert html =~ @pii_email,
+             "the scan must be able to detect a leak, else the token-blind assertion is vacuous"
+
       assert leaked.status == "received"
     end
 
-    test "an operator replay resets a dead envelope to :received (idempotent re-run)", %{event: event} do
+    test "an operator replay resets a dead envelope to :received (idempotent re-run)", %{
+      event: event
+    } do
       Application.put_env(:samen_core, :webhook_dispatch, CrashingDispatch)
-      job = %Oban.Job{args: %{"event_id" => event.id, "repo" => to_string(Repo)}, attempt: 1, max_attempts: 1}
+
+      job = %Oban.Job{
+        args: %{"event_id" => event.id, "repo" => to_string(Repo)},
+        attempt: 1,
+        max_attempts: 1
+      }
+
       IngestWorker.perform(job)
       assert Event.get(Repo, event.id).status == "dead"
 

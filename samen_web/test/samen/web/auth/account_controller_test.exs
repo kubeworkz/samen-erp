@@ -43,6 +43,7 @@ defmodule Samen.Web.Auth.AccountControllerTest do
   alias Samen.WebTest.Operator.Membership
   alias Samen.WebTest.Operator.Org
   alias Samen.WebTest.Operator.User
+  alias Samen.WebTest.RateLimitFlood
 
   @secret_key_base String.duplicate("a", 64)
   @strong_password "correct horse battery staple"
@@ -81,7 +82,14 @@ defmodule Samen.Web.Auth.AccountControllerTest do
   defp unique_email, do: "acct-#{System.unique_integer([:positive])}@example.test"
 
   defp register_mods,
-    do: %{org: Org, credential: Credential, user: User, membership: Membership, auth_token: AuthToken, repo: Repo}
+    do: %{
+      org: Org,
+      credential: Credential,
+      user: User,
+      membership: Membership,
+      auth_token: AuthToken,
+      repo: Repo
+    }
 
   defp register!(overrides \\ %{}) do
     attrs =
@@ -103,7 +111,13 @@ defmodule Samen.Web.Auth.AccountControllerTest do
   end
 
   defp arc_conn(method, path, private) do
-    opts = Plug.Session.init(store: :cookie, key: "_test", signing_salt: "salt", encryption_salt: "esalt")
+    opts =
+      Plug.Session.init(
+        store: :cookie,
+        key: "_test",
+        signing_salt: "salt",
+        encryption_salt: "esalt"
+      )
 
     Plug.Test.conn(method, path)
     |> Map.put(:secret_key_base, @secret_key_base)
@@ -208,12 +222,18 @@ defmodule Samen.Web.Auth.AccountControllerTest do
 
     test "a real reset consume redirects with ?reset=1 and rehashes — the new password NEVER in the URL" do
       result = register!()
-      {:ok, _auth_token, raw_token} = Samen.Auth.TokenMint.mint(AuthToken, result.credential.id, :password_reset, nil, 3600)
+
+      {:ok, _auth_token, raw_token} =
+        Samen.Auth.TokenMint.mint(AuthToken, result.credential.id, :password_reset, nil, 3600)
+
       new_password = "a whole different passphrase entirely"
 
       conn =
         arc_conn(:post, "/reset/#{raw_token}", %{samen_mount: mount(), samen_reset_path: "/reset"})
-        |> AccountController.reset(%{"token" => raw_token, "reset" => %{"password" => new_password}})
+        |> AccountController.reset(%{
+          "token" => raw_token,
+          "reset" => %{"password" => new_password}
+        })
 
       assert location(conn) == "/reset/#{raw_token}?reset=1"
       refute location(conn) =~ new_password
@@ -222,14 +242,19 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       # The consume was real: the token is now single-use spent.
       conn2 =
         arc_conn(:post, "/reset/#{raw_token}", %{samen_mount: mount(), samen_reset_path: "/reset"})
-        |> AccountController.reset(%{"token" => raw_token, "reset" => %{"password" => "yet another strong one"}})
+        |> AccountController.reset(%{
+          "token" => raw_token,
+          "reset" => %{"password" => "yet another strong one"}
+        })
 
       assert location(conn2) == "/reset/#{raw_token}?error=invalid_token"
     end
 
     test "a weak reset password redirects with ?error=weak_password (token untouched)" do
       result = register!()
-      {:ok, _auth_token, raw_token} = Samen.Auth.TokenMint.mint(AuthToken, result.credential.id, :password_reset, nil, 3600)
+
+      {:ok, _auth_token, raw_token} =
+        Samen.Auth.TokenMint.mint(AuthToken, result.credential.id, :password_reset, nil, 3600)
 
       conn =
         arc_conn(:post, "/reset/#{raw_token}", %{samen_mount: mount(), samen_reset_path: "/reset"})
@@ -249,7 +274,10 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       before = Ash.count!(AuthToken, authorize?: false)
 
       conn =
-        arc_conn(:post, "/verify/resend", %{samen_mount: mount(), samen_resend_path: "/verify/resend"})
+        arc_conn(:post, "/verify/resend", %{
+          samen_mount: mount(),
+          samen_resend_path: "/verify/resend"
+        })
         |> AccountController.resend_verify(%{"resend_verify" => %{"email" => result.email}})
 
       assert location(conn) == "/verify/resend?sent=1"
@@ -262,7 +290,10 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       before = Ash.count!(AuthToken, authorize?: false)
 
       conn =
-        arc_conn(:post, "/verify/resend", %{samen_mount: mount(), samen_resend_path: "/verify/resend"})
+        arc_conn(:post, "/verify/resend", %{
+          samen_mount: mount(),
+          samen_resend_path: "/verify/resend"
+        })
         |> AccountController.resend_verify(%{"resend_verify" => %{"email" => unique_email()}})
 
       assert location(conn) == "/verify/resend?sent=1"
@@ -272,6 +303,11 @@ defmodule Samen.Web.Auth.AccountControllerTest do
     test "the 4th attempt inside the window redirects ?throttled=1 (token_request_account 3/15min)" do
       email = unique_email()
       private = %{samen_mount: mount(), samen_resend_path: "/verify/resend"}
+
+      # The four requests below must land in ONE window — that IS the claim, and the shipped
+      # 900_000 ms window would occasionally turn mid-test on the wall clock. The LIMIT stays
+      # the shipped 3 (`Samen.WebTest.RateLimitFlood` pins only the window).
+      RateLimitFlood.pin!(%{token_request_account: {3, 900_000}})
 
       for _ <- 1..3 do
         conn =
@@ -310,14 +346,23 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       }
 
       settings_mount = Mount.new(:settings, Samen.WebTest.Operator, Repo)
-      {:ok, invitation, raw_token} = Invitations.create(settings_mount, owner_scope, invited_email, "member")
+
+      {:ok, invitation, raw_token} =
+        Invitations.create(settings_mount, owner_scope, invited_email, "member")
+
       assert invitation.status == "pending"
 
       join_password = "brand new teammate passphrase"
 
       conn =
-        arc_conn(:post, "/invite/#{raw_token}", %{samen_mount: mount(), samen_invite_path: "/invite"})
-        |> AccountController.accept_invite(%{"token" => raw_token, "accept" => %{"password" => join_password}})
+        arc_conn(:post, "/invite/#{raw_token}", %{
+          samen_mount: mount(),
+          samen_invite_path: "/invite"
+        })
+        |> AccountController.accept_invite(%{
+          "token" => raw_token,
+          "accept" => %{"password" => join_password}
+        })
 
       assert location(conn) == "/invite/#{raw_token}?joined=1"
       refute location(conn) =~ join_password
@@ -336,15 +381,30 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       owner = register!()
 
       owner_scope = %Samen.Scope{
-        actor: %{id: owner.user.id, org_id: owner.org.id, role: :owner, kind: :tenant, plane: :tenant, verified?: true}
+        actor: %{
+          id: owner.user.id,
+          org_id: owner.org.id,
+          role: :owner,
+          kind: :tenant,
+          plane: :tenant,
+          verified?: true
+        }
       }
 
       settings_mount = Mount.new(:settings, Samen.WebTest.Operator, Repo)
-      {:ok, _invitation, raw_token} = Invitations.create(settings_mount, owner_scope, unique_email(), "member")
+
+      {:ok, _invitation, raw_token} =
+        Invitations.create(settings_mount, owner_scope, unique_email(), "member")
 
       conn =
-        arc_conn(:post, "/invite/#{raw_token}", %{samen_mount: mount(), samen_invite_path: "/invite"})
-        |> AccountController.accept_invite(%{"token" => raw_token, "accept" => %{"password" => "short"}})
+        arc_conn(:post, "/invite/#{raw_token}", %{
+          samen_mount: mount(),
+          samen_invite_path: "/invite"
+        })
+        |> AccountController.accept_invite(%{
+          "token" => raw_token,
+          "accept" => %{"password" => "short"}
+        })
 
       assert location(conn) == "/invite/#{raw_token}?error=weak_password"
     end
@@ -395,7 +455,10 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       assert post_form?(req, "reset-request-form")
 
       result = register!()
-      {:ok, _t, raw} = Samen.Auth.TokenMint.mint(AuthToken, result.credential.id, :password_reset, nil, 3600)
+
+      {:ok, _t, raw} =
+        Samen.Auth.TokenMint.mint(AuthToken, result.credential.id, :password_reset, nil, 3600)
+
       rst = mount_smoke(ResetLive, m, %{"token" => raw})
       assert rst =~ ~s(type="password")
       assert post_form?(rst, "reset-form")
@@ -403,11 +466,23 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       owner = register!()
 
       owner_scope = %Samen.Scope{
-        actor: %{id: owner.user.id, org_id: owner.org.id, role: :owner, kind: :tenant, plane: :tenant, verified?: true}
+        actor: %{
+          id: owner.user.id,
+          org_id: owner.org.id,
+          role: :owner,
+          kind: :tenant,
+          plane: :tenant,
+          verified?: true
+        }
       }
 
       {:ok, _inv, invite_raw} =
-        Invitations.create(Mount.new(:settings, Samen.WebTest.Operator, Repo), owner_scope, unique_email(), "member")
+        Invitations.create(
+          Mount.new(:settings, Samen.WebTest.Operator, Repo),
+          owner_scope,
+          unique_email(),
+          "member"
+        )
 
       inv = mount_smoke(InviteAcceptLive, m, %{"token" => invite_raw})
       assert inv =~ ~s(type="password")
@@ -418,13 +493,16 @@ defmodule Samen.Web.Auth.AccountControllerTest do
       # The EXACT shape persona-1 F1 captured: a password form with only
       # `phx-submit` — no `method`, no `action` — which a no-JS browser submits
       # as a native GET, leaking `registration[password]=…` into the URL.
-      pre_fix = ~s(<form id="registration-form" phx-submit="register"><input type="password" name="registration[password]"></form>)
+      pre_fix =
+        ~s(<form id="registration-form" phx-submit="register"><input type="password" name="registration[password]"></form>)
 
       refute post_form?(pre_fix, "registration-form"),
              "the checker must FLAG the pre-fix GET form — otherwise it is a tautology that could never catch the regression"
 
       # And the SAME checker passes once the real POST attrs are present.
-      fixed = ~s(<form id="registration-form" action="/signup" method="post" phx-submit="register"><input type="password"></form>)
+      fixed =
+        ~s(<form id="registration-form" action="/signup" method="post" phx-submit="register"><input type="password"></form>)
+
       assert post_form?(fixed, "registration-form")
     end
   end

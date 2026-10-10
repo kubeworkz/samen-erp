@@ -13,15 +13,35 @@ defmodule Samen.Web.FleetIngressTest do
 
   alias Samen.Fleet.{Crypto, LocalCredential, Registry}
   alias Samen.Web.Fleet.{CockpitIngress, Ingress}
+  alias Samen.WebTest.RateLimitFlood
   alias Samen.WebTest.Repo, as: TestRepo
 
   @ns Samen.WebTest.Fleet
   @admin Samen.Fleet.AdminActor.new("operator-1")
   @host :fleet_ingress_test_host
 
+  # ---------------------------------------------------------------------------
+  # The counter store's WINDOW, pinned (`Samen.WebTest.RateLimitFlood`)
+  # ---------------------------------------------------------------------------
+  #
+  # This file flaked on a concurrent root run because Hammer's fixed-window buckets are
+  # `div(now, window)`: at these 60_000 ms windows EVERY bucket flips on the wall-clock minute,
+  # so a flood straddling that instant lost the counts it had accumulated and never reached its
+  # limit (`assert over_limit != []` read `[]`, reported at 12:22:00.0 — the boundary itself).
+  #
+  # These floods are about the LIMIT and the 429 shape, never about where the minute falls, so
+  # the WINDOWS are pinned to one no flood can reach across. The LIMITS are exactly the numbers
+  # `limit_for/1` still returns (60 / 120 / 10) — they are what sizes every flood below.
+  @flood_windows %{
+    fleet_enroll: {60, 60_000},
+    fleet_heartbeat: {120, 60_000},
+    fleet_heartbeat_bad_sig: {10, 60_000}
+  }
+
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(TestRepo)
     Ecto.Adapters.SQL.Sandbox.mode(TestRepo, {:shared, self()})
+    RateLimitFlood.pin!(@flood_windows)
     Samen.Fleet.NonceCache.reset()
     Samen.Web.RateLimit.reset()
     Samen.Fleet.Attention.reset()
@@ -130,7 +150,10 @@ defmodule Samen.Web.FleetIngressTest do
       %{app_id: app_id, priv: priv}
     end
 
-    test "RP-J-2 GREEN: a valid heartbeat -> 204 No Content, EMPTY body", %{app_id: app_id, priv: priv} do
+    test "RP-J-2 GREEN: a valid heartbeat -> 204 No Content, EMPTY body", %{
+      app_id: app_id,
+      priv: priv
+    } do
       conn = signed_heartbeat_conn(app_id, priv)
       resp = CockpitIngress.heartbeat(conn, namespace: @ns)
 
@@ -156,20 +179,23 @@ defmodule Samen.Web.FleetIngressTest do
       assert resp.resp_body == ""
     end
 
-    test "RP-J-13: over-limit is a byte-identical 429 for a KNOWN kid, GENUINELY VALID traffic only", %{
-      app_id: app_id,
-      priv: priv
-    } do
+    test "RP-J-13: over-limit is a byte-identical 429 for a KNOWN kid, GENUINELY VALID traffic only",
+         %{
+           app_id: app_id,
+           priv: priv
+         } do
       # The :fleet_heartbeat bucket is charged ONLY on a valid, stored
       # heartbeat (BLOCKER-1 fix) — so exhausting it requires genuinely valid
       # signed requests, never forged ones.
       {limit, _window} = Samen.Web.RateLimit.limit_for(:fleet_heartbeat)
 
       responses =
-        for _ <- 1..(limit + 3) do
-          conn = signed_heartbeat_conn(app_id, priv, unique_nonce: true)
-          CockpitIngress.heartbeat(conn, namespace: @ns)
-        end
+        RateLimitFlood.flood(limit + 3, fn ->
+          CockpitIngress.heartbeat(
+            signed_heartbeat_conn(app_id, priv, unique_nonce: true),
+            namespace: @ns
+          )
+        end)
 
       over_limit = Enum.filter(responses, &(&1.status == 429))
       assert over_limit != []
@@ -186,10 +212,12 @@ defmodule Samen.Web.FleetIngressTest do
       {limit, _window} = Samen.Web.RateLimit.limit_for(:fleet_heartbeat_bad_sig)
 
       responses =
-        for _ <- 1..(limit + 3) do
-          conn = signed_heartbeat_conn(unknown_kid, priv, unique_nonce: true)
-          CockpitIngress.heartbeat(conn, namespace: @ns)
-        end
+        RateLimitFlood.flood(limit + 3, fn ->
+          CockpitIngress.heartbeat(
+            signed_heartbeat_conn(unknown_kid, priv, unique_nonce: true),
+            namespace: @ns
+          )
+        end)
 
       refute Enum.any?(responses, &(&1.status == 204))
       over_limit = Enum.filter(responses, &(&1.status == 429))
@@ -210,10 +238,12 @@ defmodule Samen.Web.FleetIngressTest do
       {main_limit, _window} = Samen.Web.RateLimit.limit_for(:fleet_heartbeat)
 
       flood_responses =
-        for _ <- 1..(main_limit + 1) do
-          conn = signed_heartbeat_conn(app_id, wrong_priv, unique_nonce: true)
-          CockpitIngress.heartbeat(conn, namespace: @ns)
-        end
+        RateLimitFlood.flood(main_limit + 1, fn ->
+          CockpitIngress.heartbeat(
+            signed_heartbeat_conn(app_id, wrong_priv, unique_nonce: true),
+            namespace: @ns
+          )
+        end)
 
       # None of the flood responses is ever 204 -- every one of them was
       # rejected for cause (bad signature), never silently accepted.
@@ -244,10 +274,12 @@ defmodule Samen.Web.FleetIngressTest do
       # An attacker holding only the victim's kid (not secret, per §4.4a) can
       # keep doing this indefinitely.
       responses =
-        for _ <- 1..(bad_sig_limit + 15) do
-          conn = signed_heartbeat_conn(app_id, wrong_priv, unique_nonce: true)
-          CockpitIngress.heartbeat(conn, namespace: @ns)
-        end
+        RateLimitFlood.flood(bad_sig_limit + 15, fn ->
+          CockpitIngress.heartbeat(
+            signed_heartbeat_conn(app_id, wrong_priv, unique_nonce: true),
+            namespace: @ns
+          )
+        end)
 
       refute Enum.any?(responses, &(&1.status == 204))
       assert Enum.any?(responses, &(&1.status == 429))
@@ -256,7 +288,9 @@ defmodule Samen.Web.FleetIngressTest do
       # raise_entry/3 comment): Samen.Fleet.Attention's ETS table is `:set`,
       # keyed on `{kind, key}`, so repeated raises for the SAME kid COALESCE
       # into exactly one entry, no matter how many bad-sig requests flooded in.
-      entries_for_kid = Enum.filter(Samen.Fleet.Attention.list(:heartbeat_rejected), &(&1.key == app_id))
+      entries_for_kid =
+        Enum.filter(Samen.Fleet.Attention.list(:heartbeat_rejected), &(&1.key == app_id))
+
       assert length(entries_for_kid) == 1
 
       # A DIFFERENT kid's flood raises its OWN entry -- coalescing is per-key,
@@ -265,10 +299,13 @@ defmodule Samen.Web.FleetIngressTest do
       # per distinct kid, still never N per kid).
       other_app_id = Ash.UUID.generate()
 
-      for _ <- 1..(bad_sig_limit + 3) do
-        conn = signed_heartbeat_conn(other_app_id, wrong_priv, unique_nonce: true)
-        CockpitIngress.heartbeat(conn, namespace: @ns)
-      end
+      _ =
+        RateLimitFlood.flood(bad_sig_limit + 3, fn ->
+          CockpitIngress.heartbeat(
+            signed_heartbeat_conn(other_app_id, wrong_priv, unique_nonce: true),
+            namespace: @ns
+          )
+        end)
 
       all_entries = Samen.Fleet.Attention.list(:heartbeat_rejected)
       assert length(Enum.filter(all_entries, &(&1.key == app_id))) == 1
@@ -292,7 +329,9 @@ defmodule Samen.Web.FleetIngressTest do
           do: "n-#{System.unique_integer([:positive])}",
           else: Crypto.generate_nonce()
 
-      input = Crypto.signing_input("POST", "/fleet/heartbeat", ts, nonce, Crypto.body_digest(body))
+      input =
+        Crypto.signing_input("POST", "/fleet/heartbeat", ts, nonce, Crypto.body_digest(body))
+
       sig = Crypto.sign_ed25519(priv, input) |> Base.encode16(case: :lower)
       header = Crypto.build_header(app_id, 1, ts, nonce, sig)
 

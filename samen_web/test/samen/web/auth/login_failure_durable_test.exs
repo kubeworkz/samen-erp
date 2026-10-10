@@ -46,6 +46,7 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
   alias Samen.WebTest.Operator.Membership
   alias Samen.WebTest.Operator.Org
   alias Samen.WebTest.Operator.User
+  alias Samen.WebTest.RateLimitFlood
 
   @resource Samen.WebTest.Operator.LoginFailure
 
@@ -63,7 +64,11 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
 
   setup do
     prev = Application.get_env(:samen_web, RateLimit)
-    Application.put_env(:samen_web, RateLimit, limits: @limits)
+    # The LIMITS are exactly as authored below; only the WINDOW is pinned, so the multi-request
+    # sign-in floods here cannot be reset mid-count by the wall clock
+    # (`Samen.WebTest.RateLimitFlood`). The durable `LoginFailure` window is a separate,
+    # explicit (and backdate-testable) one — see `login_failed_window_seconds/0`.
+    RateLimitFlood.pin!(@limits)
     RateLimit.reset()
 
     on_exit(fn ->
@@ -211,7 +216,7 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
 
       conn = do_login(m, acct.email, acct.password, {198, 51, 100, 10})
       assert conn.status in 300..399
-      refute (get_resp_header(conn, "location") |> List.first()) =~ "error"
+      refute get_resp_header(conn, "location") |> List.first() =~ "error"
 
       assert LoginFailure.count(@resource, :email_bidx, bidx) == 0
     end
@@ -284,7 +289,8 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
   end
 
   defp backdate_window!(bidx, seconds_ago) do
-    old = DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:microsecond)
+    old =
+      DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:microsecond)
 
     row!(bidx)
     |> Ash.Changeset.for_update(:update, %{}, authorize?: false)
@@ -303,7 +309,14 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
   defp unique_email, do: "lfd-#{System.unique_integer([:positive])}@example.test"
 
   defp register_mods,
-    do: %{org: Org, credential: Credential, user: User, membership: Membership, auth_token: AuthToken, repo: Repo}
+    do: %{
+      org: Org,
+      credential: Credential,
+      user: User,
+      membership: Membership,
+      auth_token: AuthToken,
+      repo: Repo
+    }
 
   defp register!(email \\ nil) do
     email = email || unique_email()
@@ -324,7 +337,13 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
   end
 
   defp session_conn(method, path) do
-    opts = Plug.Session.init(store: :cookie, key: "_test", signing_salt: "salt", encryption_salt: "esalt")
+    opts =
+      Plug.Session.init(
+        store: :cookie,
+        key: "_test",
+        signing_salt: "salt",
+        encryption_salt: "esalt"
+      )
 
     conn(method, path)
     |> Map.put(:secret_key_base, @secret_key_base)
@@ -341,7 +360,9 @@ defmodule Samen.Web.Auth.LoginFailureDurableTest do
   end
 
   defp do_login(mount, email, password, ip) do
-    SessionController.create(login_conn(mount, ip), %{"login" => %{"email" => email, "password" => password}})
+    SessionController.create(login_conn(mount, ip), %{
+      "login" => %{"email" => email, "password" => password}
+    })
   end
 
   defp login_outcome(mount, email, password, ip) do
