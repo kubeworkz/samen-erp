@@ -576,10 +576,14 @@ defmodule Samen.Gen.Templates do
   # The `Samen.UI` app-shell landing emitted ONLY when a mountable surface is selected
   # (`--modules`). It turns the mounted framework surfaces into a REAL menu (the "undocumented
   # as a menu" fix): the inherited Inbox/CRM/Billing/Support/Marketing groups come from
-  # `Samen.UI.module_nav/1`; the selected end-user surfaces are the `:extra` "Product" nav
-  # group (`<%= menu_nav_items %>`, computed by `Samen.Gen.App`). Statically rendered — it
-  # renders no field value, so it has no masking surface. A default (no-`--modules`) app does
-  # NOT emit this file and keeps `/` → `PageController.index` (byte-for-byte unchanged).
+  # `Samen.UI.module_nav/1`, CONSTRAINED by `surfaces` (`<%= home_surfaces %>`) to the groups
+  # this app actually mounts. The surfaces whose group the framework gates on a mount LABEL
+  # (Files → Documents, Search → Discover) render from `module_nav/1` itself, off the labels the
+  # router threads (`<%= module_labels %>`); only the surfaces that own no framework group ride
+  # the `:extra` "Product" group (`<%= menu_extra %>`) — all three computed by `Samen.Gen.App` so
+  # no item is listed twice. Statically rendered — it renders no field value, so it has no
+  # masking surface. A default (no-`--modules`) app does NOT emit this file and keeps
+  # `/` → `PageController.index` (byte-for-byte unchanged).
   @doc false
   def home_live_ex, do: @home_live_ex
 

@@ -941,7 +941,12 @@ defmodule Samen.Gen.AppTest do
 
       b = Gen.bindings(s)
       assert b["module_mounts"] == ""
-      assert b["menu_nav_items"] == ""
+      assert b["menu_extra"] == ""
+      # No gated nav label → no SIDEBAR-REACHABILITY step (the verifier would refuse to
+      # certify a label-less run vacuously).
+      assert b["module_labels"] == ""
+      assert b["nav_links_step"] == ""
+      assert b["nav_links_step_api"] == ""
       assert b["root_route"] == ~s{get("/", PageController, :index)}
 
       router = rendered_router(s)
@@ -1008,10 +1013,10 @@ defmodule Samen.Gen.AppTest do
       # No mountable surface → the landing stays the plain PageController index.
       assert router =~ ~s{get("/", PageController, :index)}
       refute router =~ "HomeLive"
-      assert Gen.bindings(s)["menu_nav_items"] == ""
+      assert Gen.bindings(s)["menu_extra"] == ""
     end
 
-    test "the HomeLive menu leans on the Samen.UI kit and lists the mounted surfaces" do
+    test "the HomeLive menu leans on the Samen.UI kit and lists the surfaces that own no framework group" do
       s = spec(modules: "files,search,settings")
       home = Gen.render(Samen.Gen.Templates.home_live_ex(), Gen.bindings(s))
 
@@ -1019,12 +1024,97 @@ defmodule Samen.Gen.AppTest do
       assert home =~ "import Samen.UI"
       assert home =~ "<.app_shell>"
       assert home =~ "<.module_nav"
-      assert home =~ ~s{<.nav_group label="Product">}
-      assert home =~ ~s{<.nav_item label="Files"}
-      assert home =~ ~s{<.nav_item label="Search"}
-      assert home =~ ~s{<.nav_item label="Settings"}
-      # No CSV was selected here — the menu lists only what is mounted.
-      refute home =~ ~s{<.nav_item label="CSV import"}
+
+      # Files/Search/Settings each own a GATED framework group (Documents / Discover /
+      # Workspace), rendered by `module_nav/1` off the labels the router threads — listing them
+      # here too would put the same item in the sidebar twice. No CSV was selected either, so
+      # there is NOTHING left for the landing's own `:extra` group and the slot is omitted.
+      refute home =~ ~s{<.nav_item label="Files"}
+      refute home =~ ~s{<.nav_item label="Search"}
+      refute home =~ ~s{<.nav_item label="Settings"}
+      refute home =~ ~s{<.nav_group label="Product">}
+    end
+
+    test "the HomeLive :extra group carries exactly the surfaces with no framework group (csv)" do
+      with_csv = Gen.render(Samen.Gen.Templates.home_live_ex(), Gen.bindings(spec(modules: "files,search,csv,settings")))
+      assert with_csv =~ ~s{<.nav_group label="Product">}
+      assert with_csv =~
+               "<.nav_item label=\"CSV import\" href={\"/csv/import/record?org=\#{@org_id}\"} />"
+      # …and only that one: the gated surfaces render from module_nav/1, so they appear once.
+      refute with_csv =~ ~s{<.nav_item label="Files"}
+      refute with_csv =~ ~s{<.nav_item label="Search"}
+      refute with_csv =~ ~s{<.nav_item label="Settings"}
+
+      # A csv-ONLY app still ships the landing (the Product group is its whole menu).
+      csv_only = Gen.render(Samen.Gen.Templates.home_live_ex(), Gen.bindings(spec(modules: "csv")))
+      assert csv_only =~ ~s{<.nav_item label="CSV import"}
+      refute csv_only =~ ~s{<.nav_group label="Product">\n\s*</.nav_group>}
+    end
+
+    # X1 / ADR-045 §4.1 — the GATED NAV LABEL the router threads. A `*_path` label is what makes
+    # `module_nav/1` render the module's group on EVERY tenant sidebar, and its ABSENCE is the
+    # nav-island defect (`mix samen.verify.nav_links`'s coverage leg). Only the surfaces the
+    # framework gates on a label get one: `:csv` owns no group and `:settings` rides `surfaces`.
+    test "threads the gated nav path labels for the selected --modules surfaces (X1)" do
+      b = Gen.bindings(spec(modules: "files,search,csv,settings"))
+
+      assert b["module_labels"] == ",\n    files_path: \"/files\",\n    search_path: \"/search\""
+
+      router = rendered_router(spec(modules: "files,search,csv,settings"))
+
+      # Threaded into the SHARED label map, so EVERY tenant mount carries it and therefore every
+      # mounted page's sidebar resolves every module this app mounted.
+      assert router =~
+               "  @current_org_labels %{\n    authn: {:app_env, :widgetco, :auth_required?},\n" <>
+                 "    identity_namespace: Widgetco.Operator,\n    files_path: \"/files\",\n" <>
+                 "    search_path: \"/search\"\n  }"
+
+      # The label IS the guard: a selection that owns no gated group threads none, so the
+      # emitted label map is byte-exact to a no-`--modules` app's.
+      assert Gen.bindings(spec(modules: "csv,settings"))["module_labels"] == ""
+      assert Gen.bindings(spec(modules: "csv"))["module_labels"] == ""
+      assert Gen.bindings(spec())["module_labels"] == ""
+
+      refute rendered_router(spec(modules: "csv")) =~ "files_path"
+
+      # …and the LANDING threads the same paths (it is STATIC — no `Samen.Web.Mount` to resolve
+      # them from), so the app's own front door shows the gated groups too, not just the tenant
+      # pages behind it. Without this the landing would be a WORSE menu than every page it links
+      # to — and the framework probe asserts exactly those labels are on `/`.
+      home =
+        Gen.render(
+          Samen.Gen.Templates.home_live_ex(),
+          Gen.bindings(spec(modules: "files,search,csv,settings"))
+        )
+
+      assert home =~ ~s(files_path="/files" search_path="/search")
+
+      refute Gen.render(Samen.Gen.Templates.home_live_ex(), Gen.bindings(spec(modules: "csv"))) =~
+               ~s(files_path="/files")
+    end
+
+    # The generated app must hold ITSELF to the sidebar gate the framework core and every
+    # reference vertical run — and it may only claim that once it actually threads a label for
+    # the verifier to certify (`mix samen.verify.nav_links` refuses a label-less run as vacuous).
+    test "emits the SIDEBAR-REACHABILITY gate step in ci.sh, riding with the label" do
+      {_, ci_tmpl} = Enum.find(Samen.Gen.Templates.files(true, true, false), fn {p, _} -> p == "ci.sh" end)
+      {_, ci_web} = Enum.find(Samen.Gen.Templates.files(true, false, false), fn {p, _} -> p == "ci.sh" end)
+
+      render = fn tmpl, spec -> Gen.render(tmpl, Gen.bindings(spec)) end
+
+      for {tmpl, label} <- [{ci_tmpl, "17b/19"}, {ci_web, "16b/18"}] do
+        labelled = render.(tmpl, spec(modules: "files,search,csv,settings"))
+
+        assert labelled =~ "mix samen.verify.nav_links --router WidgetcoWeb.Router --host widgetco"
+        assert labelled =~ "step #{label}: mix samen.verify.nav_links"
+
+        # The step is NOT emitted without a gated label — there would be no group to certify.
+        refute render.(tmpl, spec(modules: "csv,settings")) =~ "nav_links"
+        refute render.(tmpl, spec()) =~ "nav_links"
+      end
+
+      # The step runs BEFORE `mix test`, so a dead nav link fails fast and is named.
+      assert render.(ci_tmpl, spec(modules: "files")) =~ ~r/nav_links.*\n.*\n.*step 18\/19: mix test/s
     end
 
     # X1 (ADR-045 §4.1) — the inherited `module_nav/1` is CONSTRAINED to the groups this

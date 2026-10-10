@@ -125,6 +125,59 @@ defmodule Samen.Gen.TemplatesParityTest do
            "orphaned golden fixtures (an emitter was removed/renamed without re-capture)"
   end
 
+  # STRICT TEMPLATE HYGIENE: no rendered artifact may leak an unreplaced `<%= … %>` token. The
+  # bindings map is composed per-CONFIGURATION (`base` + `web_bindings/1`, merged only when
+  # `web?`), so a token used by a template that a NON-web configuration renders leaks its raw
+  # source instead of being substituted — e.g. the shared `ci_sh.eex` reachable from the headless
+  # set. That is a shell syntax error at best and a silently skipped gate at worst, and it is
+  # invisible to the byte-golden (which happily freezes the broken output). Checked on EVERY
+  # rendered file of EVERY configuration, so adding a binding for one variant cannot quietly
+  # strand the others.
+  test "no rendered file leaks an unreplaced template token" do
+    for {set, files} <- render_all(), {rel, content} <- files do
+      refute content =~ "<%=",
+             "#{set}/#{rel} contains an UNREPLACED template token — its binding is missing for " <>
+               "this configuration, so the file would ship literal `<%= … %>` source"
+    end
+  end
+
+  # SIDEBAR-REACHABILITY gate-parity guard: a generated host that THREADS a gated nav label must
+  # also hold itself to the same dead-link gate the framework core and every reference vertical
+  # run. Asserted on the RENDERED output (not the golden files), so a template edit that drops
+  # the step fails HERE even after a golden re-capture. The pairing is the point: the step is
+  # emitted iff the router threads a label, because `mix samen.verify.nav_links` refuses to
+  # certify a label-less run vacuously (its `:empty_emit` leg) — a generated app can neither
+  # claim the gate without a label, nor ship a label with no gate.
+  test "every generated ci.sh that threads a gated nav label also runs samen.verify.nav_links" do
+    rendered = render_all()
+
+    for {set, files} <- rendered do
+      ci = files["ci.sh"]
+      router = files["lib/acme_web/router.ex"]
+
+      assert is_binary(ci), "#{set} emitted no ci.sh"
+      # Headless has no router at all (no web layer) — nothing to certify there.
+      labelled = is_binary(router) and router =~ ~r/_path: "\/./
+
+      if labelled do
+        assert ci =~ "mix samen.verify.nav_links --router AcmeWeb.Router --host acme",
+               "#{set}/ci.sh threads a gated nav label but does NOT run the SIDEBAR-REACHABILITY " <>
+                 "gate — its sidebar could link a route its router never mounts."
+      else
+        refute ci =~ "mix samen.verify.nav_links",
+               "#{set}/ci.sh runs the SIDEBAR-REACHABILITY gate but threads no gated nav " <>
+                 "label — the verifier would report it as :empty_emit (a gate that certifies " <>
+                 "nothing is a lie)."
+      end
+    end
+
+    # Non-vacuous: the `--modules` set MUST be the labelled one, so this guard has a real
+    # subject. (If it stopped threading labels, both branches above could pass trivially.)
+    modules_set = rendered["web_api_modules"]
+    assert modules_set["lib/acme_web/router.ex"] =~ ~s{files_path: "/files"}
+    assert modules_set["ci.sh"] =~ "mix samen.verify.nav_links"
+  end
+
   # A3 gate-parity guard (luminary pre-merge): EVERY generated app's ci.sh must run the B5
   # no_pan_columns sweep — the reference verticals (demo/driftwood/pawchart) all run it, and
   # before this guard the templates emitted a strictly WEAKER gate: a raw-DDL card_number

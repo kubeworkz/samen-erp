@@ -130,7 +130,7 @@ echo "    PASSED"
 echo "--- step 16/18: mix samen.verify.ai_prompt_masking (INV-7 no-PII-egress structural gate)"
 mix samen.verify.ai_prompt_masking
 echo "    PASSED"
-
+<%= nav_links_step %>
 echo "--- step 17/18: mix test (default suite)"
 mix test --warnings-as-errors
 echo "    PASSED"

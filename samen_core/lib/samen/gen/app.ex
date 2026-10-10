@@ -112,6 +112,17 @@ defmodule Samen.Gen.App do
   # in docs/guides/generators.md, emitted as a router prerequisite comment, never half-mounted).
   @mountable_modules [:files, :csv, :search, :settings]
 
+  # The mountable surfaces whose sidebar group the FRAMEWORK gates on a mount label (X1 /
+  # ADR-045 §4.1), with the path its route macro serves: `:files` → `:files_path`, `:search` →
+  # `:search_path`. Threading the label is what puts the group on EVERY tenant sidebar
+  # (`Samen.UI.Nav.nav_paths/1` reads it off the mount); omitting it is the nav-island defect
+  # the generated app's own `mix samen.verify.nav_links` gate fails on — the surface is mounted
+  # and shipped but reachable only by hand-typing its URL. `:csv` and `:settings` are
+  # deliberately absent: `:csv` owns no nav group (it is an ACTION on a per-resource route, not
+  # a destination), and `:settings` rides `module_nav/1`'s `surfaces` filter, which the landing
+  # already threads through `home_surfaces`.
+  @gated_modules %{files: {:files_path, "/files"}, search: {:search_path, "/search"}}
+
   @doc "The framework surfaces `--modules` recognizes (`chat`/`files`/`csv`/`search`/`settings`)."
   def known_modules, do: @known_modules
 
@@ -690,7 +701,14 @@ defmodule Samen.Gen.App do
       "by" => ba.payment,
       "bu" => ba.usage,
       "be" => ba.entitlement,
-      "bv" => ba.subscription_event
+      "bv" => ba.subscription_event,
+      # WS-E SIDEBAR-REACHABILITY step. Empty here and overridden by `web_bindings/1` for a web
+      # app that threads a gated nav label, but it MUST exist for the headless set too: the
+      # `ci_sh.eex` template is shared by the headless AND the web-without-api configurations, so
+      # an absent token would ship literal `<%= nav_links_step %>` source into a headless app's
+      # ci.sh. `templates_parity_test.exs` asserts no rendered artifact ever leaks such a token.
+      "nav_links_step" => "",
+      "nav_links_step_api" => ""
     }
 
     if s.web?, do: Map.merge(base, web_bindings(s)), else: base
@@ -754,9 +772,16 @@ defmodule Samen.Gen.App do
       # surface is selected. Values are computed with `s.module` interpolated DIRECTLY (never
       # via a nested `<%= module %>`) so `render/2`'s single substitution pass is exact.
       "module_mounts" => module_mounts_binding(s),
+      "module_labels" => module_labels_binding(s),
       "root_route" => root_route_binding(s),
-      "menu_nav_items" => menu_nav_items_binding(s),
-      "home_surfaces" => home_surfaces_binding(s)
+      "menu_extra" => menu_extra_binding(s),
+      "home_surfaces" => home_surfaces_binding(s),
+      "home_nav_paths" => home_nav_paths_binding(s),
+      # One per step-numbered ci.sh template (`ci_sh.eex` is web-without-api, `ci_sh_api.eex`
+      # adds the api_contract step and so numbers one higher). Each template references only its
+      # own key; the other key is simply absent from that template's text.
+      "nav_links_step" => nav_links_step_binding(s, "16b/18"),
+      "nav_links_step_api" => nav_links_step_binding(s, "17b/19")
     }
   end
 
@@ -770,6 +795,41 @@ defmodule Samen.Gen.App do
 
   defp selected_mountable(%__MODULE__{modules: mods}),
     do: Enum.filter(@mountable_modules, &(&1 in mods))
+
+  # The selected surfaces whose group the framework renders off a mount LABEL (see @gated_modules).
+  defp selected_gated(%__MODULE__{modules: mods}),
+    do: Enum.filter(@mountable_modules, &(&1 in mods and Map.has_key?(@gated_modules, &1)))
+
+  # The selected surfaces the landing must list ITSELF, because the framework renders no
+  # `module_nav/1` group for them: `:csv` today (an ACTION on a per-resource route, with no
+  # destination page of its own). `:files`/`:search` render from the gated Documents/Discover
+  # groups the router threads labels for (`@gated_modules`), and `:settings` from the
+  # `surfaces`-gated Workspace group — listing any of them here as well would put the same item
+  # in the sidebar twice.
+  @landing_extra_modules [:csv]
+
+  defp selected_landing_extra(%__MODULE__{modules: mods}),
+    do: Enum.filter(@landing_extra_modules, &(&1 in mods))
+
+  # The `<%= module_labels %>` seam: the gated path labels for the selected `--modules`
+  # surfaces, appended to the router's `@current_org_labels` map literal so every tenant mount
+  # carries them (the `@current_org_labels` seam is shared, so each mount's sidebar resolves
+  # every module the host mounted). "" for a default app AND for a `--modules` selection that
+  # owns no gated group (`csv`/`settings`), so the emitted label map is byte-exact there.
+  defp module_labels_binding(%__MODULE__{} = s) do
+    case selected_gated(s) do
+      [] ->
+        ""
+
+      kinds ->
+        ",\n" <> Enum.map_join(kinds, ",\n", &gated_label_line/1)
+    end
+  end
+
+  defp gated_label_line(kind) do
+    {key, path} = Map.fetch!(@gated_modules, kind)
+    "    #{key}: \"#{path}\""
+  end
 
   # The `<%= module_mounts %>` router block: the framework surface macro calls (files/search
   # over Primitives, csv over Vertical, settings over Operator), plus — when `chat` was
@@ -852,27 +912,69 @@ defmodule Samen.Gen.App do
     end
   end
 
-  # The `<%= menu_nav_items %>` seam: the `Samen.UI.nav_item`s for the `:extra` "Product" nav
-  # group in `HomeLive` (only emitted when `home?/1`). "" otherwise. The `\#{@org_id}` is a
+  # The `<%= menu_extra %>` seam: `HomeLive`'s `<:extra>` slot — the landing's OWN nav group for
+  # the selected surfaces that own no framework group (`selected_landing_extra/1`). "" when
+  # nothing is left, so no empty "Product" group header is emitted. The `\#{@org_id}` is a
   # LITERAL HEEx interpolation preserved into the emitted template (escaped so it is not
   # interpolated here at generation time).
-  defp menu_nav_items_binding(%__MODULE__{} = s) do
-    s
-    |> selected_mountable()
-    |> Enum.map_join("\n", &nav_item_line/1)
+  defp menu_extra_binding(%__MODULE__{} = s) do
+    case s |> selected_landing_extra() |> Enum.map(&nav_item_line/1) do
+      [] ->
+        ""
+
+      items ->
+        "\n            <:extra>\n              <.nav_group label=\"Product\">\n" <>
+          Enum.join(items, "\n") <>
+          "\n              </.nav_group>\n            </:extra>"
+    end
   end
 
-  defp nav_item_line(:files),
-    do: ~s(                <.nav_item label="Files" href={"/files?org=\#{@org_id}"} />)
+  # The `<%= home_nav_paths %>` seam: the gated path labels `HomeLive` threads INTO
+  # `module_nav/1`. The landing is a STATIC page — it has no `Samen.Web.Mount`, so unlike every
+  # tenant surface it cannot resolve these off `@mount` (`Samen.UI.Nav.nav_paths/1`) and must
+  # pass the SAME paths the router threads. Without them the gated groups would render on every
+  # tenant page and vanish from the landing, making the app's own front door a worse menu than
+  # the pages behind it. "" when nothing gated was selected.
+  defp home_nav_paths_binding(%__MODULE__{} = s) do
+    case selected_gated(s) do
+      [] ->
+        ""
 
-  defp nav_item_line(:search),
-    do: ~s(                <.nav_item label="Search" href={"/search?org=\#{@org_id}"} />)
+      kinds ->
+        Enum.map_join(kinds, "", fn kind ->
+          {key, path} = Map.fetch!(@gated_modules, kind)
+          " #{key}=\"#{path}\""
+        end)
+    end
+  end
+
+  # The `<%= nav_links_step %>` seam: the SIDEBAR-REACHABILITY gate step for the generated
+  # ci.sh. Emitted ONLY when this app threads at least one gated nav label — with no label the
+  # landing renders no `module_nav/1` group, and `mix samen.verify.nav_links` refuses to pass
+  # such a run vacuously (its `:empty_emit` leg). So the step rides WITH the label: a
+  # `--modules csv`/`settings`-only app emits neither, a `--modules files` (or `search`) app
+  # emits both. `label` is the step's `N/M` position — the two ci.sh templates number
+  # differently, because the api variant carries the extra api_contract step.
+  defp nav_links_step_binding(%__MODULE__{} = s, label) do
+    case selected_gated(s) do
+      [] ->
+        ""
+
+      kinds ->
+        joined = Enum.map_join(kinds, ",", &Atom.to_string/1)
+
+        "\n# SIDEBAR-REACHABILITY (X1 / ADR-045 §4.1) — every gated nav group this app mounts\n" <>
+          "# (--modules #{joined}) must link a route its OWN router declares. A label that drifted\n" <>
+          "# from the route macro it belongs to, or a mount that never threads its label at all,\n" <>
+          "# ships a sidebar link that raises `Phoenix.Router.NoRouteError` on the first click.\n" <>
+          "echo \"--- step #{label}: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)\"\n" <>
+          "mix samen.verify.nav_links --router #{s.module}Web.Router --host #{s.otp_app}\n" <>
+          "echo \"    PASSED\"\n"
+    end
+  end
 
   defp nav_item_line(:csv),
     do: ~s(                <.nav_item label="CSV import" href={"/csv/import/record?org=\#{@org_id}"} />)
-
-  defp nav_item_line(:settings),
-    do: ~s(                <.nav_item label="Settings" href={"/settings?org=\#{@org_id}"} />)
 
   # The `<%= home_surfaces %>` seam (X1 / ADR-045 §4.1): the LIST of inherited `module_nav/1`
   # groups this app's router ACTUALLY mounts, passed as `surfaces={...}` so the framework nav

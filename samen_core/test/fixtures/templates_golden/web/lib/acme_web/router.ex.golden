@@ -59,6 +59,15 @@ defmodule AcmeWeb.Router do
   # the S12 residual). A module attribute (compile-time literal) so it is usable
   # inside the framework route-macro expansions; both values are session-safe
   # (an MFA of atoms / a module atom).
+  #
+  # A generated app that SELECTS modules also threads their GATED NAV PATH labels here (X1 /
+  # ADR-045 §4.1; see
+  # `Samen.UI.Nav.nav_paths/1`): a module's sidebar group renders only when its path label is
+  # present, so the label IS the dead-link guard for a host that mounted the module — and ITS
+  # ABSENCE is a nav island (a live surface reachable only by hand-typing its URL). Because the
+  # seam is SHARED, every tenant mount carries every label, so each mounted page's sidebar
+  # resolves every module this app mounted (not just its own). `mix samen.verify.nav_links` in
+  # this app's ci.sh fails if a label here ever drifts from the route it belongs to.
   @current_org_labels %{
     authn: {:app_env, :acme, :auth_required?},
     identity_namespace: Acme.Operator

@@ -138,6 +138,14 @@ echo "--- step 17/19: mix samen.verify.ai_prompt_masking (INV-7 no-PII-egress st
 mix samen.verify.ai_prompt_masking
 echo "    PASSED"
 
+# SIDEBAR-REACHABILITY (X1 / ADR-045 §4.1) — every gated nav group this app mounts
+# (--modules files,search) must link a route its OWN router declares. A label that drifted
+# from the route macro it belongs to, or a mount that never threads its label at all,
+# ships a sidebar link that raises `Phoenix.Router.NoRouteError` on the first click.
+echo "--- step 17b/19: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)"
+mix samen.verify.nav_links --router AcmeWeb.Router --host acme
+echo "    PASSED"
+
 echo "--- step 18/19: mix test (default suite)"
 mix test --warnings-as-errors
 echo "    PASSED"
