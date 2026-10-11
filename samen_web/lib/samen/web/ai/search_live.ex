@@ -15,6 +15,7 @@ defmodule Samen.Web.AI.SearchLive do
   import Samen.Web.AI.Components
 
   alias Samen.Web.AI.Server
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @impl true
@@ -61,7 +62,14 @@ defmodule Samen.Web.AI.SearchLive do
         </.sidebar>
       </:sidebar>
 
-      <.topbar title="AI · Semantic search" crumbs={["AI", "Semantic search"]} />
+      <.topbar
+        title="AI · Semantic search"
+        crumbs={[
+          Crumbs.org(@samen_mount, @org_id),
+          Crumbs.section(@samen_mount, @org_id, :ai),
+          "Semantic search"
+        ]}
+      />
       <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
       <.ai_tabs active={:search} base={ai_base(@samen_mount)} />
 

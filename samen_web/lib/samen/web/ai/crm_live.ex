@@ -20,6 +20,7 @@ defmodule Samen.Web.AI.CrmLive do
   import Samen.Web.AI.Components
 
   alias Samen.Web.AI.Server
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @impl true
@@ -101,7 +102,14 @@ defmodule Samen.Web.AI.CrmLive do
         </.sidebar>
       </:sidebar>
 
-      <.topbar title="AI · CRM" crumbs={["AI", "CRM"]} />
+      <.topbar
+        title="AI · CRM"
+        crumbs={[
+          Crumbs.org(@samen_mount, @org_id),
+          Crumbs.section(@samen_mount, @org_id, :ai),
+          "CRM"
+        ]}
+      />
       <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
       <.ai_tabs active={:crm} base={ai_base(@samen_mount)} />
 

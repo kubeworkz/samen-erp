@@ -54,6 +54,7 @@ defmodule Samen.Web.CrumbsTest do
       assert Crumbs.section(mount, "ORG-1", :chat) == {"Chat", "/chat?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :inbox) == {"Inbox", "/notifications?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :files) == {"Files", "/files?org=ORG-1"}
+      assert Crumbs.section(mount, "ORG-1", :ai) == {"AI", "/ai?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :companies) == {"Companies", "/crm/companies?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :contacts) == {"Contacts", "/crm/contacts?org=ORG-1"}
     end
@@ -61,6 +62,12 @@ defmodule Samen.Web.CrumbsTest do
     test "omits ?org= when no org is resolved" do
       mount = build_mount(:crm)
       assert Crumbs.section(mount, nil, :work) == {"Work", "/work"}
+    end
+
+    test "honors a host :ai_path override (the AI mount's own prefix, not a hardcoded /ai)" do
+      mount =
+        Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo, labels: %{ai_path: "/insights"})
+      assert Crumbs.section(mount, "ORG-1", :ai) == {"AI", "/insights?org=ORG-1"}
     end
 
     test "an unknown section key raises (closed map)" do

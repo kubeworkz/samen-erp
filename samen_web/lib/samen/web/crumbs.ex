@@ -25,8 +25,9 @@ defmodule Samen.Web.Crumbs do
 
   Paths read the SAME whitelisted mount labels the rest of the framework uses
   (`:crm_path`, `:support_path`, `:marketing_path`, `:settings_path`,
-  `:chat_path` — `Mount.@label_keys`), with the router's `default_path/1`
-  literal as the fallback for sections that have no path label of their own.
+  `:chat_path`, `:ai_path` — `Mount.@label_keys`), with the router's
+  `default_path/1` literal as the fallback for sections that have no path label
+  of their own.
   Only sections whose root is a DISTINCT route are linked — a section whose
   root would equal the preceding crumb (e.g. CRM, whose landing IS the
   dashboard) stays a plain string at the call site.
@@ -43,6 +44,7 @@ defmodule Samen.Web.Crumbs do
     chat: "Chat",
     inbox: "Inbox",
     files: "Files",
+    ai: "AI",
     companies: "Companies",
     contacts: "Contacts"
   }
@@ -62,7 +64,11 @@ defmodule Samen.Web.Crumbs do
   @doc """
   A mid-trail section crumb `{label, section root href}` for a known section
   key (`:work`, `:support`, `:billing`, `:marketing`, `:settings`, `:chat`,
-  `:inbox`, `:files`, `:companies`, `:contacts`).
+  `:inbox`, `:files`, `:ai`, `:companies`, `:contacts`).
+
+  `:ai` resolves the mount's own AI prefix (`:ai_path`, the label
+  `samen_ai_routes/3` sets), so the crumb follows a host that mounts the AI kit
+  somewhere other than `/ai` rather than hardcoding the framework default.
   """
   @spec section(Mount.t(), String.t() | nil, atom()) :: {String.t(), String.t()}
   def section(mount, org_id, key) when is_map_key(@sections, key) do
@@ -80,6 +86,7 @@ defmodule Samen.Web.Crumbs do
   defp section_path(:chat, mount), do: Mount.label(mount, :chat_path, "/chat")
   defp section_path(:inbox, _mount), do: "/notifications"
   defp section_path(:files, _mount), do: "/files"
+  defp section_path(:ai, mount), do: Mount.label(mount, :ai_path, "/ai")
   defp section_path(:companies, mount), do: "#{Mount.label(mount, :crm_path, "/crm")}/companies"
   defp section_path(:contacts, mount), do: "#{Mount.label(mount, :crm_path, "/crm")}/contacts"
 

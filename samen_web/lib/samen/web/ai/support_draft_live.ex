@@ -19,6 +19,7 @@ defmodule Samen.Web.AI.SupportDraftLive do
   import Samen.Web.AI.Components
 
   alias Samen.Web.AI.Server
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @impl true
@@ -93,7 +94,14 @@ defmodule Samen.Web.AI.SupportDraftLive do
         </.sidebar>
       </:sidebar>
 
-      <.topbar title="AI · Support draft" crumbs={["AI", "Support draft"]} />
+      <.topbar
+        title="AI · Support draft"
+        crumbs={[
+          Crumbs.org(@samen_mount, @org_id),
+          Crumbs.section(@samen_mount, @org_id, :ai),
+          "Support draft"
+        ]}
+      />
       <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
       <.ai_tabs active={:support} base={ai_base(@samen_mount)} />
 

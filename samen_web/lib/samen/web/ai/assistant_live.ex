@@ -59,6 +59,7 @@ defmodule Samen.Web.AI.AssistantLive do
   alias Samen.Web.AI.AgentReads
   alias Samen.Web.AI.AssistantReads
   alias Samen.Web.AI.Server
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @default_title "New conversation"
@@ -514,7 +515,14 @@ defmodule Samen.Web.AI.AssistantLive do
         </.sidebar>
       </:sidebar>
 
-      <.topbar title="AI · Assistant" crumbs={["AI", "Assistant"]} />
+      <.topbar
+        title="AI · Assistant"
+        crumbs={[
+          Crumbs.org(@samen_mount, @org_id),
+          Crumbs.section(@samen_mount, @org_id, :ai),
+          "Assistant"
+        ]}
+      />
       <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
       <.ai_tabs active={:assistant} base={ai_base(@samen_mount)} />
 

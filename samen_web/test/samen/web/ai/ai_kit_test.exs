@@ -44,6 +44,64 @@ defmodule Samen.Web.AI.KitTest do
     assert render_live(Samen.Web.AI.SupportDraftLive, mount, [org_id]) =~ "AI · Support draft"
   end
 
+  # The workspace ROOT crumb on the AI surfaces. The kit shipped its trails as bare
+  # `["AI", <leaf>]` string lists, so the AI pages were the ONE tenant surface whose breadcrumb
+  # had no workspace root: the trail read as if "AI" were the top of the tree, and offered no way
+  # back to the tenant Dashboard, while `Samen.Web.Crumbs.org/2` is the crumb every other tenant
+  # trail starts with. The section crumb is linked too (`Crumbs.section/3` → the AI landing), the
+  # framework rule for a section whose root is a DISTINCT route. Asserted on the RENDERED trail
+  # (a tuple crumb renders as a live `<a>`) and for EVERY AI surface, because the omission was in
+  # all seven rather than one page.
+  test "every AI surface's trail reads workspace-root › AI (linked) › leaf", %{org_id: org_id} do
+    mount =
+      ai_mount(org_id, :tenant, %{
+        ai_aggregate_resource: Samen.WebTest.Crm.Company,
+        org_directory: {__MODULE__, :dir_for, [org_id]}
+      })
+
+    # The literal trail the workspace root must render: the tenant's NAME (resolved through the
+    # mount's `:org_directory` MFA, exactly as a real host wires it) linked to the tenant
+    # Dashboard with `?org=` threaded. Deliberately NOT derived from `CurrentOrg.name/2` — a
+    # crumb built by the same call it asserts would prove nothing about what the page rendered.
+    root = ~s|<a href="/crm/dashboard?org=#{org_id}">Gridworkz QA</a>|
+    ai_crumb = ~s|<a href="/ai?org=#{org_id}">AI</a>|
+
+    surfaces = [
+      {Samen.Web.AI.VerbsLive, [org_id], "Verbs"},
+      {Samen.Web.AI.SearchLive, [org_id], "Semantic search"},
+      {Samen.Web.AI.CrmLive, [org_id], "CRM"},
+      {Samen.Web.AI.AnalyticsLive, [org_id], "Analytics"},
+      {Samen.Web.AI.SupportDraftLive, [org_id], "Support draft"},
+      {Samen.Web.AI.AgentLive, [org_id], "Agent runs"},
+      {Samen.Web.AI.AssistantLive, [org_id], "Assistant"}
+    ]
+
+    for {module, load_args, leaf} <- surfaces do
+      html = render_live(module, mount, load_args)
+
+      [_, trail] =
+        Regex.run(~r|<div class="crumb">(.*?)</div>|s, html) ||
+          flunk("#{inspect(module)} rendered no breadcrumb trail at all")
+
+      assert trail =~ root,
+             "#{inspect(module)}'s trail has no workspace root crumb back to the Dashboard " <>
+               "(expected #{root}); trail was: #{trail}"
+
+      # ONE ordered match, so this pins the whole trail: the workspace root FIRST, the AI
+      # section crumb (a link to the AI landing, not inert text) next, the leaf last.
+      assert trail =~
+               ~r|#{Regex.escape(root)}.*?#{Regex.escape(ai_crumb)}.*?#{Regex.escape(leaf)}|s,
+             "#{inspect(module)}'s trail must read `Gridworkz QA / AI / #{leaf}` in that order " <>
+               "with BOTH the workspace root and the AI section crumb rendered as live links " <>
+               "(expected #{root} then #{ai_crumb}); trail was: #{trail}"
+    end
+  end
+
+  # The directory MFA a real host wires (`CurrentOrg.list_orgs/1` reads it off the mount's
+  # `:org_directory` label): the tenant's OWN org, NAMED. This is what makes the workspace crumb
+  # read "Gridworkz QA" rather than the `"Workspace"` fallback a directoryless mount renders.
+  def dir_for(org_id), do: [{org_id, "Gridworkz QA"}]
+
   # --- SIMULATED signposting (the load-bearing honesty; T152 flag) --------------------------
 
   test "the verbs surface signposts a keyless result as SIMULATED (not real)", %{org_id: org_id} do

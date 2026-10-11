@@ -79,6 +79,7 @@ defmodule Samen.Web.AI.AgentLive do
   import Samen.Web.AI.Components
 
   alias Samen.Web.AI.AgentReads
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @impl true
@@ -207,7 +208,14 @@ defmodule Samen.Web.AI.AgentLive do
         </.sidebar>
       </:sidebar>
 
-      <.topbar title="AI · Agent runs" crumbs={["AI", "Agent runs"]} />
+      <.topbar
+        title="AI · Agent runs"
+        crumbs={[
+          Crumbs.org(@samen_mount, @org_id),
+          Crumbs.section(@samen_mount, @org_id, :ai),
+          "Agent runs"
+        ]}
+      />
       <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
       <.ai_tabs active={:agents} base={ai_base(@samen_mount)} />
 
