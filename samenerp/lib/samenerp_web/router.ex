@@ -370,6 +370,29 @@ defmodule SamenerpWeb.Router do
       labels: @current_org_labels
     )
 
+    # 1l-bis. ADR-050 (G11) — the PUBLIC fleet STATUS PAGE (`GET /status`), the one
+    #     fleet-substrate surface with no authority gate on it, in the SAME public
+    #     scope as the two portal kinds above (no auth pipeline, no `on_mount`, no
+    #     session, no CSRF). It projects `Samen.Fleet.PublicStatus.read/2` — the
+    #     token-blind narrowing of the status the registry already computed (ADR-044
+    #     §4.6 dead-man staleness) — over this host's `Samenerp.Fleet` mount, which
+    #     migration 20261011120000 added for exactly this purpose. It re-probes
+    #     nothing and publishes NOTHING until an operator opts an app in with
+    #     `Samen.Fleet.Registry.set_publish_status/4` (`efa_publish_status` defaults
+    #     to false), so the landed state is an empty page, never the registry.
+    #
+    #     The path is deliberately NOT under /fleet: everything under `/fleet*` is
+    #     authority-gated and cross-checked by `mix samen.verify.fleet_wire` against
+    #     `Samen.Fleet.RouteTable.declared/0`, and this router mounts no `/fleet*`
+    #     route at all (the cockpit side stays unshipped — see the mount ledger's
+    #     2026-10-08 ruling and the narrower reversal recorded there). Rate-limited
+    #     per remote IP through the shared `Samen.Web.RateLimit` seam
+    #     (`:public_status_ip`, 120/min); over the window is a bare empty-bodied 429.
+    samen_fleet_status_route(
+      namespace: Samenerp.Fleet,
+      labels: %{title: "Samen ERP status"}
+    )
+
     # 1m. Phase 6 — the Calendar & Scheduling group: the framework `.ics`
     #     (RFC-5545) export surface over this host's materialized
     #     `Samenerp.Calendar` mount (`evt_event`, migration 20261007090000).

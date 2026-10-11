@@ -174,6 +174,13 @@ Result at the time of writing: **20 defined, 19 used** — 26 call sites in the 
 delta is `samen_fleet_ingest_routes` (the ADR-044 fleet *cockpit-side* ingest), which no shipped host
 mounts. That delta is **ruled below, not open** — see the next section.
 
+**Recount (2026-10-11, ADR-050 amendment):** re-run over the shipped hosts (`samenerp` · `demo` ·
+`driftwood` · `pawchart`, both the `_route(` and `_routes(` forms): **23 defined, 22 used by a shipped
+host — 85 call sites.** The earlier totals were stale (this fork has added macros and mounts since),
+but the *delta is unchanged and still exactly one*: `samen_fleet_ingest_routes`. `ADR-050`'s new
+`samen_fleet_status_route` is now USED (by `samenerp` — the amendment below), so it never entered the
+delta column.
+
 ## Ruling — the cockpit-side ingest is deliberately unshipped (2026-10-08)
 
 `git grep -l "samen_fleet_ingest_routes(" -- '*.ex' '*.exs'` returns exactly two files: the macro
@@ -194,10 +201,15 @@ It is not dead surface, and not unexercised:
   zero-read proof, forged-signature `401`, flood bounds, enroll `200`/`401`): RP-J-1/2/3/10/13.
 - **A host cannot adopt it cheaply.** Its required `namespace:` is a `Samen.Fleet.Scope`-mounted Ash
   domain (`flt_app` · `flt_credential` · `flt_enrollment_token` · `flt_report` · `flt_directive`),
-  which no shipped app has — `git grep -ln flt_credential -- demo driftwood pawchart samenerp` returns
-  nothing; the only materialization in the tree is `samen_core/priv/test_repo`'s fixture. Adopting the
-  ingest is therefore a product *becoming a cockpit* (operator-plane routes plus a five-resource fleet
-  scope), not a router line.
+  which no shipped app had at the time of writing — `git grep -ln flt_credential -- demo driftwood
+  pawchart samenerp` returned nothing, and the only materialization in the tree was
+  `samen_core/priv/test_repo`'s fixture. Adopting the ingest is therefore a product *becoming a
+  cockpit* (operator-plane routes plus a five-resource fleet scope), not a router line.
+  **SUPERSEDED IN PART (2026-10-11):** `samenerp` now holds a five-resource fleet scope
+  (`Samenerp.Fleet`, abbrevs `efa`/`efc`/`efe`/`efr`/`efd`, migration `20261011120000`) — see the
+  ADR-050 amendment below. The *ingest* delta this bullet explains is untouched: samenerp does NOT
+  mount `samen_fleet_ingest_routes`, `samen_operator_routes(…, fleet_cockpit: true)`, or any
+  `/fleet*` route.
 - **ADR-044 never required it of a vertical.** §9.3's tier (b) places the cockpit's own proof in
   `samen_web` ("one `:embedded` app plus two ingested reports"), and its dependency note is explicit
   that the ≥2-vertical proof must not require a vertical to host a cockpit. Tier (a) proves
@@ -318,12 +330,63 @@ for `:billing`, `:crm`, `:marketing`, `:support` · `samen_automation_routes` ·
   `samen_web` running its suite on a 2-connection pool while `config/test.exs` declares 20, and
   driftwood/pawchart `ci_bootstrap` hard-matching an un-retried contended `storage_down`/`storage_up`.
 
+## Amendment — samenerp holds a FLEET REGISTRY for the public status page (2026-10-11, ADR-050)
+
+**Narrower than the ruling above it.** The 2026-10-08 ruling is about the **cockpit side**, and every
+part of it still stands: nothing here mounts `samen_fleet_ingest_routes` (`POST /fleet/enroll` +
+`POST /fleet/heartbeat`), nothing mounts `samen_operator_routes(…, fleet_cockpit: true)` (the operator
+drill-in UI), and this router serves **no `/fleet*` route at all** — so the three places that must
+agree (`docs/guides/gate-failures.md`'s per-macro tally, the ingest macro's `@doc`, ADR-044 §9.2) are
+unaffected, and the ingest stays the ledger's one unused delta.
+
+What DID change is the substrate fact that bullet leaned on. ADR-050's public status page projects
+`Samen.Fleet.Registry.build_row/3`'s already-computed rows, so the page cannot be *live* without a
+fleet registry to project — a route mounted against a missing namespace fails closed to a permanent
+**503** by design (§4.5 refuses an empty 200 that would read as all-clear). samenerp is the
+operator-facing product here, so it became the **portfolio host**:
+
+| Added | What |
+|---|---|
+| `samenerp/lib/samenerp/fleet.ex` | `Samenerp.Fleet` — the `use Samen.Fleet.Scope` mount (five resources) |
+| `samenerp/priv/repo/migrations/20261011120000_mount_fleet_scope.exs` | `efa_app` · `efc_credential` · `efe_enrollment_token` · `efr_report` · `efd_directive` (all additive), cataloged in-tx |
+| `config/config.exs` | `Samenerp.Fleet` registered in both `ash_domains` lists (app + the verifiers') |
+| `lib/samenerp_web/router.ex` | `samen_fleet_status_route(namespace: Samenerp.Fleet)` — `GET /status`, in the SAME public scope as the `:kb`/`:csat` portals |
+| abbrev registry | `efa`/`efc`/`efe`/`efr`/`efd`, reserved via `mix samen.abbrev.reserve --host samenerp` (never by hand, ADR-023) |
+
+**Landed state:** `/status` is live and **publishes nothing** — no row exists, and
+`efa_publish_status` defaults to `false`, so publication requires the admin-gated
+`Samenerp.Fleet.Registry.set_publish_status/4` (the app's own heartbeat actor is refused by policy).
+Host-level proof: `test/fleet_status_page_test.exs` (dispatched through the real endpoint — 200, no
+auth bounce, empty page, opt-in respected, heartbeat refusal with its admin positive control).
+
+**Constraint discovered by mounting it — the fleet domain must NOT be a registered `ash_domain`.**
+`Samenerp.Fleet` is deliberately absent from BOTH `ash_domains` lists, and this is load-bearing:
+`mix samen.verify.aggregate_privacy` discovers its fleet from
+`Application.get_env(:samenerp, :ash_domains)` and requires every `use Samen.Aggregate.Resource` to
+declare a fail-closed cohort spec. The fleet registry has no cohort semantics — it is cross-tenant
+operator-owned registry data, which is precisely what the blueprint uses that macro FOR (the
+nullable-`org_id` override and the C7 `NoPiiColumns` check), never for aggregate reads. So
+registering the domain forces a FABRICATED cohort spec to silence the verifier, and NOT registering
+it is the correct posture. The framework's own mount is kept out the same way
+(`samen_core/config/test.exs`), so this is established posture rather than a gap: the domain still
+runs (`validate_config_inclusion?: false`), INV-2 stays compile-enforced on all five resources, and
+its columns reach the committed catalog via the migration's in-tx `catalog_sync`. A future reader who
+"tidies" this by adding the domain back will fail the gate at step 15 — that is the note's whole
+purpose.
+
+**The reversal, stated plainly, because a future reader should not have to infer it from a table:**
+this host now holds a fleet scope, which the ruling's own bullet described as "a product *becoming a
+cockpit*". That much was accepted deliberately for ADR-050's sake; the ingest and the cockpit UI
+were not, and are still deliberately unshipped. If a future change mounts either, the ruling's
+`git grep` pair at the top of this file is the check that moves with it.
+
 ## Re-running the certification
 
 ```bash
 cd samenerp && MIX_ENV=test bash ci.sh     # ends: ==> samenerp CI gate: ALL PASSED
 ```
 
-That gate runs every verifier plus the 61-test suite, which includes all seven `phaseN_surface_test.exs`
-files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
+That gate runs every verifier plus the host suite — **70 tests as of 2026-10-11** (the ADR-050 mount
+added `test/fleet_status_page_test.exs`'s 4; the earlier figure of 61 predates them), which includes
+all seven `phaseN_surface_test.exs` files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
 (all seven phases shipped without it).

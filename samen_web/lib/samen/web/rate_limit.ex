@@ -89,6 +89,10 @@ defmodule Samen.Web.RateLimit do
     fleet_enroll: {60, 60_000},
     fleet_heartbeat: {120, 60_000},
     fleet_heartbeat_bad_sig: {10, 60_000},
+    # Public status page (ADR-050 §4.4; T166). The ONE gate on an unauthenticated
+    # surface, keyed on the remote IP alone (ADR-038 §6.2's non-PII ephemeral
+    # counter key — never persisted). Over the window is a bare empty-bodied 429.
+    public_status_ip: {120, 60_000},
     # Bounded `auth.login_failed` audit counter (ADR-035 §5 taxonomy / ADR-038 §6.4;
     # T103). NOT a rate limit — a bidx-keyed FAILURE counter: every failed attempt bumps
     # it, but the append-only `aud_event` row is emitted only on a window EDGE (the first

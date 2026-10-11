@@ -82,6 +82,40 @@ defmodule Samenerp.DirectoryTest do
     refute html =~ ~r/<div class="crumb">.*?Workspace/s
   end
 
+  # The AI kit (the ONE tenant surface whose trail used to ship without a workspace root) on the
+  # ROUTER-wired mount. This is the host-level twin of the framework's fixture-mount assertion in
+  # samen_web: the fixture wires its own `dir_for` MFA, so only a DISPATCHED page proves the AI
+  # mount carries this host's `org_directory` (`Samenerp.Directory.orgs/0`) and the `:ai_path` the
+  # macro adds — a hand-built mount would not catch a missing router label, and the landed bug was
+  # exactly that: a trail that stopped at "AI" with no way back to the tenant Dashboard.
+  test "the router-mounted AI page roots its breadcrumb at the workspace (not 'Workspace', not 'AI')" do
+    tenant = create_org!("Gridworkz QA")
+
+    conn = get(build_conn(), "/ai/search?org=#{tenant.id}")
+    assert conn.status == 200
+    html = conn.resp_body
+
+    [_, trail] = Regex.run(~r|<div class="crumb">(.*?)</div>|s, html)
+
+    # The workspace root FIRST, a live link labeled with the RESOLVED tenant name, home threaded
+    # the same way the sidebar threads it.
+    assert trail =~
+             ~r/^\s*<a href="\/crm\/dashboard\?org=#{Regex.escape(tenant.id)}">Gridworkz QA<\/a>/s
+
+    # Then the AI section crumb — linked, because the AI landing is a DISTINCT route — and the
+    # page leaf last.
+    assert trail =~
+             ~r/Gridworkz QA<\/a>.*?<a href="\/ai\?org=#{Regex.escape(tenant.id)}">AI<\/a>.*?Semantic search/s
+
+    # Fallback posture intact: the trail is not the bare `["AI", <leaf>]` list it used to be, and
+    # the org crumb did not fall through to the static "Workspace" label.
+    refute Regex.run(~r/<div class="crumb">(\s*AI)/, html),
+           "the trail still starts at a bare 'AI' — the workspace root is missing"
+
+    refute trail =~ "Workspace"
+    refute trail =~ "vt_"
+  end
+
   test "name/2 on a router-shaped mount returns the directory display name" do
     tenant = create_org!("Gridworkz QA")
 

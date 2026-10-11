@@ -1285,7 +1285,17 @@ the generated app knowing what a fleet is.
 is specified, built, and certified but adopted by **no shipped product**: `git grep -l
 samen_fleet_ingest_routes` finds only the macro and `samen_web`'s test-support cockpit
 router (`Samen.WebTest.FleetCockpitRouter`), no host mounts `fleet_cockpit: true`, and no
-host holds the `flt_*` scope. That is consistent with §9.3 (the cockpit's own proof lives
+host holds the `flt_*` scope.
+
+> **Amended 2026-10-11 (ADR-050).** The ingest and the cockpit UI remain unshipped exactly as
+> above — `git grep -l "samen_fleet_ingest_routes("` still finds only the macro and the
+> test-support cockpit router, and no host mounts `fleet_cockpit: true`. But ONE half of the
+> sentence has moved: `samenerp` now holds a five-resource `Samenerp.Fleet` scope
+> (`efa`/`efc`/`efe`/`efr`/`efd`, migration `20261011120000`) because ADR-050's public status
+> page projects `Registry.build_row/3`'s rows and cannot be live without a registry to project.
+> It mounts **only** the read-only public page (`GET /status`) — no `/fleet*` route at all, so
+> RP-J-4b's enumeration is untouched. The reversal and its exact bounds are recorded in
+> `docs/samenerp-mount-ledger.md`'s 2026-10-11 amendment. That is consistent with §9.3 (the cockpit's own proof lives
 in `samen_web`, and the ≥2-vertical proof must not require a vertical to host one) —
 reporting-only products mount the app side only. Its certification is `samen_web/ci.sh`'s
 `mix samen.verify.fleet_wire --router Samen.WebTest.FleetCockpitRouter` (RP-J-4b, both

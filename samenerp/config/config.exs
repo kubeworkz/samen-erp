@@ -28,6 +28,25 @@ config :samenerp,
     # MountAiDomain migration; adding the domain is the host's only authored line
     # (ADR-043 §5.2, INV-5).
     Samen.AI.Domain
+    # NOTE (ADR-050, 2026-10-11) — `Samenerp.Fleet` (migration 20261011120000) is
+    # deliberately registered in NEITHER `ash_domains` list, and that is load-bearing
+    # rather than cosmetic. `mix samen.verify.aggregate_privacy` discovers its fleet
+    # from `Application.get_env(:samenerp, :ash_domains)` and requires EVERY
+    # `use Samen.Aggregate.Resource` to declare a fail-closed cohort spec; the fleet
+    # registry has no cohort semantics at all — it is a cross-tenant/operator-owned
+    # registry, which is exactly what the blueprint uses that macro FOR (its
+    # nullable-`org_id` override and the C7 NoPiiColumns check), never for aggregate
+    # reads. Registering the domain would therefore force a FABRICATED cohort spec
+    # (a lie about k-anonymity) purely to silence a verifier.
+    #
+    # The framework's own mount of this same blueprint is kept out the same way
+    # (`samen_core/config/test.exs`: "The fixture domain is NOT in `:ash_domains`,
+    # so `vault_declared_parity` cannot discover …"), so this is the blueprint's
+    # established posture, not a gap opened here. Nothing is lost: the domain runs
+    # (its resources set `validate_config_inclusion?: false`), INV-2 stays
+    # COMPILE-enforced on all five resources, and their columns reach the committed
+    # catalog through the migration's in-tx `catalog_sync` — which the gate's
+    # schema.dict drift check and `tnt_catalog` step both exercised when this landed.
   ]
 
 # The samen_core verifiers discover domains from :samen_core :ash_domains. Register
@@ -50,6 +69,9 @@ config :samen_core, :ash_domains, [
   Samenerp.Primitives,
   Samenerp.Operator,
   Samen.AI.Domain
+  # `Samenerp.Fleet` is deliberately absent here too — see the note on the app's own
+  # `ash_domains` list above (the samen_core discovery list would sweep the registry
+  # through the same tenant-plane verifiers).
 ]
 
 # ADR-039 §3.1 — the Automation engine seams (driftwood's exact wiring): the
