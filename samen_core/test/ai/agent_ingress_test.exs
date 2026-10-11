@@ -437,6 +437,33 @@ defmodule Samen.AI.AgentIngressTest do
       String.replace_prefix(stored, "note: ", "")
     end
 
+    # A11's perf case compares COSTS, so it asserts on the MINIMUM of `@perf_samples` runs
+    # taken by this process. The minimum is the right estimator here: ambient load and the GC
+    # only ever ADD time to a sample, never subtract it, so the best run is the closest thing
+    # to the code's own cost and the sample least able to be moved by whatever else the box is
+    # doing. See the scaling case's own comment for why what is asserted is a RATIO of two
+    # such minima and not an absolute millisecond bound.
+    @perf_samples 7
+
+    defp perf_best_of_n(fun) do
+      1..@perf_samples
+      |> Enum.map(fn _ ->
+        {us, _result} = :timer.tc(fun)
+        us
+      end)
+      |> Enum.min()
+    end
+
+    # The V14 attempt-3 bait (`iii_independent_performance_table`'s
+    # "packed-labels-4096-htmlopen"): "api_key=" + 4096 bytes of "<!--" repeated + " ", tiled
+    # to exactly `bytes`. Its form is what makes it a cost bait — one short LABEL repeated
+    # densely, each of whose values collapses ~59x under redaction.
+    defp packed_label_opener_flood(bytes) do
+      junk = String.duplicate("<!--", div(4096, 4))
+      block = "api_key=" <> junk <> " "
+      block |> String.duplicate(div(bytes, byte_size(block)) + 1) |> binary_part(0, bytes)
+    end
+
     test "RED against attempt-1 (VA11 attack_1): a dense-tiling redaction-collapse flood stays byte-identical to the unbounded reference" do
       # VA11's exact `attack_1_bound_break` construction (`_orch/verify/A11-verdict.json`): 1000
       # blocks of "pwd:" + 1000 "A"s, joined by spaces (~1,005,000 raw bytes). Attempt 1's FIXED
@@ -484,28 +511,52 @@ defmodule Samen.AI.AgentIngressTest do
         refute actual =~ "qQ1wW2eE3rR4tT5yY6uU7iI8"
       end
     end
-    test "RED against pre-A11: a packed-label-opener flood renders well under the pre-fix cost" do
-      # The exact "packed-labels-4096-htmlopen" bait from V14 attempt-3's verdict
-      # (~/Desktop/projects/samen-uxd-remediation/_orch/verify/T14-verdict.json,
-      # `strongest_attack` / `iii_independent_performance_table`): "api_key=" + 4096 bytes of
-      # "<!--" repeated + " ", tiled to 64KB — measured on THIS machine, via this exact
-      # `ToolResult.render/2` call, at 140.37ms BEFORE this item's fix
-      # (`_orch/nodes/A11/work/timings.md`). This asserts a bound comfortably below that,
-      # not a specific after-number, so the test stays meaningful on slower/faster hardware.
-      junk = String.duplicate("<!--", div(4096, 4))
-      block = "api_key=" <> junk <> " "
-      input = block |> String.duplicate(div(65536, byte_size(block)) + 1) |> binary_part(0, 65536)
 
-      # warm run — regex compilation / first-call effects are not the thing under test
-      ToolResult.render({:ok, %{note: input}}, actor: %{})
+    # The raw blow-up the scaling case asserts across: 64KB (the V14 bait's own size, measured at
+    # 140.37ms BEFORE this item's fix — `_orch/nodes/A11/work/timings.md`) to 16x that. Pre-A11
+    # the computation is LINEAR in the raw bytes, so its cost grows by this same factor; A11's
+    # bounded computation settles the pipeline pass by pass over a window grown only as far as it
+    # must, so its cost is flat. `@perf_max_raw_growth` sits between the two behaviours with room
+    # on both sides: the observed ratio is ~1x, and a reverted fix measures ~16x.
+    @perf_raw_growth 16
+    @perf_max_raw_growth 4.0
 
-      {us, _result} = :timer.tc(fn -> ToolResult.render({:ok, %{note: input}}, actor: %{}) end)
-      ms = us / 1000.0
+    test "RED against pre-A11: a packed-label-opener flood is bounded by the RENDERED length, not the raw length" do
+      # WHY THIS IS A SCALING ASSERTION AND NOT A MILLISECOND BOUND. A11's contract (§8
+      # A5-performance row) is that cost is bounded by the RENDERED length (at most
+      # `@max_scalar_bytes`) and NOT by the raw input's length — so the property to assert is
+      # that growing the RAW flood does not grow the cost with it. The absolute form this case
+      # used to carry (`assert ms < 50.0` on one 64KB sample, via this exact `ToolResult.render/2`
+      # call) measured the BOX rather than the code: on a loaded machine that same case read
+      # 50.48ms and 52.43ms against the 50.0 bound — a ~5% miss, twice — while this and every
+      # other case in the file passed at ~24ms on a quiet one. It red-lined a full-gate run for a
+      # reason with nothing to do with the item. A ratio between two measurements taken by THIS
+      # process moments apart cannot be moved that way: machine speed and ambient load enter both
+      # sides and cancel, instead of one side of a fixed threshold.
+      small = packed_label_opener_flood(65_536)
+      big = packed_label_opener_flood(65_536 * @perf_raw_growth)
 
-      assert ms < 50.0,
-             "render_scalar/2 took #{Float.round(ms, 2)}ms on a 64KB packed-label-opener " <>
-               "flood; pre-A11 this cost ~140ms because Secrets.redact/1 ran on the FULL raw " <>
-               "binary before truncating to 500 bytes"
+      # Anti-vacuity: the two floods must really differ in raw size, or `growth` below would be
+      # measuring the same input twice and the assertion would hold for any implementation.
+      assert byte_size(big) == @perf_raw_growth * byte_size(small)
+
+      # warm both — regex compilation / first-call effects are not the thing under test
+      rendered_note(small)
+      rendered_note(big)
+
+      t_small = perf_best_of_n(fn -> rendered_note(small) end)
+      t_big = perf_best_of_n(fn -> rendered_note(big) end)
+
+      growth = t_big / max(t_small, 1)
+      ms = fn us -> Float.round(us / 1000.0, 2) end
+
+      assert growth < @perf_max_raw_growth,
+             "render_scalar/2's cost grew #{Float.round(growth, 2)}x when the RAW flood grew " <>
+               "#{@perf_raw_growth}x (#{ms.(t_small)}ms at 64KB -> #{ms.(t_big)}ms at " <>
+               "#{div(byte_size(big), 1024)}KB, best of #{@perf_samples}), so it is scaling with " <>
+               "the raw input instead of with the rendered length. Pre-A11 this cost ~140ms on " <>
+               "the V14 bait, because Secrets.redact/1 ran on the FULL raw binary before " <>
+               "truncating to 500 bytes."
     end
 
     # The redacted MATCH can itself start close enough to the 500-byte cut that the outer
