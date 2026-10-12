@@ -285,8 +285,11 @@ defmodule Samen.Abbrev.AllocatorTest do
       # Version abbrevs spv/stv/sbv), allocator-reserved: 33_707 bytes, 728 flat.
       # +1 Phase-6 Calendar mount (samenerp `evt` — Samenerp.Calendar.Event),
       # allocator-reserved: 33_747 bytes, 729 flat.
-      assert byte_size(committed) == 33747
-      assert map_size(R.load()) == 729
+      # +5 ADR-050 fleet REGISTRY mount (efa/efc/efe/efr/efd — the five
+      # Samenerp.Fleet.* resources, `mix samen.abbrev.reserve --host samenerp`),
+      # allocator-reserved: 33_950 bytes, 734 flat.
+      assert byte_size(committed) == 33950
+      assert map_size(R.load()) == 734
     end
   end
 

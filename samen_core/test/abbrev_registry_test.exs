@@ -128,13 +128,15 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 86, samen_web 70, samenerp 84 (the WS-ERP E8 host proof —
+      # samen_core 86, samen_web 70, samenerp 89 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst, the
       # Phase-2 Chat mount cth/chp/cmg/cds, the Phase-5 CMS mount scg/sct/scb/
-      # scd/scn/scf + spv/stv/sbv, and the Phase-6 Calendar mount `evt`)
-      # = 324 host entries across six hosts.
+      # scd/scn/scf + spv/stv/sbv, the Phase-6 Calendar mount `evt`, and the
+      # ADR-050 fleet REGISTRY mount efa/efc/efe/efr/efd — `Samenerp.Fleet`,
+      # reserved with `mix samen.abbrev.reserve --host samenerp`)
+      # = 329 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 84
+      assert map_size(hosts["samenerp"]) == 89
       assert map_size(hosts["samen_core"]) == 86
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -702,10 +704,18 @@ defmodule Samen.AbbrevRegistryTest do
                  "sbv" => "Samenerp.Cms.Block.Version",
                  "spv" => "Samenerp.Cms.Page.Version",
                  "stv" => "Samenerp.Cms.Post.Version",
-                 # Samenerp.Calendar (1) — the Phase-6 Calendar & Scheduling mount
-                 # (`evt_event`), allocator-reserved.
-                 "evt" => "Samenerp.Calendar.Event"
-               }
+               # Samenerp.Calendar (1) — the Phase-6 Calendar & Scheduling mount
+               # (`evt_event`), allocator-reserved.
+               "evt" => "Samenerp.Calendar.Event",
+               # Samenerp.Fleet (5) — the ADR-050 fleet REGISTRY mount (the portfolio
+               # registry the public `/status` page projects), reserved through the
+               # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp`).
+               "efa" => "Samenerp.Fleet.App",
+               "efc" => "Samenerp.Fleet.Credential",
+               "efd" => "Samenerp.Fleet.Directive",
+               "efe" => "Samenerp.Fleet.EnrollmentToken",
+               "efr" => "Samenerp.Fleet.Report"
+             }
              }
 
       # The compat shim's flat view unions the global net with every host entry
@@ -802,7 +812,10 @@ defmodule Samen.AbbrevRegistryTest do
       # E7 Version abbrevs, allocator-reserved = 405 + 323 = 728 flat.)
       # (+1 Phase-6 Calendar mount: samenerp `evt` (Samenerp.Calendar.Event),
       # allocator-reserved = 405 + 324 = 729 flat.)
-      assert map_size(Reg.load()) == 729
+      # (+5 ADR-050 fleet REGISTRY mount: samenerp efa/efc/efe/efr/efd
+      # (Samenerp.Fleet.{App,Credential,EnrollmentToken,Report,Directive}), reserved
+      # with `mix samen.abbrev.reserve --host samenerp` = 405 + 329 = 734 flat.)
+      assert map_size(Reg.load()) == 734
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do
