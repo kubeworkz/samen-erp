@@ -186,6 +186,34 @@ config :samenerp, auth_required?: config_env() == :prod
 # pass via the second-leg dev fallback; a tenant without an operator membership is refused.
 config :samenerp, :operator_authority, {Samenerp.OperatorAuthz, :resolve_role, [:samenerp]}
 
+# J3 / ADR-044 §6.2 — the FLEET-WIDE role read, the second seam the operator plane needs now
+# that this host mounts the fleet cockpit (`samen_operator_routes(..., fleet_cockpit: true)`,
+# ADR-050 §6.1). `Samen.Web.Operator.Fleet.gate/2` reads it for `roles[:fleet]` (may the
+# principal open the cockpit at all), and `Samen.Web.Operator.Fleet.app_role/2` for the
+# per-PRODUCT scope (may they see this product's rows and flip its public-status opt-in).
+# `Samenerp.FleetAuthz.fleet_roles/1` delegates to `Samenerp.OperatorAuthz` — one identity, ONE
+# authorization decision for both planes, so arming this host closes them together — and fails
+# CLOSED: no operator role ⇒ `%{}` ⇒ no cockpit and no product, never a cockpit nobody
+# authorized.
+config :samenerp, :fleet_authority, {Samenerp.FleetAuthz, :fleet_roles, []}
+
+# The products this operator company grants product-scoped access to, as SLUG ATOMS (the
+# framework atomizes a slug for the scope lookup — `Samen.Web.Operator.Fleet.app_scope/1`).
+# Default: `:samenerp` — the product this host IS (it mounts the app-side `samen_fleet_routes/1`
+# reporting pair), and therefore the one whose public component `/status` is titled after
+# ("Samen ERP status"). Add each additional product's slug atom as the fleet grows: a product's
+# scope is a PROVISIONED grant a reviewer can see, never something a registered row confers on
+# itself.
+config :samenerp, :fleet_products, [:samenerp]
+
+# The fleet MODE (ADR-044 §8.1/§8.3). `:manual` is REQUIRED of a cockpit host: the cockpit
+# LiveViews read through `Samen.Fleet.read/2` with the mount's `:fleet_namespace`, and only the
+# `:manual`/`:heartbeat` branch reads the REGISTRY. The zero-config `:embedded` default returns a
+# single self-row and IGNORES the namespace — the cockpit would render this host alone, every
+# registered product would be invisible, and `/operator/fleet/:app_id` would find no row. This
+# host is the portfolio HOST while also reporting as an app; `:manual` is the host side of that.
+config :samenerp, :fleet, mode: :manual
+
 # WS-A A4/A5 — the kernel notification ENGINE wired to this app's Primitives mount
 # (the ADR-014 SendWorker config convention: the kernel is mount-agnostic; the host
 # names its concrete modules + repo). Realtime rides the samen_web PubSub broadcaster

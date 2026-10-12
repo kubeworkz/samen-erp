@@ -1297,7 +1297,47 @@ host holds the `flt_*` scope.
 > RP-J-4b's enumeration is untouched. The reversal and its exact bounds are recorded in
 > `docs/samenerp-mount-ledger.md`'s 2026-10-11 amendment. That is consistent with §9.3 (the cockpit's own proof lives
 in `samen_web`, and the ≥2-vertical proof must not require a vertical to host one) —
-reporting-only products mount the app side only. Its certification is `samen_web/ci.sh`'s
+reporting-only products mount the app side only.
+
+> **Amended AGAIN 2026-10-11 (T166b) — the other half has moved, on the same host.** `samenerp`
+> now mounts the cockpit: `samen_operator_routes(Samenerp.Operator, repo: Samenerp.Repo, …, fleet_cockpit:
+> true, fleet_namespace: Samenerp.Fleet)`, so the sentence above is no longer true of the tree — a
+> SHIPPED product hosts a cockpit, not only `samen_web`'s test-support router. What did NOT change is
+> the other half: `git grep -l "samen_fleet_ingest_routes("` still finds only the macro and the
+> test-support router, and that one-sided shape is what §3.1/§9.2 DESIGN for (the pair rule is
+> one-directional — a mode-A `:pull` cockpit needs no ingest), enforced as rule 1 of
+> `mix samen.verify.fleet_wire`'s co-adoption table rather than as a comment.
+>
+> The mount needed three runtime wirings, and all three are now on this host: the J3 role read
+> `config :samenerp, :fleet_authority, {Samenerp.FleetAuthz, :fleet_roles, []}` (§6.2 — a module
+> that DELEGATES to the operator plane's own `:operator_authority` resolver, so one identity gets
+> ONE authorization decision and arming the host closes console and cockpit together, §6.1); the
+> per-product scope `config :samenerp, :fleet_products, [:samenerp]` (the tier-2 grant the publish
+> action checks — an atom, so it is a PROVISIONED grant, not something a registered row confers on
+> itself); and `config :samenerp, :fleet, mode: :manual`, without which `Samen.Fleet.read/2` returns
+> the zero-config `:embedded` self-row and IGNORES `:fleet_namespace` — a cockpit that renders as
+> mounted and reads nothing. `:fleet_resolution` (the tenant-NAME seam of §16.2) is deliberately
+> LEFT UNWIRED, the driftwood posture: names stay masked, the page says why, fail-closed.
+>
+> RP-J-4b's enumeration is untouched: the verifier's single run lives in `samen_web/ci.sh`, against
+> `Samen.WebTest.FleetCockpitRouter`, and this host's own gate runs no `--router SamenerpWeb.Router`
+> pass. Pointed at THIS router the command would still FAIL — measured after the mount,
+> **2 violations**: the four `/operator/fleet*` routes now match (that is what mounting the cockpit
+> bought), and what remains is exactly the unshipped ingest (`POST /fleet/enroll` +
+> `POST /fleet/heartbeat`), the one delta §9.2's adoption note and the mount ledger both rule on. §9.3's tiers are unchanged — the ≥2-vertical proof still
+> must not require a vertical to host a cockpit; this host hosts one because ADR-050 §6.1 already
+> made it the portfolio host that HOLDS the registry, and a registry with a UI-less opt-in made the
+> publish action an operator console call on the one host whose job is to run the fleet.
+>
+> Proof (host level, `samenerp`): `test/fleet_cockpit_mount_test.exs` — the four routes enumerated
+> off the compiled route table each carrying the `require_operator` `on_mount` (RP-J-12), the mount
+> read back out of the `live_session` the router itself compiled carries `fleet_cockpit` +
+> `fleet_namespace`, all four routes rendered through the real endpoint, and the ARMED
+> (`auth_required?: true`) production posture driven green/red — a real operator-org `:owner`
+> publishes through the mounted cockpit and the public page reports it, a real `:member` and a
+> principal with no operator membership are both refused, with the owner's identical call as
+> positive control. Adversarial twin: `scripts/sabotages/330-samenerp-fleet-cockpit-mount-dropped.patch`
+> (drop `fleet_cockpit: true` and the two named legs flip, byte-exact reverted). Its certification is `samen_web/ci.sh`'s
 `mix samen.verify.fleet_wire --router Samen.WebTest.FleetCockpitRouter` (RP-J-4b, both
 directions) plus `samen_web/test/samen/web/fleet_ingress_test.exs`. Structural note:
 RP-J-4b compares the FULL declared route table, so it cannot be green for a reporting-only

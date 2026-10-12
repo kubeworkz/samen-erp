@@ -18,12 +18,20 @@ defmodule Samenerp.Fleet do
   a namespace that does not exist fails closed to a permanent 503 (by design — §4.5
   refuses an empty 200). Samenerp is the operator-facing product here, so it becomes
   the PORTFOLIO HOST: it holds the registry rows from which the public page reads.
-  The reversal is deliberate and narrow — this mount adds `flt_*`-shaped tables and a
-  public read-only projection; it does NOT mount `fleet_cockpit: true` (the operator
-  drill-in UI) and does not adopt the cockpit-side INGEST
-  (`samen_fleet_ingest_routes`, itself still unshipped). Nothing is published until an
-  operator opts an app in per-row (`Samen.Fleet.Registry.set_publish_status/4`), so the
-  landed state is an empty public page, never the fleet.
+
+  **Since the same day (T166b), the host also mounts the COCKPIT UI** —
+  `samen_operator_routes(Samenerp.Operator, …, fleet_cockpit: true, fleet_namespace:
+  Samenerp.Fleet)` in `SamenerpWeb.Router`, with the `:fleet_authority` seam
+  (`Samenerp.FleetAuthz`), `:fleet_products` and `:fleet, mode: :manual` wired in
+  config. The reason is the paragraph above: this host HOLDS the registry, so the
+  publish action ADR-050 §4.3 defines is worth a UI exactly here, and console-only
+  made the feature's own opt-in an operator script step. What still does NOT exist
+  on this host is the cockpit-side INGEST (`samen_fleet_ingest_routes`, unshipped
+  fleet-wide) — a mode-A `:pull` cockpit needs none, which is what ADR-044
+  §3.1/§9.2's one-directional rule exists to allow. Nothing is published until an
+  operator opts an app in per-row (`Samen.Fleet.Registry.set_publish_status/4`, or
+  the cockpit's own admin-gated control), so the landed state is an empty public
+  page, never the fleet.
 
   ## The five resources (abbrevs reserved `efa`/`efc`/`efe`/`efr`/`efd`)
 

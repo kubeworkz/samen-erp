@@ -158,12 +158,24 @@ defmodule Samen.Web.Fleet.PublicStatus do
   # The public vocabulary's display strings. Deliberately NOT the internal words:
   # `build_row/3`'s `:stale` / `:unreachable` / `:revoked` / `:deregistered` never
   # appear on this page in any spelling.
-  defp label(:operational), do: "Operational"
-  defp label(:degraded), do: "Degraded"
-  defp label(:down), do: "Down"
-  defp label(:maintenance), do: "Maintenance"
-  defp label(:unknown), do: "Unknown"
-  defp label(_other), do: "Down"
+  #
+  # PUBLIC so the operator cockpit's opt-in affordance can name the consequence of
+  # publishing an app in the page's OWN words (`Samen.Fleet.PublicStatus.preview/1`
+  # supplies the status, this supplies its display string) instead of a second,
+  # drift-prone copy of the vocabulary — the two surfaces can never disagree about
+  # what `:unreachable` reads as.
+  @doc """
+  The display string for one status of the closed public vocabulary — the exact
+  words this page renders. `_other` is the fail-closed clause: an unrecognised
+  status reads "Down", never an all-clear.
+  """
+  @spec label(atom()) :: String.t()
+  def label(:operational), do: "Operational"
+  def label(:degraded), do: "Degraded"
+  def label(:down), do: "Down"
+  def label(:maintenance), do: "Maintenance"
+  def label(:unknown), do: "Unknown"
+  def label(_other), do: "Down"
 
   defp headline(:operational), do: "All published components are operational."
   defp headline(:degraded), do: "Some published components are degraded."

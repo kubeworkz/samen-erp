@@ -207,9 +207,10 @@ It is not dead surface, and not unexercised:
   cockpit* (operator-plane routes plus a five-resource fleet scope), not a router line.
   **SUPERSEDED IN PART (2026-10-11):** `samenerp` now holds a five-resource fleet scope
   (`Samenerp.Fleet`, abbrevs `efa`/`efc`/`efe`/`efr`/`efd`, migration `20261011120000`) — see the
-  ADR-050 amendment below. The *ingest* delta this bullet explains is untouched: samenerp does NOT
-  mount `samen_fleet_ingest_routes`, `samen_operator_routes(…, fleet_cockpit: true)`, or any
-  `/fleet*` route.
+  ADR-050 amendment below — and, by **Amendment 2** below, mounts the cockpit UI
+  (`samen_operator_routes(…, fleet_cockpit: true, fleet_namespace: Samenerp.Fleet)`, the four
+  `/operator/fleet*` routes). The *ingest* delta this bullet explains is untouched: samenerp does NOT
+  mount `samen_fleet_ingest_routes`.
 - **ADR-044 never required it of a vertical.** §9.3's tier (b) places the cockpit's own proof in
   `samen_web` ("one `:embedded` app plus two ingested reports"), and its dependency note is explicit
   that the ≥2-vertical proof must not require a vertical to host a cockpit. Tier (a) proves
@@ -220,9 +221,16 @@ It is not dead surface, and not unexercised:
   cockpit-side route as unmounted. That is why each vertical's fleet evidence is its Plug-layer
   `test/fleet_wire_test.exs` and the single RP-J-4b run lives in `samen_web`.
 
-**What would settle it the other way:** a product that actually hosts a cockpit (ADR-044 §3.1 — the
-cockpit is a role, not a deployment). It would mount `samen_operator_routes(…, fleet_cockpit: true)`
-and this ingest in the same router, and the two lists below would move together:
+**What would settle it the other way — and how much of it has now happened:** a product that
+actually hosts a cockpit (ADR-044 §3.1 — the cockpit is a role, not a deployment). **2026-10-11
+(T166b): one happened.** `samenerp` mounts `samen_operator_routes(Samenerp.Operator, …,
+fleet_cockpit: true, fleet_namespace: Samenerp.Fleet)` (Amendment 2 below), so the
+`fleet_cockpit: true` list is no longer "`samen_web` internals only" — a shipped product is in it. It
+does NOT mount the ingest, and that is the DESIGNED one-sided shape rather than a half-finished
+adoption: rule 1 is one-directional (`ingest ⇒ cockpit`) because enroll/heartbeat ARE the cockpit's
+side of the wire and a mode-A `:pull` cockpit needs neither. The two lists below therefore no longer
+move together by construction, and the one this ruling is about (the ingest) is unchanged. What the
+original paragraph predicted would move together:
 
 ```bash
 # cockpit-side ingest adopters
@@ -232,10 +240,11 @@ git grep -l "samen_fleet_ingest_routes(" -- '*.ex' '*.exs'
 git grep -l "fleet_cockpit: true" -- '*.ex' '*.exs'
 ```
 
-Today the ingest list is `{router.ex (the macro), test/support/fleet_cockpit_router.ex}` and the
-cockpit list is all `samen_web` internals — i.e. no shipped product appears in either. The ruling is
-recorded in three places that must agree: here, the macro's `@doc`
-(`samen_web/lib/samen/web/router.ex`), and ADR-044 §9.2.
+Today the ingest list is `{router.ex (the macro), test/support/fleet_cockpit_router.ex}` — no shipped
+product, as ruled. The cockpit list is no longer `samen_web`-only: `samenerp/lib/samenerp_web/router.ex`
+joined it on 2026-10-11 (Amendment 2). The ruling is recorded in three places that must agree — here,
+the macro's `@doc` (`samen_web/lib/samen/web/router.ex`), and ADR-044 §9.2 — and the second amendment
+is carried in ADR-044 §9.2's adoption note and in the ADR-050 record.
 
 **Enforced, not merely recorded (2026-10-08).** The invariant is now a GATE — and it is rule 1 of
 a small data table rather than a bespoke check: `mix samen.verify.fleet_wire`
@@ -306,6 +315,19 @@ has exactly six entries because the three `/operator/{deliverability,automation,
 routes are mounted UNCONDITIONALLY by `samen_operator_routes/2` — §5.3's deep-link targets — so this
 host already has them.)
 
+**Re-verified 2026-10-11, after Amendment 2 — the SAME command, now two violations:**
+
+```bash
+cd samenerp && MIX_ENV=test mix samen.verify.fleet_wire --host samenerp --router SamenerpWeb.Router
+#   → FAIL, 2 violations: POST /fleet/enroll + POST /fleet/heartbeat,
+#     each "promised but not mounted".                          (exit 1)
+```
+
+The four `/operator/fleet*` entries left that list because this host now mounts them, and what
+remains is exactly the ingest delta this section rules on — legal because rule 1 is one-directional,
+not because the check is lax. The three resolve routes were always mounted unconditionally, which is
+the whole explanation of the old count of six.
+
 ## Base mounts (pre-date the numbered phases)
 
 Not part of the sequence, mounted earlier by the scaffold and the WS-ERP work: `samen_module_routes`
@@ -332,12 +354,14 @@ for `:billing`, `:crm`, `:marketing`, `:support` · `samen_automation_routes` ·
 
 ## Amendment — samenerp holds a FLEET REGISTRY for the public status page (2026-10-11, ADR-050)
 
-**Narrower than the ruling above it.** The 2026-10-08 ruling is about the **cockpit side**, and every
-part of it still stands: nothing here mounts `samen_fleet_ingest_routes` (`POST /fleet/enroll` +
-`POST /fleet/heartbeat`), nothing mounts `samen_operator_routes(…, fleet_cockpit: true)` (the operator
-drill-in UI), and this router serves **no `/fleet*` route at all** — so the three places that must
-agree (`docs/guides/gate-failures.md`'s per-macro tally, the ingest macro's `@doc`, ADR-044 §9.2) are
-unaffected, and the ingest stays the ledger's one unused delta.
+**Narrower than the ruling above it, in the one respect that survived the day (see the second
+amendment below).** The 2026-10-08 ruling is about the **cockpit side**, and its ingest half still
+stands unchanged: nothing here mounts `samen_fleet_ingest_routes` (`POST /fleet/enroll` +
+`POST /fleet/heartbeat`), so the three places that must agree (`docs/guides/gate-failures.md`'s
+per-macro tally, the ingest macro's `@doc`, ADR-044 §9.2) are unaffected, and the ingest stays the
+ledger's one unused delta. A mode-A `:pull` cockpit needs no ingest, so this one-sided shape is what
+ADR-044 §3.1/§9.2 DESIGN for — enforced as rule 1 of `mix samen.verify.fleet_wire`'s co-adoption
+table, not left to a comment.
 
 What DID change is the substrate fact that bullet leaned on. ADR-050's public status page projects
 `Samen.Fleet.Registry.build_row/3`'s already-computed rows, so the page cannot be *live* without a
@@ -359,6 +383,55 @@ operator-facing product here, so it became the **portfolio host**:
 Host-level proof: `test/fleet_status_page_test.exs` (dispatched through the real endpoint — 200, no
 auth bounce, empty page, opt-in respected, heartbeat refusal with its admin positive control).
 
+**The opt-in, exercised against PRODUCTION (2026-10-11).** The public page's flag is flipped by an
+operator, and this host ships no cockpit, so on samenerp the act is a call to the verb from the
+release console in the app container (`bin/samenerp eval`, the same mechanism the entrypoint's
+migrate/seed step uses) under an admitted `Samen.Fleet.AdminActor`. Round trip, observed live on
+`https://samenerp.kubeworkz.io/status`: publishing a probe app rendered a real component row
+(`ops-status-probe` · *Down*, overall "Some published components are down." — the probe never
+reported, so `build_row/3`'s `:unreachable` maps to §4.2's `:down`); the app's own `HeartbeatActor`
+was refused the same flip; unpublishing removed the row on the next read. The probe was then
+DEREGISTERED, so the page omits it entirely and the landed state is again "publishes nothing" — a
+probe left published would be a fabricated public component, which is what ADR-050 refuses.
+
+The operator ACTION itself lives in the framework (`Samen.Web.Operator.FleetDetailLive`, ADR-050
+§4.3). As first landed it was reachable only on a host mounting
+`samen_operator_routes(…, fleet_cockpit: true)` — which this host did not — so the opt-in here was a
+console call against the verb. **The second amendment below mounts the cockpit, closing that gap.**
+
+## Amendment 2 — samenerp MOUNTS THE COCKPIT, with the authority seam it needs (2026-10-11, T166b)
+
+**What moves.** The 2026-10-08 ruling's first clause ("no cockpit UI") is reversed by
+`samen_operator_routes(Samenerp.Operator, repo: Samenerp.Repo, …, fleet_cockpit: true,
+fleet_namespace: Samenerp.Fleet)` — four `/operator/fleet*` LiveViews (list · directives · register ·
+the tier-2 detail page whose publish control flips `efa_publish_status`), riding the SAME operator
+`live_session` and therefore the T146 `{Samen.Web.Operator.Authz, :require_operator}` `on_mount` on
+every route (RP-J-12 by construction — no separate fleet auth hook exists to forget). The reason is
+ADR-050 §4.3: this host holds the registry, so it is the one host where the publish action is worth
+having a UI for, and leaving it console-only made the feature's own opt-in an operator script step.
+
+**What does NOT move.** `samen_fleet_ingest_routes` stays unshipped (the ingest half above), and
+RP-J-4b's enumeration is untouched — the verifier still runs against `samen_web`'s test-support
+cockpit router, and this app's own `ci.sh` runs `nav_links`, not `fleet_wire`.
+
+| Added | What |
+|---|---|
+| `samenerp/lib/samenerp/fleet_authz.ex` | `Samenerp.FleetAuthz.fleet_roles/1` — the `:fleet_authority` seam (ADR-044 §6.2): the reserved `:fleet` scope plus one scope per configured product, at the role this host's operator resolver reports. It DELEGATES to `Samenerp.OperatorAuthz` (the `:operator_authority` resolver) so one identity gets one authorization decision; fail CLOSED to `%{}` for a non-operator. |
+| `config/config.exs` | `:fleet_authority` (the seam above), `:fleet_products, [:samenerp]` (the atomized per-product tier-2 grant the publish action checks — provisioned config, never conferred by a registered row), and `:fleet, mode: :manual` (without which `Samen.Fleet.read/2` returns the zero-config `:embedded` self-row and ignores `:fleet_namespace`) |
+| `lib/samenerp_web/router.ex` | `samen_operator_routes(…, fleet_cockpit: true, fleet_namespace: Samenerp.Fleet)` — the four cockpit routes, no new route table |
+| `test/fleet_cockpit_mount_test.exs` | host-level proof: the four routes off the COMPILED route table each carrying the operator `on_mount`, the mount read back out of the `live_session` the router itself compiled, every route rendered through the real endpoint, and the ARMED (`auth_required?: true`) posture driven green/red — a real operator-org `:owner` publishes through the mounted cockpit and the public page reports it; a real `:member` and a principal with no operator membership are refused, with the owner's identical call as positive control |
+| `scripts/sabotages/330-…` | adversarial twin: drop `fleet_cockpit: true` and the two named legs flip, byte-exact reverted |
+
+**Left unwired deliberately:** `:fleet_resolution` (the tenant-NAME seam, ADR-044 §16.2) — the
+driftwood posture. Cohort counts render; every tenant name stays masked and the page says why.
+
+**The seam that matters for production.** `Samenerp.FleetAuthz` is a thin delegation on purpose: the
+cockpit's role read and the operator console's role gate resolve through the SAME
+`Samenerp.OperatorAuthz` (credential → User → operator-org Membership), so `auth_required?: true`
+closes the console and the cockpit together and the dev convenience both share disappears with the
+same config value. A second roster was the alternative, and it would be a second policy that can
+drift from the first with neither decision auditable against the other.
+
 **Constraint discovered by mounting it — the fleet domain must NOT be a registered `ash_domain`.**
 `Samenerp.Fleet` is deliberately absent from BOTH `ash_domains` lists, and this is load-bearing:
 `mix samen.verify.aggregate_privacy` discovers its fleet from
@@ -376,9 +449,13 @@ purpose.
 
 **The reversal, stated plainly, because a future reader should not have to infer it from a table:**
 this host now holds a fleet scope, which the ruling's own bullet described as "a product *becoming a
-cockpit*". That much was accepted deliberately for ADR-050's sake; the ingest and the cockpit UI
-were not, and are still deliberately unshipped. If a future change mounts either, the ruling's
-`git grep` pair at the top of this file is the check that moves with it.
+cockpit*". That much was accepted deliberately for ADR-050's sake, and the cockpit UI followed the
+same day (Amendment 2): the registry this host holds is exactly the registry the publish action must
+be reachable from, so shipping the storage without the surface would have left the feature's own
+opt-in as a console step. The cockpit-side INGEST stays deliberately unshipped — the one-sided shape
+ADR-044 §3.1/§9.2 design for, since a mode-A `:pull` cockpit reports outward and accepts no pushes.
+If a future change mounts the ingest, the ruling's `git grep` pair at the top of this file is the
+check that moves with it.
 
 ## Re-running the certification
 
@@ -386,7 +463,8 @@ were not, and are still deliberately unshipped. If a future change mounts either
 cd samenerp && MIX_ENV=test bash ci.sh     # ends: ==> samenerp CI gate: ALL PASSED
 ```
 
-That gate runs every verifier plus the host suite — **70 tests as of 2026-10-11** (the ADR-050 mount
-added `test/fleet_status_page_test.exs`'s 4; the earlier figure of 61 predates them), which includes
-all seven `phaseN_surface_test.exs` files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
+That gate runs every verifier plus the host suite — **78 tests as of 2026-10-11** (the ADR-050 mount
+added `test/fleet_status_page_test.exs`'s 4; Amendment 2's cockpit mount added
+`test/fleet_cockpit_mount_test.exs`'s 8; the earlier figure of 61 predates both), which includes all
+seven `phaseN_surface_test.exs` files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
 (all seven phases shipped without it).

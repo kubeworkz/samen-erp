@@ -9,7 +9,8 @@
   content-level port, not a merge). The port was re-verified against THIS tree rather than
   assumed: the four owning tests pass here (`samen_core/test/fleet_public_status_test.exs`,
   `samen_web/test/samen/web/fleet_public_status_test.exs`), and the durable twins are this
-  fork's sabotage patches **325–328** (upstream numbered them 360–363). One adaptation was
+  fork's sabotage patches **325–328** (upstream numbered them 360–363); **329** was added in this
+  fork alongside the cockpit opt-in action (§4.3) and has no upstream twin. One adaptation was
   required and is recorded in §4.4 below: this fork's suite-wide `RateLimit.FloodGuard` fails a
   test that floods an UNPINNED wall-clock-aligned window, so the limiter tests pin the window
   through `Samen.WebTest.RateLimitFlood.pin!/1` while keeping their authored limits.
@@ -18,7 +19,9 @@
   `Samen.Web.Fleet.PublicStatus` + `Samen.Web.FleetStatusController` +
   `Samen.Web.Router.samen_fleet_status_route/1` (samen_web), one `flt_app` column
   (`publish_status`), one admin-gated verb (`Samen.Fleet.Registry.set_publish_status/4`),
-  owning tests across the two apps, sabotage patches **325–328**. §7 names exactly what
+  the cockpit's own opt-in ACTION over that verb (§4.3 — added 2026-10-11, and verified
+  live against `samenerp.kubeworkz.io`, §6.1), owning tests across the two apps, sabotage
+  patches **325–328** plus **329** (the cockpit action's gate). §7 names exactly what
   is deferred.
 - **Task:** close the last open G11 line (`saas-gap-roadmap.md`) — a public status page —
   **without** giving the product a second, disagreeable notion of health. At the fork point the
@@ -110,6 +113,31 @@ needs no migration, but it makes publication a **deploy**, and it puts the list 
 copy-paste can publish a slug nobody audited. Per-row state with a `false` default is auditable
 and reversible in one call.
 
+**The operator ACTION over the verb (added 2026-10-11).** The verb is the mechanism; the
+affordance that calls it is `Samen.Web.Operator.FleetDetailLive`'s `phx-click="publish_status"`
+control on `/operator/fleet/:app_id` — so a host that mounts the cockpit gets the opt-in exactly
+where the app's row already is, at 0 authored host LOC — one `handle_event/3` clause on the
+detail LiveView, with no route of its own and no new mount for a host to make.
+
+Its UI gate is deliberately **stricter** than the kernel's, and both halves are named: the
+mutation is admitted by `Samen.Policy.FleetAdminOnly` (a `HeartbeatActor` — the app itself — is
+refused), while the UI additionally requires `roles[:fleet] == :operator_admin` **and** a role in
+**that product** (`@in_product_scope?`). Publication is an act on one product, so a fleet admin
+with no role in it is not offered the control. A narrower UI posture than the kernel is the safe
+direction: the UI can withhold an affordance it is not sure about, but it can never widen what
+the kernel admits.
+
+One property this action owes is honesty about **its own consequence**. What it says publishing
+would produce comes from `Samen.Fleet.PublicStatus.preview/1` (the projection's own `status` →
+`Entry` mapping, `:excluded` for a `:deregistered` row) and the wording from
+`Samen.Web.Fleet.PublicStatus.label/1` (the page's own display strings). `preview/1` and `read/2`
+share the ONE renderer, so the cockpit cannot promise a state the page does not report — §1's "no
+second notion of up" applied to the surface that flips the switch — and
+`samen_core/test/fleet_public_status_test.exs` asserts row-by-row that the two agree. Without that
+sharing, the plausible failure is a cockpit that tells an operator "publishing lists `acme-api` as
+*Down*" for an app the page reports as operational (a real defect this suite caught while the
+change was being written, in an earlier revision that pattern-matched the wrong shape).
+
 ### 4.4 Public and rate-limited
 
 Mounted in a host's PUBLIC router scope (no auth pipeline, no `on_mount`, no session, no CSRF) —
@@ -186,11 +214,51 @@ sanctioned allocator) — additive tables, with `efa_publish_status` defaulting 
 
 That makes samenerp the first product holding a fleet scope, which the 2026-10-08 ruling had
 recorded as not being the case. The reversal is **narrow and deliberate**: the host mounts the
-read-only public page and NO `/fleet*` route — `samen_fleet_ingest_routes` and
-`samen_operator_routes(…, fleet_cockpit: true)` stay unshipped, so RP-J-4b's route enumeration and
-ADR-044 §9.3's tiers are untouched. Recorded in `docs/samenerp-mount-ledger.md` (2026-10-11
-amendment) and in ADR-044's adoption-status note. Host-level proof lives in
+read-only public page, and NO `samen_fleet_ingest_routes` mount — that ingest, and therefore the
+`POST /fleet/enroll` + `POST /fleet/heartbeat` endpoints, stay unshipped, so RP-J-4b's route
+enumeration and ADR-044 §9.3's tiers are untouched. Recorded in `docs/samenerp-mount-ledger.md`
+(2026-10-11 amendment) and in ADR-044's adoption-status note. Host-level proof lives in
 `samenerp/test/fleet_status_page_test.exs`, which dispatches through the real endpoint.
+
+**Amended the same day (T166b): the cockpit is mounted, so §4.3's action has a UI on this host.**
+The paragraph above originally read "no `/fleet*` route at all", which made §4.3's operator action
+unreachable on the only host that held a registry to flip — the opt-in existed and could only be
+exercised from a console. `samenerp` now mounts
+`samen_operator_routes(Samenerp.Operator, …, fleet_cockpit: true, fleet_namespace: Samenerp.Fleet)`
+(the T146 `on_mount` gate inherited by construction, RP-J-12) with the three runtime wirings that
+make a cockpit read anything: `:fleet_authority` → `Samenerp.FleetAuthz` (delegating to the
+operator plane's own resolver — one identity, one authorization decision), `:fleet_products`
+(`[:samenerp]`, the atomized per-product tier-2 scope §5.4's publish action checks, so the grant is
+provisioned config and not something a registered row confers on itself), and `:fleet, mode:
+:manual` (without which `Samen.Fleet.read/2` returns the zero-config `:embedded` self-row and
+ignores the namespace). Proof: `samenerp/test/fleet_cockpit_mount_test.exs`, whose ARMED
+(`auth_required?: true`) legs publish a probe row through the MOUNTED cockpit under a real
+operator-org `:owner` and observe it on this page — with a real `:member` and a principal holding no
+operator membership both refused, and the owner's identical call as positive control; adversarial
+twin `scripts/sabotages/330-samenerp-fleet-cockpit-mount-dropped.patch`. The console round trip
+recorded below stays as the historical record of how the flag was flipped while no cockpit existed
+— and it is still the fallback for a host that mounts the registry without a cockpit.
+
+**Who flips the flag on THIS host (2026-10-11), and the live round trip.** As of the T166b
+amendment above the opt-in is a click on `/operator/fleet/:app_id`, gated by
+`roles[:fleet] == :operator_admin` AND a role in the product (§4.3). The round trip below was
+verified when no cockpit existed here, so it went through the release console in the app container
+(the same `bin/samenerp eval` the entrypoint's migrate/seed step uses), under an admitted
+`Samen.Fleet.AdminActor` — the same verb the UI action calls:
+
+1. registering a probe app and publishing it made `GET /status` render a **real component row** —
+   `ops-status-probe` · *Down*, overall "Some published components are down." (the probe has never
+   reported, so `build_row/3` → `:unreachable` → §4.2's `:down`, never an all-clear);
+2. the app's OWN `HeartbeatActor` was **refused** the same flip — the "never app-initiated" policy,
+   checked in production rather than assumed;
+3. unpublishing took the row straight back off the page, and the probe row was then deregistered so
+   the registry does not keep an app that will never report. The live page is back to publishing
+   nothing.
+
+The probe slug was exactly that — a probe — and it was retired rather than left published: the
+public plane carries real components, and a fabricated one left standing is the
+fabricated-completeness ADR-014/024/026 refuse. Publishing this host's REAL products is an operator
+decision this change does not make for anyone.
 
 ## 7. Deferred, named (first increment)
 
@@ -216,6 +284,8 @@ repo refuses, so it is absent rather than approximate. A follow-on backlog row s
 | 6 | Fails closed to a 503 that says so | both test files + sabotage **328** |
 | 7 | The mount is genuinely public and carries its namespace — proven by dispatching through a real compiled router | `samen_web/test/support/public_status_router.ex` |
 | 8 | Staleness is ADR-044's, not a second one | the `:degraded` test drives `stale_after_s` alone; no threshold exists in the public path |
+| 9 | The cockpit's opt-in ACTION is operator-only, reversible, and promises only what the page reports | `samen_web/test/samen/web/fleet_publish_status_test.exs` (admin publish/unpublish reaching `read/2`, the readonly + no-product-role + no-principal refusals, each with the admin call as its positive control) + `preview/1`↔`read/2` agreement in `samen_core/test/fleet_public_status_test.exs` + sabotage **329** |
+| 10 | The action is REACHABLE in production — a real host mounts the cockpit with the authority seam it needs, and the ARMED posture publishes through it | `samenerp/test/fleet_cockpit_mount_test.exs` (routes off the compiled route table with the operator `on_mount` on all four, the router's own `live_session` mount, the endpoint renders, and armed green/red with the owner call as positive control) + sabotage **330** |
 
 ## 9. Consequences
 
@@ -223,5 +293,15 @@ repo refuses, so it is absent rather than approximate. A follow-on backlog row s
 * One more `flt_app` column for any future cockpit host to migrate (two test mounts migrated here).
 * `Registry.build_row/3` gains one key (`publish_status`) so the projection can filter without
   re-reading the app rows or re-deriving staleness.
+* `Samen.Fleet.PublicStatus.preview/1` and `Samen.Web.Fleet.PublicStatus.label/1` are now PUBLIC
+  (2026-10-11): the cockpit's opt-in action states its consequence in the page's own mapping and
+  wording, so the internal→public mapping has exactly one implementation and the display strings
+  exactly one home. A future status added to §4.2's table must be handled in `public_status/1`
+  (it renders `:down` by the fail-closed clause) — and that single edit then flows to both
+  surfaces.
 * The public/internal vocabulary split is now a thing to maintain: a new internal status must be
   mapped in `public_status/1` or it renders `:down` by the fail-closed clause.
+* The opt-in now has a UI wherever a host mounts the cockpit (§6.1's amendment): on `samenerp` that
+  means the action is a click whose two gates (`roles[:fleet] == :operator_admin` + a role in the
+  product) are the operator plane's OWN roster, read through `Samenerp.FleetAuthz` — so arming the
+  host for production closes the console, the cockpit and this page's writes with one config value.

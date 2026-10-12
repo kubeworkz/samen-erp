@@ -213,7 +213,7 @@ defmodule Samen.FleetPublicStatusTest do
       # POSITIVE CONTROL: every one of those values IS present on the operator
       # cockpit plane the projection reads from — so the refutes above are
       # refuting something that genuinely exists upstream, not a typo.
-      {:ok, rows} = Registry.read_rows(@ns, actor: @admin)
+      {:ok, %{rows: rows}} = Registry.read_rows(@ns, actor: @admin)
       cockpit = inspect(rows, limit: :infinity, printable_limit: :infinity)
 
       for present <- [app.id, "Acme Corporation GmbH", "vt_deadbeefdeadbeef", "tenant_display_name"] do
@@ -242,6 +242,85 @@ defmodule Samen.FleetPublicStatusTest do
                |> Map.from_struct()
                |> Map.keys()
                |> Enum.sort()
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # preview/1 — the SAME mapping, for the operator surface that flips the opt-in
+  # ---------------------------------------------------------------------------
+
+  describe "preview/1 — the cockpit's consequence line is the page's own mapping" do
+    test "for every row the page can publish, preview/1 agrees with what read/2 renders" do
+      # ADR-050 §1's failure mode is a SECOND notion of "up" that drifts from the
+      # page's. The cockpit states the consequence of publishing an app, so its
+      # promise is asserted here against the page's OWN output, row by row.
+      cases = [
+        {"fresh report", [report: payload()]},
+        {"never reported", []}
+      ]
+
+      for {label, opts} <- cases do
+        slug = "agree-#{System.unique_integer([:positive])}"
+        app = seed_app(slug, [publish_status: true] ++ opts)
+
+        {:ok, %{rows: rows}} = Registry.read_rows(@ns, actor: @admin)
+        row = Enum.find(rows, &(&1.app_id == app.id))
+
+        {:ok, %{entries: entries}} = PublicStatus.read(@ns)
+        entry = Enum.find(entries, &(&1.slug == slug))
+
+        assert {:ok, preview} = PublicStatus.preview(row)
+
+        assert preview.slug == entry.slug and preview.status == entry.status,
+               "#{label}: the cockpit would promise #{inspect(preview)} while the page reports " <>
+                 "#{inspect(entry)} — exactly the drift this projection refuses"
+      end
+    end
+
+    test "a never-reported row previews :down — the cockpit cannot promise an all-clear the page would not show" do
+      app = seed_app("quiet-api", [])
+
+      {:ok, %{rows: rows}} = Registry.read_rows(@ns, actor: @admin)
+      row = Enum.find(rows, &(&1.app_id == app.id))
+
+      assert {:ok, %PublicStatus.Entry{slug: "quiet-api", status: :down}} = PublicStatus.preview(row)
+    end
+
+    test "a stale row previews :degraded (ADR-044 §4.6 dead-man staleness, not a second threshold)" do
+      app = seed_app("lagging-api", report: payload(), stale_after_s: 0)
+      Process.sleep(1100)
+
+      {:ok, %{rows: rows}} = Registry.read_rows(@ns, actor: @admin)
+      row = Enum.find(rows, &(&1.app_id == app.id))
+
+      assert {:ok, %PublicStatus.Entry{slug: "lagging-api", status: :degraded}} = PublicStatus.preview(row)
+    end
+
+    test "a deregistered row is :excluded — the page omits it, so publishing it would change nothing" do
+      app = seed_app("gone-api", publish_status: true, report: payload())
+      {:ok, _} = Registry.deregister_app(@ns, app.id, @admin)
+
+      {:ok, %{rows: rows}} = Registry.read_rows(@ns, actor: @admin)
+      row = Enum.find(rows, &(&1.app_id == app.id))
+
+      assert :excluded = PublicStatus.preview(row)
+    end
+
+    test "the slug mask holds on the preview too — an out-of-shape slug is ••••, never verbatim" do
+      app = seed_app("vt_9f8e7d6c5b4a3210", publish_status: true, report: payload())
+
+      {:ok, %{rows: rows}} = Registry.read_rows(@ns, actor: @admin)
+      row = Enum.find(rows, &(&1.app_id == app.id))
+
+      assert {:ok, %PublicStatus.Entry{slug: "••••"}} = PublicStatus.preview(row)
+    end
+
+    test "fail closed: anything that is not a row carrying a bounded slug is :excluded, never an entry" do
+      assert :excluded = PublicStatus.preview(%{slug: "x"})
+      assert :excluded = PublicStatus.preview(%{status: :active})
+      assert :excluded = PublicStatus.preview(%{slug: 42, status: :active})
+      assert :excluded = PublicStatus.preview(nil)
+      assert :excluded = PublicStatus.preview("not a row")
     end
   end
 

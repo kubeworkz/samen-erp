@@ -28,13 +28,37 @@ defmodule Samen.Web.Operator.FleetDetailLive do
   This is what makes the `Samen.ScopeMaskCase` 3-proof (green/red/sabotage) +
   the mixed-render case (named + masked rows, ONE table, ONE viewer — "the
   salesperson case") assertable directly against this LiveView's rendered HTML.
+
+  ## The one WRITE on this surface: the public status page opt-in (ADR-050 §4.3)
+
+  This page carries the operator action that flips `flt_app.publish_status` — the
+  per-app OPT-IN to `GET /status` — through
+  `Samen.Fleet.Registry.set_publish_status/4`. Until an operator publishes an app,
+  the public page is empty, so this is the affordance that makes the feature
+  reachable at all; it is reversible in both directions (`false` takes the app off
+  the page on the next read).
+
+  The UI gate is `roles[:fleet] == :operator_admin` (`@fleet_ctx.admin?`) AND a role
+  in THIS product (`@in_product_scope?`) — publication is an act on one product, so
+  a fleet-admin with no role in it does not get it. That is a NARROWER UI posture
+  than the kernel's: the mutation itself is admitted by
+  `Samen.Policy.FleetAdminOnly`, which refuses a `HeartbeatActor` — the reporting app
+  can never publish itself (ADR-044 §4.5's "never app-initiated" lesson applied to
+  visibility). The kernel is the enforcement; this gate is the affordance.
+
+  The action also STATES ITS CONSEQUENCE in the page's own words: the status the app
+  would appear as comes from `Samen.Fleet.PublicStatus.preview/1` and the wording
+  from `Samen.Web.Fleet.PublicStatus.label/1` — the same renderer and the same
+  vocabulary the public page itself uses, so the cockpit cannot promise a state the
+  page does not report (ADR-050 §1: no second notion of "up").
   """
   use Phoenix.LiveView
 
   import Samen.UI
   import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
 
-  alias Samen.Fleet.{Handle, Resolution}
+  alias Samen.Fleet.{AdminActor, Handle, PublicStatus, Registry, Resolution}
+  alias Samen.Web.Fleet.PublicStatus, as: PageStatus
   alias Samen.Web.Operator.Fleet, as: FleetHelpers
 
   @cohort_families [
@@ -49,7 +73,10 @@ defmodule Samen.Web.Operator.FleetDetailLive do
 
     case FleetHelpers.gate(socket.assigns[:samen_mount], session) do
       {:ok, ctx} ->
-        {:ok, socket |> assign(fleet_ctx: ctx, app_id: app_id) |> load()}
+        {:ok,
+         socket
+         |> assign(fleet_ctx: ctx, app_id: app_id, publish_error: nil, publish_note: nil)
+         |> load()}
 
       :denied ->
         {:ok, redirect(socket, to: FleetHelpers.login_path(socket.assigns[:samen_mount]))}
@@ -68,6 +95,8 @@ defmodule Samen.Web.Operator.FleetDetailLive do
             assign(socket,
               app: nil,
               in_product_scope?: false,
+              publish_status: nil,
+              publish_preview: :excluded,
               cohorts: %{},
               resolved: %{},
               name_seam_reachable?: false
@@ -95,6 +124,10 @@ defmodule Samen.Web.Operator.FleetDetailLive do
             assign(socket,
               app: row,
               in_product_scope?: in_scope?,
+              # ADR-050 §4.3 — the opt-in state, read from the SAME registry row, plus
+              # the projection's own consequence preview (never a second mapping).
+              publish_status: row.publish_status,
+              publish_preview: unwrap_preview(PublicStatus.preview(row)),
               cohorts: cohorts,
               resolved: resolved,
               # P16 (phase6-punchlist / ADR-044 §16.2) — is the NAME-resolution seam
@@ -110,12 +143,95 @@ defmodule Samen.Web.Operator.FleetDetailLive do
           app: nil,
           not_configured: reason,
           in_product_scope?: false,
+          publish_status: nil,
+          publish_preview: :excluded,
           cohorts: %{},
           resolved: %{},
           name_seam_reachable?: false
         )
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # The public status page OPT-IN (ADR-050 §4.3) — the only mutation on this page.
+  # ---------------------------------------------------------------------------
+
+  @impl true
+  def handle_event("publish_status", %{"publish" => value}, socket) do
+    publish? = value == "true"
+    %{admin?: admin?, namespace: namespace, principal_id: principal_id} = socket.assigns.fleet_ctx
+
+    cond do
+      # Belt-and-braces: `samen_operator_routes(..., fleet_cockpit: true)` REFUSES a nil
+      # `:fleet_namespace` at compile time (`__require_fleet_namespace__!/1`), so this is
+      # the runtime layer that keeps a directly-built `%Mount{}` honest too — the mirror
+      # of `Samen.Fleet.read/2`'s own `{:missing_namespace, mode}` fail-closed arm.
+      is_nil(namespace) ->
+        {:noreply,
+         assign(socket,
+           publish_error:
+             "No fleet_namespace is configured on this mount, so there is no registry to publish into."
+         )}
+
+      not socket.assigns.in_product_scope? ->
+        {:noreply,
+         assign(socket,
+           publish_error:
+             "You hold a fleet role but no role in this product, so its public visibility is not yours to change."
+         )}
+
+      # Fail closed on BOTH halves: a non-admin, and a session with no principal to
+      # attribute the write to (a permissive `:fleet_authority` seam must not turn an
+      # anonymous request into an admin one).
+      not (admin? and is_binary(principal_id)) ->
+        {:noreply,
+         assign(socket,
+           publish_error:
+             "Only roles[:fleet] == :operator_admin may publish a product on the public status page."
+         )}
+
+      true ->
+        case Registry.set_publish_status(
+               namespace,
+               socket.assigns.app_id,
+               publish?,
+               AdminActor.new(principal_id)
+             ) do
+          # Re-`load/1` rather than trusting the returned struct: the rendered state
+          # must be the one the registry now holds, not the one we asked for.
+          {:ok, app} ->
+            {:noreply,
+             socket
+             |> assign(publish_error: nil, publish_note: publish_note(app.publish_status))
+             |> load()}
+
+          {:error, reason} ->
+            {:noreply,
+             assign(socket,
+               publish_error: "The registry refused the change: #{inspect(reason)}"
+             )}
+        end
+    end
+  end
+
+  defp publish_note(true),
+    do: "Published — this product now appears on the public status page."
+
+  defp publish_note(false),
+    do: "Unpublished — this product no longer appears on the public status page."
+
+  # `Samen.Fleet.PublicStatus.preview/1` returns `{:ok, entry} | :excluded`; the assign
+  # holds the unwrapped pair so the template cannot mistake the tuple for an entry.
+  defp unwrap_preview({:ok, entry}), do: entry
+  defp unwrap_preview(:excluded), do: :excluded
+
+  # The page's OWN display strings (`Samen.Web.Fleet.PublicStatus.label/1`), so this
+  # surface names the public vocabulary exactly as `GET /status` renders it. Deliberately
+  # NO catch-all clause: a caller that hands this something other than a projected entry
+  # has a bug, and a fallback would render a plausible-but-possibly-wrong status — which
+  # is how a cockpit ends up promising "Down" for a product the page reports as
+  # operational. Fail loudly instead.
+  defp preview_label(%PublicStatus.Entry{status: status}), do: PageStatus.label(status)
 
   defp cohort_rows(report, key, _kind, _slug, resolve_path, resolved, in_scope?) do
     (Map.get(report, key) || [])
@@ -178,6 +294,53 @@ defmodule Samen.Web.Operator.FleetDetailLive do
             title="Names unavailable — resolution seam not reachable."
             body="This cockpit deployment has no fleet name-resolution seam wired for this product (a separately-deployed / cross-origin composition). Tenant names cannot be resolved here — cohort counts remain visible, names are withheld fail-closed."
           />
+
+          <%!-- ADR-050 §4.3 — the public status page OPT-IN, per app. The consequence
+                line speaks the page's own vocabulary (`preview/1` + `label/1`), so what
+                an operator reads here is what `GET /status` will say. --%>
+          <div class="card" id="publish-status-card" style="padding:14px 18px;margin-top:18px">
+            <div class="gtitle">
+              <h3>Public status page</h3>
+              <span class="lane">· operator opt-in, per app</span>
+            </div>
+
+            <p id="publish-state">
+              <%= if @publish_status do %>
+                Published — this product appears on the public status page.
+              <% else %>
+                Not published — this product does not appear on the public status page.
+              <% end %>
+            </p>
+
+            <p :if={@publish_preview != :excluded} id="publish-preview" class="note">
+              <%= if @publish_status do %>
+                The page reports it as {preview_label(@publish_preview)}.
+              <% else %>
+                Publishing would list {@app.slug} as {preview_label(@publish_preview)}.
+              <% end %>
+            </p>
+
+            <p :if={@publish_preview == :excluded} id="publish-preview-excluded" class="note">
+              This product is deregistered, so the public page omits it entirely — publishing it would change nothing.
+            </p>
+
+            <button
+              :if={@fleet_ctx.admin?}
+              class="btn"
+              id="publish-toggle"
+              phx-click="publish_status"
+              phx-value-publish={if @publish_status, do: "false", else: "true"}
+            >
+              {if @publish_status, do: "Unpublish", else: "Publish on the status page"}
+            </button>
+
+            <p :if={!@fleet_ctx.admin?} id="publish-readonly" class="note">
+              Read-only — publishing a product on the public status page requires roles[:fleet] == :operator_admin.
+            </p>
+
+            <p :if={@publish_error} id="publish-error" style="color:var(--bad,#b91c1c)">{@publish_error}</p>
+            <p :if={@publish_note} id="publish-note" class="note">{@publish_note}</p>
+          </div>
 
           <div :for={{kind, rows} <- @cohorts} id={"cohort-#{kind}"} style="margin-top:18px">
             <div class="gtitle">

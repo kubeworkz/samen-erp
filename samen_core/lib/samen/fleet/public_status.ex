@@ -153,6 +153,33 @@ defmodule Samen.Fleet.PublicStatus do
     |> Map.fetch!(:status)
   end
 
+  @doc """
+  The `Entry` a registry row WOULD render as on the public page, or `:excluded`
+  when the page omits it (a `:deregistered` row — §4.2).
+
+  This is the projection's OWN mapping, exposed so an operator surface can state
+  the consequence of publishing an app ("publishing lists `acme-api` as *Down*")
+  without authoring a second copy of the vocabulary that could drift from the
+  page's. That drift is precisely the ADR-050 §1 failure mode in miniature: a
+  second notion of "up", free to eventually contradict the page in front of a
+  customer. `preview/1` and `read/2` share the ONE renderer below, so the cockpit
+  cannot promise something the page does not say.
+
+  Opt-in (`publish_status`) is deliberately NOT consulted: the caller is deciding
+  that flag, so what it needs is what the page would show for this row's STATUS
+  once the flag is on. A row this module cannot read is `:excluded` (fail closed —
+  never rendered, never an all-clear).
+  """
+  @spec preview(map()) :: {:ok, Entry.t()} | :excluded
+  def preview(%{slug: slug, status: status}) when is_binary(slug) do
+    case status do
+      :deregistered -> :excluded
+      _other -> {:ok, entry(%{slug: slug, status: status})}
+    end
+  end
+
+  def preview(_row), do: :excluded
+
   # Opt-in AND still registered. A deregistered app is not "down" — it is gone, so
   # it leaves the page entirely. Anything that is not literally `true` is unpublished
   # (fail closed: a `nil` from a namespace mid-migration publishes nothing).

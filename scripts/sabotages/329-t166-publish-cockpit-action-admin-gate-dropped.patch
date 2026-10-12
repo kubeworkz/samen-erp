@@ -1,0 +1,45 @@
+# SABOTAGE: T166 / ADR-050 §4.3 — the cockpit's publish action loses its ADMIN
+# conjunct, so `Samen.Web.Operator.FleetDetailLive`'s `publish_status` event stops
+# asking whether the viewer is `roles[:fleet] == :operator_admin` and asks only
+# whether the session carries a principal. A fleet READ-ONLY operator — the role
+# whose whole meaning is "watch the cockpit, change nothing" — can then publish a
+# product onto the unauthenticated public status page.
+#
+# This is the affordance half of the same claim sabotage 325 makes about the
+# default: publication is an OPERATOR act. 325 removes the opt-in FILTER (every
+# registered app is published); this one removes the HUMAN gate that decides who
+# may opt an app in. The kernel still refuses a `HeartbeatActor` (325's own
+# `set_publish_status/4` red keeps passing), so the flip is specifically about the
+# cockpit letting the wrong PERSON through, not about the resource policy.
+#
+# Flips the named §4.3 red in `fleet_publish_status_test.exs`. Everything else stays
+# GREEN: the in-product-scope refusal, the nil-namespace arm, the no-principal arm
+# (`is_binary/1` survives) and the whole mutation path are untouched, so the red
+# fails because the role gate is gone, not because the event broke.
+#
+# NOT TOUCHED, deliberately: the `in_product_scope?` clause (a fleet admin with no
+# role in the product must still be refused — that is a different tier, not this
+# one), the `is_nil(namespace)` arm, the error MESSAGES (the sabotage removes the
+# gate, not the refusal text), and `Samen.Policy.FleetAdminOnly` / `AdminActor`
+# themselves — the kernel gate is the enforcement this UI gate sits in front of.
+#
+# The bare conjunct drop leaves `admin?` destructured-and-unused, which is exactly
+# what the removed check looks like; the replay runs `mix test` (not
+# `--warnings-as-errors`), so the one warning is confined to the reverted replay.
+# APP: samen_web
+# TEST_FILES: test/samen/web/fleet_publish_status_test.exs
+# MUST_FAIL: a fleet role that is NOT :operator_admin is refused
+diff --git a/samen_web/lib/samen/web/operator/fleet_detail_live.ex b/samen_web/lib/samen/web/operator/fleet_detail_live.ex
+--- a/samen_web/lib/samen/web/operator/fleet_detail_live.ex
++++ b/samen_web/lib/samen/web/operator/fleet_detail_live.ex
+@@ -184,7 +184,9 @@ defmodule Samen.Web.Operator.FleetDetailLive do
+       # Fail closed on BOTH halves: a non-admin, and a session with no principal to
+       # attribute the write to (a permissive `:fleet_authority` seam must not turn an
+       # anonymous request into an admin one).
+-      not (admin? and is_binary(principal_id)) ->
++      # SABOTAGE (T166/ADR-050 §4.3): the ADMIN conjunct is dropped, so any
++      # authenticated principal may publish on the public status page.
++      not is_binary(principal_id) ->
+         {:noreply,
+          assign(socket,
+            publish_error:

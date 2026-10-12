@@ -1,0 +1,32 @@
+# SABOTAGE: T166b / ADR-050 §6.1 — samenerp's fleet cockpit MOUNT is dropped, so the
+# public status page's opt-in has no UI on this host again: `samen_operator_routes/2` is
+# called without `fleet_cockpit: true`, and the four `/operator/fleet*` LiveViews are not
+# compiled into the route table. The `:fleet_namespace` label and every runtime seam
+# (`:fleet_authority` → `Samenerp.FleetAuthz`, `:fleet_products`, `:fleet, mode: :manual`)
+# stay exactly as they are — the sabotage removes the MOUNT, not the wiring, so it isolates
+# the claim the host test exists for: that the cockpit is REACHABLE here, and that the
+# publish action (the opt-in the ADR-050 feature depends on) has a surface in production.
+#
+# The one-sided posture this restores is the one ADR-044 §9.2's adoption note recorded
+# before 2026-10-11 ("no host mounts `fleet_cockpit: true`") — a shape the verifiers
+# deliberately ALLOW (the ingest ⇒ cockpit rule is one-directional), which is exactly why a
+# host-level test, not a gate, is what holds the mount.
+#
+# Flips the named legs in `fleet_cockpit_mount_test.exs`: the route enumeration finds ZERO
+# cockpit routes, and the router-derived mount lookup has no route to read. Everything else
+# the host does (reporting side `samen_fleet_routes/1`, the public `/status` page, the
+# registry) is untouched, so the failures are the missing mount, not a broken app.
+# APP: samenerp
+# TEST_FILES: test/fleet_cockpit_mount_test.exs
+# MUST_FAIL: the router mounts all four cockpit routes
+# MUST_FAIL: the router's compiled mount carries the cockpit labels
+--- a/samenerp/lib/samenerp_web/router.ex
++++ b/samenerp/lib/samenerp_web/router.ex
+@@ -511,7 +511,6 @@
+       # `:fleet_resolution` is deliberately LEFT UNWIRED (the driftwood posture): tenant
+       # names therefore stay masked and the detail page says why, fail-closed, until a host
+       # resolver is provisioned.
+-      fleet_cockpit: true,
+       fleet_namespace: Samenerp.Fleet,
+       labels: %{
+         operator_workspace: "Samenerp Ops",

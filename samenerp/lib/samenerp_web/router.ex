@@ -381,11 +381,15 @@ defmodule SamenerpWeb.Router do
     #     `Samen.Fleet.Registry.set_publish_status/4` (`efa_publish_status` defaults
     #     to false), so the landed state is an empty page, never the registry.
     #
-    #     The path is deliberately NOT under /fleet: everything under `/fleet*` is
+    #     The path is deliberately NOT under /fleet: the `/fleet*` family is
     #     authority-gated and cross-checked by `mix samen.verify.fleet_wire` against
-    #     `Samen.Fleet.RouteTable.declared/0`, and this router mounts no `/fleet*`
-    #     route at all (the cockpit side stays unshipped — see the mount ledger's
-    #     2026-10-08 ruling and the narrower reversal recorded there). Rate-limited
+    #     `Samen.Fleet.RouteTable.declared/0`. This router mounts that family's
+    #     REPORTING half (`GET /fleet/health` + `POST /fleet/directive`, below) and, as of
+    #     2026-10-11, the operator-side COCKPIT (`fleet_cockpit: true` on the operator mount
+    #     further down) — while the cockpit-side INGEST (`samen_fleet_ingest_routes`:
+    #     POST /fleet/enroll + POST /fleet/heartbeat) stays unshipped, the one-directional
+    #     shape ADR-044 §3.1/§9.2 design for and the only delta the mount ledger still rules
+    #     on. The public page must not sit behind that authority gate. Rate-limited
     #     per remote IP through the shared `Samen.Web.RateLimit` seam
     #     (`:public_status_ip`, 120/min); over the window is a bare empty-bodied 429.
     samen_fleet_status_route(
@@ -488,6 +492,31 @@ defmodule SamenerpWeb.Router do
 
     samen_operator_routes(Samenerp.Operator,
       repo: Samenerp.Repo,
+      # ADR-050 §4.3 / ADR-044 §9.2 — the WS-J fleet COCKPIT, mounted here as of
+      # 2026-10-11 so the public status page's opt-in has a UI on this host instead of
+      # being an operator act against the verb from a console. TWO options and no new
+      # route table: `fleet_cockpit: true` engages the four `/operator/fleet*` LiveViews
+      # (list · directives · register · the tier-2 detail page whose publish control
+      # flips `efa_publish_status`), and `:fleet_namespace` names the registry they read
+      # — compile-REQUIRED alongside the opt (`__require_fleet_namespace__!/1`), because a
+      # cockpit that renders as mounted and reads nothing is worse than none.
+      #
+      # What this does NOT add: `samen_fleet_ingest_routes/1` (POST /fleet/enroll +
+      # /fleet/heartbeat) stays unshipped, and `mix samen.verify.fleet_wire` allows that
+      # one-sided shape BY DESIGN — the pair rule is one-directional, and a mode-A `:pull`
+      # cockpit needs no ingest. This host is already an app on the reporting side
+      # (`samen_fleet_routes(otp_app: :samenerp)` in the public scope below), so the fleet
+      # it manages and the fleet it reports to are the same substrate, nothing more.
+      #
+      # The authority seam is wired (`config :samenerp, :fleet_authority` →
+      # `Samenerp.FleetAuthz`, which delegates to the operator plane's OWN resolver), and so
+      # is the mode (`config :samenerp, :fleet, mode: :manual` — what makes
+      # `Samen.Fleet.read/2` read the registry rather than the zero-config self-row).
+      # `:fleet_resolution` is deliberately LEFT UNWIRED (the driftwood posture): tenant
+      # names therefore stay masked and the detail page says why, fail-closed, until a host
+      # resolver is provisioned.
+      fleet_cockpit: true,
+      fleet_namespace: Samenerp.Fleet,
       labels: %{
         operator_workspace: "Samenerp Ops",
         # T146 — the operator-ROLE authority seam. `Samen.Web.Operator.Authz`'s on_mount derives
