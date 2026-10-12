@@ -32,6 +32,11 @@ defmodule Samen.Web.RateLimit.FloodGuard do
   flood does not have to remember to opt in (`armed?/0` is what makes it suite-wide, and the
   guard's own suite asserts it).
 
+  The HOSTS that mount the framework's rate-limited routes (`driftwood` / `pawchart` / `samenerp`)
+  arm the same guard in their own `test/test_helper.exs`, and each carries a permanent test calling
+  `Samen.Web.RateLimit.assert_flood_guard_armed!/1` — so deleting that helper line fails loudly in
+  the host that lost it, instead of silently disarming it.
+
   In PRODUCTION the audit table is never created: `armed?/0` is a single `:ets.whereis/1` that
   returns immediately, and nothing else in the seam changes — the window arithmetic, the backend
   and the `:ok | {:error, :rate_limited}` contract are untouched.
@@ -72,6 +77,9 @@ defmodule Samen.Web.RateLimit.FloodGuard do
     @moduledoc """
     Raised inside the offending test the moment it consults ONE limiter bucket more times than
     that surface's limit on an unpinned window — see `Samen.Web.RateLimit.FloodGuard`.
+
+    `Samen.Web.RateLimit.assert_flood_guard_armed!/1` (the host-facing tripwire) raises it too, when
+    an app's suite is NOT armed or is armed but not biting.
     """
     defexception [:message]
   end
@@ -177,7 +185,7 @@ defmodule Samen.Web.RateLimit.FloodGuard do
     test asserts may never happen. The assertion is only reproducible while the window happens not
     to turn, which is what makes it a flake rather than a failure.
 
-    Two sanctioned fixes (`Samen.WebTest.RateLimitFlood`):
+    Two sanctioned fixes:
 
       * the test is about the LIMIT, not the boundary (the usual case) — pin the WINDOW, keeping
         the limit exactly as authored:
@@ -188,6 +196,13 @@ defmodule Samen.Web.RateLimit.FloodGuard do
         leave the config alone:
 
             RateLimitFlood.straddle_safe!([:#{surface}])
+
+    Both of those are samen_web's own test support. A HOST app — driftwood / pawchart / samenerp arm
+    this guard in their test helpers too — does the same two things by hand: declare with the
+    lib-level `Samen.Web.RateLimit.FloodGuard.declare_straddle_safe([:#{surface}])`, and pin the
+    window through the seam's own config, LIMIT unchanged and restored when the test exits:
+
+            Application.put_env(:samen_web, Samen.Web.RateLimit, limits: %{#{surface} => {#{limit}, 86_400_000}})
 
     See Samen.Web.RateLimit.FloodGuard. Nothing about the shipped window, the limits or the
     backend is changed by either fix — only the test's own window.

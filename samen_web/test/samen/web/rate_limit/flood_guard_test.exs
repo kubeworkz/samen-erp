@@ -17,6 +17,10 @@ defmodule Samen.Web.RateLimit.FloodGuardTest do
        buckets), `pin!/1` (limit kept verbatim, window swapped, flood allowed through to the
        seam's own refusal) and `straddle_safe!/1` (declared without touching config, enforcement
        unchanged), plus `reset/0` starting the audit over because a wipe is a fresh budget.
+    4. **The HOST-facing probe is refutable both ways** — `assert_flood_guard_armed!/1` (what
+       driftwood / pawchart / samenerp call from their own suites) returns `:ok` here where the
+       guard is armed and biting, and FAILS when it is disarmed or excused by a declaration — so
+       a host that loses its `arm!()` line cannot pass it either.
   """
   use Samen.WebTest.DataCase, async: false
 
@@ -188,6 +192,64 @@ defmodule Samen.Web.RateLimit.FloodGuardTest do
     for _ <- 1..@limit, do: assert(RateLimit.check(:signin_account, :email_bidx, value) == :ok)
     RateLimit.reset()
     for _ <- 1..@limit, do: assert(RateLimit.check(:signin_account, :email_bidx, value) == :ok)
+  end
+
+  # ===========================================================================
+  # 4. The HOST-facing probe — `assert_flood_guard_armed!/1`
+  # ===========================================================================
+
+  describe "assert_flood_guard_armed!/1 — the tripwire the HOSTS call" do
+    test "GREEN: where the guard is armed and biting, the probe returns :ok" do
+      # This is exactly what driftwood/pawchart/samenerp assert from their own suites: the probe
+      # flushes `limit + 1` consultations of ONE fresh bucket through the seam and requires the
+      # last to raise.
+      assert :ok = RateLimit.assert_flood_guard_armed!(:token_request_account)
+    end
+
+    test "RED: DISARMED, it fails and names the missing arm!() line (deleting it cannot pass)" do
+      FloodGuard.disarm()
+
+      refute FloodGuard.armed?(),
+             "the probe's GREEN case above would be unrefutable if disarm/0 did nothing"
+
+      err =
+        assert_raise FloodGuard.Violation, fn ->
+          RateLimit.assert_flood_guard_armed!(:token_request_account)
+        end
+
+      assert err.message =~ "NOT armed"
+      assert err.message =~ "test/test_helper.exs"
+
+      # Re-arm for the REST of the suite. The audit table is owned by whoever calls `arm!/0`, so
+      # re-arming from this test (or from ExUnit's per-test on_exit process) would leave a table
+      # owned by a process that dies with the test — silently disarming every later module. Hand it
+      # to a keeper that outlives this file.
+      parent = self()
+
+      keeper =
+        spawn(fn ->
+          :ok = FloodGuard.arm!()
+          send(parent, {:rearmed, self()})
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive {:rearmed, ^keeper}
+      assert FloodGuard.armed?(), "the suite must be left ARMED (see test_helper.exs)"
+    end
+
+    test "RED: ARMED but excused by a declaration, it is not reported as biting" do
+      # A declaration is the sanctioned "this test IS about the boundary" shape and deliberately
+      # lets the flood through, so the probe cannot prove anything from inside one — it must say so.
+      FloodGuard.declare_straddle_safe([:token_request_account])
+
+      err =
+        assert_raise FloodGuard.Violation, fn ->
+          RateLimit.assert_flood_guard_armed!(:token_request_account)
+        end
+
+      assert err.message =~ "did NOT bite on :token_request_account"
+      assert err.message =~ "straddle-safe"
+    end
   end
 
   # ===========================================================================

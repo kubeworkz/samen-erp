@@ -223,4 +223,44 @@ defmodule Samen.Gen.TemplatesParityTest do
              "operator-mount golden #{rel} dedupe index is not PARTIAL (external_id IS NOT NULL)"
     end
   end
+
+  # BORN-ARMED guard (the flood-guard analogue of the A3/T60 leverage assertions above): EVERY
+  # generated WEB app must emit (a) the framework flood guard's `arm!()` line in
+  # `test/test_helper.exs` and (b) the tripwire test that asserts it is armed AND biting — so a
+  # generated vertical can never be BORN unarmed, and an unpinned flood written in an adopter's app
+  # fails at the offending consultation instead of flaking. Asserted on the RENDERED output (not the
+  # golden), so a template edit that drops either artifact fails HERE even after a golden
+  # re-capture. The HEADLESS set is the RED half: it has no `samen_web` dep, so arming it could not
+  # even resolve — it must emit NEITHER artifact (AC-G4-10).
+  test "every generated web app is BORN ARMED (the test helper arm!() + its emitted tripwire)" do
+    for {set, files} <- render_all() do
+      helper = files["test/test_helper.exs"]
+      tripwire = files["test/flood_guard_armed_test.exs"]
+
+      assert is_binary(helper), "#{set} emitted no test/test_helper.exs"
+
+      if String.starts_with?(set, "web") do
+        assert helper =~ "Samen.Web.RateLimit.FloodGuard.arm!()",
+               "#{set}/test_helper.exs does not ARM the framework flood guard — an unpinned " <>
+                 "flood in a generated app would flake on a wall-clock window boundary instead " <>
+                 "of failing at the offending consultation."
+
+        assert is_binary(tripwire),
+               "#{set} emitted no test/flood_guard_armed_test.exs — the emitted arming line " <>
+                 "would have no tripwire, so losing it is silent."
+
+        assert tripwire =~ "FloodGuard.armed?()"
+        assert tripwire =~ "RateLimit.assert_flood_guard_armed!("
+        assert tripwire =~ "use ExUnit.Case, async: false"
+      else
+        refute helper =~ "FloodGuard",
+               "#{set}/test_helper.exs arms the flood guard, but the headless set has no " <>
+                 "samen_web dep — the call could not even resolve (AC-G4-10 red path)."
+
+        assert tripwire == nil,
+               "#{set} emitted a flood-guard tripwire; the headless set must emit neither the " <>
+                 "arming nor its tripwire."
+      end
+    end
+  end
 end

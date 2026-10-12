@@ -39,3 +39,9 @@ Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
 ExUnit.configure(exclude: [:adversarial])
 
 ExUnit.start()
+
+# Deliberately NOT armed: the framework rate-limit flood guard is
+# `Samen.Web.RateLimit.FloodGuard`, and `Samen.Web.RateLimit` is not in this app's dep graph at all
+# — demo does NOT depend on `samen_web` (its API-only standalone posture), so nothing here can
+# consult the limiter and there is nothing to guard. The hosts that DO mount the framework web
+# routes (driftwood, pawchart, samenerp) arm it in their own test helpers.

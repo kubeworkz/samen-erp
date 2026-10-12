@@ -1,0 +1,36 @@
+# SABOTAGE: the gen.app BORN-ARMED emission — the generated WEB file set no longer emits
+# `test/flood_guard_armed_test.exs`, so a generated vertical gets the arming line in its
+# `test/test_helper.exs` (the `[MOD]` swap, untouched here) with NOTHING that asserts it is armed
+# AND biting. Losing that line then goes silent again in every generated app: unarmed, the suite
+# still passes and an unpinned flood only FLAKES later, when a wall-clock window boundary
+# (`div(now, window)`) resets the counter mid-count.
+#
+# The claim it refutes is `templates_parity_test`'s born-armed assertion, which is checked against
+# the RENDERED output rather than the golden — so this patch flips it even though the golden file
+# for the tripwire is still on disk and unchanged. The second named failure is the file-set
+# assertion in `gen_app_test`, which is the same emission seen from the generator's own menu.
+#
+# NOT TOUCHED, deliberately: the template file itself, the arming line in the emitted test helper,
+# and the headless set — whose RED half (no `samen_web` dep, so it must emit NEITHER artifact) stays
+# green, because this removes the tripwire from the WEB set only.
+#
+# The `defp flood_guard_armed_test/0` this leaves unused draws one compile warning; the replay runs
+# `mix test` (not `--warnings-as-errors`), so the warning is confined to the reverted replay — the
+# precedent 329 set for the same reason.
+# APP: samen_core
+# TEST_FILES: test/templates_parity_test.exs test/gen_app_test.exs
+# MUST_FAIL: every generated web app is BORN ARMED
+# MUST_FAIL: web-only file set = the headless paths
+--- a/samen_core/lib/samen/gen/templates.ex
++++ b/samen_core/lib/samen/gen/templates.ex
+@@ -262,10 +262,6 @@
+       {"lib/<%= otp_app %>_web/layouts.ex", layouts_ex()},
+       {"lib/<%= otp_app %>_web/page_controller.ex", page_controller_ex()},
+       {"lib/<%= otp_app %>_web/error_html.ex", error_html_ex()},
+-      # The framework flood-guard TRIPWIRE for the arming line the web test helper carries: a
+-      # generated host is BORN armed AND self-verifying (delete the `arm!()` line and THIS
+-      # emitted test fails loudly). The probe it calls is samen_web's — never re-emitted.
+-      {"test/flood_guard_armed_test.exs", flood_guard_armed_test()}
+     ]
+ 
+     base ++ web_new

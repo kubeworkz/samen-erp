@@ -63,6 +63,11 @@ defmodule Samen.Web.RateLimit do
   pins the window while keeping the limit verbatim). Production is untouched: the guard's audit
   table is never armed there, so `check/3` and `over_limit?/3` pay one `:ets.whereis/1` that
   returns immediately.
+
+  The HOSTS that mount these rate-limited routes (`driftwood` / `pawchart` / `samenerp`) arm the
+  SAME guard with one line in their own `test/test_helper.exs`, and each carries a permanent test
+  calling `assert_flood_guard_armed!/1` — so losing that line fails loudly in the host that lost
+  it, instead of silently disarming it.
   """
 
   alias Samen.Web.RateLimit.Backend
@@ -178,6 +183,51 @@ defmodule Samen.Web.RateLimit do
     Backend.inc(bucket(surface, kind, value), window_ms, 1)
   end
 
+  @doc """
+  Test support — the HOST-facing proof that the flood guard is ARMED **and** BITING in an app that
+  mounts this seam's rate-limited routes (`driftwood` / `pawchart` / `samenerp`).
+
+  Those hosts arm `Samen.Web.RateLimit.FloodGuard` with ONE line in their `test/test_helper.exs`,
+  and that line is invisible when it is lost: unarmed, every test in the host still passes, and an
+  unpinned flood merely FLAKES — when a wall-clock window boundary (`div(now_ms, window_ms)`) resets
+  its counter mid-count and the refusal it asserts never happens. This is the tripwire such a suite
+  calls from its own test, so deleting the `arm!/0` line fails there instead of silently disarming
+  the host. (It is the host-reachable counterpart of `Samen.WebTest.RateLimitFlood`: a host does not
+  compile `samen_web`'s `test/` tree, so it cannot use that module.)
+
+  It flushes `limit + 1` consultations of ONE bucket for `surface` through `check/3`: the first
+  `limit` must be allowed and the last must raise `FloodGuard.Violation`. Returns `:ok`, or raises
+  `FloodGuard.Violation` naming what is missing (not armed, or armed but not biting).
+
+  Pass a `surface` the host's router really exposes with a SMALL limit — the `samen_auth_routes`
+  verify/resend arc's `:token_request_account` (3 per 15 min) is the usual choice. Test-only, like
+  `reset/0`: nothing about the shipped limits, windows or backend changes. It also cannot run in a
+  test that declared the surface straddle-safe, since by design a declaration excuses the flood.
+  """
+  @spec assert_flood_guard_armed!(atom()) :: :ok
+  def assert_flood_guard_armed!(surface) when is_atom(surface) do
+    unless FloodGuard.armed?() do
+      raise FloodGuard.Violation, flood_guard_not_armed_message()
+    end
+
+    {limit, _window_ms} = limit_for(surface)
+    # A bucket no other test touches, so the count below starts at zero.
+    value = "flood-guard-armed-probe-#{System.unique_integer([:positive])}"
+
+    # The legitimate at-limit flood: the seam allows exactly `limit` per window. A refusal here
+    # would mean the bucket was not fresh after all, so the match fails loudly rather than report
+    # a false "armed and biting".
+    for _ <- 1..limit, do: :ok = check(surface, :flood_guard_probe, value)
+
+    case probe_bite(surface, value) do
+      %FloodGuard.Violation{} ->
+        :ok
+
+      {:inert, result} ->
+        raise FloodGuard.Violation, flood_guard_inert_message(surface, limit, result)
+    end
+  end
+
   @doc "Clear all counters (test support)."
   @spec reset() :: :ok
   def reset do
@@ -200,6 +250,45 @@ defmodule Samen.Web.RateLimit do
   defp audit_gate(surface, kind, value, limit, window_ms) do
     if FloodGuard.armed?(), do: FloodGuard.gate(surface, kind, value, limit, window_ms)
     :ok
+  end
+
+  # The (limit + 1)th consultation of `assert_flood_guard_armed!/1`'s bucket — the one the guard
+  # exists to fail. Returns the `Violation` the seam raised, or `{:inert, result}` if the call came
+  # back instead (the calling test declared the surface straddle-safe, or the seam stopped auditing).
+  defp probe_bite(surface, value) do
+    {:inert, check(surface, :flood_guard_probe, value)}
+  rescue
+    e in FloodGuard.Violation -> e
+  end
+
+  defp flood_guard_not_armed_message do
+    """
+    Samen.Web.RateLimit.FloodGuard is NOT armed — `arm!()` is missing from this app's test suite.
+
+    Arming is ONE line (`Samen.Web.RateLimit.FloodGuard.arm!()` in `test/test_helper.exs`) and
+    losing it changes nothing a test asserts: unarmed, an unpinned flood still passes and only
+    FLAKES later — when a wall-clock window boundary (`div(now_ms, window_ms)`) resets its counter
+    mid-count and the refusal it asserts never happens. This probe exists to break that silence.
+
+    Fix: call `Samen.Web.RateLimit.FloodGuard.arm!()` in this app's `test/test_helper.exs` (every
+    host that mounts the framework's rate-limited routes — driftwood / pawchart / samenerp — does).
+    """
+  end
+
+  defp flood_guard_inert_message(surface, limit, result) do
+    """
+    Samen.Web.RateLimit.FloodGuard is armed, but it did NOT bite on :#{surface}: the
+    (#{limit} + 1)th consultation returned #{inspect(result)} instead of raising `Violation`.
+
+    Two causes, both real:
+
+      * this test declared :#{surface} straddle-safe (`FloodGuard.declare_straddle_safe/1`, or
+        samen_web's `Samen.WebTest.RateLimitFlood.pin!/1`) — a declaration deliberately lets a
+        flood through, so the probe must run from a test that declared nothing; or
+      * the seam (`Samen.Web.RateLimit.check/3`) stopped auditing its consultations at all.
+
+    Fix: run the probe from a test with no declaration, and keep the seam's audit wired.
+    """
   end
 
   # The non-PII key discipline (§6.2): surface:kind:value — value is provider/ip/bidx/id.

@@ -32,3 +32,12 @@ Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
 ExUnit.configure(exclude: [:adversarial])
 
 ExUnit.start()
+
+# The framework rate-limit FLOOD GUARD (`Samen.Web.RateLimit.FloodGuard`). This host MOUNTS the
+# framework web routes (`samen_auth_routes` / `samen_fleet_routes` / `samen_files_routes`), so its
+# tests DO consult `Samen.Web.RateLimit`. Armed here, a test that consults one limiter bucket more
+# times than that surface's limit on an unpinned window fails at the offending consultation instead
+# of flaking when a wall-clock boundary (`div(now, window)`) resets the count mid-flood — the same
+# guarantee samen_web's own suite holds. Production never arms it: the table is absent there, so the
+# seam stays a no-op outside tests.
+Samen.Web.RateLimit.FloodGuard.arm!()

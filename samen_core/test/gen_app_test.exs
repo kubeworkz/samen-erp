@@ -74,7 +74,10 @@ defmodule Samen.Gen.AppTest do
     "lib/<%= otp_app %>_web/router.ex",
     "lib/<%= otp_app %>_web/layouts.ex",
     "lib/<%= otp_app %>_web/page_controller.ex",
-    "lib/<%= otp_app %>_web/error_html.ex"
+    "lib/<%= otp_app %>_web/error_html.ex",
+    # The BORN-ARMED tripwire: the web `test/test_helper.exs` `[MOD]` swap carries the flood-guard
+    # arming line, and this emitted test proves it is present AND biting.
+    "test/flood_guard_armed_test.exs"
   ]
 
   # WS-D D3 (AC-G4-2): the api-only emissions. The PageLimitClamp is deliberately ABSENT
@@ -335,7 +338,7 @@ defmodule Samen.Gen.AppTest do
       assert Samen.Gen.Templates.files(false) == Samen.Gen.Templates.files(false, false)
     end
 
-    test "web-only file set = the headless paths + the 9 web emissions, in order (AC-G4-1)" do
+    test "web-only file set = the headless paths + the web emissions, in order (AC-G4-1)" do
       assert Enum.map(Samen.Gen.Templates.files(true, false), &elem(&1, 0)) ==
                @headless_paths ++ @web_only_paths
     end

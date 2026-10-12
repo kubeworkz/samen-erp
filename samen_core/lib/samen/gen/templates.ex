@@ -79,6 +79,8 @@ defmodule Samen.Gen.Templates do
   @dockerfile File.read!(Path.join(@templates_dir, "dockerfile.eex"))
   @external_resource Path.join(@templates_dir, "endpoint_ex.eex")
   @endpoint_ex File.read!(Path.join(@templates_dir, "endpoint_ex.eex"))
+  @external_resource Path.join(@templates_dir, "flood_guard_armed_test.eex")
+  @flood_guard_armed_test File.read!(Path.join(@templates_dir, "flood_guard_armed_test.eex"))
   @external_resource Path.join(@templates_dir, "fly_toml.eex")
   @fly_toml File.read!(Path.join(@templates_dir, "fly_toml.eex"))
   @external_resource Path.join(@templates_dir, "gitignore_deploy.eex")
@@ -149,6 +151,8 @@ defmodule Samen.Gen.Templates do
   @test_exs File.read!(Path.join(@templates_dir, "test_exs.eex"))
   @external_resource Path.join(@templates_dir, "test_helper.eex")
   @test_helper File.read!(Path.join(@templates_dir, "test_helper.eex"))
+  @external_resource Path.join(@templates_dir, "test_helper_web.eex")
+  @test_helper_web File.read!(Path.join(@templates_dir, "test_helper_web.eex"))
   @external_resource Path.join(@templates_dir, "vertical_ex.eex")
   @vertical_ex File.read!(Path.join(@templates_dir, "vertical_ex.eex"))
   @external_resource Path.join(@templates_dir, "vertical_ex_api.eex")
@@ -230,6 +234,10 @@ defmodule Samen.Gen.Templates do
       "config/dev.exs" => dev_exs_web(),
       "config/prod.exs" => config_prod_exs_web(),
       "lib/<%= otp_app %>/application.ex" => application_ex_web(),
+      # The web test helper = the data-layer helper + the flood-guard ARMING line (the tripwire
+      # emitted below asserts it is present AND biting). The headless set keeps the unarmed
+      # template: it has no samen_web dep, so `Samen.Web.RateLimit` is not even loaded there.
+      "test/test_helper.exs" => test_helper_web(),
       ".gitignore" => gitignore_web(),
       "README.md" => readme_web()
     }
@@ -253,7 +261,11 @@ defmodule Samen.Gen.Templates do
       {"lib/<%= otp_app %>_web/router.ex", router_ex()},
       {"lib/<%= otp_app %>_web/layouts.ex", layouts_ex()},
       {"lib/<%= otp_app %>_web/page_controller.ex", page_controller_ex()},
-      {"lib/<%= otp_app %>_web/error_html.ex", error_html_ex()}
+      {"lib/<%= otp_app %>_web/error_html.ex", error_html_ex()},
+      # The framework flood-guard TRIPWIRE for the arming line the web test helper carries: a
+      # generated host is BORN armed AND self-verifying (delete the `arm!()` line and THIS
+      # emitted test fails loudly). The probe it calls is samen_web's — never re-emitted.
+      {"test/flood_guard_armed_test.exs", flood_guard_armed_test()}
     ]
 
     base ++ web_new
@@ -478,6 +490,9 @@ defmodule Samen.Gen.Templates do
   # ------------------------------------------------------------------ test
   defp test_helper, do: @test_helper
 
+  # The `--web` variant (a `[MOD]` swap): the same helper + the flood-guard arming line.
+  defp test_helper_web, do: @test_helper_web
+
   defp data_case, do: @data_case
 
   defp record_vault_test, do: @record_vault_test
@@ -571,6 +586,12 @@ defmodule Samen.Gen.Templates do
     end
     """
   end
+
+  # ------------------------------------------------------------ flood-guard tripwire (web)
+  # The emitted test that proves the web test helper's arming line is present AND biting (it calls
+  # `Samen.Web.RateLimit.assert_flood_guard_armed!/1`, samen_web's own host-facing probe). Ported
+  # from the reference verticals' `test/flood_guard_armed_test.exs`.
+  defp flood_guard_armed_test, do: @flood_guard_armed_test
 
   # ------------------------------------------------------------ WS-E `--modules` menu landing
   # The `Samen.UI` app-shell landing emitted ONLY when a mountable surface is selected

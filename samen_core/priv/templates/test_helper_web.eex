@@ -1,0 +1,27 @@
+# Fresh KMS keystore + migrated DB before the suite (mirrors ci_bootstrap).
+kms_key_dir =
+  Path.join(System.tmp_dir!(), "<%= otp_app %>_keystore_test_#{System.system_time(:nanosecond)}")
+
+File.rm_rf!(kms_key_dir)
+Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
+
+alias <%= module %>.Repo
+
+_ = Ecto.Adapters.Postgres.storage_down(Repo.config())
+:ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
+
+{:ok, _} = Repo.start_link()
+Ecto.Migrator.run(Repo, :up, all: true)
+Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
+
+ExUnit.start()
+
+# The framework rate-limit FLOOD GUARD (`Samen.Web.RateLimit.FloodGuard`). This host MOUNTS the
+# framework web routes (`samen_auth_routes` / `samen_module_routes` / … — see the router), so its
+# tests DO consult `Samen.Web.RateLimit`. Armed here, a test that consults one limiter bucket more
+# times than that surface's limit on an unpinned window fails at the offending consultation instead
+# of FLAKING when a wall-clock boundary (`div(now, window)`) resets the count mid-flood —
+# `test/flood_guard_armed_test.exs` asserts this line is present AND biting, so deleting it fails
+# loudly instead of silently disarming the app. Production never arms it: the audit table is absent
+# there, so the seam stays a no-op outside tests.
+Samen.Web.RateLimit.FloodGuard.arm!()

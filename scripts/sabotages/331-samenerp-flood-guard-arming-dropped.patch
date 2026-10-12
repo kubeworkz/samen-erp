@@ -1,0 +1,31 @@
+# SABOTAGE: the flood guard's HOST-side ARMING line — `driftwood` / `pawchart` / `samenerp` each
+# arm `Samen.Web.RateLimit.FloodGuard` with ONE line in their own `test/test_helper.exs`, and each
+# carries a permanent tripwire test asserting it is armed AND biting. Losing that line is otherwise
+# SILENT: unarmed, every other test in the host still passes, and an unpinned flood merely FLAKES
+# later, when a wall-clock window boundary (`div(now, window)`) resets the counter mid-count and the
+# refusal it asserts never happens. This patch deletes samenerp's arming line and nothing else, so
+# the tripwire is the only thing that can fail.
+#
+# The claim it refutes is the tripwire's own sentence — "delete the `arm!()` line from
+# `test/test_helper.exs` and THIS test fails" — which until now was asserted only in prose. One host
+# proves the pattern for all three: the file is the same template
+# (`samen_core/priv/templates/flood_guard_armed_test.eex`) and the probe it calls is samen_web's,
+# whose refutability BOTH ways (disarmed, and armed-but-excused by a straddle-safe declaration) is
+# asserted in `samen_web/test/samen/web/rate_limit/flood_guard_test.exs`.
+#
+# NOT TOUCHED, deliberately: the tripwire test itself, the seam (`check/3`, the limits and the
+# windows), and the other two hosts' arming lines — the sabotage removes an ARMING, not the tripwire
+# and not the guard.
+#
+# No warning is introduced (a deleted line leaves nothing unused) and the replay runs `mix test`, so
+# unlike 329 there is no warning to confine.
+# APP: samenerp
+# TEST_FILES: test/flood_guard_armed_test.exs
+# MUST_FAIL: the framework flood guard is ARMED and BITING in samenerp
+--- a/samenerp/test/test_helper.exs
++++ b/samenerp/test/test_helper.exs
+@@ -31,4 +31,3 @@
+ # offending consultation instead of flaking when a wall-clock boundary (`div(now, window)`) resets
+ # the count mid-flood — the same guarantee samen_web's own suite holds. Production never arms it: the
+ # table is absent there, so the seam stays a no-op outside tests.
+-Samen.Web.RateLimit.FloodGuard.arm!()
