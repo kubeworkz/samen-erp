@@ -1,0 +1,29 @@
+# SABOTAGE: pawchart's flood-guard ARMING line — the third host that mounts the framework's
+# rate-limited routes (driftwood / pawchart / samenerp), each arming
+# `Samen.Web.RateLimit.FloodGuard` with ONE line in its own `test/test_helper.exs` and each carrying
+# a permanent tripwire test that asserts it is armed AND biting. Losing that line is otherwise
+# SILENT: unarmed, every other test in the host still passes, and an unpinned flood merely FLAKES
+# later, when a wall-clock window boundary (`div(now, window)`) resets the counter mid-count and the
+# refusal it asserts never happens. This patch deletes pawchart's arming line and nothing else.
+#
+# 333 does the same for driftwood and 331 for samenerp: three patches, three hosts, three suites, so
+# no host's tripwire is inferred from another's. A host is the unit that owns the line — pawchart
+# arms in its own `test_helper.exs`, boots its own endpoint and database, and runs its own gate — so
+# the refutation belongs in that host's suite rather than in a note about the shared template.
+#
+# NOT TOUCHED, deliberately: the tripwire test itself, the seam (`check/3`, the limits and the
+# windows), and the host's own emitters — the sabotage removes an ARMING, not the tripwire and not
+# the guard.
+#
+# No warning is introduced (a deleted line leaves nothing unused) and the replay runs `mix test`, so
+# there is no warning to confine.
+# APP: pawchart
+# TEST_FILES: test/flood_guard_armed_test.exs
+# MUST_FAIL: the framework flood guard is ARMED and BITING in pawchart
+--- a/pawchart/test/test_helper.exs
++++ b/pawchart/test/test_helper.exs
+@@ -36,4 +36,3 @@
+ # of flaking when a wall-clock boundary (`div(now, window)`) resets the count mid-flood — the same
+ # guarantee samen_web's own suite holds. Production never arms it: the table is absent there, so the
+ # seam stays a no-op outside tests.
+-Samen.Web.RateLimit.FloodGuard.arm!()

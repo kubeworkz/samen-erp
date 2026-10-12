@@ -1,0 +1,30 @@
+# SABOTAGE: driftwood's flood-guard ARMING line — one of the three hosts that mount the framework's
+# rate-limited routes (driftwood / pawchart / samenerp), each arming
+# `Samen.Web.RateLimit.FloodGuard` with ONE line in its own `test/test_helper.exs` and each carrying
+# a permanent tripwire test that asserts it is armed AND biting. Losing that line is otherwise
+# SILENT: unarmed, every other test in the host still passes, and an unpinned flood merely FLAKES
+# later, when a wall-clock window boundary (`div(now, window)`) resets the counter mid-count and the
+# refusal it asserts never happens. This patch deletes driftwood's arming line and nothing else.
+#
+# 331 made the same claim about samenerp, which left driftwood and pawchart's tripwires INFERRED from
+# it — the same template, the same samen_web probe, but each host has its own `test_helper.exs`, its
+# own emitters and its own suite, so "the pattern holds" is an argument, not a proof. This patch (and
+# 334 for pawchart) makes each host's tripwire fail on its OWN suite, so a host that quietly drops
+# the line is refuted where it dropped it.
+#
+# NOT TOUCHED, deliberately: the tripwire test itself, the seam (`check/3`, the limits and the
+# windows), and the host's own emitters — the sabotage removes an ARMING, not the tripwire and not
+# the guard.
+#
+# No warning is introduced (a deleted line leaves nothing unused) and the replay runs `mix test`, so
+# there is no warning to confine.
+# APP: driftwood
+# TEST_FILES: test/flood_guard_armed_test.exs
+# MUST_FAIL: the framework flood guard is ARMED and BITING in driftwood
+--- a/driftwood/test/test_helper.exs
++++ b/driftwood/test/test_helper.exs
+@@ -40,4 +40,3 @@
+ # of flaking when a wall-clock boundary (`div(now, window)`) resets the count mid-flood — the same
+ # guarantee samen_web's own suite holds. Production never arms it: the table is absent there, so the
+ # seam stays a no-op outside tests.
+-Samen.Web.RateLimit.FloodGuard.arm!()
