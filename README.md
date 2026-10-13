@@ -239,14 +239,17 @@ For details, see [docs/ai-integration.md](docs/ai-integration.md).
 
 Deploy Samen as an enterprise SaaS service. Production deploys are **CI-gated and automated**: every push to `main` runs the full `ci.sh` gate (`.github/workflows/ci.yml`); on success `deploy.yml` SSHes to the prod host and runs `scripts/deploy-prod.sh`, which syncs the tree to the release commit, rebuilds the image, applies migrations, gates on health + smoke + a live ESP check, and rolls back automatically if any gate fails.
 
-The manual fallback (operator-run):
+That workflow can only run once GitHub hands it a runner, so when the hosted pool is saturated the release waits on infrastructure that has nothing to do with the release. The same deploy without that dependency, run from an operator machine (`scripts/deploy.sh`):
 
-```bash operator-todo
-cd samenerp
-cp .env.example .env  # Configure environment
-docker-compose up -d   # Start services
-docker-compose exec app bin/samenerp eval "Samenerp.Release.migrate()"  # Run migrations
+```bash
+scripts/deploy.sh                        # deploy origin/main, gated on CI's recorded verdict
+scripts/deploy.sh --local-gate           # CI stuck in the queue: run the SAME ./ci.sh gate here, then deploy
+scripts/deploy.sh --sha <sha> --dry-run  # resolve + gate, print the exact ssh, deploy nothing
 ```
+
+It performs the identical `ssh … "TARGET_SHA=<sha> bash -s" < scripts/deploy-prod.sh`, so there stays exactly one deploy implementation and one set of server-side gates. The gate is neither optional nor bypassable: the deploy runs only if CI passed for that exact commit, or — with `--local-gate` — if the same `./ci.sh` exits 0 on that exact commit in a clean tree.
+
+The manual fallback is `scripts/deploy.sh --local-gate` above: it is not a different deploy — it is the CI-gated one, gate and all, with the runner taken out of the path. Never deploy by editing the server checkout or running compose by hand; `deploy-prod.sh` resets the tree to the release commit and discards anything un-pushed (a backup branch is cut first).
 
 **Features:**
 - ✅ Docker + Docker Compose

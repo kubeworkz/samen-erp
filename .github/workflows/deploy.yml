@@ -6,6 +6,15 @@ name: Deploy
 # CI failure ⇒ this never runs ⇒ the old container keeps serving.
 # A manual run (workflow_dispatch) deploys github.sha at the operator's own
 # risk — use it for emergencies, not routine releases.
+#
+# THIS WORKFLOW IS NOT THE ONLY PATH, ON PURPOSE. A workflow only starts once GitHub
+# hands it a runner, so a saturated hosted pool leaves BOTH the CI job and this deploy
+# job queued with no runner assigned — the release waits on infrastructure that has
+# nothing to do with the release (observed 2026-10-13: CI queued 17+ min, 0 running).
+# scripts/deploy.sh performs this same ssh from an operator machine with no runner at
+# all, gated on either CI's recorded verdict for that exact SHA or — with --local-gate
+# — on the same ./ci.sh run locally against that exact commit. Same deploy-prod.sh,
+# same server-side gates: one implementation, two ways to start it.
 
 on:
   workflow_run:
