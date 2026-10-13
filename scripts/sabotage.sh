@@ -93,6 +93,19 @@
 #   --list, --dry-run       print the SELECTED patch set (name + resolved APP,
 #                             and the count) and EXIT — no patch is applied and
 #                             no test runs. Fast proof of what a filter will run.
+#   --test-db <name>        run each patch's `mix test` against THIS database (exported as
+#                             SAMEN_TEST_DB, which every DB-backed app's config/test.exs
+#                             honours; unset ⇒ that app's canonical test DB, unchanged).
+#                             This is the seam that lets two slices of the SAME app run
+#                             CONCURRENTLY: each slice's test_helper `storage_down` →
+#                             `storage_up` → migrate (`mix samen_web.test_setup` for
+#                             samen_web) then touches only its own database instead of
+#                             dropping the schema out from under its neighbour. Without it a
+#                             same-app parallel run is impossible BY CONSTRUCTION, which is
+#                             why parallel replay used to be app-partitioned only — see
+#                             scripts/sabotage_parallel.sh §intra-app slices.
+#                             Validated up front as a bare Postgres identifier
+#                             ([A-Za-z_][A-Za-z0-9_]*); anything else is refused (exit 2).
 #
 # ── HEADER PREFLIGHT, WIRING, AND REQUIREMENTS ────────────────────────────────
 # The header preflight (scripts/sabotage_lint.sh) ALWAYS runs over ALL patches,
@@ -171,6 +184,7 @@ usage() {
   echo "Usage: sabotage.sh [--app <name>] [--range <lo>-<hi> | --from <lo> --to <hi>]"
   echo "                   [--touching <path>... | --touching-file <file> | --changed [<ref>]]"
   echo "                   [--list | --dry-run]"
+  echo "                   [--test-db <name>]  (per-slice test DB: exports SAMEN_TEST_DB for each patch's mix test)"
   echo "                   [--no-preflight]  (skip the structural preflight — for callers that already ran it)"
   echo ""
   # Marker-delimited (not line-numbered) so editing the header cannot silently
@@ -234,6 +248,10 @@ TOUCH_SET="$WORK/touch_set"
 : > "$TOUCH_SET"
 LIST_ONLY=0
 NO_PREFLIGHT=0
+# Per-slice test database (empty ⇒ the app's own config decides — byte-identical to before).
+TEST_DB=""
+# The env array handed to `mix test` (via `env`, so an empty array is a true no-op).
+TEST_DB_ENV=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -298,6 +316,11 @@ while [[ $# -gt 0 ]]; do
       TOUCH_DESC="changed=${changed_ref}+untracked" ;;
     --list|--dry-run)
       LIST_ONLY=1; shift ;;
+    --test-db)
+      shift; [[ $# -gt 0 ]] || arg_err "--test-db requires a database name"
+      [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \
+        || arg_err "--test-db wants a bare Postgres identifier ([A-Za-z_][A-Za-z0-9_]*), got: $1"
+      TEST_DB="$1"; shift ;;
     --no-preflight)
       NO_PREFLIGHT=1; shift ;;
     -h|--help)
@@ -318,6 +341,13 @@ fi
 
 FILTER_ACTIVE=0
 [[ -n "$FILTER_APP" || $RANGE_ACTIVE -eq 1 || $TOUCH_MODE -eq 1 ]] && FILTER_ACTIVE=1
+
+# The per-slice test database, if requested, as an env assignment for `mix test`. `env` is used
+# at the call site so an EMPTY array is a genuine no-op — the default run's command line is
+# then exactly what it was before this flag existed.
+if [[ -n "$TEST_DB" ]]; then
+  TEST_DB_ENV=(SAMEN_TEST_DB="$TEST_DB")
+fi
 
 # Human-readable selection label (for the effective-selection line + success line).
 filter_label() {
@@ -545,6 +575,15 @@ if [[ $FILTER_ACTIVE -eq 1 ]]; then
   echo "  (a filtered run certifies ONLY this subset; full coverage needs an unfiltered/background run)"
 fi
 
+# A per-slice DB is the one thing this harness touches OUTSIDE the replay tree, so it is
+# announced before the first patch: anyone reading this slice's log can see — and a parallel
+# driver can prove — which database this slice owned. Silent when unset (the default run's
+# output stays byte-identical).
+if [[ -n "$TEST_DB" ]]; then
+  echo "SABOTAGE HARNESS: per-slice test DB — SAMEN_TEST_DB=$TEST_DB"
+  echo "  (every patch's mix test runs against $TEST_DB: this slice's test_helper drop/create/migrate cannot touch another slice's schema)"
+fi
+
 # ── the invariant, recorded before anything can touch the main checkout ──────
 # Every path ANY selected patch touches, fingerprinted as the main checkout holds
 # it right now, and re-fingerprinted after the replay. This is the whole point of
@@ -568,7 +607,11 @@ for patch in "${selected[@]}"; do
   [[ -s "$WORK/must_fail" ]] || fail "$name: no MUST_FAIL headers"
 
   echo ""
-  echo "==> sabotage $name (app: $app)"
+  if [[ -n "$TEST_DB" ]]; then
+    echo "==> sabotage $name (app: $app, db: $TEST_DB)"
+  else
+    echo "==> sabotage $name (app: $app)"
+  fi
 
   # 0. The patch acts on the replay tree only. Pin every path it touches to the
   #    main checkout's bytes first, so the apply sees exactly what it would have
@@ -589,8 +632,11 @@ for patch in "${selected[@]}"; do
   # 3. The targeted suite MUST fail under sabotage.
   out="$WORK/${name%.patch}.out"
   # shellcheck disable=SC2086
-  (cd "$SHADOW/$app" && MIX_DEPS_PATH="$REPO_ROOT/$app/deps" \
-     MIX_BUILD_PATH="$BUILD_ROOT/$app" mix test $test_files) > "$out" 2>&1
+  # `env` (rather than inline `VAR=value` prefixes) so the per-slice DB assignment can be an
+  # ARRAY that is empty unless --test-db was given: an empty expansion leaves the command
+  # line byte-identical to the pre-flag form.
+  (cd "$SHADOW/$app" && env MIX_DEPS_PATH="$REPO_ROOT/$app/deps" \
+     MIX_BUILD_PATH="$BUILD_ROOT/$app" ${TEST_DB_ENV[@]+"${TEST_DB_ENV[@]}"} mix test $test_files) > "$out" 2>&1
   status=$?
 
   # 5a. Revert before judging, so a failed assertion never strands a dirty tree.

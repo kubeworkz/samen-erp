@@ -342,6 +342,21 @@ echo "==> Running sabotage-harness selection regression (ADR-047 A4 fold (a) —
 bash "$REPO_ROOT/scripts/sabotage_selection_test.sh"
 echo "==> sabotage selection regression: PASSED"
 
+# --- Sabotage-harness INTRA-APP parallelism regression ---------------------------------
+# `scripts/sabotage_parallel.sh` certifies the whole sweep in parallel, and it cuts the largest
+# APP into slices — which is only possible because every DB-backed app's `config/test.exs` reads
+# its test DB name from `SAMEN_TEST_DB` (unset ⇒ the canonical name, unchanged) and the harness
+# sets it per slice via `--test-db`. That seam is now a cross-app contract, and dropping the
+# `System.get_env` read in ANY of the six configs would not fail a single suite here — it would
+# just silently put two slices back on one database during a certification nobody reruns. So it
+# is pinned unconditionally, next to the selection regression and for the same reason. Needs no
+# DB and applies no patch (every assertion is `--list`); it costs a couple of minutes on Windows
+# (two calls list the whole selection) and seconds on the Linux runners.
+echo ""
+echo "==> Running sabotage-harness intra-app parallelism regression (per-slice test DB + slice plan/guards)"
+bash "$REPO_ROOT/scripts/sabotage_intra_test.sh"
+echo "==> sabotage intra-app regression: PASSED"
+
 # --- WS-E sabotage harness (E2i.1) — permanent OPT-IN step (SAMEN_SABOTAGE=1) ---
 # Replays every shipped gate sabotage as a committed patch (scripts/sabotages/*.patch):
 # apply → targeted `mix test` MUST fail with the NAMED tests among the failures (the

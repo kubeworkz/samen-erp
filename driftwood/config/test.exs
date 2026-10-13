@@ -4,7 +4,10 @@ config :driftwood, Driftwood.Repo,
   username: System.get_env("USER") || "postgres",
   password: "",
   hostname: "localhost",
-  database: "driftwood_test",
+  # Per-SLICE test database (unset ⇒ "driftwood_test", unchanged): the sabotage harness's
+  # parallel driver exports SAMEN_TEST_DB per intra-app slice, so two slices can run
+  # concurrently without sharing one test_helper drop/create/migrate.
+  database: System.get_env("SAMEN_TEST_DB") || "driftwood_test",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10
 

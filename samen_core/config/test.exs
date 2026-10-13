@@ -4,7 +4,14 @@ config :samen_core, SamenCore.TestRepo,
   username: System.get_env("USER") || "postgres",
   password: "",
   hostname: "localhost",
-  database: "samen_core_test",
+  # Per-SLICE test database (unset ⇒ this app's canonical test DB, byte-identical to before).
+  # The sabotage harness's parallel driver exports SAMEN_TEST_DB per intra-app slice, so two
+  # slices of THIS app can run concurrently: each test_helper's `storage_down` -> `storage_up`
+  # -> migrate only ever touches its OWN database. Sharing one name is precisely why same-app
+  # patches could not run side by side before (scripts/sabotage_parallel.sh §intra-app slices).
+  # Only the PRIMARY test DB is overridable on purpose: the harness never starts the multinode
+  # repo below (that is the opt-in `:multinode` tier's, untouched by any sabotage patch).
+  database: System.get_env("SAMEN_TEST_DB") || "samen_core_test",
   pool: Ecto.Adapters.SQL.Sandbox,
   # pool_size 20 + queue slack: verify_vault_declared_parity opens direct
   # Postgrex connections outside the sandbox for DDL; under an unlucky seed the

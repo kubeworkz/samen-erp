@@ -4,7 +4,10 @@ config :demo, Demo.Repo,
   username: System.get_env("USER") || "postgres",
   password: "",
   hostname: "localhost",
-  database: "demo_test",
+  # Per-SLICE test database (unset ⇒ "demo_test", unchanged): the sabotage harness's parallel
+  # driver exports SAMEN_TEST_DB per intra-app slice, so two slices can run concurrently
+  # without sharing one test_helper drop/create/migrate.
+  database: System.get_env("SAMEN_TEST_DB") || "demo_test",
   pool: Ecto.Adapters.SQL.Sandbox,
   # pool_size 20 + queue slack (mirrors samen_core config/test.exs, WS-B B9 gate F1 /
   # WS-F4 QA): the dogfood + verifier suite opens concurrent checkouts (incl. direct

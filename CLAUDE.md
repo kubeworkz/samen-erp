@@ -47,7 +47,23 @@ not — that is what codemunch replaces. See `driftwood/CLAUDE.md` for the full 
   `--touching <path>…` / `--changed [<ref>]` (only patches whose touched files intersect
   your diff — the verifier primitive), and `--list`/`--dry-run` to preview a selection
   (names + resolved APP + count) without applying anything. The header preflight still
-  lints ALL patch headers even under a filter.
+  lints ALL patch headers even under a filter. For a full sweep, `scripts/sabotage_parallel.sh
+  [--jobs <n>] [--intra <k>] [same filters]` runs the SAME patches in parallel — one isolated
+  replay tree, build cache, lock AND test DATABASE per slice, all slices concurrent — after
+  asserting coverage against the harness's own selection count (an under-covering partition
+  fails before anything is applied). Slicing is per app AND, when a wider pool makes it pay,
+  per intra-app chunk: every DB-backed app's `config/test.exs` takes its test DB name from
+  `SAMEN_TEST_DB` (unset ⇒ the canonical name, unchanged), which `sabotage.sh --test-db` sets
+  per slice. That seam is what removes the old floor — without it two slices of ONE app drop
+  each other's schema, which is why the sweep used to be bounded by the largest app (samen_core,
+  173 of 334 patches). The driver refuses to launch while a test file reaches outside its
+  per-slice DB in >1 slice (`--allow-shared-scratch` to attest otherwise) and lowers an unpinned
+  `--jobs` to fit Postgres's `max_connections`. A slice with no cache yet is warm-started by
+  copying a sibling's build cache — preferring one that has never replayed a patch, and normalising
+  the copy's Elixir manifest (`scripts/sabotage_seed_manifest.exs`) so the cache is actually reused
+  in the new tree instead of recompiled (measured: 777 files/1m20 → 0 files) — under `--no-seed`.
+  Plan/coverage/guard regression:
+  `scripts/sabotage_intra_test.sh` (all via `--list`).
 
 ## Fail-honest adapter contract (ADR-014, ADR-024, ADR-026)
 An unconfigured/unimplemented adapter NEVER returns `{:ok, _}` for work it did not do —

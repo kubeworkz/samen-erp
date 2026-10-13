@@ -4,7 +4,11 @@ config :samen_web, Samen.WebTest.Repo,
   username: System.get_env("USER") || "postgres",
   password: "",
   hostname: "localhost",
-  database: "samen_web_test",
+  # Per-SLICE test database (unset ⇒ the canonical "samen_web_test", unchanged). The sabotage
+  # harness's parallel driver exports SAMEN_TEST_DB per intra-app slice, so two slices of THIS
+  # app can run concurrently: `mix samen_web.test_setup` (run by the test alias) drops/creates/
+  # migrates from THIS repo config, so each slice preps only its own database.
+  database: System.get_env("SAMEN_TEST_DB") || "samen_web_test",
   pool: Ecto.Adapters.SQL.Sandbox,
   # pool_size 20 + queue slack (mirrors samen_core config/test.exs, WS-B B9 gate F1 /
   # WS-F4 QA): the render suite fans out many concurrent DB-backed reads under the
