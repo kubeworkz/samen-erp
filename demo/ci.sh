@@ -227,6 +227,15 @@ echo "--- step 17/18: mix samen.verify.ai_prompt_masking (T65 INV-7 no-PII-egres
 mix samen.verify.ai_prompt_masking
 echo "    PASSED"
 
+# 16c. P17 / ADR-021 — the SILENT-EMPTY-FUNNEL gate. demo does not mount the tenant
+#      own-org analytics reader today, so this step passes — and it is here so that the day
+#      it DOES mount `samen_tenant_analytics_routes`, its own gate refuses a reader with no
+#      product-event producer (`Samen.Analytics` emitter + `:product_event_rollup` spec),
+#      rather than shipping a page that is empty for every org forever.
+echo "--- step 16c/18: mix samen.verify.analytics_producer (silent-empty-funnel gate)"
+mix samen.verify.analytics_producer
+echo "    PASSED"
+
 # 17. T4.6 ADVERSARIAL SUITE (test/adversarial/, tagged :adversarial). The consolidated
 #     Phase-4 attack matrix, run as durable CI: (1) impersonation bypass matrix — every
 #     egress (LiveView / JSON / webhook / CSV-iodata / logs / error messages) under an

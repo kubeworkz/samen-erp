@@ -6525,6 +6525,72 @@
     {
       "fields": [
         {
+          "column_name": "sae_actor_ref",
+          "logical_name": "actor_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sae_entity_ref",
+          "logical_name": "entity_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sae_event_kind",
+          "logical_name": "event_kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sae_event_name",
+          "logical_name": "event_name",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sae_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sae_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sae_occurred_at",
+          "logical_name": "occurred_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sae_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sae_props",
+          "logical_name": "props",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "sae_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Analytics.ProductEvent",
+      "table_name": "sae_product_event"
+    },
+    {
+      "fields": [
+        {
           "column_name": "scb_archived_at",
           "logical_name": "archived_at",
           "pii": false,

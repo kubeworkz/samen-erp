@@ -122,6 +122,14 @@ echo "    PASSED"
 echo "--- step 15/18: mix samen.verify.aggregate_privacy"
 mix samen.verify.aggregate_privacy
 echo "    PASSED"
+# P17 / ADR-021 (mount-ledger Amendment 3) — the SILENT-EMPTY-FUNNEL gate. If this app
+# mounts the own-org analytics reader (`samen_tenant_analytics_routes`) it must also
+# configure a product-event producer (`Samen.Analytics` emitter + a
+# `:product_event_rollup` spec), or `/analytics` renders "no data yet" when the truth
+# is "no data possible" for every org forever.
+echo "--- step 15b/18: mix samen.verify.analytics_producer (silent-empty-funnel gate)"
+mix samen.verify.analytics_producer
+echo "    PASSED"
 
 # ai_prompt_masking (ADR-043 §3.4, T65 INV-7 no-PII-egress structural gate): (b) no
 # vault-routed field is embeddable (grants never unlock embedding, §7.2); (c) no managed

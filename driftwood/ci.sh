@@ -173,6 +173,15 @@ echo "--- step 16c/20: mix samen.verify.ai_prompt_masking (INV-7 no-PII-egress s
 mix samen.verify.ai_prompt_masking
 echo "    PASSED"
 
+# 16e. P17 / ADR-021 — the SILENT-EMPTY-FUNNEL gate. Driftwood does not mount the tenant
+#      own-org analytics reader today, so this step passes — and it is here so that the day
+#      it DOES mount `samen_tenant_analytics_routes`, its own gate refuses a reader with no
+#      product-event producer (`Samen.Analytics` emitter + `:product_event_rollup` spec),
+#      rather than shipping a page that is empty for every org forever.
+echo "--- step 16e/20: mix samen.verify.analytics_producer (silent-empty-funnel gate)"
+mix samen.verify.analytics_producer
+echo "    PASSED"
+
 # 17. Default test suite (settlement property test, FMCSA gate red paths, CDL vault
 #     round-trip, cross-org denial, dispatch worker).
 # SIDEBAR-REACHABILITY (2026-10-10) — the inherited sidebar must never link a route this

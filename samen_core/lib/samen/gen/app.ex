@@ -708,7 +708,13 @@ defmodule Samen.Gen.App do
       # an absent token would ship literal `<%= nav_links_step %>` source into a headless app's
       # ci.sh. `templates_parity_test.exs` asserts no rendered artifact ever leaks such a token.
       "nav_links_step" => "",
-      "nav_links_step_api" => ""
+      "nav_links_step_api" => "",
+      # P17 / ADR-021 silent-empty-funnel step. Empty in `base` (the HEADLESS set has no
+      # web layer, so it can never mount the analytics reader), overridden by
+      # `web_bindings/1`. It must exist here too or the shared `ci_sh.eex` would leak a
+      # literal `<%= analytics_producer_step %>` into a headless app's ci.sh.
+      "analytics_producer_step" => "",
+      "analytics_producer_step_api" => ""
     }
 
     if s.web?, do: Map.merge(base, web_bindings(s)), else: base
@@ -781,8 +787,33 @@ defmodule Samen.Gen.App do
       # adds the api_contract step and so numbers one higher). Each template references only its
       # own key; the other key is simply absent from that template's text.
       "nav_links_step" => nav_links_step_binding(s, "16b/18"),
-      "nav_links_step_api" => nav_links_step_binding(s, "17b/19")
+      "nav_links_step_api" => nav_links_step_binding(s, "17b/19"),
+      # P17 / ADR-021 silent-empty-funnel step. Emitted for EVERY web app (a generated app
+      # mounts no analytics reader today, so the step passes — and it guards the day one
+      # adds `samen_tenant_analytics_routes` without a producer). `ci_sh.eex` is the
+      # web-without-api template (15b/18), `ci_sh_api.eex` adds api_contract one higher
+      # (15b/19).
+      "analytics_producer_step" => analytics_producer_step_binding("15b/18"),
+      "analytics_producer_step_api" => analytics_producer_step_binding("15b/19")
     }
+  end
+
+  # The `<%= analytics_producer_step %>` seam: the SILENT-EMPTY-FUNNEL gate step for the
+  # generated ci.sh. Static (source + config only), so it needs no DB and no boot — the
+  # verifier scans THIS app's shipped `lib/` and `config/` from the cwd. A generated app
+  # mounts no analytics reader, so the step passes on first run by construction; the day it
+  # mounts `samen_tenant_analytics_routes/2` without wiring the `Samen.Analytics` emitter and
+  # the `:product_event_rollup` spec, its own gate refuses to ship a page that is empty for
+  # every org forever (`<%= analytics_producer_step %>` is a NO-OP for the headless set).
+  defp analytics_producer_step_binding(label) do
+    "# P17 / ADR-021 (mount-ledger Amendment 3) — the SILENT-EMPTY-FUNNEL gate. If this app\n" <>
+      "# mounts the own-org analytics reader (`samen_tenant_analytics_routes`) it must also\n" <>
+      "# configure a product-event producer (`Samen.Analytics` emitter + a\n" <>
+      "# `:product_event_rollup` spec), or `/analytics` renders \"no data yet\" when the truth\n" <>
+      "# is \"no data possible\" for every org forever.\n" <>
+      "echo \"--- step #{label}: mix samen.verify.analytics_producer (silent-empty-funnel gate)\"\n" <>
+      "mix samen.verify.analytics_producer\n" <>
+      "echo \"    PASSED\"\n"
   end
 
   # --------------------------------------------------------------- WS-E `--modules` seams

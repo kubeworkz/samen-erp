@@ -1,0 +1,26 @@
+# SABOTAGE: the SILENT-EMPTY-FUNNEL verifier's mount MATCHER
+# (`Mix.Tasks.Samen.Verify.AnalyticsProducer.reader_call?/1`, ADR-021 / mount-ledger
+# Amendment 3). Neutering BOTH clauses to `false` models the exact vacuous-gate regression this
+# class of verifier is prone to: the AST scan stops recognising a real
+# `samen_tenant_analytics_routes/2` CALL, so `reader_mount` is `[]` for every app, the
+# reader=>producer obligation is never ENGAGED, and the verifier prints "OK — no violations"
+# over a host that mounts the analytics reader with no product-event producer (the samenerp
+# defect, now invisible). The GREEN non-vacuity assertion and the RED emitter assertion both
+# flip, which is what the MUST_FAIL below detects: a matcher that silently matches nothing
+# must never read as "no violation".
+# APP: samen_core
+# TEST_FILES: test/analytics_producer_verifier_test.exs
+# MUST_FAIL: RED (emitter): reader mounted, no product_event_resource is one violation
+--- a/samen_core/lib/mix/tasks/samen.verify.analytics_producer.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.analytics_producer.ex
+@@ -363,8 +363,8 @@
+   # {:\\, _, [{:opts, _, nil}, []]}]}` — a FIRST argument variable and a SECOND argument
+   # that is a `:\\` node, never a keyword list — so requiring a keyword-list second
+   # argument (or the one-arg form) excludes the definition while matching every real mount.
+-  defp reader_call?({@reader_macro, _meta, [_namespace]}), do: true
+-  defp reader_call?({@reader_macro, _meta, [_namespace, opts]}), do: is_list(opts)
++  defp reader_call?({@reader_macro, _meta, [_namespace]}), do: false
++  defp reader_call?({@reader_macro, _meta, [_namespace, _opts]}), do: false
+   defp reader_call?(_), do: false
+ 
+   # ---------------------------------------------------------------------------

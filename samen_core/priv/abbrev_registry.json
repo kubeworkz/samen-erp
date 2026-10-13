@@ -714,6 +714,7 @@
       "ecj": "Samenerp.Erp.JournalEntry",
       "eon": "Samenerp.Operator.Invitation",
       "epe": "Samenerp.Operator.Entitlement",
+      "sae": "Samenerp.Analytics.ProductEvent",
       "erd": "Samenerp.Erp.ReceiptLine",
       "sct": "Samenerp.Cms.Post",
       "efc": "Samenerp.Fleet.Credential",

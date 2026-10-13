@@ -122,7 +122,7 @@ echo "    PASSED"
 echo "--- step 15/19: mix samen.verify.aggregate_privacy"
 mix samen.verify.aggregate_privacy
 echo "    PASSED"
-
+<%= analytics_producer_step_api %>
 # C6 api_contract structural-break check (WS-D D3): the committed api_contract.v1.json
 # pins the /api/v1 routes + the deny-by-default `show_fields` allowlist. Deleting an
 # exposed field / dropping a route is an UN-VERSIONED break — the gate flips.

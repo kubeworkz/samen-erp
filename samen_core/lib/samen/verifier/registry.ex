@@ -27,6 +27,10 @@ defmodule Samen.Verifier.Registry do
       `--source-dirs`.
     * `samen.verify.never_read_current` — the never-read-current lint over source dirs. Takes
       `--source-dirs`.
+    * `samen.verify.analytics_producer` — the silent-empty-funnel gate: every app whose shipped
+      `lib/` mounts the own-org analytics reader must configure its product-event producer (the
+      `Samen.Analytics` emitter AND the `:product_event_rollup` spec) in `config/`. Takes
+      `--root`.
 
   ## Named exclusions (and why)
 
@@ -78,6 +82,12 @@ defmodule Samen.Verifier.Registry do
       task: "samen.verify.never_read_current",
       scope: "lint never-read-current over the tree's source dirs",
       tree_args: :source_dirs
+    },
+    %{
+      task: "samen.verify.analytics_producer",
+      scope:
+        "walk every app under the tree: a mounted own-org analytics reader needs its producer",
+      tree_args: :root
     }
   ]
 

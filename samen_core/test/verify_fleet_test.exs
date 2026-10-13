@@ -28,7 +28,8 @@ defmodule Samen.VerifyFleetTest do
                "samen.verify.agent_coverage",
                "samen.verify.fleet_wire",
                "samen.verify.pii_reads",
-               "samen.verify.never_read_current"
+               "samen.verify.never_read_current",
+               "samen.verify.analytics_producer"
              ]
 
       for entry <- Registry.tree_scoped() do

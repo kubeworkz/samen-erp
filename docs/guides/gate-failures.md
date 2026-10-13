@@ -866,13 +866,13 @@ own twins: `173-pp8-pp9-settings-automation-nav-items-removed.patch` (the whole 
 **Shared failure shape** (`samen_core/lib/mix/tasks/samen.verify.fleet.ex`), one line per member:
 
 ```text
-FAIL: samen.verify.fleet — 1 of 4 verifier(s) failed (2 violation(s) total).
+FAIL: samen.verify.fleet — 1 of 5 verifier(s) failed (2 violation(s) total).
 ```
 
 **Meaning:** the AGGREGATE ran every TREE-SCOPED verifier against one tree and at least one
 member failed. The roster is `Samen.Verifier.Registry.tree_scoped/0` (`agent_coverage`,
-`fleet_wire`, `pii_reads`, `never_read_current` — the verifiers whose findings come from
-reading SOURCE FILES under a tree); its moduledoc at
+`fleet_wire`, `pii_reads`, `never_read_current`, `analytics_producer` — the verifiers whose
+findings come from reading SOURCE FILES under a tree); its moduledoc at
 `samen_core/lib/samen/verifier/registry.ex` names the DB- and module-introspecting tiers it
 deliberately EXCLUDES, and why. Each member runs as its own OS process
 (`mix <task> --format json <tree args>`) and the aggregate is a consumer of the per-verifier
@@ -880,7 +880,7 @@ JSON, so a member that halts the VM, boots the app, or exits 1 WITH a report is 
 a crash:
 
 ```json
-{"status":"fail","task":"samen.verify.fleet","root":"…","failed_count":1,"verifier_count":4,"violation_count":2,"verifiers":[{"task":"samen.verify.agent_coverage","status":"fail","violation_count":2,"violations":[{"app":null,"kind":null,"message":"…","rule":null}]}]}
+{"status":"fail","task":"samen.verify.fleet","root":"…","failed_count":1,"verifier_count":5,"violation_count":2,"verifiers":[{"task":"samen.verify.agent_coverage","status":"fail","violation_count":2,"violations":[{"app":null,"kind":null,"message":"…","rule":null}]}]}
 ```
 
 `status` is `"ok"` only when the roster is non-empty and every member is `"ok"`. A member that
@@ -901,3 +901,64 @@ Adversarial twins: `scripts/sabotages/317-fleet-aggregate-status-ignores-failure
 aggregate's `status` stops consulting its members, so a failed verifier reads as an `ok` fleet)
 and `scripts/sabotages/318-fleet-runner-error-becomes-ok.patch` (an unevaluable member is
 reported `ok`, so the fail-closed guarantee is gone). Each names the test that must flip.
+
+## `mix samen.verify.analytics_producer` — the silent-empty-funnel gate (ADR-021)
+
+Runs in every host's own `ci.sh` (the bare command, over the cwd app) and, tree-scoped, in the
+ROOT gate's `verifiers` tier and `mix samen.verify.fleet` (`--root`). It is static — source +
+config files only, no DB, no boot.
+
+**Errors** (`samen_core/lib/mix/tasks/samen.verify.analytics_producer.ex`):
+
+```text
+FAIL: samen.verify.analytics_producer found 1 violation(s):
+  • samenerp: mounts the own-org analytics reader (samen_tenant_analytics_routes/2) at
+    lib/samenerp_web/router.ex:327 but configures NO product-event emitter — Samen.Analytics.track/1
+    persists nothing without `config :samen_core, Samen.Analytics, product_event_resource: <Module>`
+    ...
+  • samenerp: ... but configures NO :product_event_rollup spec in `config :samen_core, :rollups` ...
+
+FAIL: samen.verify.analytics_producer found 1 violation(s):
+  • the analytics-producer scan found NO app dirs under /path — a scan that discovers nothing
+    certifies nothing ...
+```
+
+**Meaning:** an app's SHIPPED `lib/` mounts the P17 own-org analytics reader
+(`samen_tenant_analytics_routes/2`, whose single route renders
+`Samen.Web.Tenant.AnalyticsLive` over `paf_product_event_rollup`) but is missing one or both
+halves of its product-event producer:
+
+1. **the emitter** — `config :samen_core, Samen.Analytics, product_event_resource: <Module>`.
+   Without it `Samen.Analytics.track/1` returns `{:ok, :dropped}` (the documented
+   quiet-until-mounted posture), so every framework-emitted event is discarded;
+2. **the rollup source** — a `:product_event_rollup` entry in `config :samen_core, :rollups`.
+   Without it the `paf_product_event_rollup` table the reader queries is never rebuilt, so it
+   stays empty even once the ledger fills.
+
+Either way the `/analytics` page is empty for **every org, forever**, under copy that reads as
+"no data yet" — samenerp shipped exactly this (readers mounted in Phase 3, producer never
+wired), and nothing in the build said a word, because a mounted reader and a fed reader look
+identical on disk, in config, and at boot.
+
+**Fix:** mount the Analytics scope and wire the emitter
+(`config :samen_core, Samen.Analytics, product_event_resource: MyApp.Analytics.ProductEvent`)
+AND register the domain-sourced `:product_event_rollup` spec in `config :samen_core, :rollups`
+(the samenerp/driftwood/pawchart/demo configs are the reference). Or remove the reader mount.
+`samenerp/test/analytics_activation_test.exs` proves the same two links end to end.
+
+The `:bad_root` variant means an explicit `--root` names something that is not a directory; the
+`:empty_discovery` variant means an explicit tree yielded no app dirs. Both FAIL rather than
+skip: a tree that cannot be walked certifies nothing.
+
+**Deliberate carve-out:** `samen_operator_routes/2` always mounts `/operator/analytics`
+(`Samen.Web.Operator.AnalyticsLive`), which reads the same `paf` rollup — so an operator-only
+host can render the same empty funnel. It is NOT in scope here, because that surface is bundled
+into the operator workspace EVERY generated app mounts: requiring a producer for it would make
+product analytics mandatory rather than opt-in (the generator would have to mount the Analytics
+scope + ledger migration by default). Widening the gate to the operator seed is a separate,
+deliberate decision.
+
+Adversarial twin:
+`scripts/sabotages/335-analytics-producer-reader-mount-matcher-neutered.patch` (both
+`reader_call?/1` clauses return `false`, so the mount matcher fires on nothing and the verifier
+prints OK over an unfed reader) — it names the test that must flip.

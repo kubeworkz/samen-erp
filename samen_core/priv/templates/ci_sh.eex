@@ -122,7 +122,7 @@ echo "    PASSED"
 echo "--- step 15/18: mix samen.verify.aggregate_privacy"
 mix samen.verify.aggregate_privacy
 echo "    PASSED"
-
+<%= analytics_producer_step %>
 # ai_prompt_masking (ADR-043 §3.4, T65 INV-7 no-PII-egress structural gate): (b) no
 # vault-routed field is embeddable (grants never unlock embedding, §7.2); (c) no managed
 # Prompt template body embeds a `vt_` vault token (§7.5). This app inherits the runtime

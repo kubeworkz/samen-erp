@@ -457,14 +457,86 @@ ADR-044 §3.1/§9.2 design for, since a mode-A `:pull` cockpit reports outward a
 If a future change mounts the ingest, the ruling's `git grep` pair at the top of this file is the
 check that moves with it.
 
+## Amendment 3 — the analytics PRODUCER is mounted, so Insights → Activation can actually fill (2026-10-13, ADR-021)
+
+Samenerp shipped the analytics READERS in Phase 3 and never the producer, and the difference was
+invisible until someone looked at the page: `GET /analytics` rendered its honest empty state under copy
+that reads as *"no data yet"*, while the truth was *"no data possible"* — for every org, forever. Two
+links were missing, and **both** are needed:
+
+1. **The emitter was inert.** `Samen.Analytics.track/1` persists nothing without
+   `config :samen_core, Samen.Analytics, product_event_resource: …` — it answers `{:ok, :dropped}`
+   ("sources are quiet until the host mounts the Analytics scope", by design). The framework emitters
+   already fire on this host: the session controller emits `session.signed_in` on every sign-in, the
+   first-run wizard emits `record.created` + `first_run.completed`, ⌘K emits `search.used`, and every
+   flag-variant assignment rides the `Samen.FeatureFlags` emit seam. All of it was being discarded.
+2. **The rollup had no source.** `paf_product_event_rollup` (created by `20261006140000`, which named
+   this as the host's follow-on) is rebuilt by the domain-sourced `:product_event_rollup` spec from
+   `<abbrev>_product_event`. With no ledger and no spec, the table stayed empty, so
+   `Samen.Web.Tenant.AnalyticsReads` could only ever render ⊘ or the empty state.
+
+What landed — framework-first: **no framework code changed and no new surface was authored**:
+
+* `Samenerp.Analytics` — `use Samen.Scopes.Analytics` (the demo/driftwood/pawchart mount) with the
+  FRESH abbrev `sae`, reserved through the sanctioned allocator
+  (`mix samen.abbrev.reserve --host samenerp --abbrev sae --owner Samenerp.Analytics.ProductEvent`;
+  the registry gained exactly one appended row — ADR-023/ADR-006, never hand-edited).
+* migration `20261013120000_add_analytics_scope.exs` — the `sae_product_event` ledger plus its
+  `(org, event_name, occurred_at)` read index, catalogued in the same transaction (ADR-004).
+* config — `product_event_resource`, the `Samen.FeatureFlags` emit target, and the
+  `:product_event_rollup` spec whose `rebuild_sql` reads `sae_product_event`. The refresh is the
+  canonical `*/10 * * * *` `RollupRefreshWorker` cron `Samen.Jobs.install_defaults/1` already installs
+  at boot, so this host schedules nothing itself.
+
+**Deliberately NOT wired: `mrr_revenue_rollup`.** The operator `/operator/revenue` plane reads it, and it
+stays on honest zeros: it needs a subscription-MOVEMENT ledger source this app has not adopted, and
+inventing one to make a page look busier would be the fabricated-count failure the analytics posture
+exists to prevent. Named here so the next reader does not treat it as an oversight.
+
+**A floor note the tests forced.** `Samen.Aggregate.Privacy` defaults to k=5, but every shipped host
+configures `:k_anonymity_min_cohort, 2` — samenerp included — so a 2-actor cohort RELEASES here and only
+a count-of-one renders ⊘. The new suite reads the floor from `Privacy.k/0` rather than assuming 5, and
+asserts a sub-floor cohort renders ⊘ **in its own count cell** (a bare `body =~ "⊘"` would pass on the
+page's suppression-count note alone).
+
+**Proof.** `test/analytics_activation_test.exs` (10 tests) pins each link and then the outcome: the
+resource's `sae_product_event` table; the emitter config; an ANTI-TAUTOLOGY red path (with
+`product_event_resource` cleared, the SAME capture is `{:ok, :dropped}` and persists nothing — the exact
+defect); the registered domain-sourced spec reconciling with independently computed distinct-subject
+counts; and the page rendering the captured cohort, ⊘ below the floor, a foreign org's sentinel never
+leaking, and the empty state still correct for an org with no events.
+
+**One divergence worth naming** (so nobody "fixes" it blind): this host registers NO `non_pii!`
+clearances for `sae_actor_ref` / `sae_entity_ref` / `sae_props`, so the CDC projection default-denies
+exactly those three columns (verified via `Samen.Cdc.Projection.classify_columns/1`). demo, driftwood and
+pawchart register them to satisfy AC-G12-3's "`project/1` returns ALL columns" claim for a ledger that
+IS mirrored. Nothing on this host consumes `sae` through the mirror, so the deny is the SAFE direction,
+and the gate's `pii_classify` / `no_plaintext_pii` tiers are green either way. If a CDC consumer for
+`sae` ever appears, clear the three columns the way `Driftwood.Analytics.NonPiiSetup` does — that is a
+hardening step, not a repair.
+
+**The gate that keeps it from regressing on ANY host (2026-10-13).** Amendment 3 fixed this host;
+`mix samen.verify.analytics_producer` keeps the CLASS from shipping again. It is a static
+(source + config) verifier: any app whose shipped `lib/` mounts `samen_tenant_analytics_routes/2`
+must ALSO configure its product-event producer — the `Samen.Analytics` emitter
+(`product_event_resource`) AND a `:product_event_rollup` spec in `config :samen_core, :rollups`,
+the two links this amendment names — or the gate reports the app, the mount location and the
+missing half. It runs in this host's own `ci.sh` (the bare command, over the cwd app), tree-scoped
+over the whole checkout in the root gate's `verifiers` tier, and as a member of
+`samen.verify.fleet` (so any checkout can be gated with one argument). The generated-app
+templates emit the same step, so a host is gated from birth. Operator-only hosts are
+**deliberately out of scope**: `samen_operator_routes/2` bundles `/operator/analytics` into every
+generated app, so requiring a producer for it would make product analytics mandatory rather than
+opt-in. Adversarial twin: `scripts/sabotages/335-analytics-producer-reader-mount-matcher-neutered.patch`.
+
 ## Re-running the certification
 
 ```bash
 cd samenerp && MIX_ENV=test bash ci.sh     # ends: ==> samenerp CI gate: ALL PASSED
 ```
 
-That gate runs every verifier plus the host suite — **78 tests as of 2026-10-11** (the ADR-050 mount
+That gate runs every verifier plus the host suite — **88 tests as of 2026-10-13** (the ADR-050 mount
 added `test/fleet_status_page_test.exs`'s 4; Amendment 2's cockpit mount added
-`test/fleet_cockpit_mount_test.exs`'s 8; the earlier figure of 61 predates both), which includes all
-seven `phaseN_surface_test.exs` files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
+`test/fleet_cockpit_mount_test.exs`'s 8; Amendment 3 added `test/analytics_activation_test.exs`'s 10;
+the earlier figure of 61 predates all three), which includes all seven `phaseN_surface_test.exs` files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
 (all seven phases shipped without it).

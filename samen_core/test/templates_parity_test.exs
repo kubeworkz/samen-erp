@@ -198,6 +198,32 @@ defmodule Samen.Gen.TemplatesParityTest do
     end
   end
 
+  # P17 / ADR-021 (mount-ledger Amendment 3) gate-parity guard: every generated WET ci.sh must
+  # run the SILENT-EMPTY-FUNNEL verifier — the same gate samenerp's own ci.sh runs, the host
+  # that shipped a mounted analytics reader with no producer and therefore a `/analytics` page
+  # empty for every org forever. Asserted on the RENDERED output (not the golden files), so a
+  # template edit that drops the step fails HERE even after a golden re-capture. The HEADLESS
+  # set is the RED half: it has no web layer, so it can never mount the analytics reader.
+  test "every generated web ci.sh runs samen.verify.analytics_producer (P17 gate parity)" do
+    for {set, files} <- render_all() do
+      ci = files["ci.sh"]
+      router = files["lib/acme_web/router.ex"]
+
+      assert is_binary(ci), "#{set} emitted no ci.sh"
+
+      if is_binary(router) do
+        assert ci =~ "mix samen.verify.analytics_producer",
+               "#{set}/ci.sh emits a router but does NOT run the silent-empty-funnel gate — a " <>
+                 "generated app that mounts `samen_tenant_analytics_routes` without a producer " <>
+                 "would ship an empty-for-every-org /analytics page with nothing red."
+      else
+        refute ci =~ "samen.verify.analytics_producer",
+               "#{set}/ci.sh runs the analytics-producer gate but has no web layer (no router) — " <>
+                 "the headless set cannot mount the analytics reader, so the step is vacuous there."
+      end
+    end
+  end
+
   # T60 framework-first guard: EVERY generated app's operator-mount migration must EMIT the
   # chat offline-escalation dedupe partial-unique index. This is stronger than the byte-golden
   # (which would silently accept a regenerated index-less golden): if a future template edit

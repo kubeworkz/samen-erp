@@ -27,7 +27,12 @@ config :samenerp,
     # with host-invariant abbrevs AND table names, materialized here by the
     # MountAiDomain migration; adding the domain is the host's only authored line
     # (ADR-043 §5.2, INV-5).
-    Samen.AI.Domain
+    Samen.AI.Domain,
+    # WS-B / G12 (ADR-021) — the product-event ledger (`sae`) the activation funnel is
+    # rebuilt from. Mounted because this app had the analytics READERS (the P17
+    # `/analytics` surface + the operator plane) without a producer: see the mount note
+    # in lib/samenerp/analytics.ex and migration 20261013120000.
+    Samenerp.Analytics
     # NOTE (ADR-050, 2026-10-11) — `Samenerp.Fleet` (migration 20261011120000) is
     # deliberately registered in NEITHER `ash_domains` list, and that is load-bearing
     # rather than cosmetic. `mix samen.verify.aggregate_privacy` discovers its fleet
@@ -68,7 +73,8 @@ config :samen_core, :ash_domains, [
   Samenerp.Aggregate,
   Samenerp.Primitives,
   Samenerp.Operator,
-  Samen.AI.Domain
+  Samen.AI.Domain,
+  Samenerp.Analytics
   # `Samenerp.Fleet` is deliberately absent here too — see the note on the app's own
   # `ash_domains` list above (the samen_core discovery list would sweep the registry
   # through the same tenant-plane verifiers).
@@ -95,6 +101,97 @@ config :samen_core, :non_pii_repo, Samenerp.Repo
 config :samen_core, :verify_repo, Samenerp.Repo
 config :samen_core, :vault_repo, Samenerp.Repo
 config :samen_core, :tnt_record_repo, Samenerp.Repo
+
+# WS-B / G12 (ADR-021) — the product-analytics capture emitter. `Samen.Analytics.track/1`
+# writes into SAMENERP's `sae` ledger, and every flag-variant assignment (ADR-020 §3.4
+# seam) flows to `track/1` too. WITHOUT `product_event_resource`, `track/1` is INERT
+# (`{:ok, :dropped}` — the documented quiet-until-mounted posture): the framework emitters
+# already fire on this host (sign-in, first-run, record create, ⌘K search) and every event
+# was dropped, which is why the activation funnel was GUARANTEED empty rather than merely
+# empty so far.
+config :samen_core, Samen.Analytics, product_event_resource: Samenerp.Analytics.ProductEvent
+config :samen_core, Samen.FeatureFlags, emit: {Samen.Analytics, :track}
+
+# WS-B / G12 (ADR-021 §B8) — the DOMAIN-SOURCED funnel/retention rollup
+# (`paf_product_event_rollup` — host-invariant table name, created in Phase 3 by
+# 20261006140000) REBUILT FROM THIS HOST'S `sae` LEDGER. Funnel rows are (org, stage) for
+# signup → first-run → first-record; retention rows are (org, cohort_week, week_offset 0..4)
+# of distinct actors active N weeks after their first event. Refreshed on the canonical
+# `*/10 * * * *` RollupRefreshWorker cron — `Samen.Jobs.default_crontab/0`, installed at
+# boot by `Samen.Jobs.install_defaults/1` (see application.ex), so the host schedules
+# nothing itself; the refresh framework, the erasure orchestration and the
+# `no_plaintext_pii` Rollup oracle tier all read this ONE registry.
+#
+# ERASURE STANCE (design §4.4): `sae` has NO subject column — `sae_actor_ref` is the
+# per-subject HMAC pseudonym — so the load-bearing erasure is the subject's KMS key
+# destruction; `subject_delete_sql` plus the oracle's INDEPENDENT residue scan key the
+# pseudonym column against the RAW subject id and match ZERO rows BY CONSTRUCTION (they
+# exist to catch a sabotaged `track/1` leaking a raw id into the ledger).
+#
+# SCOPE — only the product-event rollup is registered here. `mrr_revenue_rollup` (also
+# created by 20261006140000 and read by the operator `/operator/revenue` plane) stays
+# UNWIRED: it needs a subscription-MOVEMENT ledger source this app has not adopted, and
+# its readers keep rendering honest zeros rather than fabricated counts. Separate
+# follow-on, named rather than silently skipped.
+config :samen_core, :rollups, [
+  %{
+    name: :product_event_rollup,
+    source: :domain,
+    table: "paf_product_event_rollup",
+    subject_delete_sql: "DELETE FROM sae_product_event WHERE sae_actor_ref::text = $1",
+    domain_table: "sae_product_event",
+    domain_subject_column: "sae_actor_ref",
+    bounded_columns:
+      ~w(paf_id paf_org_id paf_kind paf_stage paf_cohort_week paf_week_offset paf_actor_count paf_suppressed paf_refreshed_at),
+    rebuild_sql:
+      {"DELETE FROM paf_product_event_rollup",
+       """
+       INSERT INTO paf_product_event_rollup
+         (paf_org_id, paf_kind, paf_stage, paf_cohort_week, paf_week_offset,
+          paf_actor_count, paf_suppressed, paf_refreshed_at)
+       SELECT
+         sae_org_id                                AS paf_org_id,
+         'funnel'                                  AS paf_kind,
+         CASE sae_event_name
+           WHEN 'session.signed_in'   THEN 'signup'
+           WHEN 'first_run.completed' THEN 'first_run'
+           ELSE 'first_record'
+         END                                       AS paf_stage,
+         NULL::date                                AS paf_cohort_week,
+         NULL::int                                 AS paf_week_offset,
+         COUNT(DISTINCT sae_actor_ref)::int        AS paf_actor_count,
+         FALSE                                     AS paf_suppressed,
+         now()                                     AS paf_refreshed_at
+       FROM sae_product_event
+       WHERE sae_event_name IN ('session.signed_in', 'first_run.completed', 'record.created')
+       GROUP BY sae_org_id, sae_event_name
+       UNION ALL
+       SELECT
+         a.sae_org_id                              AS paf_org_id,
+         'retention'                               AS paf_kind,
+         NULL::text                                AS paf_stage,
+         f.cohort_week                             AS paf_cohort_week,
+         ((date_trunc('week', a.sae_occurred_at)::date - f.cohort_week) / 7)::int
+                                                   AS paf_week_offset,
+         COUNT(DISTINCT a.sae_actor_ref)::int      AS paf_actor_count,
+         FALSE                                     AS paf_suppressed,
+         now()                                     AS paf_refreshed_at
+       FROM sae_product_event a
+       JOIN (
+         SELECT sae_org_id, sae_actor_ref,
+                date_trunc('week', MIN(sae_occurred_at))::date AS cohort_week
+         FROM sae_product_event
+         WHERE sae_actor_ref IS NOT NULL
+         GROUP BY sae_org_id, sae_actor_ref
+       ) f
+         ON f.sae_org_id = a.sae_org_id AND f.sae_actor_ref = a.sae_actor_ref
+       WHERE a.sae_actor_ref IS NOT NULL
+         AND ((date_trunc('week', a.sae_occurred_at)::date - f.cohort_week) / 7) BETWEEN 0 AND 4
+       GROUP BY a.sae_org_id, f.cohort_week,
+                ((date_trunc('week', a.sae_occurred_at)::date - f.cohort_week) / 7)
+       """}
+  }
+]
 
 # T35 §4.7 / T37h: reveal grants are a CLIENT of the T34 E3 approve/reject engine.
 # This app's own Approval resource (Samen.Approvals.Blueprint.define_approval/5,

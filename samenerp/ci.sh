@@ -146,6 +146,16 @@ echo "    PASSED"
 echo "--- step 17b/19: mix samen.verify.nav_links (SIDEBAR-REACHABILITY dead-link gate)"
 mix samen.verify.nav_links --router SamenerpWeb.Router --host samenerp
 echo "    PASSED"
+# P17 / ADR-021 (mount-ledger Amendment 3) — the SILENT-EMPTY-FUNNEL gate. This host
+# mounts the own-org analytics reader (`samen_tenant_analytics_routes`), so it must also
+# configure its product-event producer (the `Samen.Analytics` emitter AND the
+# `:product_event_rollup` spec) — else `/analytics` renders "no data yet" when the truth is
+# "no data possible", for every org forever. This app's own gate fails the moment either
+# link regresses; `test/analytics_activation_test.exs` proves the same end to end.
+echo "--- step 17c/19: mix samen.verify.analytics_producer (silent-empty-funnel gate)"
+mix samen.verify.analytics_producer
+echo "    PASSED"
+
 echo "--- step 18/19: mix test (default suite)"
 mix test --warnings-as-errors
 echo "    PASSED"
