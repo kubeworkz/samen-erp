@@ -241,7 +241,7 @@ Deploy Samen as an enterprise SaaS service. Production deploys are **CI-gated an
 
 That workflow can only run once GitHub hands it a runner, so when the hosted pool is saturated the release waits on infrastructure that has nothing to do with the release. The same deploy without that dependency, run from an operator machine (`scripts/deploy.sh`):
 
-```bash
+```bash operator-todo
 scripts/deploy.sh                        # deploy origin/main, gated on CI's recorded verdict
 scripts/deploy.sh --local-gate           # CI stuck in the queue: run the SAME ./ci.sh gate here, then deploy
 scripts/deploy.sh --sha <sha> --dry-run  # resolve + gate, print the exact ssh, deploy nothing
