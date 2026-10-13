@@ -26,15 +26,33 @@
 #   There is deliberately no "deploy anyway" bypass: an unvalidated release is the exact thing the
 #   gate exists to prevent. If you believe the gate is wrong, fix the gate.
 #
+#   --local-gate is SPENDY: the gate is a sequence of INDEPENDENT tiers and costs ~90 minutes on a
+#   Windows checkout — long enough that an operator waits it out instead of running it. So it
+#   NARROWS by default: scripts/ci_tiers.sh derives the tier set from the diff and ci.sh runs only
+#   those (SAMEN_CI_TIERS=<csv>), while the preflights and every cross-cutting verifier still run.
+#
+#   The baseline that makes narrowing SOUND is evidence, not an assumption: a tier may be skipped
+#   only because the code it covers was already validated at the baseline commit. So the baseline
+#   is the newest ancestor of the target for which CI itself concluded SUCCESS. If there is no such
+#   ancestor — no gh, no network, no successful run, rewritten history — there is nothing to vouch
+#   for and the FULL gate runs. `--since <ref>` replaces that with the operator's own attestation;
+#   `--full-gate` ignores narrowing entirely.
+#
+#   A narrowed run is never dressed up as the full gate: ci.sh labels its verdict `TIER SUBSET`,
+#   and this script logs which tiers were skipped and on what basis they could be skipped.
+#
 # NOT VERIFIED BY THIS SCRIPT: deploy-prod.sh's own server-side gates (health, migrations, smoke,
 #   secrets) and its rollback. Those still run and still decide — this script adds no trust in them.
 #
 # Usage:
-#   scripts/deploy.sh [--sha <sha>] [--local-gate] [--host <user@host>] [--key <path>]
-#                     [--pin-host-key] [--dry-run]
+#   scripts/deploy.sh [--sha <sha>] [--local-gate] [--since <ref>] [--full-gate]
+#                     [--host <user@host>] [--key <path>] [--pin-host-key] [--dry-run]
 #
 #   --sha <sha>       deploy this commit (default: origin/main after a fetch)
 #   --local-gate      validate by running ./ci.sh here instead of reading CI's verdict
+#   --since <ref>     with --local-gate: narrow against this baseline instead of the newest
+#                     CI-validated ancestor (an attestation — you are vouching for it)
+#   --full-gate       with --local-gate: run every tier; no narrowing
 #   --host <target>   ssh target (default: $DEPLOY_HOST or ubuntu@65.109.232.89)
 #   --key <path>      ssh identity file (default: none — use your agent/default keys)
 #   --pin-host-key    append the host's pinned ed25519 key to known_hosts if it is missing
@@ -51,6 +69,8 @@ PINNED_HOST_KEY='65.109.232.89 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDCica1GLo+FC
 
 TARGET_SHA=""
 LOCAL_GATE=0
+SINCE=""
+FULL_GATE=0
 HOST="$DEPLOY_HOST_DEFAULT"
 KEY=""
 PIN_HOST_KEY=0
@@ -76,6 +96,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --local-gate)
       LOCAL_GATE=1
+      shift
+      ;;
+    --since)
+      [[ $# -ge 2 ]] || die "--since needs a value"
+      SINCE="$2"
+      shift 2
+      ;;
+    --full-gate)
+      FULL_GATE=1
       shift
       ;;
     --host)
@@ -104,6 +133,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Narrowing knobs are meaningless on the default gate (which reads CI's verdict for the EXACT
+# sha, a full-gate result). Refuse rather than silently ignore them — a knob that does nothing
+# while appearing to do something is how an operator talks themselves into a weaker gate.
+if [ "$LOCAL_GATE" -eq 0 ]; then
+  [ -z "$SINCE" ] || die "--since only applies to --local-gate (the default gate reads CI's verdict for the exact SHA — there is nothing to narrow)"
+  [ "$FULL_GATE" -eq 0 ] || die "--full-gate only applies to --local-gate (the default gate is already CI's full gate)"
+fi
+
 [ -f "$REPO_ROOT/scripts/deploy-prod.sh" ] || die "not a samen checkout: $REPO_ROOT (no scripts/deploy-prod.sh)"
 
 # ── 1. resolve the target commit ──────────────────────────────────────────────
@@ -126,6 +163,26 @@ SLUG="$(git remote get-url origin 2>/dev/null |
   sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')"
 [[ "$SLUG" == */* ]] || SLUG="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
 
+# ci_validated_ancestor <sha> — the NEWEST ancestor of <sha> for which CI concluded SUCCESS, or
+# nothing when there is nothing to vouch for (no gh, no network, no successful run, rewritten
+# history). This is the only basis on which tiers may be skipped: a tier is skipped because CI
+# validated the code it covers at this commit — never because we assume it still passes. Empty
+# output is a REFUSAL to narrow, not an error, so it is returned on every path.
+ci_validated_ancestor() {
+  local target="$1" sha
+  command -v gh >/dev/null 2>&1 || return 0
+  [ -n "$SLUG" ] || return 0
+  # Newest first, so the first one that turns out to be an ancestor is the newest ancestor.
+  for sha in $(gh api "repos/$SLUG/actions/workflows/ci.yml/runs?status=success&per_page=50" \
+    --jq '.workflow_runs[].head_sha' 2>/dev/null); do
+    if git merge-base --is-ancestor "$sha" "$target" 2>/dev/null; then
+      printf '%s' "$sha"
+      return 0
+    fi
+  done
+  return 0
+}
+
 if [ "$LOCAL_GATE" -eq 1 ]; then
   # Substituting the EXECUTOR, not the gate: require that what we are about to gate is what we are
   # about to deploy. A dirty tree or a different HEAD would validate something else entirely.
@@ -136,11 +193,55 @@ $DIRTY"
   [ "$HEAD_SHA" = "$SHA" ] \
     || die "--local-gate gates the CHECKED-OUT commit, but HEAD is $(git rev-parse --short "$HEAD_SHA") and the target is $SHORT. Check out the target (git checkout $SHORT) or pass --sha $HEAD_SHA."
 
-  log "gate: running the SAME gate CI runs (bash ./ci.sh) on $SHORT locally — this takes minutes"
-  if bash "$REPO_ROOT/ci.sh"; then
-    log "gate: local ./ci.sh PASSED on $SHORT ✔ (no GitHub runner involved)"
+  # ── which tiers does THIS change actually need? ────────────────────────────────────────────
+  # Same script, same commit: what changes is how many of its independent tiers run. The
+  # baseline is derived (or attested) and the selector is allowed to refuse — see the header.
+  GATE_SINCE="$SINCE"
+  GATE_BASIS=""
+  if [ "$FULL_GATE" -eq 1 ]; then
+    GATE_BASIS=""
+  elif [ -n "$GATE_SINCE" ]; then
+    GATE_BASIS="--since $GATE_SINCE, as attested by the operator"
   else
-    die "local ./ci.sh FAILED on $SHORT — refusing to deploy an unvalidated commit"
+    GATE_SINCE="$(ci_validated_ancestor "$SHA")"
+    GATE_BASIS="the newest ancestor CI validated"
+  fi
+
+  TIERS="all"
+  if [ "$FULL_GATE" -eq 0 ] && [ -n "$GATE_SINCE" ]; then
+    log "gate: narrowing to $GATE_BASIS — the [ci-tiers] lines below are this decision's reasoning"
+    TIERS="$(bash "$REPO_ROOT/scripts/ci_tiers.sh" --repo "$REPO_ROOT" --since "$GATE_SINCE" "$SHA")" || TIERS="all"
+  fi
+  [ -n "$TIERS" ] || TIERS="all"   # an empty answer is a refusal to narrow, never a subset
+
+  if [ "$TIERS" = "all" ]; then
+    GATE_ENV=""
+    GATE_LABEL="the FULL gate"
+    if [ "$FULL_GATE" -eq 1 ]; then
+      log "gate: --full-gate — running the FULL gate (bash ./ci.sh) on $SHORT (~90 min)"
+    else
+      log "gate: no tier subset could be vouched for — running the FULL gate (bash ./ci.sh) on $SHORT (~90 min)"
+    fi
+  else
+    GATE_ENV="$TIERS"
+    GATE_LABEL="TIER SUBSET $TIERS"
+    log "gate: running only the tiers this change needs (SAMEN_CI_TIERS=$TIERS) on $SHORT"
+    log "gate: SKIPPED tiers are not re-run here; each is skipped because the baseline above already validated the code it covers."
+  fi
+
+  GATE_RC=0
+  if [ -n "$GATE_ENV" ]; then
+    SAMEN_CI_TIERS="$GATE_ENV" bash "$REPO_ROOT/ci.sh" || GATE_RC=$?
+  else
+    bash "$REPO_ROOT/ci.sh" || GATE_RC=$?
+  fi
+  [ "$GATE_RC" -eq 0 ] \
+    || die "local ./ci.sh FAILED on $SHORT ($GATE_LABEL, exit $GATE_RC) — refusing to deploy an unvalidated commit"
+
+  if [ "$GATE_ENV" = "" ]; then
+    log "gate: local ./ci.sh PASSED on $SHORT ✔ (the full gate — no GitHub runner involved)"
+  else
+    log "gate: local ./ci.sh PASSED on $SHORT ✔ ($GATE_LABEL — not the full gate; no GitHub runner involved)"
   fi
 else
   [ -n "$SLUG" ] || die "cannot determine the GitHub repo (no origin remote, gh unavailable) — use --local-gate"

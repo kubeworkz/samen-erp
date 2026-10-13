@@ -5,6 +5,67 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# --- TIER SELECTION (opt-in, fail-closed) ---------------------------------------------
+# This gate is one sequence of INDEPENDENT tiers. Running every one of them is the contract,
+# and it is the default: SAMEN_CI_TIERS unset ⇒ `all`, byte-identical to the pre-tier gate
+# (CI is untouched). But a change confined to ONE app does not need every other app's gate,
+# and the full sequence costs ~90 minutes on a Windows checkout — the difference between a
+# deploy gate an operator actually runs and one they wait out.
+#
+# So a subset of tiers may be selected: SAMEN_CI_TIERS=core,demo ./ci.sh. Selection is a
+# subset of EXECUTION, never of the contract: a non-`all` run announces its scope up front,
+# every skipped tier says so in place, the final verdict is labelled TIER SUBSET, and the
+# preflights below (cheap, read-only, fail-fast) ALWAYS run — they are what makes a partial
+# run safe to start at all.
+#
+# WHO MAY PICK A SUBSET is deliberately not decided here. scripts/ci_tiers.sh derives a tier
+# set from a diff and returns `all` (i.e. refuses to narrow) for any path it cannot vouch
+# for; scripts/deploy.sh is the caller that relies on it. CI always runs `all`.
+# NOTE the `-` (not `:-`): an UNSET variable means `all` (CI and every existing caller), but an
+# explicitly EMPTY one is a typo and must be rejected — `:-` would silently turn `SAMEN_CI_TIERS=`
+# into a full run, and a knob that cannot express "you made a mistake" is not fail-closed.
+CI_TIERS="${SAMEN_CI_TIERS-all}"
+
+# tier_on <tier> — true when <tier> was selected ('all' selects every tier).
+tier_on() {
+  case ",$CI_TIERS," in
+    *",all,"*) return 0 ;;
+    *",$1,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# skip_tier <tier> <what> — report a skip and return 0 (so `if skip_tier …` reads plainly).
+skip_tier() {
+  if tier_on "$1"; then return 1; fi
+  echo "==> SKIPPING $2 (tier '$1' not selected — SAMEN_CI_TIERS=$CI_TIERS)"
+  return 0
+}
+
+# The vocabulary is CLOSED and validated: an unknown or empty selection is a typo, and a typo that
+# silently ran (almost) nothing while printing ALL PASSED is the exact failure this gate exists to
+# prevent. Refuse instead — a subset you cannot name is a subset you cannot reason about.
+KNOWN_TIERS="spikes core ai verifiers stripe postmark ses resend anthropic gen harness web demo driftwood pawchart samenerp"
+if [[ -z "$CI_TIERS" ]]; then
+  echo "==> TIER ERROR: SAMEN_CI_TIERS is empty. Use 'all' or a comma-separated subset of:"
+  echo "    $KNOWN_TIERS"
+  exit 1
+fi
+for tier in ${CI_TIERS//,/ }; do
+  if [[ "$tier" == "all" ]]; then continue; fi
+  if [[ " $KNOWN_TIERS " != *" $tier "* ]]; then
+    echo "==> TIER ERROR: '$tier' is not a known tier — refusing to run a subset that cannot be reasoned about."
+    echo "    Known tiers: $KNOWN_TIERS (or 'all')."
+    exit 1
+  fi
+done
+
+if [[ "$CI_TIERS" != "all" ]]; then
+  echo "==> TIER SCOPE: SAMEN_CI_TIERS=$CI_TIERS — this run executes a SUBSET of the gate."
+  echo "    Unlisted tiers are SKIPPED, not passed, and the verdict line records it. Only"
+  echo "    scripts/ci_tiers.sh's diff-derived set (or an operator quoting it) should do this."
+fi
+
 # --- SABOTAGE PREFLIGHTS (fail closed, seconds–minutes) --------------------------------
 # Four read-only guards run before the gate is spent. Each answers a question knowable in
 # seconds that was, historically, only discovered ~an hour into the sabotage replay (or the
@@ -40,6 +101,7 @@ run_spike() {
   echo "==> spike $spike_name: PASSED"
 }
 
+if ! skip_tier spikes "the spike suites (spikes/*)"; then
 # --- spike list ---
 run_spike "$REPO_ROOT/spikes/s00_smoke"
 run_spike "$REPO_ROOT/spikes/s02_transformer"
@@ -53,7 +115,9 @@ run_spike "$REPO_ROOT/spikes/s07_pii_reads"
 
 echo ""
 echo "==> All spikes passed."
+fi
 
+if ! skip_tier core "the samen_core kernel suite (samen_core/**). Its doc tests read README.md and docs/ too."; then
 # --- samen_core kernel tests ---
 echo ""
 echo "==> Running samen_core tests"
@@ -63,6 +127,7 @@ echo "==> Running samen_core tests"
   mix test --warnings-as-errors
 )
 echo "==> samen_core: PASSED"
+fi
 
 # --- L4 multi-node Oban proof (T90) — permanent OPT-IN tier (SAMEN_MULTINODE=1) --------
 # Boots TWO real BEAM peer nodes against ONE Postgres and proves the Oban substrate is
@@ -87,6 +152,7 @@ else
   echo "==> Skipping multi-node Oban proof (opt-in: SAMEN_MULTINODE=1 ./ci.sh boots the 2-node cluster)"
 fi
 
+if ! skip_tier ai "the AI runtime eval + mask-leak red-team tier (ADR-043 D8)"; then
 # --- AI runtime eval + mask-leak red-team tier (ADR-043 §10 / D8, T72) -----------------
 # The PERMANENT D8 CI tier — a keyless, deterministic runtime eval of the AI plane, wired
 # as a first-class ROOT-gate step (like the samen_core suite / the demo verifier gate) so a
@@ -115,7 +181,9 @@ echo "==> Running AI runtime eval + mask-leak red-team tier (ADR-043 D8 / §10 �
   mix test --warnings-as-errors test/ai_eval/
 )
 echo "==> AI eval tier: PASSED"
+fi
 
+if ! skip_tier verifiers "the whole-tree verifiers (agent_coverage · tool_actor_identity · tool_surface · analytics_producer)"; then
 # --- agent-coverage verifier (ADR-047 A7 / §9#6) --------------------------------------
 # The agent loop A1-A6 built is made SELF-DEFENDING here. `mix samen.verify.agent_coverage`
 # runs from samen_core but scans the WHOLE umbrella tree (the anti-bypass probe technique),
@@ -175,6 +243,25 @@ echo "==> Running tool-surface verifier (T183b, UXD-11/UXD-12 — Samen.AI.ToolS
 )
 echo "==> tool-surface verifier: PASSED"
 
+# --- analytics-producer verifier (ADR-021 / mount-ledger Amendment 3) ------------------
+# The SILENT-EMPTY-FUNNEL gate, run TREE-SCOPED over the whole checkout: any app whose
+# shipped `lib/` mounts the own-org analytics reader (`samen_tenant_analytics_routes/2`)
+# must also configure its product-event producer — the `Samen.Analytics` emitter
+# (`product_event_resource`) AND a `:product_event_rollup` spec in `config :samen_core,
+# :rollups`. Without both, the `/analytics` page is empty for EVERY org forever under copy
+# that reads as "no data yet" (samenerp shipped exactly that: readers mounted, producer
+# unwired). Static (source + config only — no DB, no boot), fail-closed on an empty walk,
+# sabotage-refutable. Each host's own gate runs the same verifier on itself.
+echo ""
+echo "==> Running analytics-producer verifier (ADR-021 — silent-empty-funnel gate, tree-scoped)"
+(
+  cd "$REPO_ROOT/samen_core"
+  mix samen.verify.analytics_producer --root "$REPO_ROOT"
+)
+echo "==> analytics-producer verifier: PASSED"
+fi
+
+if ! skip_tier stripe "the samen_stripe adapter package gate"; then
 # --- samen_stripe adapter package gate (ADR-038 §8.1, T18/B1) ---
 # The first-party-but-separate Stripe billing adapter (skeleton): path-deps on
 # samen_core ONLY (never samen_web), owns its own vendor HTTP client dep (req),
@@ -191,7 +278,9 @@ echo "==> Running samen_stripe tests (ADR-038 B1 skeleton — standalone, samen_
   mix test --warnings-as-errors
 )
 echo "==> samen_stripe: PASSED"
+fi
 
+if ! skip_tier postmark "the samen_postmark adapter package gate"; then
 # --- samen_postmark adapter package gate (ADR-038 §4/§8.1, T27/C1) ---
 # The first-party-but-separate, INBOUND-CAPABLE reference delivery adapter:
 # path-deps on samen_core ONLY (never samen_web), owns its own vendor HTTP
@@ -209,7 +298,9 @@ echo "==> Running samen_postmark tests (ADR-038 C1 reference adapter — standal
   mix test --warnings-as-errors
 )
 echo "==> samen_postmark: PASSED"
+fi
 
+if ! skip_tier ses "the samen_ses adapter package gate"; then
 # --- samen_ses adapter package gate (ADR-038 §4/§8.1, T94/C1) ---
 # The first-party-but-separate SECOND reference delivery adapter (M1 ruling):
 # path-deps on samen_core ONLY (never samen_web), owns its own vendor HTTP
@@ -229,7 +320,9 @@ echo "==> Running samen_ses tests (ADR-038 C1 second reference adapter — stand
   mix test --warnings-as-errors
 )
 echo "==> samen_ses: PASSED"
+fi
 
+if ! skip_tier resend "the samen_resend adapter package gate (see: samenerp path-deps it)"; then
 # --- samen_resend adapter package gate (ADR-038 §4/§8.1, T95/C1) ---
 # The first-party-but-separate THIRD reference delivery adapter (M1 ruling):
 # path-deps on samen_core ONLY (never samen_web), owns its own vendor HTTP
@@ -250,7 +343,9 @@ echo "==> Running samen_resend tests (ADR-038 C1 third reference adapter — sta
   mix test --warnings-as-errors
 )
 echo "==> samen_resend: PASSED"
+fi
 
+if ! skip_tier anthropic "the samen_anthropic AI-provider adapter package gate"; then
 # --- samen_anthropic AI-provider adapter package gate (ADR-043 §5.1, T64/D1) ---
 # The first-party-but-separate reference AI-provider adapter: path-deps on samen_core
 # ONLY (never samen_web — the samen_stripe/samen_postmark §8.1 layout precedent), owns
@@ -268,6 +363,7 @@ echo "==> Running samen_anthropic tests (ADR-043 D1 reference AI adapter — sta
   mix test --warnings-as-errors
 )
 echo "==> samen_anthropic: PASSED"
+fi
 
 # --- T107: interrupt-safe wrapper for the registry-mutating gen_app probes ------------
 # See scripts/gen_probe_guard.sh for the full rationale (recurring Phase-2 failure,
@@ -275,6 +371,7 @@ echo "==> samen_anthropic: PASSED"
 # also what scripts/interrupt_probe_test.sh (the T107 interrupt-proof harness) exercises.
 source "$REPO_ROOT/scripts/gen_probe_guard.sh"
 
+if ! skip_tier gen "the generator probes (gen_app flagship · post-app · deploy · gen_agent)"; then
 # --- gen_app tier: the flagship generative proof (WS-D D6, AC-X-1) ---
 # The PERMANENT gen_app test tier (design.md §4). In ONE automated run it generates a
 # fresh app with the FULL running product (--web --api --seeds --observability), runs
@@ -327,7 +424,9 @@ run_gen_probe "priv/gen_app_deploy_probe.exs" \
 # the three gen_app probes so the interrupt-safe registry backstop covers it uniformly.
 run_gen_probe "priv/gen_agent_probe.exs" \
   "gen_agent probe (ADR-047 A7 — samen.gen.agent scaffold → emitted AgentCase proof + sabotage)"
+fi
 
+if ! skip_tier harness "the sabotage-harness regressions (selection + intra-app selection)"; then
 # --- Sabotage-harness SELECTION regression (ADR-047 A4 fold (a)) ----------------------
 # `scripts/sabotage.sh --changed [<ref>]` is the VERIFIER PRIMITIVE ("replay the sabotages
 # relevant to my diff"). It used to derive its touched set from `git diff --name-only`,
@@ -356,6 +455,25 @@ echo ""
 echo "==> Running sabotage-harness intra-app parallelism regression (per-slice test DB + slice plan/guards)"
 bash "$REPO_ROOT/scripts/sabotage_intra_test.sh"
 echo "==> sabotage intra-app regression: PASSED"
+
+# --- Deploy-gate NARROWING regressions (scripts/ci_tiers.sh + scripts/deploy.sh) --------
+# The root gate can now be invoked with a SUBSET of its tiers (SAMEN_CI_TIERS, derived from a
+# diff by scripts/ci_tiers.sh and relied on by scripts/deploy.sh --local-gate). That is only
+# acceptable if the narrowing itself is pinned, so its two halves are asserted here — in the
+# `harness` tier, which is part of EVERY narrowed set's baseline: you cannot narrow the gate
+# without re-certifying the thing that does the narrowing.
+#   * ci_tiers_test.sh — the diff→tiers mapping and its fail-closed rules, driven against real
+#     throwaway git repos (a too-narrow answer must not be producible silently);
+#   * deploy_test.sh  — the caller: the exact tier set the gate is invoked with, that an
+#     unvouchable baseline runs the FULL gate, and that a failing gate still fails the deploy.
+# Both need no DB and apply no patch; ~50s total on Windows, seconds on the Linux runners.
+echo ""
+echo "==> Running deploy-gate narrowing regressions (diff→tiers mapping + deploy.sh's decision)"
+bash "$REPO_ROOT/scripts/ci_tiers_test.sh"
+echo "==> ci_tiers mapping regression: PASSED"
+bash "$REPO_ROOT/scripts/deploy_test.sh"
+echo "==> deploy.sh narrowing regression: PASSED"
+fi
 
 # --- WS-E sabotage harness (E2i.1) — permanent OPT-IN step (SAMEN_SABOTAGE=1) ---
 # Replays every shipped gate sabotage as a committed patch (scripts/sabotages/*.patch):
@@ -390,8 +508,8 @@ fi
 # which one, and `exit 1` — never reaching the ALL PASSED line. Each gate's own
 # `==> ... : PASSED` marker(s) print ONLY after that gate's exit code is confirmed 0.
 
-echo ""
-echo "==> Running app gates CONCURRENTLY: samen_web · demo · driftwood · pawchart"
+# NOTE: which apps launch is decided by the tier selection below (registry built after the
+# gate functions), so the CONCURRENTLY banner is printed there, listing the actual set.
 
 GATE_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/samen_ci_gates.XXXXXX")"
 
@@ -436,18 +554,28 @@ gate_samenerp() {
   MIX_ENV=test bash ci.sh
 }
 
-# Gate registry: name | function | PASSED marker line(s) to emit on success.
-gate_names=(samen_web demo driftwood pawchart samenerp)
-gate_fns=(gate_samen_web gate_demo gate_driftwood gate_pawchart gate_samenerp)
-gate_markers=(
-  "==> samen_web gate: PASSED"
-  $'==> demo tests: PASSED\n==> demo CI gate: PASSED'
-  "==> Driftwood CI gate: PASSED"
-  "==> PawChart CI gate: PASSED"
-  "==> samenerp CI gate: ALL PASSED"
-)
+# Gate registry: name | function | PASSED marker line(s) to emit on success — built from the
+# SELECTED app tiers. `all` selects every app (identical to the pre-tier gate); a subset selects
+# only those, so a change confined to one app does not also pay for the other four. An empty
+# registry short-circuits to a reported skip rather than an empty launch loop.
+gate_names=()
+gate_fns=()
+gate_markers=()
+add_gate() { gate_names+=("$1"); gate_fns+=("$2"); gate_markers+=("$3"); }
+if tier_on web; then add_gate samen_web gate_samen_web "==> samen_web gate: PASSED"; fi
+if tier_on demo; then add_gate demo gate_demo $'==> demo tests: PASSED\n==> demo CI gate: PASSED'; fi
+if tier_on driftwood; then add_gate driftwood gate_driftwood "==> Driftwood CI gate: PASSED"; fi
+if tier_on pawchart; then add_gate pawchart gate_pawchart "==> PawChart CI gate: PASSED"; fi
+if tier_on samenerp; then add_gate samenerp gate_samenerp "==> samenerp CI gate: ALL PASSED"; fi
 
-# Launch all four in the background, each redirected to its own per-app log.
+if (( ${#gate_names[@]} == 0 )); then
+  echo ""
+  echo "==> SKIPPING every app gate (no app tier selected — SAMEN_CI_TIERS=$CI_TIERS)"
+else
+echo ""
+echo "==> Running app gates CONCURRENTLY: ${gate_names[*]}"
+
+# Launch them in the background, each redirected to its own per-app log.
 gate_pids=()
 gate_logs=()
 for i in "${!gate_names[@]}"; do
@@ -479,8 +607,13 @@ if [[ "$gate_failed" != 0 ]]; then
   exit 1
 fi
 
-# All five gates confirmed exit 0 — logs no longer needed.
+# Every launched gate confirmed exit 0 — logs no longer needed.
 rm -rf "$GATE_LOG_DIR"
+fi
 
 echo ""
-echo "==> ROOT CI: ALL PASSED"
+if [[ "$CI_TIERS" == "all" ]]; then
+  echo "==> ROOT CI: ALL PASSED"
+else
+  echo "==> ROOT CI: ALL PASSED (TIER SUBSET: $CI_TIERS — this is NOT the full gate)"
+fi

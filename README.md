@@ -245,9 +245,13 @@ That workflow can only run once GitHub hands it a runner, so when the hosted poo
 scripts/deploy.sh                        # deploy origin/main, gated on CI's recorded verdict
 scripts/deploy.sh --local-gate           # CI stuck in the queue: run the SAME ./ci.sh gate here, then deploy
 scripts/deploy.sh --sha <sha> --dry-run  # resolve + gate, print the exact ssh, deploy nothing
+scripts/deploy.sh --local-gate --since <ref>  # narrow the local gate to the tiers <ref>..HEAD needs
+scripts/deploy.sh --local-gate --full-gate    # force every tier, no narrowing
 ```
 
 It performs the identical `ssh … "TARGET_SHA=<sha> bash -s" < scripts/deploy-prod.sh`, so there stays exactly one deploy implementation and one set of server-side gates. The gate is neither optional nor bypassable: the deploy runs only if CI passed for that exact commit, or — with `--local-gate` — if the same `./ci.sh` exits 0 on that exact commit in a clean tree.
+
+`--local-gate` is the expensive path (the full gate is a sequence of independent tiers, ~90 minutes on a Windows checkout), so it **narrows by default**: `scripts/ci_tiers.sh` maps the diff to the tiers it can affect, and `ci.sh` runs only those (`SAMEN_CI_TIERS`), preflights included. What makes narrowing sound is the baseline — a tier is skipped only because the code it covers was already validated there, and the baseline is evidence, not an assumption: the newest ancestor of the target that CI itself concluded `success` for. When there is no such ancestor — no gh, no network, no successful run, rewritten history — there is nothing to vouch for and the **full gate runs**; a path the selector cannot reason about (a new top-level directory) does the same. `--since <ref>` substitutes your own attestation for the derived baseline, and `--full-gate` opts out entirely. A narrowed run is never dressed up as the full gate: `ci.sh` labels its verdict `TIER SUBSET`, and `deploy.sh` logs which tiers were skipped and on what basis.
 
 The manual fallback is `scripts/deploy.sh --local-gate` above: it is not a different deploy — it is the CI-gated one, gate and all, with the runner taken out of the path. Never deploy by editing the server checkout or running compose by hand; `deploy-prod.sh` resets the tree to the release commit and discards anything un-pushed (a backup branch is cut first).
 
