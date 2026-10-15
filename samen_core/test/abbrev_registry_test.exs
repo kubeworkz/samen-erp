@@ -128,15 +128,17 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 86, samen_web 70, samenerp 89 (the WS-ERP E8 host proof —
+      # samen_core 86, samen_web 70, samenerp 90 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst, the
       # Phase-2 Chat mount cth/chp/cmg/cds, the Phase-5 CMS mount scg/sct/scb/
       # scd/scn/scf + spv/stv/sbv, the Phase-6 Calendar mount `evt`, and the
       # ADR-050 fleet REGISTRY mount efa/efc/efe/efr/efd — `Samenerp.Fleet`,
-      # reserved with `mix samen.abbrev.reserve --host samenerp`)
-      # = 329 host entries across six hosts.
+      # reserved with `mix samen.abbrev.reserve --host samenerp` — plus the
+      # ADR-021 analytics mount `sae` — `Samenerp.Analytics.ProductEvent`,
+      # reserved with `mix samen.abbrev.reserve --host samenerp --abbrev sae`)
+      # = 330 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 89
+      assert map_size(hosts["samenerp"]) == 90
       assert map_size(hosts["samen_core"]) == 86
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -714,7 +716,12 @@ defmodule Samen.AbbrevRegistryTest do
                "efc" => "Samenerp.Fleet.Credential",
                "efd" => "Samenerp.Fleet.Directive",
                "efe" => "Samenerp.Fleet.EnrollmentToken",
-               "efr" => "Samenerp.Fleet.Report"
+               "efr" => "Samenerp.Fleet.Report",
+               # Samenerp.Analytics (1) — the ADR-021 analytics mount's token-blind
+               # product-event ledger (`sae_product_event`), reserved through the
+               # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp
+               # --abbrev sae --owner Samenerp.Analytics.ProductEvent`).
+               "sae" => "Samenerp.Analytics.ProductEvent"
              }
              }
 
@@ -815,7 +822,10 @@ defmodule Samen.AbbrevRegistryTest do
       # (+5 ADR-050 fleet REGISTRY mount: samenerp efa/efc/efe/efr/efd
       # (Samenerp.Fleet.{App,Credential,EnrollmentToken,Report,Directive}), reserved
       # with `mix samen.abbrev.reserve --host samenerp` = 405 + 329 = 734 flat.)
-      assert map_size(Reg.load()) == 734
+      # (+1 ADR-021 analytics mount: samenerp `sae` (Samenerp.Analytics.ProductEvent),
+      # reserved with `mix samen.abbrev.reserve --host samenerp --abbrev sae`
+      # = 405 + 330 = 735 flat.)
+      assert map_size(Reg.load()) == 735
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

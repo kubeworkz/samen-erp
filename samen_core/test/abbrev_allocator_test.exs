@@ -288,8 +288,11 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +5 ADR-050 fleet REGISTRY mount (efa/efc/efe/efr/efd — the five
       # Samenerp.Fleet.* resources, `mix samen.abbrev.reserve --host samenerp`),
       # allocator-reserved: 33_950 bytes, 734 flat.
-      assert byte_size(committed) == 33950
-      assert map_size(R.load()) == 734
+      # +1 ADR-021 analytics mount (`sae` — Samenerp.Analytics.ProductEvent,
+      # `mix samen.abbrev.reserve --host samenerp --abbrev sae`),
+      # allocator-reserved: 33_998 bytes, 735 flat.
+      assert byte_size(committed) == 33998
+      assert map_size(R.load()) == 735
     end
   end
 
