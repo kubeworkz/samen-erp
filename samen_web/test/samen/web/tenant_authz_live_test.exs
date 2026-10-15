@@ -492,6 +492,26 @@ defmodule Samen.Web.TenantAuthzLiveTest do
       SecurityHost.disarm!()
       # Disarmed → the byte-identical dev convenience, regardless of the caller's real role.
       assert TenantRole.admin_scope(mount, host.org.id, member.credential.id).actor.role == :admin
+
+      # P17 — the READ scope (`authenticated_scope/2`) is the WRITE helper with the elevation
+      # removed: it never grants more than the caller really holds, and a self-elevating READ is
+      # exactly what S1a was. The principal reaches it the way a LiveView hands it over — pinned
+      # by the `on_mount` gate, stashed onto the mount by `Samen.Web.Live.assign_mount/2`.
+      viewer = accept_into!(host, :viewer)
+      SecurityHost.arm!()
+      stashed = stashed_mount(mount, viewer.credential.id)
+
+      assert TenantRole.authenticated_scope(stashed, host.org.id).actor.role == :viewer,
+             "a real :viewer keeps :viewer in a READ scope — the gate must be able to refuse it"
+
+      assert TenantRole.authenticated_scope(stashed_mount(mount, member.credential.id), host.org.id).actor.role ==
+               :member
+
+      SecurityHost.disarm!()
+
+      assert TenantRole.authenticated_scope(mount, host.org.id).actor.role == :member,
+             "disarmed reads keep Mount.scope/2's :member — the least privilege that still reads, " <>
+               "NOT the write helper's dev :admin convenience"
     end
   end
 
@@ -674,6 +694,16 @@ defmodule Samen.Web.TenantAuthzLiveTest do
   defp session_token!(credential_id) do
     {:ok, _session, raw} = SessionCreate.create(session_create_mods(), credential_id)
     raw
+  end
+
+  # The mount a LiveView actually reads through: the principal pinned in assigns by
+  # `Samen.Web.TenantAuthz`'s on_mount and stashed by `Samen.Web.Live.assign_mount/2`.
+  defp stashed_mount(mount, principal) do
+    %Phoenix.LiveView.Socket{}
+    |> Phoenix.Component.assign(:samen_tenant_principal, principal)
+    |> Samen.Web.Live.assign_mount(%{"samen_mount" => Mount.to_session(mount)})
+    |> Map.fetch!(:assigns)
+    |> Map.fetch!(:samen_mount)
   end
 
   defp armed_flags_mount do

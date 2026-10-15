@@ -257,7 +257,7 @@ defmodule Samenerp.AnalyticsActivationTest do
 
       # A stage no actor reached has NO rollup row at all: the SQL groups over the
       # ledger, so absence is the honest encoding. The 0-actor cohort is materialized by
-      # the READ layer (`AnalyticsReads.floored_funnel/3` defaults every stage in
+      # the READ layer (`AnalyticsReads.read/3`'s floored read defaults every stage in
       # `@funnel_stages`), which then fail-closes it — §4 proves that renders ⊘, never a
       # fabricated 0. Asserted here so the layering is explicit rather than assumed.
       assert actual["first_record"] == nil

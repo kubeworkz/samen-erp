@@ -172,3 +172,157 @@ P17 is **a new, separate, org-scoped path**. It must not touch `Samen.AI.Analyti
 **Erasure.** Live-computed only — no new precomputed store, so nothing to resurrect an erased subject from (ADR-046 satisfied without a rollup registration); the completeness oracle's existing rollup arm remains the guard for any host that DOES add a persisted store.
 
 **Sabotages** (`scripts/sabotages/`): `276-p17-org-analytics-cohort-floor-neutered` (core floor bypass → count-of-one emits), `277-p17-org-aggregate-reads-cross-org` (OrgScope bypass → cross-org leak), `278-p17-tenant-analytics-mask-twin-floor-neutered` (surface floor bypass → the MaskingCase twin's count-of-one reconstructs). All flip the named tests + restore byte-exact.
+
+---
+
+## 7 · FOLLOW-ON (2026-10-15) — the four silences, and the role gate made load-bearing
+
+**The defect (as seen from the product).** Insights → Activation rendered, for a resolved org with a
+wired mount and a legible caller, the sentence *"No own-org activation data yet, or analytics is not
+available for your role."* Four different facts were fused into one claim about the org's DATA:
+(a) the rollup read RAN and the org has no rows; (b) no org was resolved for the session; (c) a role
+the gate refuses; (d) the read raised (unmigrated table / unusable repo). Only (a) is an answer — and
+only (a) is a measurement. Rendering (b)–(d) as (a) is the exact assertion ADR-014/024/026 forbid of
+an adapter (`{:ok, _}` for work it did not do), on a page: it tells an operator the product emitted
+nothing when the truth may be that nobody looked. It also made the states unactionable — a screenshot
+cannot distinguish a never-emitting host from a missing migration.
+
+**And the second half: the role gate was inert on the wired route.** `Samen.Web.Plane.scope/2`
+fabricates the tenant actor at `role: :member`, so `AnalyticsReads.can_query?/1` — shipped, documented
+and unit-proven — was satisfied BY CONSTRUCTION on `/analytics`: every authenticated principal was
+`:member`, and the page's "not available for your role" clause described a gate that could not fire.
+(`queryable_roles/0` also omitted `:owner` — a rank-3 superset of `:member` — so had the gate been live
+it would have told an org's OWNER "not available for your role".)
+
+**What landed.**
+
+* `Samen.Web.Tenant.AnalyticsReads.read/3` — the surface read: `%{funnel: […], unread: nil | reason}`,
+  with the silences named as a bounded vocabulary — `:no_org`, `:not_authorized`, `:not_configured`,
+  `:read_failed`. `unread: nil` is reserved for the ONE answered case. A caller-side refusal is decided
+  BEFORE the mount is examined, so the gate never depends on host wiring and a wiring gap is never
+  reported to a caller who was refused. `funnel/3` remains the rows-only reader (every silence is `[]`
+  there — which is precisely why a surface must not read through it).
+* `Samen.Web.TenantRole.authenticated_scope/2` — the READ counterpart of `admin_scope/3`, with the
+  write elevation removed: operator → `:admin` (T146/T150-gated), armed tenant → the REAL
+  `Identity.Membership` role (fail-closed `:member`), disarmed → `:member`, i.e. byte-identical to
+  `Mount.scope/2` (a self-elevating READ is what S1a was, so the write helper's dev `:admin`
+  convenience is deliberately not mirrored). `queryable_roles/0` is now `[:owner, :admin, :member]`,
+  `:viewer` deliberately out.
+* `Samen.Web.Tenant.AnalyticsLive` — `analytics-empty` renders ONLY when the read answered; each
+  silence renders `Samen.UI.unread_state/1` with its own title/body and the reason token
+  (`data-read-state="unread"`, `data-unread-reason="…"`), and a session with no mount renders
+  `:not_configured` instead of crashing.
+
+**Proofs (samen_web).** `tenant_analytics_test.exs` — one reason per silence at the read layer, the
+answered-`nil` anti-tautology, `:read_failed` driven by a genuinely absent rollup (a transactional
+rename), and a per-state render test that refutes `analytics-empty` for every silence;
+`tenant_analytics_route_e2e_test.exs` — through the REAL router on an armed host: the org's OWNER is
+served its own state (the `:owner` admission), a REAL `:viewer` membership is refused with
+`:not_authorized`, and an authenticated principal with no resolved org gets `:no_org` (the
+`?org=`-forge refusal and the unauthenticated halt stay green beside them); `tenant_authz_live_test.exs`
+— the read scope's "never elevates" property (armed `:viewer` stays `:viewer`; disarmed stays `:member`).
+
+**Sabotage:** `343-p17-tenant-analytics-silence-collapsed-into-empty` (the read discards its reason,
+the failed read becomes `nil`, and the page drops the `unread` branch) → flips the seven named tests,
+restores byte-exact.
+
+---
+
+## 8 · FOLLOW-ON (2026-10-15) — every silence names the step that clears it
+
+**The residual.** Named reasons made the states LEGIBLE but still left the reader standing on them: a
+refused member was told *why* and offered nothing, an operator facing a wiring gap or a failed read
+was told *what* was not read and not where to fix it. A reason with no next step also invites the
+reader back to the empty list as if it were the answer — the collapse §7 removed, one affordance
+over.
+
+**What landed.**
+
+* `Samen.UI.Feedback.unread_state/1` gained an OPTIONAL `:actions` slot — the next step for THIS
+  reason, rendered above the Retry control, and absent it renders nothing (a link to nowhere is the
+  same claim as an empty list for a read that never ran). The primitive still decides nothing: the
+  surface supplies a destination it has PROVEN exists.
+* `Samen.Web.Tenant.AnalyticsLive.unread_next_step/3` (public, pure) — the ONE step per silence:
+  `:not_authorized` → the org's **team settings** (`<settings_path>/invitations?org=…`), where an owner
+  actually grants the role; `:not_configured` → this reader's **host mount docs**
+  (`docs/ws-analytics/p17-tenant-analytics-design.md`); `:read_failed` → the **operator runbook**
+  (`docs/runbooks/alerts.md` — the `rollups` queue backlog, `/readyz`, pool saturation); `:no_org` →
+  **none**, deliberately (there is no org to act on, and inventing a destination would be a second
+  unobserved claim on a page whose whole job is not to make one).
+* **Two dead-link guards, both the house pattern.** The team-settings href exists only when the host
+  declares `:settings_path` (label PRESENCE is the guard — a host that mounts this page and not its
+  settings routes is never handed a 404 dressed as a fix); a doc reference becomes an href only under
+  a host-declared `:docs_base`, and is otherwise NAMED in a `code` element (the
+  `docs/guides/mailbox-seam.md` precedent in `MailboxLive`). `docs_base` is added to `Mount`'s closed
+  `@label_keys` whitelist so it round-trips through a cold `from_session/1`. Defaulting either to a
+  plausible path was rejected for the same reason an unread page may not render an empty state.
+* `SamenerpWeb.Router` now declares `settings_path: "/settings"` on its shared tenant labels (it
+  mounts `samen_settings_routes(:settings, …)` there), so the deployed host's refused caller gets a
+  live link instead of a reason; `mix samen.verify.nav_links --router …` stays green (a label may not
+  outrun the router).
+
+**Proofs (samen_web).** `tenant_analytics_test.exs` — the per-reason mapping (linked where declared,
+named where not, absent for `:no_org` and for the ANSWERED empty state) plus the `load/2` wiring;
+`tenant_analytics_route_e2e_test.exs` — the refusal leg now asserts the href END-TO-END through the
+real router on an armed host; `unread_is_not_empty_test.exs` — the primitive renders the step it is
+given and invents none.
+
+**Sabotages (regenerated, both replayed green).** `338-unread-state-collapsed-into-empty` now also
+removes the `:actions` slot and its render branch (a silence loses both halves at once) and adds the
+named `unread_state/1 renders the NEXT STEP it is given` to its MUST_FAIL set;
+`343-p17-tenant-analytics-silence-collapsed-into-empty` carries four new MUST_FAILs (the role step,
+the stated-but-unlinked step, the doc references, the `load/2` wiring) and deliberately leaves
+`unread_next_step/3` in place — the defect is a page that cannot render a reason, not a missing
+function, so removing the mapping would turn the sabotage into a compile error instead of a lie.
+
+---
+
+## 9 · FOLLOW-ON (2026-10-15) — the warning gets a page, and plain words
+
+**The defect, as a tenant sees it.** Insights → Activation rendered its warning as a bare `<h2>` and
+`<p>` on an unstyled viewport: this was the ONE authenticated tenant surface in `samen_web` that
+mounted no `app_shell`, so it had no sidebar, no page header and no padded main panel — the message
+floated loose, and "we are not sure what it means" was the verdict on the copy itself. Both halves
+matter: a state nobody can read, presented somewhere that looks like it belongs to no product, is a
+state that may as well not have been said.
+
+**Chrome.** `Samen.Web.Tenant.AnalyticsLive` now renders inside `Samen.UI.app_shell/1`: the workspace
+sidebar (switcher · the inherited `module_nav`, resolved from THIS host's own path labels · the
+user/logout footer), a `<.topbar title="Activation">` whose trail is `[org, "Insights", "Activation"]`,
+and the page body in the shared `.wrap` main panel — the chrome every sibling tenant surface mounts,
+with the Insights group marking where the reader is. Every state (the four silences, the answered
+empty state, the funnel itself) renders in that main panel BESIDE the sidebar; the answered state is
+the kit's `empty_state/1` and each silence is the kit's `unread_state/1`, so neither can be presented
+as the other. `assign_surface/3` defaults `samen_acting_as` (`false`), so the cold-render path (a
+session that carried no mount) still renders rather than crashing on the shell's impersonation
+banner — the page must never crash on a silence it exists to report.
+
+**Copy.** One sentence per state, in the words a tenant would use, with the machine-readable reason
+token (`data-unread-reason`) left in the DOM for support:
+
+| state | what the reader is told |
+|---|---|
+| `not_authorized` | *Your role does not include activation analytics.* — open to owners/admins/members; nothing was read |
+| `not_configured` | *Activation analytics is not set up on this app.* — nothing queried, nothing withheld |
+| `read_failed` | *We could not read your activation data.* — unknown, not empty; try again |
+| `no_org` | *No organization is selected.* — nothing was read, which is not "no data" |
+| answered (empty) | *No activation data yet.* — the rollup WAS read and has no rows |
+
+The k-anonymity floor is explained once, above whatever state rendered, in a `.scope-note` (plain
+words: fewer people than the floor → `⊘`, never a number, never an individual). The copy carries no
+apostrophes on purpose — `Phoenix.HTML.Safe` escapes `'` as `&#39;`, and a DOM full of entities is
+what a reader copies out of a bug report.
+
+**Proofs.** `tenant_analytics_test.exs` adds the chrome proof (every state, the answered one
+included, renders `id="tenant-analytics"` INSIDE `<main class="main">`, with the sidebar beside it)
+and the plain-language proof (one asserted title per state, plus the refutation that no silence
+borrows the answered sentence "it came back with no rows");
+`tenant_analytics_route_e2e_test.exs` asserts the refusal leg renders inside the main panel
+end-to-end through the real router; `samenerp/test/phase3_surface_test.exs` asserts the same chrome
+plus the new empty-state copy on the deployed host.
+
+**Sabotage.** `343` was regenerated against the new render — the same two collapses (the read
+discards its reason, the page drops its `unread` branch and renders the empty state for every
+silence), with the chrome and copy proofs added to its MUST_FAIL set (thirteen named tests flip;
+`unread_next_step/3` still deliberately survives, so the sabotage is a page that lies rather than a
+missing function). Restores byte-exact.

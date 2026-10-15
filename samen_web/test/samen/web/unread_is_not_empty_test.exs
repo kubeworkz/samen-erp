@@ -132,6 +132,30 @@ defmodule Samen.Web.UnreadIsNotEmptyTest do
     refute without =~ "phx-click"
   end
 
+  test "unread_state/1 renders the NEXT STEP it is given, and offers none when it is given none" do
+    # A refusal with a place to go: the surface supplies the destination, the primitive renders
+    # it — a silence that names only its reason leaves the reader stranded on the failure.
+    step = [
+      %{
+        inner_block: fn _, _ ->
+          Phoenix.HTML.raw(~s(<a href="/settings/invitations">Ask an owner to raise your role</a>))
+        end
+      }
+    ]
+
+    html = render_component(&Samen.UI.unread_state/1, %{reason: :not_authorized, actions: step})
+
+    assert html =~ "unread-actions"
+    assert html =~ "Ask an owner to raise your role"
+    assert html =~ ~s(href="/settings/invitations")
+
+    # No step supplied → no affordance at all: the primitive never invents a destination (a link
+    # to nowhere is the same lie as an empty list for a read that never ran).
+    bare = render_component(&Samen.UI.unread_state/1, %{reason: :read_failed})
+    refute bare =~ "unread-actions"
+    refute bare =~ ~s(href=)
+  end
+
   # ==========================================================================
   # list_view/1 wiring — every adopter inherits the contract
   # ==========================================================================

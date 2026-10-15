@@ -236,6 +236,13 @@ defmodule Samen.Web.Mount do
   #     `login_path` (already whitelisted); `totp_issuer` (`auth/totp_enroll_live.ex`) and
   #     `work_path`/`work_logo_style` (`work/live.ex`) round out the same audit. `__principal__`
   #     (`tenant_role.ex`) is the stashed-role sentinel key.
+  #   * `docs_base` (P17 next-step affordances, 2026-10-15) — the DOCS PREFIX a host declares so
+  #     a framework surface can turn a repo-relative doc reference into a real link instead of a
+  #     dead href (or a bare "see the docs"). Absent it the reference is NAMED in a `code` path
+  #     and left unlinked — label PRESENCE is the dead-link guard, the same posture every `*_path`
+  #     key above carries. Read by `Samen.Web.Tenant.AnalyticsLive`'s next-step resolution (and
+  #     by any surface that ships a doc reference); round-trips through a cold `from_session/1`
+  #     like every other label here.
   # Enumerated round-trip is pinned by `identity_namespace_coverage_test.exs` +
   # `tenant_authn_prodpath_test.exs`, which rebuild every mount off a compiled router, AND by
   # `label_keys_completeness_test.exs` (luminary A4) — a source-grep over every call site
@@ -271,6 +278,7 @@ defmodule Samen.Web.Mount do
     work_path work_logo_style
     banking_path banking_logo_style erp_namespace
     files_path search_path analytics_path ics_path
+    docs_base
     __principal__
   )a
 

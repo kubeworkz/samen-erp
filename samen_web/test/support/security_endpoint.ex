@@ -111,7 +111,23 @@ defmodule Samen.WebTest.SecurityRouter do
     # other tenant surface rides: an authenticated member of org A asking for org B is bound to A,
     # never B (org bound from the authenticated scope, forge refused). Driven in
     # `tenant_analytics_route_e2e_test.exs`.
-    samen_tenant_analytics_routes(Samen.WebTest.Crm, repo: Samen.WebTest.Repo, labels: @labels)
+    #
+    # The `:identity_namespace` seam is wired (as it is on the flags mount above) so the armed
+    # host can derive the acting principal's REAL `Identity.Membership` role: without it the
+    # analytics role gate cannot be driven end-to-end at all, and its `:not_authorized` state
+    # (and the `:owner` admission) would stay provable only at the read layer.
+    #
+    # `:settings_path` is declared alongside the identity seam so the P17 next-step resolution can
+    # hand a REFUSED member a real route (this router mounts `samen_settings_routes(:settings, …)`
+    # at exactly this path, below/above) instead of a reason and no way to act — and so the e2e
+    # suite drives BOTH branches of that dead-link guard against a real mount.
+    samen_tenant_analytics_routes(Samen.WebTest.Crm,
+      repo: Samen.WebTest.Repo,
+      labels:
+        @labels
+        |> Map.put(:identity_namespace, Samen.WebTest.Operator)
+        |> Map.put(:settings_path, "/settings")
+    )
   end
 end
 

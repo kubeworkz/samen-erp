@@ -8,17 +8,19 @@
 # APP: samen_web
 # TEST_FILES: test/samen/web/tenant_analytics_test.exs
 # MUST_FAIL: same lower-priv plane
+diff --git a/samen_web/lib/samen/web/tenant/analytics_reads.ex b/samen_web/lib/samen/web/tenant/analytics_reads.ex
+index 062eb9c..901b74e 100644
 --- a/samen_web/lib/samen/web/tenant/analytics_reads.ex
 +++ b/samen_web/lib/samen/web/tenant/analytics_reads.ex
-@@ -147,8 +147,9 @@ defmodule Samen.Web.Tenant.AnalyticsReads do
+@@ -209,8 +209,9 @@ defmodule Samen.Web.Tenant.AnalyticsReads do
              Map.get(by_stage, stage, %{stage: stage, actor_count: 0})
            end)
  
 -        {:ok, floored} = Privacy.apply(stage_rows, @funnel_spec, Keyword.take(opts, [:k, :l]))
--        floored
+-        %{funnel: floored, unread: nil}
 +        # SABOTAGE: the floor is bypassed — a sub-floor / count-of-one own-org cohort emits
 +        # its re-identifying raw count instead of ⊘.
-+        stage_rows
++        %{funnel: stage_rows, unread: nil}
  
        _ ->
-         []
+         %{funnel: [], unread: :read_failed}

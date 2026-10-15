@@ -102,7 +102,16 @@ defmodule SamenerpWeb.Router do
     # presence-is-the-guard posture as every path above: the Workspace group's Automation item
     # renders exactly because this host mounted `samen_automation_routes(:automation, …)` below,
     # and `mix samen.verify.nav_links` fails any host whose label outruns its router.
-    automation_path: "/automation"
+    automation_path: "/automation",
+    # P17 next-step seam (2026-10-15) — the path `Samen.Web.Tenant.AnalyticsLive` builds the
+    # "ask an owner to raise your role" link from when the page refuses a role. The SAME
+    # presence-is-the-guard posture as every path above: this host mounts
+    # `samen_settings_routes(:settings, …)` at exactly this path below, so declaring it makes the
+    # link live instead of leaving the refused caller with a reason and no way to act. (The
+    # settings mount sets its own copy — this rides the shared tenant labels so the analytics
+    # mount carries it too, and `mix samen.verify.nav_links` fails a label that outruns the
+    # router.)
+    settings_path: "/settings"
   }
 
   pipeline :browser do

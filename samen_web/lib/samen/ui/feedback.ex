@@ -80,6 +80,26 @@ defmodule Samen.UI.Feedback do
   Purely presentational — copy in, markup out. It renders no field values, so it has
   no masking surface.
 
+  ## `:actions` — a silence names its NEXT STEP, not only its reason
+
+  Naming what could not be read is half the honesty; the other half is what the reader can
+  DO about it. A silence with no next step strands the reader on the same page — and, worse,
+  invites them to read the neighbouring empty list as the answer, which is the collapse this
+  primitive exists to prevent. The `:actions` slot is where a surface supplies the step that
+  is actually available for THAT reason: a refused role → ask an owner to raise it; an
+  unmounted seam → the host's mount docs; a failed read → the operator runbook.
+
+  Two properties the CALLER owns (this component renders, it does not decide):
+
+    * **at most one step per reason** — a choice of remedies is a surface's design, and the
+      bounded silence vocabulary is one reason at a time;
+    * **a step is a link only to a destination that provably exists** — a route the host
+      declares (mount-label PRESENCE is the dead-link guard, the `Samen.UI.Nav` posture) or a
+      docs base it sets. Where the host declares neither, the destination is NAMED (a `code`
+      path on the span), never a href to a route nobody mounted and never a bare "see the
+      docs". Absent the slot, no affordance renders at all — a link to nowhere is the same
+      lie in a different costume.
+
   Attrs:
 
     * `title` — the headline (default "Could not be read.")
@@ -90,12 +110,17 @@ defmodule Samen.UI.Feedback do
       specific seam to name should override it)
     * `retry_event` — OPTIONAL `phx-click` event name; when given, a Retry control
       is rendered (a surface that can re-run its read should offer it)
+    * `:actions` — OPTIONAL slot, the next step(s) for this reason (see above)
   """
   attr :title, :string, default: "Could not be read."
   attr :reason, :any, default: nil
   attr :body, :string, default: nil
   attr :retry_event, :string, default: nil
   attr :class, :any, default: nil
+
+  slot :actions,
+    doc:
+      "the next step for THIS reason — the destination a caller has PROVEN exists on this host"
 
   def unread_state(assigns) do
     assigns =
@@ -122,6 +147,13 @@ defmodule Samen.UI.Feedback do
         reason: <span class="mono" data-unread-reason={@reason_token}>{@reason_token}</span>
       </p>
       <p class="unread-body" style="margin:0;color:var(--muted);font-size:13px;max-width:52ch">{@body_text}</p>
+      <div
+        :if={@actions != []}
+        class="unread-actions"
+        style="display:flex;align-items:center;gap:8px;margin-top:8px"
+      >
+        {render_slot(@actions)}
+      </div>
       <button
         :if={@retry_event}
         type="button"

@@ -1,10 +1,12 @@
 defmodule Samen.Web.TenantRole do
   @moduledoc """
-  The TENANT-plane WRITE-role derivation (ADR-045 §4.4 — the S1a/S12 residual the B-SEC fix
-  bounded but did not close). The tenant-plane twin of `Samen.Web.Operator.Authz.resolve_role/2`
-  (T146): it answers "what admin-rank does the authenticated principal actually hold in this
-  org?" from the SAME source of truth the settings surfaces already use — the principal's
-  `Identity.Membership` row, via `Samen.Auth.OrgActor` (through `Samen.Web.CurrentOrg.resolve_actor/3`).
+  The TENANT-plane ROLE derivation (ADR-045 §4.4 — the S1a/S12 residual the B-SEC fix bounded but
+  did not close): the WRITE scope (`admin_scope/3`) and the READ scope
+  (`authenticated_scope/2`, added for the P17 own-org analytics role gate). The tenant-plane twin
+  of `Samen.Web.Operator.Authz.resolve_role/2` (T146): it answers "what role does the
+  authenticated principal actually hold in this org?" from the SAME source of truth the settings
+  surfaces already use — the principal's `Identity.Membership` row, via `Samen.Auth.OrgActor`
+  (through `Samen.Web.CurrentOrg.resolve_actor/3`).
 
   ## The hole this closes (S1a)
 
@@ -65,6 +67,37 @@ defmodule Samen.Web.TenantRole do
   end
 
   @doc """
+  The tenant-plane READ scope for `org_id` — the read-side counterpart of `admin_scope/3`, with
+  the WRITE elevation removed: `Mount.scope/2` with the actor's `:role` replaced by the
+  authenticated principal's REAL role, never raised above it.
+
+  ## Why a read surface needs it
+
+  A read that must decide "may this caller see this?" cannot decide it off `Mount.scope/2`: that
+  actor is a per-org pseudo-principal (`Samen.Web.Plane` fabricates `role: :member`), so a gate
+  reading it is satisfied BY CONSTRUCTION and gates nothing. This helper is what makes a
+  membership-derived read gate possible — `Samen.Web.Tenant.AnalyticsReads`'s `queryable_roles/0`
+  is load-bearing through it.
+
+  ## Postures (strictly narrowing — never wider than `Mount.scope/2`'s `:member`)
+
+    1. **OPERATOR plane** — `:admin`, exactly as `admin_scope/3` (T146/T150-gated impersonation
+       drill-ins; unchanged).
+    2. **ARMED tenant plane** — the REAL `Identity.Membership` role (`membership_role/3`),
+       fail-CLOSED to `:member` when there is no principal, no reachable Identity spine, or no
+       membership row.
+    3. **DISARMED tenant plane** — `:member`, i.e. BYTE-IDENTICAL to `Mount.scope/2` (the sanctioned
+       ADR-031 dev/dogfood `?org=` posture is untouched). Note this deliberately does NOT mirror
+       `admin_scope/3`'s dev `:admin` convenience: that is a WRITE posture, and a READ that
+       self-elevates is precisely the S1a hole.
+  """
+  @spec authenticated_scope(Mount.t(), String.t() | nil) :: Samen.Scope.t()
+  def authenticated_scope(%Mount{} = mount, org_id) do
+    %Samen.Scope{actor: actor} = Mount.scope(mount, org_id)
+    %Samen.Scope{actor: Map.put(actor, :role, read_role(mount, actor, org_id))}
+  end
+
+  @doc """
   The label key under which `Samen.Web.Live.assign_mount/2` stashes the request's authenticated
   principal onto the mount, so the 2-arity `write_scope(mount, org_id)` helpers reach it with no
   per-call-site threading. Runtime-only (never serialized into the `live_session` session).
@@ -82,6 +115,17 @@ defmodule Samen.Web.TenantRole do
     if CurrentOrg.tenant_gate_armed?(mount),
       do: membership_role(mount, org_id, principal),
       else: :admin
+  end
+
+  # The READ counterpart of `role_for/4`: same operator + armed legs, but the DISARMED leg keeps
+  # `Mount.scope/2`'s `:member` instead of the write convenience's `:admin` (see
+  # `authenticated_scope/2`).
+  defp read_role(_mount, %{plane: :operator}, _org_id), do: :admin
+
+  defp read_role(mount, _actor, org_id) do
+    if CurrentOrg.tenant_gate_armed?(mount),
+      do: membership_role(mount, org_id, stashed_principal(mount)),
+      else: :member
   end
 
   @doc """

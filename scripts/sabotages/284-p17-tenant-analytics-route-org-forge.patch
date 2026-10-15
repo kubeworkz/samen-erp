@@ -8,9 +8,11 @@
 # APP: samen_web
 # TEST_FILES: test/samen/web/tenant_analytics_route_e2e_test.exs
 # MUST_FAIL: gets A's funnel, never B's
+diff --git a/samen_web/lib/samen/web/tenant/analytics_live.ex b/samen_web/lib/samen/web/tenant/analytics_live.ex
+index bf033e7..429a60f 100644
 --- a/samen_web/lib/samen/web/tenant/analytics_live.ex
 +++ b/samen_web/lib/samen/web/tenant/analytics_live.ex
-@@ -28,7 +28,9 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
+@@ -48,7 +48,9 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
  
    @impl true
    def handle_params(params, _uri, socket) do
@@ -18,6 +20,6 @@
 +    # SABOTAGE: the surface trusts a client-supplied `?org=` over the authenticated org
 +    # authority, so an armed `?org=<other-org>` forge binds the FOREIGN org and leaks its cohorts.
 +    org_id = params["org"] || CurrentOrg.reresolve(socket, params)
-     {:noreply, load(assign(socket, org_id: org_id), org_id)}
+     {:noreply, load(socket, org_id)}
    end
  

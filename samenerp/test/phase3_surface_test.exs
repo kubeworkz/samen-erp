@@ -224,8 +224,16 @@ defmodule Samenerp.Phase3SurfaceTest do
     body = conn.resp_body
     assert body =~ "Your organization", "the P17 surface did not render"
     assert body =~ ~s(id="analytics-empty"), "the honest empty state did not render"
-    assert body =~ "No own-org activation data yet",
+    assert body =~ "No activation data yet.",
            "the empty-state copy did not render"
+
+    # …and it renders INSIDE the shared page chrome (the sidebar + main panel every other
+    # tenant surface mounts), so the state reads as a page state rather than a loose sentence.
+    assert body =~ ~s(class="side"),
+           "the /analytics page rendered with no sidebar — it left the tenant shell"
+
+    assert Regex.match?(~r/<main class="main">.*id="analytics-empty"/s, body),
+           "the empty state rendered outside the main panel"
   end
 
   test "the seeded funnel renders floored counts for the caller's org only" do

@@ -329,6 +329,13 @@ svg { display: block; }
 }
 .gtitle .lane { font-size: 12px; color: var(--faint); }
 .gtitle .filt { margin-left: auto; }
+/* The own-org activation page's scope note (P17): the k-anonymity floor, said in plain words
+   ABOVE whatever state the read reached — a reader who meets ⊘ in the table has already been
+   told what it means, and a reader who meets a silence knows what WOULD have been shown. */
+.scope-note {
+  margin: 0 2px 16px; max-width: 78ch;
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+}
 
 /* ---------------------------------------------------------------------------
  * Board (generic grouped columns — Samen.UI.board/1; G1 kanban first client)
