@@ -1,0 +1,100 @@
+# SABOTAGE: the revenue surface's per-half / per-read silences are collapsed back into one —
+# the read layer stops reporting WHICH source failed (both markers are a constant `nil`, and
+# its own rescue answers the empty surface), the page drops the two `unread_state` siblings the
+# sweep added (the cohort grid and the cross-tenant plan section), and a wired-but-raising
+# `revenue_plan_loader:` is reported as "no projection wired" again.
+#
+# Aimed at BOTH halves of the contract this surface shipped: the READER (`RevenueReads`, which
+# must distinguish "the rollup answered" from "the mov timeline answered") and the ADOPTION
+# (`RevenueLive`). Neither half alone is enough — the twin test hand-sets a marker and proves
+# the RENDER discriminates, the reads tests prove the REAL reads produce those markers.
+#
+# No warning is introduced (every collapsed branch keeps one clause, and no function loses its
+# only call site) and the replay runs `mix test`, so there is no warning to confine.
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_revenue_render_test.exs
+# MUST_FAIL: RED — an unreadable mov timeline leaves the WATERFALL readable and the grid honest
+# MUST_FAIL: SABOTAGE TWIN — the same grid renders BOTH states, so the probe discriminates
+# MUST_FAIL: RED — a WIRED plan loader that RAISES is never rendered as 'no projection wired'
+# MUST_FAIL: GREEN/twin — a loader that ANSWERED and a host with NO loader are told apart, and neither is read-failed
+--- a/samen_web/lib/samen/web/operator/revenue/reads.ex
++++ b/samen_web/lib/samen/web/operator/revenue/reads.ex
+@@ -93,11 +93,11 @@
+       periods: periods,
+       latest: List.last(periods),
+       cohorts: Metrics.cohort_retention(timeline),
+-      unread: if(rollup_ok?, do: nil, else: :read_failed),
+-      cohorts_unread: if(cohorts_ok?, do: nil, else: :read_failed)
++      unread: nil,
++      cohorts_unread: nil
+     }
+   rescue
+-    _ -> %{empty() | unread: :read_failed, cohorts_unread: :read_failed}
++    _ -> empty()
+   end
+ 
+   @doc """
+--- a/samen_web/lib/samen/web/operator/revenue_live.ex
++++ b/samen_web/lib/samen/web/operator/revenue_live.ex
+@@ -88,11 +88,11 @@
+         try do
+           {apply(mod, fun, args) || [], nil}
+         rescue
+-          _ -> {[], :read_failed}
++          _ -> {[], nil}
+         end
+ 
+       _ ->
+-        {[], :not_configured}
++        {[], nil}
+     end
+   end
+ 
+@@ -205,18 +205,8 @@
+                 <span class="n">{length(@revenue.cohorts.cohorts)}</span>
+                 <span class="lane">· customers by signup month · retained % from each customer's own movement timeline</span>
+               </div>
+-              <%!-- FAIL-HONEST: the cohort grid reads the mov TIMELINE — a different source from
+-                    the rollup above — so it states its OWN silence, and never borrows the
+-                    waterfall's. --%>
+-              <.unread_state
+-                :if={@revenue.cohorts.cohorts == [] and Map.get(@revenue, :cohorts_unread)}
+-                class="cohorts-unread"
+-                reason={Map.get(@revenue, :cohorts_unread)}
+-                title="Cohort retention could not be read."
+-                body="The customer movement timeline did not answer, so this page cannot tell you whether any signup cohorts exist. That is not the same as an empty grid."
+-              />
+               <.empty_state
+-                :if={@revenue.cohorts.cohorts == [] and is_nil(Map.get(@revenue, :cohorts_unread))}
++                :if={@revenue.cohorts.cohorts == []}
+                 class="cohorts-empty"
+                 icon="▦"
+                 title="No cohorts yet."
+@@ -253,26 +243,8 @@
+                 un-suppresses.
+               </.token_blind_bar>
+ 
+-              <%!-- FAIL-HONEST: three silences, stated separately — no loader wired
+-                    (`:not_configured`), a wired loader that RAISED (`:read_failed`), and a
+-                    loader that ANSWERED with no rows (the only case that may print a count
+-                    of none). --%>
+-              <.unread_state
+-                :if={@plan_cohorts == [] and @plan_cohorts_unread == :read_failed}
+-                class="plan-mrr-unread"
+-                reason={@plan_cohorts_unread}
+-                title="The cross-tenant plan projection could not be read."
+-                body="A revenue_plan_loader IS wired on this host, but it raised — so this page cannot tell you whether any plan cohorts exist. That is not the same as no loader being wired."
+-              />
+               <.empty_state
+-                :if={@plan_cohorts == [] and is_nil(@plan_cohorts_unread)}
+-                class="plan-mrr-empty"
+-                icon="⊘"
+-                title="No plan cohorts to show."
+-                body="The wired loader answered with no cohorts — every plan either has no live subscriptions or is below the k-anonymity floor (a suppressed cohort renders ⊘)."
+-              />
+-              <.empty_state
+-                :if={@plan_cohorts == [] and @plan_cohorts_unread == :not_configured}
++                :if={@plan_cohorts == []}
+                 class="plan-mrr-empty"
+                 icon="⊘"
+                 title="No cross-tenant plan projection wired."

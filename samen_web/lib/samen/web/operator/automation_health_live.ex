@@ -84,6 +84,8 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
           operator: nil,
           summary: [],
           runs: [],
+          unread: nil,
+          runs_unread: nil,
           action_error: nil,
           session_info: nil,
           open_error: nil
@@ -97,6 +99,8 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
           operator: operator,
           summary: [],
           runs: [],
+          unread: nil,
+          runs_unread: nil,
           action_error: nil,
           session_info: nil,
           open_error: nil
@@ -109,13 +113,17 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
         # ONE tenant's workflows is recorded in that tenant's ledger). Deny-on-read when missing.
         case Impersonation.gate_socket(socket, socket.assigns[:samen_operator_id], target_org_id) do
           {:ok, _actor, info} ->
+            {summary, runs, unread, runs_unread} = readings(operator, target_org_id)
+
             assign(socket,
               no_org: false,
               impersonation: :active,
               target_org_id: target_org_id,
               operator: operator,
-              summary: fetch_summary(operator, target_org_id),
-              runs: fetch_runs(operator, target_org_id),
+              summary: summary,
+              runs: runs,
+              unread: unread,
+              runs_unread: runs_unread,
               action_error: nil,
               session_info: info,
               open_error: nil
@@ -129,6 +137,7 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
               operator: operator,
               summary: [],
               runs: [],
+              unread: nil,
               action_error: nil,
               session_info: nil,
               open_error: nil
@@ -142,6 +151,7 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
               operator: operator,
               summary: [],
               runs: [],
+              unread: nil,
               action_error: nil,
               session_info: nil,
               open_error: nil
@@ -206,19 +216,61 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
 
   # ---------------------------------------------------------------------------
 
-  defp fetch_summary(operator, org_id) do
-    case Health.summary(operator, org_id) do
-      {:ok, summary} -> summary
-      {:error, _} -> []
-    end
+  # Returns `{summary, runs, wf_unread, runs_unread}` — the two lists carry their OWN
+  # silence: `nil` when that read ANSWERED (only an answered read may be printed as "none"),
+  # `:unavailable` when this host wired no such seam at all, `:read_failed` when a wired read
+  # did not answer. `[]` alone would make "No workflows for this org." an assertion about a
+  # tenant's data over a query that never returned (ADR-014/024/026 — the rule the agent
+  # plane's `:unavailable` branch keeps too).
+  defp readings(operator, org_id) do
+    summary = Health.summary(operator, org_id)
+    runs = Health.runs(operator, org_id, limit: 50)
+
+    {fetch_summary(summary), fetch_runs(runs), silence(summary), silence(runs)}
   end
 
-  defp fetch_runs(operator, org_id) do
-    case Health.runs(operator, org_id, limit: 50) do
-      {:ok, runs} -> runs
-      {:error, _} -> []
-    end
-  end
+  defp silence({:error, :unavailable}), do: :unavailable
+  defp silence({:error, _}), do: :read_failed
+  defp silence(_answered), do: nil
+
+  defp wf_unread_title(:unavailable), do: "Automation is not configured on this host."
+  defp wf_unread_title(_), do: "Workflows could not be read."
+
+  defp wf_unread_body(:unavailable),
+    do:
+      "This host has not wired the automation engine's workflow module (config :samen_core, Samen.Automation, workflow_module: ...), so no tenant's workflows can be read here. That is a fact about this host, not about this account's automations."
+
+  defp wf_unread_body(_),
+    do:
+      "The automation read did not answer, so this page cannot tell you whether this org has any workflows — that is not the same as having none."
+
+  defp runs_unread_title(:unavailable), do: "The run log is not wired on this host."
+  defp runs_unread_title(_), do: "Workflow runs could not be read."
+
+  defp runs_unread_body(:unavailable),
+    do:
+      "This host wired the automation engine but no run module (run_module), so no workflow's runs can be read here — the run log is unreadable, not empty."
+
+  defp runs_unread_body(_),
+    do:
+      "The run log did not answer, so no statement about this org's executions can be made here."
+
+  # A row whose run side could not be read says so in every run-derived cell — a `0`,
+  # `—` or blank there would be a measurement this host never made.
+  defp runs_count_cell(_value, false), do: "unreadable"
+  defp runs_count_cell(value, true), do: counts_str(value)
+
+  defp runs_total_cell(_total, false), do: "unreadable"
+  defp runs_total_cell(total, true), do: total
+
+  defp last_failure_cell(_ts, false), do: "unreadable"
+  defp last_failure_cell(ts, true), do: ts(ts)
+
+  defp fetch_summary({:ok, summary}), do: summary
+  defp fetch_summary(_), do: []
+
+  defp fetch_runs({:ok, runs}), do: runs
+  defp fetch_runs(_), do: []
 
   # Bridges ADR-010's tenant-shaped operator-workspace actor to the
   # `Samen.OperatorPlane.Actor` `Samen.Automation.Health` expects — see
@@ -357,8 +409,18 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
                   <span class="n">{length(@summary)}</span>
                 </div>
 
+                <%!-- FAIL-HONEST: a page with no workflows must say WHICH silence that is —
+                      this host wired no engine, a wired read did not answer, or the read
+                      genuinely answered "none". --%>
+                <.unread_state
+                  :if={@summary == [] and @unread}
+                  class="wf-unread"
+                  reason={@unread}
+                  title={wf_unread_title(@unread)}
+                  body={wf_unread_body(@unread)}
+                />
                 <.empty_state
-                  :if={@summary == []}
+                  :if={@summary == [] and is_nil(@unread)}
                   class="wf-empty"
                   icon="⚙"
                   title="No workflows for this org."
@@ -385,10 +447,17 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
                       </span>
                       <span :if={!w.killed}>active</span>
                     </td>
-                    <td class="w-total">{w.total_runs}</td>
-                    <td class="w-by-state">{counts_str(w.run_counts)}</td>
-                    <td class="w-by-error">{counts_str(w.error_kind_counts)}</td>
-                    <td class="w-last-failure" style="color:var(--muted)">{ts(w.last_failure_at)}</td>
+                    <%!-- A string, not a boolean: Phoenix omits a `data-*` attribute whose value
+                          is `false`, which would erase the very marker this row is here to
+                          carry. --%>
+                    <td class="w-total" data-runs-readable={to_string(Map.get(w, :runs_readable, true))}>
+                      {runs_total_cell(w.total_runs, Map.get(w, :runs_readable, true))}
+                    </td>
+                    <td class="w-by-state">{runs_count_cell(w.run_counts, Map.get(w, :runs_readable, true))}</td>
+                    <td class="w-by-error">{runs_count_cell(w.error_kind_counts, Map.get(w, :runs_readable, true))}</td>
+                    <td class="w-last-failure" style="color:var(--muted)">
+                      {last_failure_cell(w.last_failure_at, Map.get(w, :runs_readable, true))}
+                    </td>
                     <td class="w-actions">
                       <button
                         :if={!w.killed}
@@ -420,8 +489,17 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
                   <span class="n">{length(@runs)}</span>
                 </div>
 
+                <%!-- FAIL-HONEST: the run LOG has its own seam (`run_module`) and therefore its
+                      own silence — never the workflow section's. --%>
+                <.unread_state
+                  :if={@runs == [] and @runs_unread}
+                  class="run-unread"
+                  reason={@runs_unread}
+                  title={runs_unread_title(@runs_unread)}
+                  body={runs_unread_body(@runs_unread)}
+                />
                 <.empty_state
-                  :if={@runs == []}
+                  :if={@runs == [] and is_nil(@runs_unread)}
                   class="run-empty"
                   icon="✓"
                   title="No runs recorded."

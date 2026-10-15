@@ -1,0 +1,59 @@
+# SABOTAGE: the operator automation page's two lists lose their per-list silence — the reads'
+# answer is discarded and every run-derived cell is printed as a measurement again. A host with no
+# automation renders "No workflows for this org."; a host with no run side prints runs as `0`/"—";
+# a workflow whose run read RAISED claims the same counts. Each is an assertion about data the
+# surface never observed (ADR-014/024/026).
+#
+# Aimed at the ADOPTION only (`AutomationHealthLive`): `Samen.Automation.Health` keeps its
+# `availability/0` / `:unavailable` / `runs_readable` contract (patch 340 owns the kernel), so the
+# page still KNOWS which silence it is — it simply has no per-surface statement left to make.
+#
+# No warning is introduced (each collapsed helper keeps exactly one clause, so nothing becomes
+# unreachable) and the replay runs `mix test`, so there is no warning to confine.
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_automation_health_test.exs
+# MUST_FAIL: an UNWIRED host is never rendered as 'No workflows for this org.'
+# MUST_FAIL: a host whose RUN side is unwired shows the workflows — aggregates marked unreadable, never 0
+# MUST_FAIL: a WIRED read that RAISES renders the unread state — and only for the list that raised
+--- a/samen_web/lib/samen/web/operator/automation_health_live.ex
++++ b/samen_web/lib/samen/web/operator/automation_health_live.ex
+@@ -229,9 +229,7 @@
+     {fetch_summary(summary), fetch_runs(runs), silence(summary), silence(runs)}
+   end
+ 
+-  defp silence({:error, :unavailable}), do: :unavailable
+-  defp silence({:error, _}), do: :read_failed
+-  defp silence(_answered), do: nil
++  defp silence(_result), do: nil
+ 
+   defp wf_unread_title(:unavailable), do: "Automation is not configured on this host."
+   defp wf_unread_title(_), do: "Workflows could not be read."
+@@ -257,14 +255,11 @@
+ 
+   # A row whose run side could not be read says so in every run-derived cell — a `0`,
+   # `—` or blank there would be a measurement this host never made.
+-  defp runs_count_cell(_value, false), do: "unreadable"
+-  defp runs_count_cell(value, true), do: counts_str(value)
+-
+-  defp runs_total_cell(_total, false), do: "unreadable"
+-  defp runs_total_cell(total, true), do: total
+-
+-  defp last_failure_cell(_ts, false), do: "unreadable"
+-  defp last_failure_cell(ts, true), do: ts(ts)
++  defp runs_count_cell(value, _readable), do: counts_str(value)
++
++  defp runs_total_cell(total, _readable), do: total
++
++  defp last_failure_cell(ts, _readable), do: ts(ts)
+ 
+   defp fetch_summary({:ok, summary}), do: summary
+   defp fetch_summary(_), do: []
+@@ -450,7 +445,7 @@
+                     <%!-- A string, not a boolean: Phoenix omits a `data-*` attribute whose value
+                           is `false`, which would erase the very marker this row is here to
+                           carry. --%>
+-                    <td class="w-total" data-runs-readable={to_string(Map.get(w, :runs_readable, true))}>
++                    <td class="w-total" data-runs-readable="true">
+                       {runs_total_cell(w.total_runs, Map.get(w, :runs_readable, true))}
+                     </td>
+                     <td class="w-by-state">{runs_count_cell(w.run_counts, Map.get(w, :runs_readable, true))}</td>

@@ -154,7 +154,7 @@ defmodule Samen.WebTest.DataCase do
     Samen.Web.Mount.new(
       :operator,
       Samen.WebTest.Operator,
-      Samen.WebTest.Repo,
+      Keyword.get(opts, :repo, Samen.WebTest.Repo),
       plane: Samen.Web.Plane.tenant(),
       labels: labels
     )

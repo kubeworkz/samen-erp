@@ -221,8 +221,19 @@ defmodule Samen.Web.Operator.DeliverabilityLive do
                   <span class="lane">· dlv_suppression · refused BEFORE the provider ever sees the send</span>
                 </div>
 
+                <%!-- FAIL-HONEST: an unreadable suppression read is NOT "nobody is suppressed" —
+                      that would misdirect the operator away from the exact cause they came for.
+                      Rendered INSTEAD of the confident empty state. --%>
+                <.unread_state
+                  :if={@detail.suppressions == [] and Map.get(@detail, :unread)}
+                  class="suppressions-unread"
+                  reason={Map.get(@detail, :unread)}
+                  title="The suppression list could not be read."
+                  body="The dlv_suppression read did not answer, so this page cannot tell you whether anyone in this tenant is suppressed. That is not the same as an empty suppression list."
+                />
+
                 <.empty_state
-                  :if={@detail.suppressions == []}
+                  :if={@detail.suppressions == [] and is_nil(Map.get(@detail, :unread))}
                   class="suppressions-empty"
                   icon="✓"
                   title="No suppressions."
@@ -259,8 +270,16 @@ defmodule Samen.Web.Operator.DeliverabilityLive do
                   <span class="lane">· dlv_email_event · delivered / bounce / complaint / open / click</span>
                 </div>
 
+                <.unread_state
+                  :if={@detail.events == [] and Map.get(@detail, :unread)}
+                  class="events-unread"
+                  reason={Map.get(@detail, :unread)}
+                  title="The delivery timeline could not be read."
+                  body="The dlv_email_event read did not answer, so no statement can be made about this tenant's delivery history. That is not the same as an empty timeline."
+                />
+
                 <.empty_state
-                  :if={@detail.events == []}
+                  :if={@detail.events == [] and is_nil(Map.get(@detail, :unread))}
                   class="events-empty"
                   icon="✉"
                   title="No delivery events."

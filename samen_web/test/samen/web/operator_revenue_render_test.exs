@@ -18,6 +18,8 @@ defmodule Samen.Web.OperatorRevenueRenderTest do
   """
   use Samen.WebTest.DataCase, async: false
 
+  alias Samen.Web.Operator.RevenueLive
+  alias Samen.Web.Operator.RevenueReads
   alias Samen.WebTest.Operator, as: Op
 
   # -- fixtures -----------------------------------------------------------------
@@ -142,6 +144,13 @@ defmodule Samen.Web.OperatorRevenueRenderTest do
     assert html =~ "cohort-row"
     assert html =~ "100.0%"
     assert html =~ "50.0%"
+
+    # GREEN half of the per-half silence contract: BOTH reads answered, so neither half
+    # reports a silence (`unread` = the rollup's, `cohorts_unread` = the mov timeline's).
+    assigns = loaded_assigns(revenue_mount(org_id))
+    assert assigns.revenue.unread == nil
+    assert assigns.revenue.cohorts_unread == nil
+    refute html =~ ~s(data-read-state="unread")
   end
 
   test "the revenue surface is not a PII surface: no vault token, no mask sentinel, all bounded numbers" do
@@ -158,6 +167,9 @@ defmodule Samen.Web.OperatorRevenueRenderTest do
     assert html =~ "revenue-empty"
     assert html =~ "cohorts-empty"
     assert html =~ "No revenue movements yet."
+    # A READ that answered and found nothing is the only case that may say "none" — the
+    # zero-data render carries no unread marker at all.
+    refute html =~ ~s(data-read-state="unread")
   end
 
   # -- cross-tenant: the k-anon suppression render contract (AC-G7-9) -------------
@@ -205,5 +217,124 @@ defmodule Samen.Web.OperatorRevenueRenderTest do
 
     assert html =~ "plan-mrr-empty"
     assert html =~ "No cross-tenant plan projection wired."
+  end
+
+  # ---------------------------------------------------------------------------
+  # The per-half / per-read silences (fail-honest, ADR-014/024/026).
+  #
+  # The own-book surface reads TWO sources (the `mrr_revenue_rollup` RAW table for the
+  # waterfall, the mount's `SubscriptionEvent` mov timeline for the cohort grid), and the
+  # cross-tenant section reads a THIRD (the host's `revenue_plan_loader:` label). Each is
+  # proven green / read-failed / sabotage-twin, so none of them can print "none" for a
+  # read that never answered.
+
+  test "RED — an unreadable mov timeline leaves the WATERFALL readable and the grid honest" do
+    org_id = seed_revenue!()
+    mount = revenue_mount(org_id)
+
+    # The mov-timeline read cannot run (an unscopable read of that ONE resource) while the
+    # rollup's own read — a different source entirely — still answers: exactly the per-half
+    # case a single page-wide flag cannot express. Asserted against the REAL read, not a stub.
+    revenue = RevenueReads.revenue(mount, nil)
+
+    assert revenue.unread == nil, "the rollup answered — the waterfall is readable"
+    assert revenue.cohorts_unread == :read_failed
+    assert revenue.periods != []
+    assert revenue.cohorts.cohorts == []
+
+    html = render_html(RevenueLive, %{loaded_assigns(mount) | revenue: revenue})
+
+    assert html =~ "Cohort retention could not be read."
+    assert html =~ ~s(data-unread-reason="read_failed")
+    assert html =~ ~s(class="card unread-state cohorts-unread")
+    refute html =~ "No cohorts yet.",
+           "an unreadable timeline claimed the tenant has no signup cohorts"
+
+    # …and the waterfall beside it still renders its real rows — the two halves hold their
+    # OWN silences (blanking this table would be the mirror-image lie).
+    assert html =~ "waterfall-row"
+    refute html =~ "Revenue movements could not be read."
+  end
+
+  test "SABOTAGE TWIN — the same grid renders BOTH states, so the probe discriminates" do
+    # An org with no rows at all: the grid is genuinely empty, and the ONLY difference
+    # between the two renders below is the marker.
+    base = loaded_assigns(revenue_mount(Ash.UUID.generate()))
+    assert base.revenue.cohorts.cohorts == []
+
+    readable = render_html(RevenueLive, base)
+    assert readable =~ "No cohorts yet."
+    refute readable =~ ~s(data-read-state="unread")
+
+    unread = render_html(RevenueLive, %{base | revenue: %{base.revenue | cohorts_unread: :read_failed}})
+    assert unread =~ "Cohort retention could not be read."
+    refute unread =~ "No cohorts yet."
+
+    # Non-vacuous: the assertion that separates them FAILS on the readable render.
+    assert_raise ExUnit.AssertionError, fn ->
+      assert readable =~ "Cohort retention could not be read."
+    end
+  end
+
+  test "RED — a WIRED plan loader that RAISES is never rendered as 'no projection wired'" do
+    org_id = seed_revenue!()
+
+    mount =
+      revenue_mount(org_id, %{revenue_plan_loader: {__MODULE__, :raising_plan_cohorts, []}})
+
+    assigns = loaded_assigns(mount)
+    assert assigns.plan_cohorts_unread == :read_failed
+
+    html = render_html(RevenueLive, assigns)
+
+    assert html =~ "The cross-tenant plan projection could not be read."
+    assert html =~ ~s(data-unread-reason="read_failed")
+    assert html =~ ~s(class="card unread-state plan-mrr-unread")
+    # The old collapse: a false statement about the HOST ("not wired") over a loader that is
+    # wired and raised, and a false one about the platform ("none").
+    refute html =~ "No cross-tenant plan projection wired."
+    refute html =~ "No plan cohorts to show."
+  end
+
+  test "GREEN/twin — a loader that ANSWERED and a host with NO loader are told apart, and neither is read-failed" do
+    org_id = seed_revenue!()
+
+    answered =
+      loaded_assigns(revenue_mount(org_id, %{revenue_plan_loader: {__MODULE__, :empty_plan_cohorts, []}}))
+
+    assert answered.plan_cohorts_unread == nil
+    answered_html = render_html(RevenueLive, answered)
+    assert answered_html =~ "No plan cohorts to show."
+    refute answered_html =~ "No cross-tenant plan projection wired."
+    refute answered_html =~ ~s(data-read-state="unread")
+
+    unwired = loaded_assigns(revenue_mount(org_id))
+    assert unwired.plan_cohorts_unread == :not_configured
+    wiring_html = render_html(RevenueLive, unwired)
+    assert wiring_html =~ "No cross-tenant plan projection wired."
+    refute wiring_html =~ "could not be read"
+    refute wiring_html =~ "No plan cohorts to show."
+
+    # SABOTAGE TWIN — the predicate that separates the twos is refutable on BOTH sides.
+    assert_raise ExUnit.AssertionError, fn -> assert wiring_html =~ "No plan cohorts to show." end
+  end
+
+  # -- harness ------------------------------------------------------------------
+
+  # The loader a host wires when its floored aggregate read answers with nothing (every plan
+  # below the floor or empty) — an ANSWERED read, so the section may say "none".
+  def empty_plan_cohorts, do: []
+
+  # …and a wired loader that RAISES: the loader exists, so "no projection wired" is false.
+  def raising_plan_cohorts, do: raise("plan loader exploded")
+
+  # The socket's assigns after the REAL `load/1` (the same path `render_live/3` drives), for
+  # assertions on the read-layer markers themselves rather than on rendered copy.
+  defp loaded_assigns(mount) do
+    %Phoenix.LiveView.Socket{}
+    |> Phoenix.Component.assign(:samen_mount, mount)
+    |> Phoenix.Component.assign(:samen_acting_as, false)
+    |> RevenueLive.load()
+    |> Map.fetch!(:assigns)
   end
 end

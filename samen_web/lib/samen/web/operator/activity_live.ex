@@ -257,8 +257,20 @@ defmodule Samen.Web.Operator.ActivityLive do
                   </span>
                 </div>
 
+                <%!-- FAIL-HONEST: an empty feed is a claim about the audit ledger, and a tier
+                      that RAISED never observed it. "No changes in this window" would send the
+                      operator hunting for a wider window over a read that never happened, so the
+                      unread state is rendered INSTEAD of the empty one. --%>
+                <.unread_state
+                  :if={@feed.items == [] and Map.get(@feed, :unread)}
+                  class="activity-unread"
+                  reason={Map.get(@feed, :unread)}
+                  title="Part of the activity feed could not be read."
+                  body="The audit ledger or the versioned-change tier did not answer, so this page cannot tell you whether anything changed in the selected window. That is not the same as an empty feed."
+                />
+
                 <.empty_state
-                  :if={@feed.items == []}
+                  :if={@feed.items == [] and is_nil(Map.get(@feed, :unread))}
                   class="activity-empty"
                   icon="🕘"
                   title="No changes in this window."

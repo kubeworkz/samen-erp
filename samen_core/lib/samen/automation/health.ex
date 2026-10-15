@@ -27,6 +27,22 @@ defmodule Samen.Automation.Health do
   seam `Samen.Automation.RunWorker`/`DispatchWorker` already use, so the
   operator surface and the engine always agree on which host resources they
   mean.
+
+  ## Three silences, never one (fail-honest, ADR-014/024/026)
+
+  An operator page over this API must be able to tell apart the facts it prints as
+  "nothing":
+
+    * **the host wired no engine** — `availability/0 == :unavailable`; `summary/3` and
+      `runs/3` refuse `{:error, :unavailable}` (the pawchart/demo posture);
+    * **the host wired the engine but not its run side** (driftwood/samenerp today: no
+      `run_module`) — the workflow rows are readable and carry `runs_readable: false` with
+      `nil` run aggregates; `runs/3` refuses `{:error, :unavailable}`, because the RUN LOG
+      genuinely cannot be read here;
+    * **a wired read RAISED** — `{:error, :read_failed}`, never `{:ok, []}`.
+
+  Only a read that ANSWERED produces `{:ok, rows}` — including `{:ok, []}`, which is the
+  one and only "this tenant has none".
   """
 
   require Ash.Query
@@ -54,34 +70,77 @@ defmodule Samen.Automation.Health do
   def may_manage?(_), do: false
 
   # ---------------------------------------------------------------------------
+  # Availability — honest-empty vs cannot-read (the A6 / R-A5-4 posture)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Is the automation engine READABLE on this host — `:available` or `:unavailable`?
+
+  `config :samen_core, Samen.Automation, workflow_module: ...` is the seam every entry
+  below resolves through; a host that wired no workflow module has no automation to
+  read at all (`Samen.Automation` documents the unwired engine as INERT, which is a
+  fact about the HOST, not about any tenant's workflows). Decided at the seam, without
+  touching the database — a wired-but-unreadable host reports `:read_failed` from the
+  read itself, so the two are never conflated.
+
+  Deliberately NOT org-scoped: the engine is wired per HOST, and asking per org would
+  invite the very confusion this closes (org with no workflows vs host with no engine).
+  """
+  @spec availability() :: :available | :unavailable
+  def availability do
+    if Automation.workflow_module(), do: :available, else: :unavailable
+  end
+
+  @doc "`availability/0` as a boolean, for callers that only branch."
+  @spec available?() :: boolean()
+  def available?, do: availability() == :available
+
+  @doc """
+  Can this host's RUN side be read at all — `:available` or `:unavailable`?
+
+  `run_module` is the observability half of the same seam (`Samen.Automation`: the
+  `RunRecord`/`Health`/`Breaker` family degrades to no-ops when it is unset) and is
+  wired INDEPENDENTLY of the engine: driftwood and samenerp wire workflows and no run
+  module today. The run log is then unreadable HERE, which is not the fact "this org has
+  no runs" — `runs/3` refuses rather than answering `[]`.
+  """
+  @spec run_log_availability() :: :available | :unavailable
+  def run_log_availability do
+    if Automation.run_module(), do: :available, else: :unavailable
+  end
+
+  # ---------------------------------------------------------------------------
   # Reads
   # ---------------------------------------------------------------------------
 
   @doc """
   Per-workflow health aggregates for ONE tenant org (ADR-039 §8.3): run counts
   by state, error-kind distribution, last failure, trip status. Refuses
-  `{:error, :not_authorized}` for a non-viewing actor.
+  `{:error, :not_authorized}` for a non-viewing actor and `{:error, :unavailable}` on a
+  host that wired no engine — the refusal ORDER is itself a boundary (an unauthorized
+  caller learns nothing about the host's wiring).
   """
   @spec summary(Actor.t() | term(), String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def summary(operator, org_id, opts \\ []) do
-    if may_view?(operator) do
-      {:ok, build_summary(org_id, opts)}
-    else
-      {:error, :not_authorized}
+    cond do
+      not may_view?(operator) -> {:error, :not_authorized}
+      availability() == :unavailable -> {:error, :unavailable}
+      true -> build_summary(org_id, opts)
     end
   end
 
   @doc """
   Recent Run rows for ONE tenant org, optionally scoped to one workflow
   (`opts[:workflow_id]`), newest first, bounded by `opts[:limit]` (default 100).
-  Refuses `{:error, :not_authorized}` for a non-viewing actor.
+  Refuses `{:error, :not_authorized}` for a non-viewing actor and
+  `{:error, :unavailable}` on a host whose run side is unwired.
   """
   @spec runs(Actor.t() | term(), String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def runs(operator, org_id, opts \\ []) do
-    if may_view?(operator) do
-      {:ok, list_runs(org_id, opts)}
-    else
-      {:error, :not_authorized}
+    cond do
+      not may_view?(operator) -> {:error, :not_authorized}
+      run_log_availability() == :unavailable -> {:error, :unavailable}
+      true -> list_runs(org_id, opts)
     end
   end
 
@@ -181,36 +240,74 @@ defmodule Samen.Automation.Health do
   defp operator_id(%{id: id}), do: id
   defp operator_id(_), do: nil
 
+  # FAIL-HONEST — see the moduledoc's "three silences". The old `else _ -> []` collapsed
+  # "this host wired nothing" and "this host wired no run side" into the same empty SUCCESS
+  # as "this org has no workflows", a claim about a tenant's data no read here observed.
   defp build_summary(org_id, opts) do
-    with wf_mod when not is_nil(wf_mod) <- Automation.workflow_module(opts),
-         run_mod when not is_nil(run_mod) <- Automation.run_module(opts) do
-      wf_mod
-      |> safe_read_by_org(org_id)
-      |> Enum.map(&workflow_health(&1, run_mod, org_id))
-    else
-      _ -> []
+    with {:ok, workflows} <- safe_read_by_org(Automation.workflow_module(opts), org_id) do
+      case Automation.run_module(opts) do
+        # Engine wired, run side not: the workflow rows ARE readable, their run aggregates
+        # are not — each row says so (`runs_readable: false`) instead of a measured 0.
+        nil ->
+          {:ok,
+           Enum.map(workflows, fn wf ->
+             {:ok, row} = workflow_row(wf, nil, org_id)
+             row
+           end)}
+        run_mod -> workflow_rows(workflows, run_mod, org_id)
+      end
     end
   end
 
-  defp workflow_health(wf, run_mod, org_id) do
-    runs = safe_runs_for_workflow(run_mod, org_id, wf.id, 500)
+  defp workflow_rows(workflows, run_mod, org_id) do
+    workflows
+    |> Enum.reduce_while({:ok, []}, fn wf, {:ok, acc} ->
+      case workflow_row(wf, run_mod, org_id) do
+        {:ok, row} -> {:cont, {:ok, [row | acc]}}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
+    |> case do
+      {:ok, rows} -> {:ok, Enum.reverse(rows)}
+      {:error, _} = err -> err
+    end
+  end
 
-    by_state =
-      runs
-      |> Enum.map(& &1.state)
-      |> Enum.frequencies()
+  defp workflow_row(wf, nil, _org_id) do
+    {:ok, health_row(wf, nil, nil, nil, nil, false)}
+  end
 
-    by_error_kind =
-      runs
-      |> Enum.map(& &1.error_kind)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.frequencies()
+  defp workflow_row(wf, run_mod, org_id) do
+    with {:ok, runs} <- runs_for_workflow(run_mod, org_id, wf.id, 500) do
+      by_state =
+        runs
+        |> Enum.map(& &1.state)
+        |> Enum.frequencies()
 
-    last_failure =
-      runs
-      |> Enum.filter(&(&1.state == :failed))
-      |> Enum.max_by(& &1.finished_at, fn a, b -> compare_dt(a, b) end, fn -> nil end)
+      by_error_kind =
+        runs
+        |> Enum.map(& &1.error_kind)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.frequencies()
 
+      last_failure =
+        runs
+        |> Enum.filter(&(&1.state == :failed))
+        |> Enum.max_by(& &1.finished_at, fn a, b -> compare_dt(a, b) end, fn -> nil end)
+
+      {:ok,
+       health_row(
+         wf,
+         length(runs),
+         by_state,
+         by_error_kind,
+         last_failure && last_failure.finished_at,
+         true
+       )}
+    end
+  end
+
+  defp health_row(wf, total_runs, run_counts, error_kind_counts, last_failure_at, runs_readable) do
     %{
       workflow_id: wf.id,
       name: wf.name,
@@ -219,10 +316,13 @@ defmodule Samen.Automation.Health do
       killed: not is_nil(wf.disabled_by_operator_at),
       disabled_reason: wf.disabled_reason,
       disabled_by_operator_at: wf.disabled_by_operator_at,
-      total_runs: length(runs),
-      run_counts: by_state,
-      error_kind_counts: by_error_kind,
-      last_failure_at: last_failure && last_failure.finished_at
+      total_runs: total_runs,
+      run_counts: run_counts,
+      error_kind_counts: error_kind_counts,
+      last_failure_at: last_failure_at,
+      # FALSE = "this host cannot read runs at all": the row states the silence rather
+      # than reporting 0 over a run side that was never read (moduledoc, second silence).
+      runs_readable: runs_readable
     }
   end
 
@@ -230,45 +330,49 @@ defmodule Samen.Automation.Health do
   defp compare_dt(nil, _), do: false
   defp compare_dt(_a, nil), do: true
 
+  # `{:ok, rows}` ONLY for a read that answered — a raise is `{:error, :read_failed}`, never
+  # `{:ok, []}`. The unwired-run-module case is refused one level up (`runs/3`, so an
+  # unauthorized caller never reaches it).
   defp list_runs(org_id, opts) do
     limit = Keyword.get(opts, :limit, 100)
     workflow_id = Keyword.get(opts, :workflow_id)
 
-    case Automation.run_module(opts) do
-      nil ->
-        []
-
-      run_mod ->
-        run_mod
-        |> filter(org_id == ^org_id)
-        |> maybe_filter_workflow(workflow_id)
-        |> Ash.Query.sort(inserted_at: :desc)
-        |> Ash.Query.limit(limit)
-        |> Ash.read!(authorize?: false)
-    end
+    Automation.run_module(opts)
+    |> filter(org_id == ^org_id)
+    |> maybe_filter_workflow(workflow_id)
+    |> Ash.Query.sort(inserted_at: :desc)
+    |> Ash.Query.limit(limit)
+    |> Ash.read!(authorize?: false)
+    |> then(&{:ok, &1})
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   defp maybe_filter_workflow(query, nil), do: query
   defp maybe_filter_workflow(query, workflow_id), do: filter(query, workflow_id == ^workflow_id)
 
-  defp safe_runs_for_workflow(run_mod, org_id, workflow_id, limit) do
+  # A per-workflow run read that RAISES must not become `total_runs: 0` for that workflow
+  # (a measured-looking 0 the read never measured) — it fails the whole summary instead.
+  defp runs_for_workflow(run_mod, org_id, workflow_id, limit) do
     run_mod
     |> filter(org_id == ^org_id)
     |> filter(workflow_id == ^workflow_id)
     |> Ash.Query.sort(inserted_at: :desc)
     |> Ash.Query.limit(limit)
     |> Ash.read!(authorize?: false)
+    |> then(&{:ok, &1})
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
+  # `{:ok, rows} | {:error, :read_failed}` — a workflow read that raised observed nothing,
+  # so it says so instead of answering the empty list that means "this org has none".
   defp safe_read_by_org(resource, org_id) do
     resource
     |> filter(org_id == ^org_id)
     |> Ash.read!(authorize?: false)
+    |> then(&{:ok, &1})
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 end

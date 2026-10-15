@@ -90,16 +90,21 @@ defmodule Samen.Web.Operator.AnalyticsReads do
   `funnel` is `[]` only when the rollup has NO funnel rows at all (the empty state);
   otherwise all three stages appear in funnel order (an unreached stage is a 0-org
   cohort — below any floor, suppressed). On any read error the surface is EMPTY
-  (`empty/0`), never partial garbage.
+  (`empty/0`) and marked `unread: :read_failed`, never partial garbage — and never a
+  claim that the product has emitted no events.
   """
   def analytics(mount, opts \\ []) do
-    %{funnel: funnel(mount, opts), retention: retention(mount, opts)}
+    %{funnel: funnel(mount, opts), retention: retention(mount, opts), unread: nil}
   rescue
-    _ -> empty()
+    _ -> %{empty() | unread: :read_failed}
   end
 
-  @doc "The empty surface shape (no mount / read error)."
-  def empty, do: %{funnel: [], retention: []}
+  @doc """
+  The empty surface shape. `unread` is `nil`: "nothing to read here" is a successful
+  outcome, distinct from `analytics/2`'s rescue, which marks the SAME shape
+  `:read_failed` so the page never presents a failed rollup read as "no product events".
+  """
+  def empty, do: %{funnel: [], retention: [], unread: nil}
 
   @doc "How many funnel stages arrived `%Suppressed{}` (feeds the suppression note)."
   def funnel_suppressed(funnel) when is_list(funnel),

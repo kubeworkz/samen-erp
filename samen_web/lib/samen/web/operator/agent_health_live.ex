@@ -93,6 +93,10 @@ defmodule Samen.Web.Operator.AgentHealthLive do
         summary: [],
         runs: [],
         turns: [],
+        # FAIL-HONEST: `nil` when every read answered. A reason here means the agent plane IS
+        # wired but a read failed, so "No agent runs for this org" would be an assertion about
+        # the tenant's data that this page never observed (see `fetch/1`).
+        unread: nil,
         selected_run: Keyword.get(opts, :selected_run),
         action_error: Keyword.get(opts, :action_error),
         session_info: nil,
@@ -106,14 +110,18 @@ defmodule Samen.Web.Operator.AgentHealthLive do
       true ->
         case Impersonation.gate_socket(socket, socket.assigns[:samen_operator_id], target_org_id) do
           {:ok, _actor, info} ->
+            {[summary, runs, turns], unread} =
+              readings(operator, target_org_id, Keyword.get(opts, :selected_run))
+
             assign(
               socket,
               base
               |> Keyword.merge(
                 impersonation: :active,
-                summary: fetch(Health.summary(operator, target_org_id)),
-                runs: fetch(Health.runs(operator, target_org_id, limit: 50)),
-                turns: fetch_turns(operator, target_org_id, Keyword.get(opts, :selected_run)),
+                summary: summary,
+                runs: runs,
+                turns: turns,
+                unread: unread,
                 session_info: info
               )
             )
@@ -171,12 +179,25 @@ defmodule Samen.Web.Operator.AgentHealthLive do
     end
   end
 
+  # The three reads share ONE outcome: `nil` when they all answered, `:read_failed` when any
+  # did not. A failed read is NOT an empty result — `[]` here would make the page print "No
+  # agent runs for this org." over a query that never returned (ADR-014/024/026).
+  defp readings(operator, org_id, selected_run) do
+    results = [
+      Health.summary(operator, org_id),
+      Health.runs(operator, org_id, limit: 50),
+      turns_or_nil(operator, org_id, selected_run)
+    ]
+
+    unread = if Enum.any?(results, &match?({:error, _}, &1)), do: :read_failed, else: nil
+    {Enum.map(results, &fetch/1), unread}
+  end
+
+  defp turns_or_nil(_operator, _org_id, nil), do: {:ok, []}
+  defp turns_or_nil(operator, org_id, run_id), do: Health.turns(operator, org_id, run_id)
+
   defp fetch({:ok, rows}), do: rows
   defp fetch(_), do: []
-
-  defp fetch_turns(_operator, _org_id, nil), do: []
-
-  defp fetch_turns(operator, org_id, run_id), do: fetch(Health.turns(operator, org_id, run_id))
 
   defp open_error_copy(:reason_required), do: "A reason for access is required."
   defp open_error_copy(:not_authorized), do: "Your operator role may not open an impersonation session."
@@ -321,8 +342,17 @@ defmodule Samen.Web.Operator.AgentHealthLive do
                   <span class="n">{length(@summary)}</span>
                 </div>
 
+                <%!-- FAIL-HONEST: the plane IS wired here (the `:unavailable` branch above did
+                      not fire), so a failed read is a read that did not observe "no runs". --%>
+                <.unread_state
+                  :if={@summary == [] and assigns[:unread]}
+                  class="agent-unread"
+                  reason={assigns[:unread]}
+                  title="Agent definitions could not be read."
+                  body="The agent-plane read did not answer, so this page cannot tell you whether this org has any runs. That is not the same as an org with no agent activity."
+                />
                 <.empty_state
-                  :if={@summary == []}
+                  :if={@summary == [] and is_nil(assigns[:unread])}
                   class="agent-empty"
                   icon="◎"
                   title="No agent runs for this org."
@@ -377,7 +407,10 @@ defmodule Samen.Web.Operator.AgentHealthLive do
                   <span class="n">{length(@runs)}</span>
                 </div>
 
-                <.empty_state :if={@runs == []} class="agent-run-empty" icon="✓" title="No runs recorded."
+                <.unread_state :if={@runs == [] and assigns[:unread]} class="agent-run-unread" reason={assigns[:unread]}
+                  title="Agent runs could not be read."
+                  body="The run log did not answer, so no statement about this org's runs can be made here." />
+                <.empty_state :if={@runs == [] and is_nil(assigns[:unread])} class="agent-run-empty" icon="✓" title="No runs recorded."
                   body="Queued, running, parked, and terminal runs appear here as agents dispatch." />
 
                 <.data_table :if={@runs != []}>
@@ -438,7 +471,10 @@ defmodule Samen.Web.Operator.AgentHealthLive do
                   </tr>
                 </.data_table>
 
-                <.empty_state :if={@turns == []} class="turn-empty" icon="·" title="No turns for that run." body="" />
+                <.unread_state :if={@turns == [] and assigns[:unread]} class="turn-unread" reason={assigns[:unread]}
+                  title="Turns for that run could not be read."
+                  body="The turn read did not answer, so this run's turns are unknown rather than absent." />
+                <.empty_state :if={@turns == [] and is_nil(assigns[:unread])} class="turn-empty" icon="·" title="No turns for that run." body="" />
               </div>
           <% end %>
         </div>

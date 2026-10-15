@@ -49,17 +49,19 @@ defmodule Samen.Web.Operator.RevenueLive do
           no_org: true,
           revenue: RevenueReads.empty(),
           plan_cohorts: [],
+          plan_cohorts_unread: nil,
           plan_suppressed: 0
         )
 
       _org_id ->
         scope = Operator.scope(mount)
-        plan_cohorts = plan_cohorts(mount)
+        {plan_cohorts, plan_cohorts_unread} = plan_cohorts(mount)
 
         assign(socket,
           no_org: false,
           revenue: RevenueReads.revenue(mount, scope),
           plan_cohorts: plan_cohorts,
+          plan_cohorts_unread: plan_cohorts_unread,
           plan_suppressed: Enum.count(plan_cohorts, &suppressed_cohort?/1)
         )
     end
@@ -69,18 +71,28 @@ defmodule Samen.Web.Operator.RevenueLive do
   # the `aggregate_loader:` pattern). The loader reads through the token-blind
   # `Samen.Aggregate.read_all/2` chokepoint, so the k-anon/l-div floors + query
   # budget have ALREADY run — a below-floor cohort arrives `%Suppressed{}` and is
-  # passed through untouched. Absent a loader the section renders an empty state.
+  # passed through untouched.
+  #
+  # Returns `{cohorts, silence}` — WHICH silence is the whole point, because this read has
+  # three of them (fail-honest, ADR-014/024/026):
+  #
+  #   * `:not_configured` — the host wired no `revenue_plan_loader:` at all (automation is
+  #     opt-in per host); the section says so and names the seam to wire;
+  #   * `:read_failed` — a loader IS wired and it RAISED; "no projection wired" would be
+  #     a false statement about the host, and `[]` a false one about the platform;
+  #   * `nil` — the loader ANSWERED, including `[]` ("no plan cohorts to show"), which is
+  #     the only case in which the section may print a count of none.
   defp plan_cohorts(%Mount{} = mount) do
     case Mount.label(mount, :revenue_plan_loader, nil) do
       {mod, fun, args} ->
         try do
-          apply(mod, fun, args) || []
+          {apply(mod, fun, args) || [], nil}
         rescue
-          _ -> []
+          _ -> {[], :read_failed}
         end
 
       _ ->
-        []
+        {[], :not_configured}
     end
   end
 
@@ -145,8 +157,17 @@ defmodule Samen.Web.Operator.RevenueLive do
                 <span class="n">{length(@revenue.periods)}</span>
                 <span class="lane">· opening + new + expansion − contraction − churn + reactivation = closing · reads the rollup, never a live scan</span>
               </div>
+              <%!-- FAIL-HONEST: an unreadable rollup is NOT a revenue surface with no movements.
+                    Rendered instead of the empty state, before it. --%>
+              <.unread_state
+                :if={@revenue.periods == [] and @revenue.unread}
+                class="revenue-unread"
+                reason={@revenue.unread}
+                title="Revenue movements could not be read."
+                body="The MRR rollup did not answer, so this page cannot tell you whether the ledger has movements. The tiles above show zeros for the same reason — they are not measured values."
+              />
               <.empty_state
-                :if={@revenue.periods == []}
+                :if={@revenue.periods == [] and is_nil(@revenue.unread)}
                 class="revenue-empty"
                 icon="≋"
                 title="No revenue movements yet."
@@ -184,8 +205,18 @@ defmodule Samen.Web.Operator.RevenueLive do
                 <span class="n">{length(@revenue.cohorts.cohorts)}</span>
                 <span class="lane">· customers by signup month · retained % from each customer's own movement timeline</span>
               </div>
+              <%!-- FAIL-HONEST: the cohort grid reads the mov TIMELINE — a different source from
+                    the rollup above — so it states its OWN silence, and never borrows the
+                    waterfall's. --%>
+              <.unread_state
+                :if={@revenue.cohorts.cohorts == [] and Map.get(@revenue, :cohorts_unread)}
+                class="cohorts-unread"
+                reason={Map.get(@revenue, :cohorts_unread)}
+                title="Cohort retention could not be read."
+                body="The customer movement timeline did not answer, so this page cannot tell you whether any signup cohorts exist. That is not the same as an empty grid."
+              />
               <.empty_state
-                :if={@revenue.cohorts.cohorts == []}
+                :if={@revenue.cohorts.cohorts == [] and is_nil(Map.get(@revenue, :cohorts_unread))}
                 class="cohorts-empty"
                 icon="▦"
                 title="No cohorts yet."
@@ -222,8 +253,26 @@ defmodule Samen.Web.Operator.RevenueLive do
                 un-suppresses.
               </.token_blind_bar>
 
+              <%!-- FAIL-HONEST: three silences, stated separately — no loader wired
+                    (`:not_configured`), a wired loader that RAISED (`:read_failed`), and a
+                    loader that ANSWERED with no rows (the only case that may print a count
+                    of none). --%>
+              <.unread_state
+                :if={@plan_cohorts == [] and @plan_cohorts_unread == :read_failed}
+                class="plan-mrr-unread"
+                reason={@plan_cohorts_unread}
+                title="The cross-tenant plan projection could not be read."
+                body="A revenue_plan_loader IS wired on this host, but it raised — so this page cannot tell you whether any plan cohorts exist. That is not the same as no loader being wired."
+              />
               <.empty_state
-                :if={@plan_cohorts == []}
+                :if={@plan_cohorts == [] and is_nil(@plan_cohorts_unread)}
+                class="plan-mrr-empty"
+                icon="⊘"
+                title="No plan cohorts to show."
+                body="The wired loader answered with no cohorts — every plan either has no live subscriptions or is below the k-anonymity floor (a suppressed cohort renders ⊘)."
+              />
+              <.empty_state
+                :if={@plan_cohorts == [] and @plan_cohorts_unread == :not_configured}
                 class="plan-mrr-empty"
                 icon="⊘"
                 title="No cross-tenant plan projection wired."

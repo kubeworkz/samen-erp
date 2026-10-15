@@ -212,8 +212,17 @@ defmodule Samen.Web.Operator.AnalyticsLive do
               <span class="n">{length(@analytics.funnel)}</span>
               <span class="lane">· signup → first-run → first-record · reads the paf rollup, never a live event scan</span>
             </div>
+            <%!-- FAIL-HONEST: a rollup that did not answer has not observed "no product
+                  events". Rendered instead of the empty state, before it. --%>
+            <.unread_state
+              :if={@analytics.funnel == [] and @analytics.unread}
+              class="funnel-unread"
+              reason={@analytics.unread}
+              title="The activation funnel could not be read."
+              body="The paf rollup did not answer, so this page cannot tell you whether any product events exist. That is not the same as an empty funnel."
+            />
             <.empty_state
-              :if={@analytics.funnel == []}
+              :if={@analytics.funnel == [] and is_nil(@analytics.unread)}
               class="funnel-empty"
               icon="≋"
               title="No product events yet."
@@ -247,8 +256,15 @@ defmodule Samen.Web.Operator.AnalyticsLive do
               <span class="n">{length(@analytics.retention)}</span>
               <span class="lane">· weekly signup cohorts · retained % of each cohort's own actors · seed scope, W0–W4 only</span>
             </div>
+            <.unread_state
+              :if={@analytics.retention == [] and @analytics.unread}
+              class="retention-unread"
+              reason={@analytics.unread}
+              title="Retention cohorts could not be read."
+              body="The paf rollup did not answer, so no cohort statement can be made here."
+            />
             <.empty_state
-              :if={@analytics.retention == []}
+              :if={@analytics.retention == [] and is_nil(@analytics.unread)}
               class="retention-empty"
               icon="▦"
               title="No cohorts yet."

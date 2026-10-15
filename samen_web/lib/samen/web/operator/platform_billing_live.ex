@@ -61,6 +61,17 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
             </div>
           </div>
         <% else %>
+          <%!-- FAIL-HONEST: every tile below reads `@billing`, and a failed read returns the
+                ZEROED shape. `$0.00` is a measurement; this bar is what stops a read failure
+                from being read as one. --%>
+          <.unread_state
+            :if={@billing.unread}
+            class="billing-unread"
+            reason={@billing.unread}
+            title="Platform billing could not be read."
+            body="The subscription and invoice reads did not answer, so the totals below are zeros from a failed read — not measured $0. Do not read them as a drop in platform MRR."
+          />
+
           <div class="metrics">
             <.metric label="Platform MRR" value={dollars(@billing.mrr_cents)} sub="active subscriptions">
               <:icon>
@@ -93,7 +104,7 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
                 <span class="lane">· each is a tenant's subscription TO the SaaS · customer in the clear</span>
               </div>
               <.empty_state
-                :if={@billing.subscriptions == []}
+                :if={@billing.subscriptions == [] and is_nil(@billing.unread)}
                 class="subscriptions-empty"
                 icon="↻"
                 title="No tenant subscriptions yet."
@@ -130,7 +141,7 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
                 <span class="lane">· invoices the SaaS issues tenants · past-due flagged</span>
               </div>
               <.empty_state
-                :if={@billing.invoices == []}
+                :if={@billing.invoices == [] and is_nil(@billing.unread)}
                 class="invoices-empty"
                 icon="☰"
                 title="No invoices yet."
@@ -169,8 +180,19 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
 
   # -- helpers -----------------------------------------------------------------
 
+  # `unread: nil` — the no-org case is a KNOWN outcome, not a failed read. `Reads.platform_billing/2`
+  # marks its OWN zeroed shape `:read_failed`, so the two are distinguishable at the render.
   defp empty_billing,
-    do: %{subscriptions: [], invoices: [], dunning: [], mrr_cents: 0, past_due_cents: 0, active_subs: 0}
+    do:
+      %{
+        subscriptions: [],
+        invoices: [],
+        dunning: [],
+        mrr_cents: 0,
+        past_due_cents: 0,
+        active_subs: 0,
+        unread: nil
+      }
 
   defp customer_name(nil), do: "—"
   defp customer_name(%{billing_name: name}), do: render_name(name)

@@ -1,0 +1,59 @@
+# SABOTAGE: the automation operator plane's THREE silences are collapsed back into one — a host
+# that wired no engine, a host with no run side, and a read that RAISED all answer the same empty
+# SUCCESS `Samen.AI.Agent.Health` was already cured of (pawchart's `agent_plane_unwired_test.exs`:
+# "The three of these previously answered `{:ok, []}` — an empty SUCCESS from a plane that cannot be
+# read at all").
+#
+# Aimed at the KERNEL only (`Samen.Automation.Health`): `availability/0` always claims the engine is
+# wired, every workflow row claims its run aggregates WERE read, and the rescued read answers
+# `{:ok, []}`. The operator LiveView's own per-surface branches are untouched — it simply has nothing
+# honest left to render from, which is the failure mode the named tests must catch.
+#
+# No warning is introduced (no clause or function becomes unused) and the replay runs `mix test`, so
+# there is no warning to confine.
+# APP: samen_core
+# TEST_FILES: test/automation/observability_test.exs
+# MUST_FAIL: an UNWIRED host refuses — and AUTHZ still refuses FIRST
+# MUST_FAIL: a host that wired the engine but NO run side says so — rows readable, aggregates not
+# MUST_FAIL: a WIRED read that RAISES is :read_failed — never the empty success
+--- a/samen_core/lib/samen/automation/health.ex
++++ b/samen_core/lib/samen/automation/health.ex
+@@ -87,9 +87,7 @@
+   invite the very confusion this closes (org with no workflows vs host with no engine).
+   """
+   @spec availability() :: :available | :unavailable
+-  def availability do
+-    if Automation.workflow_module(), do: :available, else: :unavailable
+-  end
++  def availability, do: :available
+ 
+   @doc "`availability/0` as a boolean, for callers that only branch."
+   @spec available?() :: boolean()
+@@ -105,9 +103,7 @@
+   no runs" — `runs/3` refuses rather than answering `[]`.
+   """
+   @spec run_log_availability() :: :available | :unavailable
+-  def run_log_availability do
+-    if Automation.run_module(), do: :available, else: :unavailable
+-  end
++  def run_log_availability, do: :available
+ 
+   # ---------------------------------------------------------------------------
+   # Reads
+@@ -322,7 +318,7 @@
+       last_failure_at: last_failure_at,
+       # FALSE = "this host cannot read runs at all": the row states the silence rather
+       # than reporting 0 over a run side that was never read (moduledoc, second silence).
+-      runs_readable: runs_readable
++      runs_readable: true
+     }
+   end
+ 
+@@ -373,6 +369,6 @@
+     |> Ash.read!(authorize?: false)
+     |> then(&{:ok, &1})
+   rescue
+-    _ -> {:error, :read_failed}
++    _ -> {:ok, []}
+   end
+ end

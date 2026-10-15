@@ -1,0 +1,144 @@
+# SABOTAGE: the PER-SURFACE unread branches added by the fail-honest sweep are dropped — the
+# activity feed, deliverability and flag-admin render sites lose their `unread` gate, and the three
+# read layers behind them collapse their marker back to a constant `nil`.
+#
+# This is aimed at the ADOPTION, outside the primitive: `Samen.UI.unread_state/1`, `%Page.unread`
+# and `list_view/1`'s clause are all untouched (patch 338 owns those, and the page still KNOWS when
+# a read failed — it simply has no per-surface statement to make). What is lost is the
+# disambiguation each of these three surfaces gained: an empty feed reads as "No changes in this
+# window.", an unreadable suppression list reads as "No suppressions.", an unreadable cohort read
+# reads as "No tenant accounts yet." — each an assertion about data the surface never observed.
+#
+# No warning is introduced (the read-layer functions that reported `ok?` are still called, their
+# results simply discarded, and `unread_deliverability/0` is removed with its only call site), and
+# the replay runs `mix test`, so there is no warning to confine.
+# APP: samen_web
+# TEST_FILES: test/samen/web/unread_is_not_empty_test.exs
+# MUST_FAIL: the deliverability read layer marks a FAILED read, and never a successful one
+# MUST_FAIL: the deliverability page names the unread silence for both tables, and the readable one for neither
+# MUST_FAIL: the flags cohort read reports which silence it is, and the page renders it
+# MUST_FAIL: the activity feed separates an UNREADABLE tier from an empty window
+--- a/samen_web/lib/samen/web/operator/deliverability_live.ex
++++ b/samen_web/lib/samen/web/operator/deliverability_live.ex
+@@ -224,16 +224,8 @@
+                 <%!-- FAIL-HONEST: an unreadable suppression read is NOT "nobody is suppressed" —
+                       that would misdirect the operator away from the exact cause they came for.
+                       Rendered INSTEAD of the confident empty state. --%>
+-                <.unread_state
+-                  :if={@detail.suppressions == [] and Map.get(@detail, :unread)}
+-                  class="suppressions-unread"
+-                  reason={Map.get(@detail, :unread)}
+-                  title="The suppression list could not be read."
+-                  body="The dlv_suppression read did not answer, so this page cannot tell you whether anyone in this tenant is suppressed. That is not the same as an empty suppression list."
+-                />
+-
+                 <.empty_state
+-                  :if={@detail.suppressions == [] and is_nil(Map.get(@detail, :unread))}
++                  :if={@detail.suppressions == [] }
+                   class="suppressions-empty"
+                   icon="✓"
+                   title="No suppressions."
+@@ -270,16 +262,8 @@
+                   <span class="lane">· dlv_email_event · delivered / bounce / complaint / open / click</span>
+                 </div>
+ 
+-                <.unread_state
+-                  :if={@detail.events == [] and Map.get(@detail, :unread)}
+-                  class="events-unread"
+-                  reason={Map.get(@detail, :unread)}
+-                  title="The delivery timeline could not be read."
+-                  body="The dlv_email_event read did not answer, so no statement can be made about this tenant's delivery history. That is not the same as an empty timeline."
+-                />
+-
+                 <.empty_state
+-                  :if={@detail.events == [] and is_nil(Map.get(@detail, :unread))}
++                  :if={@detail.events == [] }
+                   class="events-empty"
+                   icon="✉"
+                   title="No delivery events."
+--- a/samen_web/lib/samen/web/operator/flag_admin_live.ex
++++ b/samen_web/lib/samen/web/operator/flag_admin_live.ex
+@@ -411,15 +411,8 @@
+               <%!-- FAIL-HONEST: a failed cohorts read is not "no tenant accounts yet" — that
+                     would tell the operator the platform has no tenants when the read simply did
+                     not answer. Rendered INSTEAD of the empty state. --%>
+-              <.unread_state
+-                :if={@cohorts == [] and @cohorts_unread}
+-                class="cohorts-unread"
+-                reason={@cohorts_unread}
+-                title="Tenant cohorts could not be read."
+-                body="The account read did not answer, so this page cannot tell you whether any tenant orgs exist. That is not the same as an empty book."
+-              />
+               <.empty_state
+-                :if={@cohorts == [] and is_nil(@cohorts_unread)}
++                :if={@cohorts == [] }
+                 class="cohorts-empty"
+                 icon="◫"
+                 title="No tenant accounts yet."
+--- a/samen_web/lib/samen/web/operator/activity_live.ex
++++ b/samen_web/lib/samen/web/operator/activity_live.ex
+@@ -261,16 +261,8 @@
+                       that RAISED never observed it. "No changes in this window" would send the
+                       operator hunting for a wider window over a read that never happened, so the
+                       unread state is rendered INSTEAD of the empty one. --%>
+-                <.unread_state
+-                  :if={@feed.items == [] and Map.get(@feed, :unread)}
+-                  class="activity-unread"
+-                  reason={Map.get(@feed, :unread)}
+-                  title="Part of the activity feed could not be read."
+-                  body="The audit ledger or the versioned-change tier did not answer, so this page cannot tell you whether anything changed in the selected window. That is not the same as an empty feed."
+-                />
+-
+                 <.empty_state
+-                  :if={@feed.items == [] and is_nil(Map.get(@feed, :unread))}
++                  :if={@feed.items == [] }
+                   class="activity-empty"
+                   icon="🕘"
+                   title="No changes in this window."
+--- a/samen_web/lib/samen/web/operator/deliverability_reads.ex
++++ b/samen_web/lib/samen/web/operator/deliverability_reads.ex
+@@ -70,21 +70,7 @@
+       unread: nil
+     }
+   rescue
+-    _ -> unread_deliverability()
+-  end
+-
+-  @doc """
+-  The empty delivery shape, marked `unread: :read_failed`. The marker is what keeps a
+-  FAILED read from being rendered as the same confident "nobody is suppressed" claim a
+-  genuinely-empty read makes.
+-  """
+-  def unread_deliverability do
+-    %{
+-      events: [],
+-      suppressions: [],
+-      suppressed_subscriber_ids: MapSet.new(),
+-      unread: :read_failed
+-    }
++    _ -> %{events: [], suppressions: [], suppressed_subscriber_ids: MapSet.new(), unread: nil}
+   end
+ 
+   defp with_recipient(row, mount, actor, opts) do
+--- a/samen_web/lib/samen/web/operator/activity_reads.ex
++++ b/samen_web/lib/samen/web/operator/activity_reads.ex
+@@ -174,8 +174,8 @@
+     now = Keyword.get(opts, :now, DateTime.utc_now())
+     cutoff = DateTime.add(now, -window_hours * 3600, :second)
+ 
+-    {governance, governance_ok?} = governance_items(mount.repo, org_id, cutoff)
+-    {history, history_ok?} = history_items(mount, org_id, cutoff)
++    {governance, _governance_ok?} = governance_items(mount.repo, org_id, cutoff)
++    {history, _history_ok?} = history_items(mount, org_id, cutoff)
+ 
+     items =
+       (governance ++ history)
+@@ -191,7 +191,7 @@
+       # REPORTS whether it ran. An empty feed is otherwise ambiguous: "No changes in this window"
+       # is a claim about the audit ledger, and a tier that raised never observed it — it would
+       # send the operator hunting for a wider window over a read that never happened.
+-      unread: if(governance_ok? and history_ok?, do: nil, else: :tier_unreadable)
++      unread: nil
+     }
+   end
+ 

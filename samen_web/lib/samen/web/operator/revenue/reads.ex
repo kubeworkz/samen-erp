@@ -60,39 +60,73 @@ defmodule Samen.Web.Operator.RevenueReads do
         periods: [%{month:, waterfall: %Metrics.Waterfall{}, display:, nrr:,
                     gross_churn:, net_churn:, logo_churn:}, ...]  # ascending
         latest:  the last period (or nil),
-        cohorts: Metrics.cohort_retention/1 grid over the mov timeline
+        cohorts: Metrics.cohort_retention/1 grid over the mov timeline,
+        unread:  nil on success | :read_failed when the ROLLUP read did not answer,
+        cohorts_unread: nil on success | :read_failed when the MOV-TIMELINE read did not
+                        answer
       }
 
-  On any read error the surface is EMPTY (`empty/0`), never partial garbage.
+  On any read error the surface is EMPTY (`empty/0`), never partial garbage — and it is
+  marked `unread: :read_failed`, because a read that raised did not observe "no revenue
+  movements yet" and the page must not say it did.
+
+  ## Two silences, one per half (fail-honest, ADR-014/024/026)
+
+  The two halves read DIFFERENT sources: the waterfall's periods come from the
+  `mrr_revenue_rollup` RAW table (SQL through `mount.repo`), the cohort grid from the `mov`
+  timeline (an Ash read of the mount's `SubscriptionEvent`). So neither may speak for the
+  other — an unreadable timeline must not blank a waterfall that answered, and a readable
+  waterfall must not be presented as the grid's own answer. Each half therefore carries its
+  OWN marker (`unread` / `cohorts_unread`), and each inner read reports whether it RAN
+  (rather than rescuing to `[]`, which the outer rescue could never see and which the page
+  would have printed as "no movements yet" / "no cohorts yet").
   """
   def revenue(mount, scope) do
     operator_org_id = Samen.Web.Operator.org_id(mount)
 
-    periods =
-      mount
-      |> rollup_rows(operator_org_id)
-      |> periods()
+    {rollup, rollup_ok?} = rollup_rows(mount, operator_org_id)
+    {timeline, cohorts_ok?} = movement_timeline(mount, scope, operator_org_id)
+
+    periods = periods(rollup)
 
     %{
       periods: periods,
       latest: List.last(periods),
-      cohorts: Metrics.cohort_retention(movement_timeline(mount, scope))
+      cohorts: Metrics.cohort_retention(timeline),
+      unread: if(rollup_ok?, do: nil, else: :read_failed),
+      cohorts_unread: if(cohorts_ok?, do: nil, else: :read_failed)
     }
   rescue
-    _ -> empty()
+    _ -> %{empty() | unread: :read_failed, cohorts_unread: :read_failed}
   end
 
-  @doc "The empty surface shape (no org / read error)."
+  @doc """
+  The empty surface shape (no org).
+
+  Both markers are `nil` here — "no org to read" is a KNOWN, successful outcome, not a
+  failed read. Only `revenue/2`'s rescue (and each inner read's own failure) sets
+  `:read_failed`, so the renderer can tell the two apart and never print "no revenue
+  movements yet" / "no cohorts yet" over a read that did not answer.
+  """
   def empty do
-    %{periods: [], latest: nil, cohorts: %{cohorts: [], max_offset: 0}}
+    %{
+      periods: [],
+      latest: nil,
+      cohorts: %{cohorts: [], max_offset: 0},
+      unread: nil,
+      cohorts_unread: nil
+    }
   end
 
   # -- rollup read (raw table, bounded SQL) --------------------------------------
 
   # One org's rollup rows, ascending by period. Explicit LIMIT — bounded by
   # construction; the org filter keeps this the operator's OWN book (tenant-book
-  # drill-down, no floor). Returns [%{period_month:, kind:, delta_cents:, count:}].
-  defp rollup_rows(_mount, nil), do: []
+  # drill-down, no floor). Returns `{[%{period_month:, kind:, delta_cents:, count:}],
+  # ok?}` — `ok?` is the read's own report that it RAN, so a missing/unreadable raw table
+  # is a VALUE the caller can distinguish from "this org has no movements" (`{[], true}`),
+  # instead of a rescue the outer `revenue/2` never sees.
+  defp rollup_rows(_mount, nil), do: {[], true}
 
   defp rollup_rows(%Mount{repo: repo}, operator_org_id) do
     sql = """
@@ -105,14 +139,17 @@ defmodule Samen.Web.Operator.RevenueReads do
 
     with {:ok, org_uuid} <- Ecto.UUID.dump(operator_org_id),
          {:ok, %{rows: rows}} <- Ecto.Adapters.SQL.query(repo, sql, [org_uuid]) do
-      Enum.map(rows, fn [month, kind, delta, count] ->
-        %{period_month: month, kind: kind, delta_cents: delta, count: count}
-      end)
+      rows =
+        Enum.map(rows, fn [month, kind, delta, count] ->
+          %{period_month: month, kind: kind, delta_cents: delta, count: count}
+        end)
+
+      {rows, true}
     else
-      _ -> []
+      _ -> {[], false}
     end
   rescue
-    _ -> []
+    _ -> {[], false}
   end
 
   # -- period chaining (kernel-documented caller threading) -----------------------
@@ -165,16 +202,24 @@ defmodule Samen.Web.Operator.RevenueReads do
 
   # The raw movement timeline the kernel's cohort_retention/1 documents as its input.
   # Customer-keyed bounded ids + enums + cents + timestamps — no PII (AC-G7-3).
-  defp movement_timeline(mount, scope) do
-    Mount.resource(mount, SubscriptionEvent)
-    |> Ash.Query.ensure_selected([:customer_id, :kind, :mrr_delta_cents, :occurred_at])
-    # T121: `id` belt makes this a STRICT TOTAL ORDER (not merely deterministic-in-
-    # practice) — mov rows sharing an `occurred_at` instant resolve to ONE defined
-    # order regardless of timestamp precision, mirroring the ledger read's tiebreak.
-    |> Ash.Query.sort(occurred_at: :asc, id: :asc)
-    |> Ash.Query.limit(@lookup_limit)
-    |> Ash.read!(scope: scope)
+  # Returns `{rows, ok?}` — see `rollup_rows/2`: a namespace with no `SubscriptionEvent`
+  # (or an unscopable read) is `{[], false}`, never the empty list that means
+  # "no customer has a movement yet".
+  defp movement_timeline(_mount, _scope, nil), do: {[], true}
+
+  defp movement_timeline(mount, scope, _operator_org_id) do
+    rows =
+      Mount.resource(mount, SubscriptionEvent)
+      |> Ash.Query.ensure_selected([:customer_id, :kind, :mrr_delta_cents, :occurred_at])
+      # T121: `id` belt makes this a STRICT TOTAL ORDER (not merely deterministic-in-
+      # practice) — mov rows sharing an `occurred_at` instant resolve to ONE defined
+      # order regardless of timestamp precision, mirroring the ledger read's tiebreak.
+      |> Ash.Query.sort(occurred_at: :asc, id: :asc)
+      |> Ash.Query.limit(@lookup_limit)
+      |> Ash.read!(scope: scope)
+
+    {rows, true}
   rescue
-    _ -> []
+    _ -> {[], false}
   end
 end

@@ -318,6 +318,104 @@ defmodule Samen.Automation.ObservabilityTest do
   end
 
   # ---------------------------------------------------------------------------
+  # The three silences (fail-honest, ADR-014/024/026; the A6/R-A5-4 posture): an operator
+  # surface may print "nothing" only for the read that ANSWERED. Every other empty used to
+  # arrive as the same `{:ok, []}` — an empty success from a plane that cannot be read.
+
+  test "an UNWIRED host refuses — and AUTHZ still refuses FIRST" do
+    org = Ash.UUID.generate()
+    admin = Actor.new(Ash.UUID.generate(), :operator_admin)
+
+    # WIRED (this suite's fixture seam): both reads ANSWER, so `[]` here is a fact about the
+    # tenant, which is exactly what makes it a legitimate empty and not a fallback.
+    assert Health.availability() == :available
+    assert Health.available?()
+    assert Health.run_log_availability() == :available
+    assert {:ok, []} = Health.summary(admin, org)
+    assert {:ok, []} = Health.runs(admin, org)
+
+    # Engine UNWIRED — the pawchart/demo posture, where this used to answer `{:ok, []}`.
+    unwire_automation(fn ->
+      assert Health.availability() == :unavailable
+      refute Health.available?()
+      assert Health.run_log_availability() == :unavailable
+
+      assert {:error, :unavailable} = Health.summary(admin, org)
+      assert {:error, :unavailable} = Health.runs(admin, org)
+      refute match?({:ok, []}, Health.summary(admin, org))
+
+      # AUTHZ first: an unauthorized caller learns nothing about the host's wiring either.
+      assert {:error, :not_authorized} = Health.summary(%{id: "nobody"}, org)
+      assert {:error, :not_authorized} = Health.runs(%{id: "nobody"}, org)
+    end)
+
+    # POSITIVE CONTROL — re-wired, the identical calls answer again (the refusal is the
+    # host's wiring, not a broken reader).
+    assert {:ok, []} = Health.summary(admin, org)
+  end
+
+  test "a host that wired the engine but NO run side says so — rows readable, aggregates not" do
+    org = Ash.UUID.generate()
+    owner = Ash.UUID.generate()
+    admin = Actor.new(Ash.UUID.generate(), :operator_admin)
+
+    wf =
+      create_workflow!(org, owner,
+        conditions: [],
+        actions: [%{"kind" => "notify", "recipient" => "owner", "event_type" => "workflow.fired"}]
+      )
+
+    create_target!(org)
+    drain()
+
+    assert {:ok, [%{total_runs: 1, runs_readable: true, workflow_id: id}]} = Health.summary(admin, org)
+    assert id == wf.id
+
+    # driftwood/samenerp today: workflows wired, `run_module` unset.
+    without_run_module(fn ->
+      assert Health.availability() == :available
+      assert Health.run_log_availability() == :unavailable
+
+      # The workflow ITSELF is readable on this host — withholding the row would be its own
+      # lie. What is unreadable is its run side, and the row says exactly that.
+      assert {:ok, [row]} = Health.summary(admin, org)
+      assert row.workflow_id == wf.id
+      assert row.name == wf.name
+      assert row.killed == false
+      assert row.runs_readable == false
+      # …neither a measured 0 nor a fabricated count: the aggregates claim nothing.
+      assert row.total_runs == nil
+      assert row.run_counts == nil
+      assert row.error_kind_counts == nil
+      assert row.last_failure_at == nil
+
+      # The RUN LOG genuinely cannot be read here — refused, never `[]`.
+      assert {:error, :unavailable} = Health.runs(admin, org)
+    end)
+
+    # POSITIVE CONTROL — re-wired: the same row carries real numbers again.
+    assert {:ok, [%{total_runs: 1, runs_readable: true}]} = Health.summary(admin, org)
+  end
+
+  test "a WIRED read that RAISES is :read_failed — never the empty success" do
+    org = Ash.UUID.generate()
+    admin = Actor.new(Ash.UUID.generate(), :operator_admin)
+
+    # A wired seam naming something that is not a readable resource: the read RAISES inside
+    # the reader. `availability/0` still says `:available` (the host wired a module), which is
+    # the point — this is the third silence, and the page must be able to tell it from the
+    # first two.
+    with_raising_engine(fn ->
+      assert Health.availability() == :available
+      assert {:error, :read_failed} = Health.summary(admin, org)
+      refute match?({:ok, []}, Health.summary(admin, org))
+    end)
+
+    # POSITIVE CONTROL — the same call answers once the seam names a real resource.
+    assert {:ok, []} = Health.summary(admin, org)
+  end
+
+  # ---------------------------------------------------------------------------
   # Done-criterion 3 — INV-1/INV-2: no PII column, no leak in outcome rows.
 
   test "sar_run carries no pii_ column, physically (the no_pii_columns bar, INV-2)" do
@@ -445,4 +543,27 @@ defmodule Samen.Automation.ObservabilityTest do
 
   defp restore(app, key, nil), do: Application.delete_env(app, key)
   defp restore(app, key, val), do: Application.put_env(app, key, val)
+
+  # The three host postures the reads must tell apart, applied to the SAME seam the setup
+  # wires and restored on every exit path (application env is process-global).
+  defp unwire_automation(fun), do: with_seam(fun, :delete)
+
+  defp without_run_module(fun), do: with_seam(fun, {:put, :run_module, nil})
+
+  defp with_raising_engine(fun), do: with_seam(fun, {:put, :workflow_module, TestRepo})
+
+  defp with_seam(fun, change) do
+    prior = Application.get_env(:samen_core, Samen.Automation)
+
+    case change do
+      :delete -> Application.delete_env(:samen_core, Samen.Automation)
+      {:put, key, value} -> Application.put_env(:samen_core, Samen.Automation, Keyword.put(prior, key, value))
+    end
+
+    try do
+      fun.()
+    after
+      restore(:samen_core, Samen.Automation, prior)
+    end
+  end
 end

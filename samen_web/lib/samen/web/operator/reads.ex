@@ -179,28 +179,48 @@ defmodule Samen.Web.Operator.Reads do
   operator org. Returns `%{subscriptions:, invoices:, dunning:, mrr_cents:, past_due_cents:}`.
   """
   def platform_billing(mount, scope) do
-    subs = subscriptions(mount, scope)
-    invoices = invoices(mount, scope)
-    mrr_cents = Enum.reduce(subs, 0, fn s, acc -> if s.status == :active, do: acc + s.__mrr_cents__, else: acc end)
+    # Each inner read reports its OWN outcome (`{:ok, rows} | {:error, reason}`) instead of
+    # rescuing to `[]`. That distinction is the whole point: `[]` here means "no subscriptions",
+    # and a rescuing reader could not tell that apart from "the query raised" — so a failed
+    # read rendered a confident `$0.00` platform MRR (a MEASUREMENT the page never made).
+    with {:ok, subs} <- subscriptions(mount, scope),
+         {:ok, invoices} <- invoices(mount, scope) do
+      mrr_cents =
+        Enum.reduce(subs, 0, fn s, acc -> if s.status == :active, do: acc + s.__mrr_cents__, else: acc end)
 
-    now = DateTime.utc_now()
+      now = DateTime.utc_now()
+      dunning = Enum.filter(invoices, fn inv -> past_due?(inv, now) end)
+      past_due_cents = Enum.reduce(dunning, 0, fn inv, acc -> acc + (inv.amount_due_cents || 0) end)
 
-    dunning =
-      invoices
-      |> Enum.filter(fn inv -> past_due?(inv, now) end)
-
-    past_due_cents = Enum.reduce(dunning, 0, fn inv, acc -> acc + (inv.amount_due_cents || 0) end)
-
-    %{
-      subscriptions: subs,
-      invoices: invoices,
-      dunning: dunning,
-      mrr_cents: mrr_cents,
-      past_due_cents: past_due_cents,
-      active_subs: Enum.count(subs, &(&1.status == :active))
-    }
+      %{
+        subscriptions: subs,
+        invoices: invoices,
+        dunning: dunning,
+        mrr_cents: mrr_cents,
+        past_due_cents: past_due_cents,
+        active_subs: Enum.count(subs, &(&1.status == :active)),
+        unread: nil
+      }
+    else
+      # FAIL-HONEST: a failed read is NOT "no subscriptions, $0 MRR". The zeroed shape is
+      # returned (the page still renders structurally) but marked `unread`, so the renderer
+      # shows "could not be read" instead of a confident `$0.00` total.
+      _ -> unread_billing()
+    end
   rescue
-    _ -> %{subscriptions: [], invoices: [], dunning: [], mrr_cents: 0, past_due_cents: 0, active_subs: 0}
+    _ -> unread_billing()
+  end
+
+  defp unread_billing do
+    %{
+      subscriptions: [],
+      invoices: [],
+      dunning: [],
+      mrr_cents: 0,
+      past_due_cents: 0,
+      active_subs: 0,
+      unread: :read_failed
+    }
   end
 
   @doc """
@@ -241,7 +261,9 @@ defmodule Samen.Web.Operator.Reads do
 
     %{page | items: Enum.map(page.items, &desk_row(&1, joins))}
   rescue
-    _ -> empty_page(state)
+    # FAIL-HONEST: a failed page read is not an empty desk. The `%Page{}` carries `unread`,
+    # so `Samen.UI.list_view/1` renders "could not be read" instead of "no tickets".
+    _ -> %{empty_page(state) | unread: :read_failed}
   end
 
   defp desk_joins(mount, scope) do
@@ -535,6 +557,7 @@ defmodule Samen.Web.Operator.Reads do
           tickets: desk(mount, scope) |> Enum.filter(&(&1.__requester_org_id__ == row.tenant_org_id)),
           invoices:
             invoices(mount, scope)
+            |> invoices_or_empty()
             |> Enum.filter(&(&1.customer_id == customer_id))
             |> Enum.map(&Map.put(&1, :__past_due__, past_due?(&1, now)))
         }
@@ -639,38 +662,57 @@ defmodule Samen.Web.Operator.Reads do
 
   # -- private: Billing ---------------------------------------------------------
 
+  # Unwrap the billing readers for the callers that render a LIST rather than a MEASUREMENT.
+  #
+  # KNOWN GAP (deliberate, documented): `account_detail/5`'s invoices/tickets sections and the
+  # dunning score still treat an unreadable read as `[]`, so they can render "No invoices." for
+  # a read that failed. Those two callers are NOT on the platform-billing path (whose `$0.00`
+  # was the load-bearing lie this change closes) and threading a per-section unread flag through
+  # `account_detail`'s shape is its own change. This helper is the seam where that lands.
+  defp invoices_or_empty({:ok, rows}), do: rows
+  defp invoices_or_empty({:error, _}), do: []
+
   # Subscriptions with their monthly-price MRR + status. Customer PII resolved (tenant plane).
+  #
+  # Returns `{:ok, rows} | {:error, reason}` — the failure is a VALUE, so a caller that renders a
+  # measurement can say "could not be read" instead of reporting an empty book as `$0`.
   defp subscriptions(mount, scope) do
     prices_by_plan = monthly_prices_by_plan(mount, scope)
     plans_by_id = plans_by_id(mount, scope)
     customers = customers(mount, scope)
     customers_by_id = Map.new(customers, &{&1.id, &1})
 
-    Mount.resource(mount, Subscription)
-    |> Ash.Query.ensure_selected([:status, :customer_id, :plan_id, :current_period_end])
-    |> Ash.Query.sort(inserted_at: :asc)
-    |> Ash.Query.limit(@lookup_limit)
-    |> Ash.read!(scope: scope)
-    |> Enum.map(fn sub ->
-      mrr = if sub.status == :active, do: Map.get(prices_by_plan, sub.plan_id, 0), else: 0
+    rows =
+      Mount.resource(mount, Subscription)
+      |> Ash.Query.ensure_selected([:status, :customer_id, :plan_id, :current_period_end])
+      |> Ash.Query.sort(inserted_at: :asc)
+      |> Ash.Query.limit(@lookup_limit)
+      |> Ash.read!(scope: scope)
+      |> Enum.map(fn sub ->
+        mrr = if sub.status == :active, do: Map.get(prices_by_plan, sub.plan_id, 0), else: 0
 
-      %{
-        id: sub.id,
-        status: sub.status,
-        customer_id: sub.customer_id,
-        plan_id: sub.plan_id,
-        current_period_end: sub.current_period_end,
-        __customer__: Map.get(customers_by_id, sub.customer_id),
-        __plan__: Map.get(plans_by_id, sub.plan_id),
-        __mrr_cents__: mrr
-      }
-    end)
+        %{
+          id: sub.id,
+          status: sub.status,
+          customer_id: sub.customer_id,
+          plan_id: sub.plan_id,
+          current_period_end: sub.current_period_end,
+          __customer__: Map.get(customers_by_id, sub.customer_id),
+          __plan__: Map.get(plans_by_id, sub.plan_id),
+          __mrr_cents__: mrr
+        }
+      end)
+
+    {:ok, rows}
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   defp subscriptions_by_customer(mount, scope) do
-    subscriptions(mount, scope) |> Map.new(&{&1.customer_id, &1})
+    case subscriptions(mount, scope) do
+      {:ok, rows} -> Map.new(rows, &{&1.customer_id, &1})
+      {:error, _} -> %{}
+    end
   end
 
   # Map each account's tenant_org_id -> its Billing.Customer (via customer.custom.tenant_org_id).
@@ -695,21 +737,27 @@ defmodule Samen.Web.Operator.Reads do
     _ -> []
   end
 
+  # Returns `{:ok, rows} | {:error, reason}` — see `subscriptions/2` for why the failure must
+  # stay a value (a rescuing `[]` is indistinguishable from "no invoices", which is exactly the
+  # false absence claim the platform-billing page must never make).
   defp invoices(mount, scope) do
     customers_by_id = customers(mount, scope) |> Map.new(&{&1.id, &1})
 
-    Mount.resource(mount, Invoice)
-    |> Ash.Query.ensure_selected([:status, :amount_due_cents, :amount_paid_cents, :currency, :due_date, :paid_at, :customer_id])
-    |> Ash.Query.sort(inserted_at: :asc)
-    |> Ash.Query.limit(@lookup_limit)
-    |> Ash.read!(scope: scope)
-    |> Enum.map(fn inv ->
-      inv
-      |> Map.take([:id, :status, :amount_due_cents, :amount_paid_cents, :currency, :due_date, :paid_at, :customer_id])
-      |> Map.put(:__customer__, Map.get(customers_by_id, inv.customer_id))
-    end)
+    rows =
+      Mount.resource(mount, Invoice)
+      |> Ash.Query.ensure_selected([:status, :amount_due_cents, :amount_paid_cents, :currency, :due_date, :paid_at, :customer_id])
+      |> Ash.Query.sort(inserted_at: :asc)
+      |> Ash.Query.limit(@lookup_limit)
+      |> Ash.read!(scope: scope)
+      |> Enum.map(fn inv ->
+        inv
+        |> Map.take([:id, :status, :amount_due_cents, :amount_paid_cents, :currency, :due_date, :paid_at, :customer_id])
+        |> Map.put(:__customer__, Map.get(customers_by_id, inv.customer_id))
+      end)
+
+    {:ok, rows}
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   defp plans_by_id(mount, scope) do
@@ -771,7 +819,9 @@ defmodule Samen.Web.Operator.Reads do
   # `invoices/2` read; day counts are computed HERE so the score stays clock-free.
   # `now` arrives from the caller (ONE reading per assembly — B9 carry B4-P2-1).
   defp past_due_by_account(mount, scope, now) do
-    invoices(mount, scope)
+    mount
+    |> invoices(scope)
+    |> invoices_or_empty()
     |> Enum.filter(&past_due?(&1, now))
     |> Enum.reduce(%{}, fn inv, acc ->
       case get_in((inv.__customer__ && inv.__customer__.custom) || %{}, ["tenant_org_id"]) do

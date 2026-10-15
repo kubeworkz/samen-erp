@@ -180,6 +180,95 @@ defmodule Samen.Web.OperatorAutomationHealthTest do
   end
 
   # ---------------------------------------------------------------------------
+  # The three silences (fail-honest, ADR-014/024/026): "this host has no automation",
+  # "this host wired no run side", and "a wired read RAISED" are three different facts,
+  # and NONE of them is the fourth one — "this org has no workflows/runs".
+
+  test "an UNWIRED host is never rendered as 'No workflows for this org.'" do
+    org = Ash.UUID.generate()
+
+    # WIRED control: this org genuinely has nothing, and the page says exactly that.
+    wired = render_gated(org)
+    assert wired =~ "No workflows for this org."
+    assert wired =~ "No runs recorded."
+    refute wired =~ ~s(data-read-state="unread")
+
+    unwire(fn ->
+      html = render_gated(org)
+
+      # The page names WHICH silence: this HOST has no automation to read at all…
+      assert html =~ "Automation is not configured on this host."
+      assert html =~ ~s(data-read-state="unread")
+      assert html =~ ~s(data-unread-reason="unavailable")
+      assert html =~ ~s(class="card unread-state wf-unread")
+      refute html =~ "No workflows for this org.",
+             "an unwired host claimed its org has no workflows — the fail-honest contract inverted"
+
+      # …and the run log, whose seam is `run_module`, carries its own sentence.
+      assert html =~ "The run log is not wired on this host."
+      assert html =~ ~s(class="card unread-state run-unread")
+      refute html =~ "No runs recorded."
+    end)
+
+    # POSITIVE CONTROL — re-wired, the honest empty states come back (so the assertions
+    # above discriminate a wiring fact, not a copy change).
+    rewired = render_gated(org)
+    assert rewired =~ "No workflows for this org."
+    refute rewired =~ ~s(data-read-state="unread")
+  end
+
+  test "a host whose RUN side is unwired shows the workflows — aggregates marked unreadable, never 0" do
+    org = Ash.UUID.generate()
+    owner = Ash.UUID.generate()
+    wf = create_workflow!(org, owner)
+    _run = open_and_finalize!(org, wf, :succeeded, nil)
+
+    # WIRED control: the row's run aggregates ARE read here.
+    wired = render_gated(org)
+    assert wired =~ wf.name
+    assert wired =~ ~s(data-runs-readable="true")
+    refute wired =~ "unreadable"
+
+    without_run_module(fn ->
+      html = render_gated(org)
+
+      # The workflow ITSELF is readable on this host — dropping the row would be its own
+      # lie. What is unreadable is its run side, and every run-derived cell says so.
+      assert html =~ wf.name
+      assert html =~ ~s(data-runs-readable="false")
+      assert html =~ "unreadable"
+      refute html =~ "No workflows for this org."
+
+      # The run LOG cannot be read at all here — refused, never reported as empty.
+      assert html =~ "The run log is not wired on this host."
+      assert html =~ ~s(class="card unread-state run-unread")
+      refute html =~ "No runs recorded."
+    end)
+
+    # POSITIVE CONTROL — re-wired, the same row counts again.
+    assert render_gated(org) =~ ~s(data-runs-readable="true")
+  end
+
+  test "a WIRED read that RAISES renders the unread state — and only for the list that raised" do
+    org = Ash.UUID.generate()
+
+    with_raising_engine(fn ->
+      html = render_gated(org)
+
+      assert html =~ "Workflows could not be read."
+      assert html =~ ~s(data-unread-reason="read_failed")
+      assert html =~ ~s(class="card unread-state wf-unread")
+      refute html =~ "No workflows for this org."
+
+      # The run LOG's own read still ANSWERED, so it keeps its honest empty state — the two
+      # lists hold their own silences (a single page-wide flag would have lied here).
+      assert html =~ "No runs recorded."
+      refute html =~ "The run log is not wired on this host."
+      refute html =~ ~s(class="card unread-state run-unread")
+    end)
+  end
+
+  # ---------------------------------------------------------------------------
   # Harness
 
   defp operator_mount(operator_org_id) do
@@ -251,5 +340,32 @@ defmodule Samen.Web.OperatorAutomationHealthTest do
     |> Ash.Query.filter(id == ^run.id)
     |> Ash.read!(authorize?: false)
     |> List.first()
+  end
+
+  # The three host postures, applied to the SAME seam the setup wires and restored on every
+  # exit path — application env is process-global and these tests are `async: false`.
+  defp unwire(fun), do: with_seam(fun, :delete)
+
+  defp without_run_module(fun), do: with_seam(fun, {:put, :run_module, nil})
+
+  # A wired seam naming something that cannot be READ: `availability/0` still says available
+  # (the host wired a module), and the read itself raises — the third silence.
+  defp with_raising_engine(fun), do: with_seam(fun, {:put, :workflow_module, Samen.WebTest.NoSuchRepo})
+
+  defp with_seam(fun, change) do
+    prior = Application.get_env(:samen_core, Samen.Automation)
+
+    case change do
+      :delete -> Application.delete_env(:samen_core, Samen.Automation)
+      {:put, key, value} -> Application.put_env(:samen_core, Samen.Automation, Keyword.put(prior, key, value))
+    end
+
+    try do
+      fun.()
+    after
+      if prior,
+        do: Application.put_env(:samen_core, Samen.Automation, prior),
+        else: Application.delete_env(:samen_core, Samen.Automation)
+    end
   end
 end

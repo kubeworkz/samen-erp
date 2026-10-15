@@ -152,7 +152,10 @@ defmodule Samen.Web.Operator.ActivityReads do
   degrades that tier to `[]` — fail-honest, never a crash, never a partial page
   presented as complete for the other tier.
 
-  Returns `%{items:, window_hours:, cutoff:}`. Each item:
+  Returns `%{items:, window_hours:, cutoff:, unread:}` where `unread` is `nil` when both tiers
+  answered (including the KNOWN-empty unwired/missing-org cases) and `:tier_unreadable` when at
+  least one tier RAISED — the page then distinguishes "nothing changed in this window" from "part
+  of the ledger did not answer" instead of asserting the former over a failed read. Each item:
   `%{id:, tier: :governance | :history, occurred_at:, action:, actor_id:,
   object_ref:, impersonation?:, session_id:, detail:, changes:}` — `changes` is
   `nil` on governance-tier items (there is no diff to show; the object-ref IS
@@ -162,19 +165,34 @@ defmodule Samen.Web.Operator.ActivityReads do
   @spec activity(Mount.t(), String.t(), keyword()) :: map()
   def activity(mount, org_id, opts \\ [])
 
-  def activity(_mount, nil, _opts), do: %{items: [], window_hours: @default_window_hours, cutoff: nil}
+  def activity(_mount, nil, _opts) do
+    %{items: [], window_hours: @default_window_hours, cutoff: nil, unread: nil}
+  end
 
   def activity(%Mount{} = mount, org_id, opts) do
     window_hours = clamp_window(Keyword.get(opts, :window_hours, @default_window_hours))
     now = Keyword.get(opts, :now, DateTime.utc_now())
     cutoff = DateTime.add(now, -window_hours * 3600, :second)
 
+    {governance, governance_ok?} = governance_items(mount.repo, org_id, cutoff)
+    {history, history_ok?} = history_items(mount, org_id, cutoff)
+
     items =
-      (governance_items(mount.repo, org_id, cutoff) ++ history_items(mount, org_id, cutoff))
+      (governance ++ history)
       |> Enum.sort_by(& &1.occurred_at, {:desc, DateTime})
       |> Enum.take(@feed_limit)
 
-    %{items: items, window_hours: window_hours, cutoff: cutoff}
+    %{
+      items: items,
+      window_hours: window_hours,
+      cutoff: cutoff,
+      # FAIL-HONEST: each tier still degrades to `[]` on ITS OWN error (partial-degrade is the
+      # right production behaviour — one broken tier must not blank the other), but the tier now
+      # REPORTS whether it ran. An empty feed is otherwise ambiguous: "No changes in this window"
+      # is a claim about the audit ledger, and a tier that raised never observed it — it would
+      # send the operator hunting for a wider window over a read that never happened.
+      unread: if(governance_ok? and history_ok?, do: nil, else: :tier_unreadable)
+    }
   end
 
   defp clamp_window(hours) when is_integer(hours), do: hours |> max(1) |> min(@max_window_hours)
@@ -196,13 +214,22 @@ defmodule Samen.Web.Operator.ActivityReads do
   # one tier's error never blanks the others (fail-honest, partial-degrade).
   # ---------------------------------------------------------------------------
 
+  # Returns `{items, ok?}`. `ok?` is false when ANY sub-query raised — the failure is a VALUE
+  # here, so the caller can tell "the ledger has nothing in this window" from "the ledger did
+  # not answer" (an unwired/nil repo is `{[], true}`: nothing was asked to read, which is a
+  # KNOWN host configuration and the moduledoc's documented empty-feed case, not a fault).
   defp governance_items(repo, org_id, cutoff) when is_atom(repo) and not is_nil(repo) do
-    impersonation_rows(repo, org_id, cutoff) ++
-      system_bucket_rows(repo, org_id, cutoff) ++
+    results = [
+      impersonation_rows(repo, org_id, cutoff),
+      system_bucket_rows(repo, org_id, cutoff),
       approval_rows(repo, org_id, cutoff)
+    ]
+
+    ok? = Enum.all?(results, &match?({:ok, _}, &1))
+    {Enum.flat_map(results, fn {:ok, rows} -> rows; {:error, _} -> [] end), ok?}
   end
 
-  defp governance_items(_repo, _org_id, _cutoff), do: []
+  defp governance_items(_repo, _org_id, _cutoff), do: {[], true}
 
   # -- 1. Impersonation family: subject_id == org_id (T38 P7-F1) ---------------
 
@@ -216,8 +243,9 @@ defmodule Samen.Web.Operator.ActivityReads do
     |> limit(^@governance_limit)
     |> repo.all()
     |> Enum.map(&governance_item(&1, true))
+    |> then(&{:ok, &1})
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   # -- 2. The "system" bucket: event_type == "system" AND correlation_id == org_id (DIRECT) --
@@ -232,8 +260,9 @@ defmodule Samen.Web.Operator.ActivityReads do
     |> limit(^@governance_limit)
     |> repo.all()
     |> Enum.map(&governance_item(&1, false))
+    |> then(&{:ok, &1})
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   # -- 3. Approval family: correlation_id is an Approval id (INDIRECT) ---------
@@ -246,10 +275,13 @@ defmodule Samen.Web.Operator.ActivityReads do
 
   defp approval_rows(repo, org_id, cutoff) do
     case approval_ids_for_org(org_id) do
-      [] ->
-        []
+      :error ->
+        {:error, :read_failed}
 
-      approval_ids ->
+      {:ok, []} ->
+        {:ok, []}
+
+      {:ok, approval_ids} ->
         AuditEvent
         |> where(
           [e],
@@ -260,30 +292,36 @@ defmodule Samen.Web.Operator.ActivityReads do
         |> limit(^@governance_limit)
         |> repo.all()
         |> Enum.map(&governance_item(&1, false))
+        |> then(&{:ok, &1})
     end
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   # The SAME host-wiring seam `Samen.Approvals.wiring/1` reads
   # (`config :samen_core, Samen.Approvals, approval_resource: ...`). Unwired
   # (no host has adopted the Approvals engine, e.g. samen_web's own test
-  # host today) or an org with zero approvals ⇒ `[]` immediately, no query —
-  # fail-honest, never a partial/guessed join.
+  # host today) or an org with zero approvals ⇒ `{:ok, []}` immediately, no
+  # query — fail-honest, never a partial/guessed join. A RAISED lookup is
+  # `:error`, kept distinct from "unwired": the first is a fault this reader
+  # must not present as an empty governance tier.
   defp approval_ids_for_org(org_id) do
     case Application.get_env(:samen_core, Samen.Approvals, [])[:approval_resource] do
       nil ->
-        []
+        {:ok, []}
 
       resource ->
-        resource
-        |> Ash.Query.filter(org_id == ^org_id)
-        |> Ash.Query.select([:id])
-        |> Ash.read!(authorize?: false)
-        |> Enum.map(& &1.id)
+        ids =
+          resource
+          |> Ash.Query.filter(org_id == ^org_id)
+          |> Ash.Query.select([:id])
+          |> Ash.read!(authorize?: false)
+          |> Enum.map(& &1.id)
+
+        {:ok, ids}
     end
   rescue
-    _ -> []
+    _ -> :error
   end
 
   defp governance_item(%AuditEvent{} = e, impersonation?) do
@@ -372,16 +410,22 @@ defmodule Samen.Web.Operator.ActivityReads do
   # `versioned` resource the host's mounted domain declares.
   # ---------------------------------------------------------------------------
 
+  # Returns `{items, ok?}` — see `governance_items/3`. A mount with no domain is `{[], true}`:
+  # the tier is not wired, which the moduledoc documents as an honestly-empty half, not a fault.
   defp history_items(%Mount{domain: domain}, org_id, cutoff) when not is_nil(domain) do
-    domain
-    |> Samen.Catalog.resource_modules()
-    |> Enum.filter(&Samen.Info.versioned?/1)
-    |> Enum.flat_map(&version_rows_for(&1, org_id, cutoff))
+    results =
+      domain
+      |> Samen.Catalog.resource_modules()
+      |> Enum.filter(&Samen.Info.versioned?/1)
+      |> Enum.map(&version_rows_for(&1, org_id, cutoff))
+
+    ok? = Enum.all?(results, &match?({:ok, _}, &1))
+    {Enum.flat_map(results, fn {:ok, rows} -> rows; {:error, _} -> [] end), ok?}
   rescue
-    _ -> []
+    _ -> {[], false}
   end
 
-  defp history_items(_mount, _org_id, _cutoff), do: []
+  defp history_items(_mount, _org_id, _cutoff), do: {[], true}
 
   defp version_rows_for(resource, org_id, cutoff) do
     version_mod = Module.concat(resource, Version)
@@ -394,8 +438,9 @@ defmodule Samen.Web.Operator.ActivityReads do
     |> Ash.Query.limit(@version_limit_per_resource)
     |> Ash.read!(authorize?: false)
     |> Enum.map(&history_item(&1, abbrev, vault_names))
+    |> then(&{:ok, &1})
   rescue
-    _ -> []
+    _ -> {:error, :read_failed}
   end
 
   defp vault_field_names(resource) do

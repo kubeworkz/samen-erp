@@ -67,6 +67,7 @@ defmodule Samen.Web.Operator.FlagAdminLive do
           operator_org_id: operator_org_id,
           flags_mount: nil,
           cohorts: [],
+          cohorts_unread: nil,
           page: %Samen.Web.Page{},
           list_state: %Samen.Web.ListState{}
         )
@@ -77,19 +78,22 @@ defmodule Samen.Web.Operator.FlagAdminLive do
           operator_org_id: nil,
           flags_mount: flags_mount,
           cohorts: [],
+          cohorts_unread: nil,
           page: %Samen.Web.Page{},
           list_state: %Samen.Web.ListState{}
         )
 
       true ->
         scope = Mount.scope(mount, operator_org_id)
+        {cohorts, cohorts_unread} = Reads.tenant_cohorts(mount, operator_org_id)
 
         socket
         |> assign(
           no_flags_ns: false,
           operator_org_id: operator_org_id,
           flags_mount: flags_mount,
-          cohorts: Reads.tenant_cohorts(mount, operator_org_id)
+          cohorts: cohorts,
+          cohorts_unread: cohorts_unread
         )
         |> init_list(flags_mount, scope)
         |> refresh_edit()
@@ -404,8 +408,18 @@ defmodule Samen.Web.Operator.FlagAdminLive do
                 <span class="n">{length(@cohorts)}</span>
                 <span class="lane">· cache-free preview (no ETS warm, no assignment emit) · bounded cohort</span>
               </div>
+              <%!-- FAIL-HONEST: a failed cohorts read is not "no tenant accounts yet" — that
+                    would tell the operator the platform has no tenants when the read simply did
+                    not answer. Rendered INSTEAD of the empty state. --%>
+              <.unread_state
+                :if={@cohorts == [] and @cohorts_unread}
+                class="cohorts-unread"
+                reason={@cohorts_unread}
+                title="Tenant cohorts could not be read."
+                body="The account read did not answer, so this page cannot tell you whether any tenant orgs exist. That is not the same as an empty book."
+              />
               <.empty_state
-                :if={@cohorts == []}
+                :if={@cohorts == [] and is_nil(@cohorts_unread)}
                 class="cohorts-empty"
                 icon="◫"
                 title="No tenant accounts yet."

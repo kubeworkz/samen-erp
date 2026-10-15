@@ -98,6 +98,10 @@ defmodule Samen.UI do
       (G1 kanban first client, reusable by calendar/gallery/tree — WS-G)
     * `empty_state/1`    — the standard zero-rows card (title/body/icon +
       `:actions`/`:sample` slots); `list_view/1`'s default `:empty` (ADR-016 §5)
+    * `unread_state/1`   — the standard "could not be read" card, the fail-honest SIBLING of
+      `empty_state/1`; `list_view/1` renders it (instead of the empty state) whenever the
+      `%Samen.Web.Page{}` carries an `unread` reason, so a failed read is never presented as
+      an empty set (ADR-014/024/026)
     * `simple_form/1`    — the `AshPhoenix.Form`-backed form wrapper (ADR-016 §2;
       `:let={f}` inner block + `:actions` slot; pairs with `form_field/1`)
     * `form_field/1`     — one labelled input/select/textarea with inline errors +
@@ -185,6 +189,8 @@ defmodule Samen.UI do
 
   # Feedback
   defdelegate empty_state(assigns), to: Samen.UI.Feedback
+  defdelegate unread_state(assigns), to: Samen.UI.Feedback
+  defdelegate unread_reason_token(reason), to: Samen.UI.Feedback
   defdelegate skeleton(assigns), to: Samen.UI.Feedback
   defdelegate progress(assigns), to: Samen.UI.Feedback
   defdelegate pill(assigns), to: Samen.UI.Feedback

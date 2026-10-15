@@ -41,13 +41,15 @@ defmodule Samen.Web.Operator.DeliverabilityReads do
 
   @doc """
   Assemble ONE tenant org's delivery/suppression state. Returns
-  `%{events:, suppressions:, suppressed_subscriber_ids:}` — `events`/`suppressions`
+  `%{events:, suppressions:, suppressed_subscriber_ids:, unread:}` — `events`/`suppressions`
   rows carry a `:__recipient__` key (`%{name:, email:}`, each possibly `%Masked{}`,
   or `nil` when the subscriber_id does not resolve to a known `Identity.User`).
   `suppressed_subscriber_ids` is a `MapSet` of every currently-suppressed
   subscriber, so a delivery-timeline row can flag itself "suppressed" without a
   second read. Any read error degrades to the all-empty shape — fail-honest,
-  never a crash, never partial-with-a-lie.
+  never a crash, never partial-with-a-lie — and marks `unread: :read_failed`, so
+  the page renders "could not be read" instead of asserting "No suppressions" /
+  "No delivery events" over a read that never ran.
   """
   @spec deliverability(Mount.t(), map(), String.t(), keyword()) :: map()
   def deliverability(mount, actor, org_id, opts \\ []) do
@@ -64,10 +66,25 @@ defmodule Samen.Web.Operator.DeliverabilityReads do
     %{
       events: events,
       suppressions: suppressions,
-      suppressed_subscriber_ids: MapSet.new(suppressions, & &1.subscriber_id)
+      suppressed_subscriber_ids: MapSet.new(suppressions, & &1.subscriber_id),
+      unread: nil
     }
   rescue
-    _ -> %{events: [], suppressions: [], suppressed_subscriber_ids: MapSet.new()}
+    _ -> unread_deliverability()
+  end
+
+  @doc """
+  The empty delivery shape, marked `unread: :read_failed`. The marker is what keeps a
+  FAILED read from being rendered as the same confident "nobody is suppressed" claim a
+  genuinely-empty read makes.
+  """
+  def unread_deliverability do
+    %{
+      events: [],
+      suppressions: [],
+      suppressed_subscriber_ids: MapSet.new(),
+      unread: :read_failed
+    }
   end
 
   defp with_recipient(row, mount, actor, opts) do

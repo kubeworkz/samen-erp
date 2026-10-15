@@ -10,7 +10,7 @@ defmodule Samen.UI.Table do
   use Phoenix.Component
 
   import Samen.UI.Shell, only: [button: 1]
-  import Samen.UI.Feedback, only: [empty_state: 1, skeleton: 1]
+  import Samen.UI.Feedback, only: [empty_state: 1, skeleton: 1, unread_state: 1]
 
   # ---------------------------------------------------------------------------
   # Data table
@@ -110,6 +110,16 @@ defmodule Samen.UI.Table do
   attr :empty_text, :string, default: "Nothing here yet."
   attr :empty_icon, :string, default: nil
   attr :empty_body, :string, default: nil
+
+  attr :empty_unread_body, :string,
+    default: nil,
+    doc:
+      "body copy for the unread state (rendered when `page.unread != nil`) — override to name the " <>
+        "specific seam that could not be read"
+
+  attr :retry_event, :string,
+    default: nil,
+    doc: "`phx-click` event offered as a Retry control in the unread state (nil = no control)"
   slot :head, required: true
   slot :row, required: true
   slot :bulk_bar
@@ -162,6 +172,17 @@ defmodule Samen.UI.Table do
           <div class="card list-loading" style="padding:14px 16px">
             <.skeleton rows={5} avatar />
           </div>
+        <% @page.items == [] and @page.unread != nil -> %>
+          <%!-- FAIL-HONEST: the read did not run (or did not succeed), so "no rows" is not a
+                claim this surface may make. The unread state is rendered INSTEAD of the empty
+                state, and BEFORE the `:empty` slot, so a caller cannot accidentally present a
+                failed read as its own tailored empty copy. --%>
+          <.unread_state
+            class="list-unread"
+            reason={@page.unread}
+            body={@empty_unread_body}
+            retry_event={@retry_event}
+          />
         <% @page.items == [] and @empty != [] -> %>
           {render_slot(@empty)}
         <% @page.items == [] -> %>

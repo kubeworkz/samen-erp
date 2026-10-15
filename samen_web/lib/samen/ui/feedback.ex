@@ -55,6 +55,97 @@ defmodule Samen.UI.Feedback do
   end
 
   # ---------------------------------------------------------------------------
+  # Unread state (fail-honest — the SIBLING of empty_state/1)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  The standard "this could not be read" state — the honest sibling of
+  `empty_state/1`, and NOT a variant of it.
+
+  ## Why it is a separate primitive
+
+  "Zero rows" and "we could not look" are different claims, and an empty list
+  communicates the first one whether or not it is true. Every surface that renders
+  a rescued query, an absent dependency table, or a `{:error, _}` seam as an empty
+  list is asserting something it did not observe — the exact lie ADR-014/024/026
+  forbid of an adapter (`{:ok, _}` for work it did not do). This component is how a
+  SURFACE keeps that same promise: it says what could not be read, why, and what
+  that means about the numbers beside it.
+
+  It is deliberately visually and textually distinct from `empty_state/1` — a
+  different glyph, a `data-read-state="unread"` marker, and the words "could not be
+  read" — so a screenshot of the two is not confusable, and a test can refute a
+  surface that swaps one for the other.
+
+  Purely presentational — copy in, markup out. It renders no field values, so it has
+  no masking surface.
+
+  Attrs:
+
+    * `title` — the headline (default "Could not be read.")
+    * `reason` — a bounded atom/term from the read layer (`:read_failed`,
+      `:not_mounted`, `:not_configured`, …), rendered as a monospace token so the
+      reader can name the failure in a bug report
+    * `body` — what this means (the default copy is the honest one; a caller with a
+      specific seam to name should override it)
+    * `retry_event` — OPTIONAL `phx-click` event name; when given, a Retry control
+      is rendered (a surface that can re-run its read should offer it)
+  """
+  attr :title, :string, default: "Could not be read."
+  attr :reason, :any, default: nil
+  attr :body, :string, default: nil
+  attr :retry_event, :string, default: nil
+  attr :class, :any, default: nil
+
+  def unread_state(assigns) do
+    assigns =
+      assigns
+      |> assign(:class_attr, Enum.join(["card", "unread-state"] ++ List.wrap(assigns.class), " "))
+      |> assign(:reason_token, unread_reason_token(assigns.reason))
+      |> assign(
+        :body_text,
+        assigns.body ||
+          "This is not an empty result — nothing could be read here, so any count, total or " <>
+            "\"none yet\" statement on this surface would be a guess. Treat the absence as " <>
+            "unknown until the read succeeds."
+      )
+
+    ~H"""
+    <div
+      class={@class_attr}
+      data-read-state="unread"
+      style="padding:34px 24px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center"
+    >
+      <div class="unread-icon" aria-hidden="true" style="font-size:26px;line-height:1">⚠</div>
+      <h3 class="unread-title" style="margin:0;font-size:15px;font-weight:600">{@title}</h3>
+      <p :if={@reason_token} class="unread-reason" style="margin:0;color:var(--muted);font-size:13px">
+        reason: <span class="mono" data-unread-reason={@reason_token}>{@reason_token}</span>
+      </p>
+      <p class="unread-body" style="margin:0;color:var(--muted);font-size:13px;max-width:52ch">{@body_text}</p>
+      <button
+        :if={@retry_event}
+        type="button"
+        class="btn-retry"
+        phx-click={@retry_event}
+        style="margin-top:8px;padding:7px 14px;border-radius:8px;border:1px solid var(--line2);background:var(--card);font-size:13px;cursor:pointer"
+      >
+        Retry
+      </button>
+    </div>
+    """
+  end
+
+  # The bounded token a reader can quote: an atom/string as-is, a `{tag, _detail}` tuple
+  # by its tag (the detail is a raw error term and never belongs in the DOM), and anything
+  # else by its inspect form. `nil` renders no reason line at all.
+  @doc false
+  def unread_reason_token(nil), do: nil
+  def unread_reason_token(reason) when is_atom(reason), do: to_string(reason)
+  def unread_reason_token(reason) when is_binary(reason), do: reason
+  def unread_reason_token({tag, _detail}) when is_atom(tag), do: to_string(tag)
+  def unread_reason_token(reason), do: inspect(reason)
+
+  # ---------------------------------------------------------------------------
   # Skeleton (WS-E E6.2, ADR-030 — the loading-placeholder primitive)
   # ---------------------------------------------------------------------------
 

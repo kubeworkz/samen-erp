@@ -48,7 +48,15 @@ defmodule Samen.Web.Flags.Reads do
     |> Ash.Query.ensure_selected([:name, :description, :enabled, :rollout_pct, :stage, :target_rules, :variants])
     |> Samen.Web.Reads.page!(state, scope: scope, filter_fields: [:name, :description])
   rescue
-    _ -> %Samen.Web.Page{items: [], page_size: Samen.Web.Reads.bounded_page_size(state.page_size)}
+    # FAIL-HONEST: a failed page read is not "no flags". The `%Page{}` carries `unread`, so
+    # `Samen.UI.list_view/1` renders "could not be read" instead of the empty state (which would
+    # otherwise read as "the platform has no feature flags", a claim this read never observed).
+    _ ->
+      %Samen.Web.Page{
+        items: [],
+        page_size: Samen.Web.Reads.bounded_page_size(state.page_size),
+        unread: :read_failed
+      }
   end
 
   @doc "Read ONE flag by id for `scope` (bounded lookup). `nil` when absent/denied."
@@ -119,16 +127,23 @@ defmodule Samen.Web.Flags.Reads do
   as `Operator.Reads.accounts_page/3`, hence `authorize?: false` with the explicit
   filter). BOUNDED to #{@cohort_limit} rows; only bounded non-PII columns (name /
   plan) are selected — the targeting-subject keys, no PII path.
+
+  Returns `{cohorts, unread}` — `unread` is `nil` when the read answered, `:read_failed` when it
+  raised. The cohort table's empty state is a claim about the operator's book, and a failed read
+  never observed it; the tuple is what keeps the two apart at the render.
   """
   def tenant_cohorts(operator_mount, operator_org_id) do
-    Mount.resource(operator_mount, Org)
-    |> Ash.Query.ensure_selected([:name, :plan, :org_id])
-    |> Ash.Query.filter(org_id == ^operator_org_id and id != ^operator_org_id)
-    |> Ash.Query.sort(inserted_at: :asc)
-    |> Ash.Query.limit(@cohort_limit)
-    |> Ash.read!(authorize?: false)
+    cohorts =
+      Mount.resource(operator_mount, Org)
+      |> Ash.Query.ensure_selected([:name, :plan, :org_id])
+      |> Ash.Query.filter(org_id == ^operator_org_id and id != ^operator_org_id)
+      |> Ash.Query.sort(inserted_at: :asc)
+      |> Ash.Query.limit(@cohort_limit)
+      |> Ash.read!(authorize?: false)
+
+    {cohorts, nil}
   rescue
-    _ -> []
+    _ -> {[], :read_failed}
   end
 
   # The plain config map `evaluate_config/4` expects, straight off the row (the same

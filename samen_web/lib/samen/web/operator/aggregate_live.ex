@@ -44,28 +44,38 @@ defmodule Samen.Web.Operator.AggregateLive do
       title: title(socket.assigns[:samen_mount]),
       metrics: Map.get(data, :metrics, []),
       groups: Map.get(data, :groups, []),
-      suppressed_count: Map.get(data, :suppressed_count, 0)
+      suppressed_count: Map.get(data, :suppressed_count, 0),
+      unread: Map.get(data, :unread)
     )
   end
 
   # Resolve the host aggregate data. A host wires `aggregate_loader: {M, F, A}` on the mount
-  # labels; the loader returns the token-blind projection. Absent a loader (e.g. the stub /
-  # a bare mount) the surface renders empty but structurally correct — proving the plane.
+  # labels; the loader returns the token-blind projection.
+  #
+  # TWO failures are distinguished, because they are NOT the same fact (fail-honest):
+  #
+  #   * NO loader wired (`:not_configured`) — nothing was asked to read, so "no aggregate
+  #     projection wired" is a true statement about the host; and
+  #   * a loader that RAISED or returned garbage (`:read_failed`) — a projection WAS wired
+  #     and did not answer, so the surface must not report it as unwired or empty.
   defp load_aggregate(%Mount{} = mount) do
     case Mount.label(mount, :aggregate_loader, nil) do
       {mod, fun, args} ->
         try do
-          apply(mod, fun, args) || %{}
+          case apply(mod, fun, args) do
+            data when is_map(data) -> Map.put_new(data, :unread, nil)
+            _ -> %{unread: :read_failed}
+          end
         rescue
-          _ -> %{}
+          _ -> %{unread: :read_failed}
         end
 
       _ ->
-        %{}
+        %{unread: :not_configured}
     end
   end
 
-  defp load_aggregate(_), do: %{}
+  defp load_aggregate(_), do: %{unread: :not_configured}
 
   defp title(%Mount{} = mount), do: Mount.label(mount, :operator_title, "Portfolio")
   defp title(_), do: "Portfolio"
@@ -141,8 +151,18 @@ defmodule Samen.Web.Operator.AggregateLive do
             </.data_table>
           </div>
 
+          <%!-- FAIL-HONEST: a wired loader that RAISED is not an unwired host, and neither is an
+                empty projection. `:not_configured` and `:read_failed` say which one it is. --%>
+          <.unread_state
+            :if={@groups == [] and @unread == :read_failed}
+            class="aggregate-unread"
+            reason={@unread}
+            title="The aggregate projection could not be read."
+            body="A projection is wired on this host but it did not answer, so this page cannot tell you whether it holds any cohorts. That is not the same as an unwired projection."
+          />
+
           <.empty_state
-            :if={@groups == []}
+            :if={@groups == [] and @unread == :not_configured}
             class="aggregate-empty"
             icon="⊘"
             title="No aggregate projection wired."
