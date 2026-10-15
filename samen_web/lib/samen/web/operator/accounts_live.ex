@@ -135,7 +135,7 @@ defmodule Samen.Web.Operator.AccountsLive do
     <div id="operator-accounts">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:accounts} />
+          <.operator_sidebar mount={@samen_mount} active={:accounts} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Accounts" crumbs={["Operator plane", "Accounts"]}>

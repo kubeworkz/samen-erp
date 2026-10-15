@@ -127,7 +127,7 @@ defmodule Samen.Web.Operator.DeliverabilityLive do
     <div id="operator-deliverability">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:deliverability} />
+          <.operator_sidebar mount={@samen_mount} active={:deliverability} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Deliverability" crumbs={["Operator plane", "Deliverability", @org_id || "—"]}>
@@ -164,6 +164,19 @@ defmodule Samen.Web.Operator.DeliverabilityLive do
                 <div :if={@open_error} id="open-error" style="color:#B42318;font-size:12px;margin-bottom:8px">
                   {@open_error}
                 </div>
+                <%!-- A session whose role may NOT open a drill-in is still OFFERED the reason form
+                      below, and every submit is refused `:not_authorized`. The withheld control's
+                      note is this disclosure: it answers which roles CAN open one, from the same
+                      predicate the gate applies (`Actor.may_impersonate?/1`). --%>
+                <.role_help_note
+                  :if={drill_in_role_denied?(assigns[:samen_operator_role])}
+                  id="drill-in-role-denied"
+                  focus={:tenant_drill_in}
+                  operator_role={assigns[:samen_operator_role]}
+                >
+                  Opening a per-account drill-in session requires an operator role that may
+                  impersonate; this session's role may not.
+                </.role_help_note>
                 <form phx-submit="open_session" id="open-session-form" style="display:flex;gap:8px;align-items:flex-start">
                   <input
                     type="text"

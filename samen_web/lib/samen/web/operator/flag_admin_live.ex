@@ -257,7 +257,7 @@ defmodule Samen.Web.Operator.FlagAdminLive do
     <div id="operator-flags">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:flags} />
+          <.operator_sidebar mount={@samen_mount} active={:flags} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Feature flags" crumbs={["Operator plane", "Flags"]} />

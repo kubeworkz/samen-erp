@@ -172,6 +172,63 @@ svg { display: block; }
 .side .foot .m b { display: block; font-size: 12px; font-weight: 550; }
 .side .foot .m span { display: block; font-size: 10.5px; color: var(--faint); }
 
+/* Operator sidebar — the role label IS a disclosure: it opens what each operator role may do,
+   so an operator reading a withheld-control note (`#dlq-readonly`, the fleet `*-readonly` note)
+   can tell whether the control is theirs or which role would be. A native <details>, no JS — the
+   same shape as .ws-switcher in the footer below it. Deliberately built from DIVs, not spans/
+   b: the `.side .foot .m span`/`b` rules above would otherwise out-specify these. */
+.role-help { margin-top: 1px; }
+.role-help > summary {
+  display: flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: 10.5px; color: var(--faint);
+}
+.role-help > summary::-webkit-details-marker { display: none; }
+.role-help > summary:hover { color: var(--muted); }
+.role-help-role { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-help-chevron { font-size: 12px; line-height: 1; transition: transform .12s ease; }
+.role-help[open] > summary .role-help-chevron { transform: rotate(90deg); }
+.role-help-panel {
+  margin-top: 7px; padding: 9px 10px; border: 1px solid var(--line2); border-radius: 8px;
+  background: var(--card); font-size: 10.5px; line-height: 1.45; color: var(--muted);
+}
+.role-help-head {
+  font-size: 9.5px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 6px;
+}
+.role-help-row + .role-help-row { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); }
+.role-help-cap { display: flex; gap: 5px; color: var(--ink); }
+.role-help-mark { flex: 0 0 10px; font-weight: 700; }
+.role-help-mark.yes { color: var(--green); }
+.role-help-mark.no { color: var(--faint); }
+.role-help-roles { color: var(--faint); }
+.role-help-why { color: var(--faint); font-style: italic; }
+/* The row the caller is ABOUT — a withheld-control note marks its own capability, so the
+   panel opens AT the answer instead of somewhere in a list of six. */
+.role-help-row[data-focus] {
+  border-left: 2px solid #3B4CCA; margin-left: -8px; padding-left: 6px;
+}
+
+/* A WITHHELD-CONTROL NOTE that opens the role matrix — the note's OWN sentence is the
+   <summary>, and the panel behind it is the same `.role-help-panel` the footer renders, so a
+   note can never explain the withheld control with a different story than the chrome does.
+   Same zero-JS `<details>` shape as `.role-help` / `.ws-switcher`. */
+.note-help > summary {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  cursor: pointer; color: var(--muted);
+}
+.note-help > summary::-webkit-details-marker { display: none; }
+.note-help > summary::marker { content: ""; }
+.note-help > summary:hover { color: var(--ink); }
+.note-help-text { min-width: 0; }
+.note-help-cta { color: #3B4CCA; font-weight: 550; white-space: nowrap; }
+.note-help > summary:hover .note-help-cta { text-decoration: underline; }
+.note-help-chevron { display: inline-block; font-size: 12px; line-height: 1; transition: transform .12s ease; }
+.note-help[open] > summary .note-help-chevron { transform: rotate(90deg); }
+/* The panel's type is small on purpose IN THE SIDEBAR; in a page note the matrix IS the
+   note's content, so it reads at note scale and stays a readable measure. */
+.note-help > .role-help-panel { font-size: 12px; max-width: 660px; margin-top: 8px; }
+.note-help > .role-help-panel .role-help-head { font-size: 10.5px; }
+
 /* ---------------------------------------------------------------------------
  * Main panel + topbar
  * ------------------------------------------------------------------------- */

@@ -68,7 +68,7 @@ defmodule Samen.Web.Operator.AccountDetailLive do
     <div id="operator-account-detail">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:accounts} />
+          <.operator_sidebar mount={@samen_mount} active={:accounts} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar

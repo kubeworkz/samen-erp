@@ -49,7 +49,7 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
     <div id="operator-billing">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:billing} />
+          <.operator_sidebar mount={@samen_mount} active={:billing} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Platform billing" crumbs={["Operator plane", "Platform billing"]} />

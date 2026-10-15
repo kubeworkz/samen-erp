@@ -13,7 +13,8 @@ defmodule Samen.Web.Operator.FleetRegisterLive do
   use Phoenix.LiveView
 
   import Samen.UI
-  import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
+  import Samen.Web.Operator.Live,
+    only: [assign_mount: 2, operator_sidebar: 1, role_help_note: 1]
 
   alias Samen.Fleet.{AdminActor, Registry}
   alias Samen.Web.Operator.Fleet, as: FleetHelpers
@@ -83,15 +84,26 @@ defmodule Samen.Web.Operator.FleetRegisterLive do
     <div id="fleet-register">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:fleet} />
+          <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Register / enroll" crumbs={["Operator plane", "Fleet", "Register"]} />
 
         <div class="wrap">
-          <div :if={!@fleet_ctx.admin?} class="card" id="register-not-admin" style="padding:16px 20px">
+          <%!-- The withheld controls here (both forms below) are gated by `with_admin/1`'s
+                `@fleet_ctx.admin?`. The note names the role, and opening it shows WHAT EACH ROLE
+                MAY DO, focused on `fleet_register` — its OWN row, not the status-page one: a
+                reader told "registering needs :operator_admin" is not answered by a row about
+                publishing a status page. --%>
+          <.role_help_note
+            :if={!@fleet_ctx.admin?}
+            id="register-not-admin"
+            class="card register-readonly-note"
+            focus={:fleet_register}
+            operator_role={assigns[:samen_operator_role]}
+          >
             Read-only — `roles[:fleet] == :operator_admin` is required to register an app or mint an enrollment token.
-          </div>
+          </.role_help_note>
 
           <div :if={@error} class="card form-error" id="register-error" style="padding:10px 14px;color:var(--bad,#b91c1c)">
             {@error}

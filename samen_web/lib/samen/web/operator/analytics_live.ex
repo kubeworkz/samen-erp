@@ -171,7 +171,7 @@ defmodule Samen.Web.Operator.AnalyticsLive do
     <div id="operator-analytics">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:analytics} />
+          <.operator_sidebar mount={@samen_mount} active={:analytics} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Product analytics" crumbs={["Operator plane", "Analytics"]} />

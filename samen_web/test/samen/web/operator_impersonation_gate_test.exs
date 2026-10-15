@@ -109,6 +109,38 @@ defmodule Samen.Web.OperatorImpersonationGateTest do
   end
 
   # ==========================================================================
+  # 1b. A ROLE THAT MAY NEVER OPEN ONE gets the ANSWER, not a dead-end form
+  # ==========================================================================
+
+  test "a role that may not impersonate gets the withheld-control note, focused on the drill-in capability" do
+    org = seed_tenant()
+    operator_id = Ecto.UUID.generate()
+
+    socket =
+      drill_in_socket(operator_id)
+      |> with_operator_identity(operator_id, :operator_readonly)
+      |> DeliverabilityLive.load(org.id)
+
+    assert socket.assigns.impersonation == :denied
+
+    html = render(socket)
+
+    # The form is still offered and still refused by `Impersonation.open/4` (that posture is
+    # unchanged) — what is new is that the operator is no longer left with a form that cannot
+    # work: the note opens WHAT EACH ROLE MAY DO, focused on the capability it withheld.
+    assert html =~ "open-session-form"
+    assert html =~ "drill-in-role-denied"
+    assert html =~ "requires an operator role that may"
+    assert html =~ ~s(data-capability="tenant_drill_in" data-held="false" data-focus="true")
+
+    # POSITIVE CONTROL — the same drill-in as an admin (who MAY open one) carries no such note.
+    admin_html = drill_in_socket(operator_id) |> DeliverabilityLive.load(org.id) |> render()
+
+    assert admin_html =~ "open-session-form"
+    refute admin_html =~ "drill-in-role-denied"
+  end
+
+  # ==========================================================================
   # 2. RENDERS + RECORDS WITH SESSION — real row + tenant ledger who/why/expiry
   # ==========================================================================
 

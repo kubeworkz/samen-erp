@@ -110,7 +110,7 @@ defmodule Samen.Web.Operator.FleetDirectivesLive do
     <div id="fleet-directives">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:fleet} />
+          <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Fleet directives" crumbs={["Operator plane", "Fleet", "Directives"]} />

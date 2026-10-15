@@ -14,6 +14,9 @@ defmodule Samen.Web.Operator.Live do
   import Samen.UI
   import Samen.Web.CurrentOrg, only: [switcher: 1]
 
+  alias Samen.Automation.Health
+  alias Samen.BreakGlass
+  alias Samen.OperatorPlane.Actor
   alias Samen.Web.Mount
 
   @doc "Read the mount out of the session (see `Samen.Web.Live.assign_mount/2`)."
@@ -32,6 +35,12 @@ defmodule Samen.Web.Operator.Live do
 
   attr :mount, Mount, default: nil
   attr :active, :atom, default: nil
+
+  # The session's RESOLVED operator role (`:samen_operator_role`, assigned by
+  # `Samen.Web.Operator.Authz`'s `:require_operator` on_mount) — the SAME value every
+  # write predicate on every operator page reads. `nil` on a mount that never ran the
+  # on_mount (a bare test socket), which falls back to the mount's static copy.
+  attr :operator_role, :atom, default: nil
 
   @doc """
   The operator control-plane sidebar — workspace header + the operator nav group.
@@ -141,7 +150,30 @@ defmodule Samen.Web.Operator.Live do
         <div class="foot">
           <div class="av" style="background:#DDE2F5;color:#3B4CCA">{label(@mount, :operator_initials, "OP")}</div>
           <div class="m">
-            <b>{label(@mount, :operator_user, "Operator")}</b><span>{label(@mount, :operator_role, "SaaS staff")}</span>
+            <b>{label(@mount, :operator_user, "Operator")}</b>
+            <%!--
+              The role label IS the disclosure control — a native `<details>` (the same shape the
+              footer's org switcher below already uses): zero JS, keyboard-operable, and it
+              renders on EVERY operator page at 0 authored LOC. The panel answers "may I do
+              this?" per capability, so an operator reading a withheld-control note (`#dlq-
+              readonly`, the fleet `*-readonly` note) can see whether the control is theirs — or
+              which role would be. `operator_role_label/2` is the RESOLVED session role.
+            --%>
+            <details class="role-help" id="operator-role-help">
+              <summary
+                id="operator-role"
+                data-operator-role={@operator_role}
+                title="Your resolved operator role — a page withholds every control this role may not use. Open for what each role may do."
+              >
+                <div class="role-help-role">{operator_role_label(@operator_role, @mount)}</div>
+                <div class="role-help-chevron" aria-hidden="true">›</div>
+              </summary>
+
+              <%!-- ONE definition of the matrix, shared with every withheld-control note
+                    (`<.role_help_note>` below) — the footer's answer and a note's answer are the
+                    same answer, and neither can drift from the other. --%>
+              <.operator_role_help_panel operator_role={@operator_role} />
+            </details>
           </div>
           <.logout_form />
         </div>
@@ -149,6 +181,259 @@ defmodule Samen.Web.Operator.Live do
     </.sidebar>
     """
   end
+
+  attr :operator_role, :atom, default: nil
+
+  attr :focus, :atom,
+    default: nil,
+    doc: "The one capability row this caller is ABOUT (`:dlq_write` for the DLQ's note, …)."
+
+  @doc """
+  The role-capability matrix — one row per capability, with the roles that hold it and whether
+  THIS session's `:operator_role` does.
+
+  Rendered from ONE definition in two places: inside the sidebar's `#operator-role-help`
+  disclosure, and inside every withheld-control note's `<.role_help_note>` (below). So the
+  answer a note opens is the answer the footer gives — a note can never explain a control with
+  a different story than the chrome does.
+
+  `focus` marks ONE row (`data-focus="true"`, styled by `.role-help-row[data-focus]`) as the
+  capability the note that opened this panel is about, so a withheld control opens AT its own
+  answer instead of somewhere in a list of six.
+  """
+  def operator_role_help_panel(assigns) do
+    ~H"""
+    <div class="role-help-panel">
+      <div class="role-help-head">What each operator role may do</div>
+
+      <div :if={@operator_role} class="role-help-legend role-help-why">
+        ✓ this session's role may · — it may not
+      </div>
+
+      <div
+        :for={row <- operator_capabilities(@operator_role)}
+        class="role-help-row"
+        data-capability={row.key}
+        data-held={if @operator_role, do: to_string(row.mine?), else: nil}
+        data-focus={if row.key == @focus, do: "true", else: nil}
+      >
+        <div class="role-help-cap">
+          <div :if={@operator_role && row.mine?} class="role-help-mark yes" aria-hidden="true">✓</div>
+          <div :if={@operator_role && !row.mine?} class="role-help-mark no" aria-hidden="true">—</div>
+          <div>{row.label}</div>
+          <%!-- The marks are decorative (the legend explains them); a screen reader gets
+               the same fact as a sentence, so the panel is not sighted-only. --%>
+          <div :if={@operator_role} class="sr-only">
+            {if row.mine?, do: "Your role may do this.", else: "Your role may not do this."}
+          </div>
+        </div>
+        <div class="role-help-roles">{Enum.join(row.role_labels, " · ")}</div>
+        <div :if={row.why} class="role-help-why">{row.why}</div>
+      </div>
+
+      <div :if={!@operator_role} class="role-help-why">
+        No operator role was resolved for this session — the ✓/— marks need one.
+      </div>
+    </div>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :operator_role, :atom, default: nil
+  attr :focus, :atom, default: nil
+  attr :title, :string, default: nil
+  attr :class, :string, default: nil, doc: "Extra classes for the caller's own surface (e.g. `card`)."
+
+  slot :inner_block, required: true
+
+  @doc """
+  A WITHHELD-CONTROL NOTE that opens the role-capability matrix — the note and the role answer
+  one click apart.
+
+  Every operator surface that withholds a control renders a note saying so; several of those
+  notes already NAME the role that would be required (`#dlq-readonly`, the fleet
+  `#publish-readonly` / register notes). A named role the reader cannot map to their own was
+  still a dead end — the operator could read "requires `:operator_admin`" and not know whether
+  that is them. This note is the same zero-JS `<details>` shape the footer uses: the note TEXT
+  is the `<summary>`, and the panel it opens is the shared matrix, focused on the capability
+  this note is about.
+
+  The role it marks ✓/— against is the SAME assign the withholding predicate reads on that
+  surface — `:samen_operator_role`, the session's RESOLVED operator role (`WebhookDlqLive`'s
+  `may_write?/1`, `writable?/1`, `Actor.may_impersonate?/1` and the fleet gate all read that
+  one value / its fleet-scope twin) — so the marks cannot contradict the control next to them.
+  """
+  def role_help_note(assigns) do
+    ~H"""
+    <details
+      class={if @class, do: "note note-help " <> @class, else: "note note-help"}
+      id={@id}
+      title={@title}
+    >
+      <summary>
+        <span class="note-help-text">{render_slot(@inner_block)}</span>
+        <span class="note-help-cta">
+          What each operator role may do
+          <span class="note-help-chevron" aria-hidden="true">›</span>
+        </span>
+      </summary>
+      <.operator_role_help_panel operator_role={@operator_role} focus={@focus} />
+    </details>
+    """
+  end
+
+  @doc """
+  Is a per-account DRILL-IN session withheld from this session's resolved operator role?
+
+  The gate is `Samen.Impersonation.open/4` → `Actor.may_impersonate?/1`: a drill-in page that
+  offers the reason form to a role the gate refuses is offering a control that cannot work.
+  `nil` is withheld too — `Samen.Web.Operator.Impersonation.open/4`'s catch-all refuses
+  `{:error, :not_authorized}` on a role that was never resolved.
+  """
+  @spec drill_in_role_denied?(Samen.OperatorPlane.Actor.operator_role() | nil | atom()) :: boolean()
+  def drill_in_role_denied?(nil), do: true
+
+  def drill_in_role_denied?(role) when is_atom(role) do
+    # Denied unless it is a role in the closed set that the gate admits. A role OUTSIDE the
+    # set is DENIED (matching `Impersonation.open/4`'s catch-all) — and `Actor.new/2` would
+    # RAISE on it, so it is answered here rather than through the throwaway actor
+    # (fail closed, never crash a render).
+    not (role in Actor.roles() and Actor.may_impersonate?(role_actor(role)))
+  end
+
+  @doc """
+  The operator ROLE label the sidebar footer shows.
+
+  The `:samen_operator_role` the `{Samen.Web.Operator.Authz, :require_operator}` on_mount
+  RESOLVED from the authenticated session principal — rendered as a human label so an operator
+  can see, on the page itself, WHY a control was withheld. That is the whole point: the DLQ's
+  `#dlq-readonly` note says "replay and resolve require `:operator_admin` / `:operator_support`",
+  and this footer is where the operator reads which of those they are. It is ALSO the same value
+  every write predicate (`WebhookDlqLive.may_write?/1`, `Automation.Health.may_manage?/1`, the
+  fleet `roles[:fleet]` ladder) reads — so the label cannot disagree with the behaviour.
+
+  Falls back to the mount's static `:operator_role` copy (default "SaaS staff") when NO role was
+  resolved: a mount that never ran the on_mount (a bare test socket, or a non-operator-plane
+  render) has no session role to show, and this is a DISPLAY fallback — never authority. Host
+  copy set on the mount still wins in that case, so nothing a host branded changes.
+  """
+  @spec operator_role_label(Samen.OperatorPlane.Actor.operator_role() | nil, Mount.t() | nil) ::
+          String.t()
+  def operator_role_label(role, mount \\ nil)
+
+  def operator_role_label(:operator_admin, _mount), do: "Operator admin"
+  def operator_role_label(:operator_support, _mount), do: "Operator support"
+  def operator_role_label(:operator_readonly, _mount), do: "Read-only operator"
+  def operator_role_label(:operator_break_glass, _mount), do: "Break-glass operator"
+  def operator_role_label(_unresolved, mount), do: label(mount, :operator_role, "SaaS staff")
+
+  @doc """
+  A SHORT role name for the capability panel's role lists (`"admin"`, `"support"`, `"read-only"`,
+  `"break-glass"`). The long `operator_role_label/2` form is the panel's HEADING (the current
+  session's role); these are the per-row "who holds this" lists, where four long labels would not
+  fit a sidebar.
+  """
+  @spec operator_role_short_label(Samen.OperatorPlane.Actor.operator_role()) :: String.t()
+  def operator_role_short_label(:operator_admin), do: "admin"
+  def operator_role_short_label(:operator_support), do: "support"
+  def operator_role_short_label(:operator_readonly), do: "read-only"
+  def operator_role_short_label(:operator_break_glass), do: "break-glass"
+
+  # ==========================================================================
+  # The role-help disclosure's capability matrix
+  # ==========================================================================
+
+  # `{key, capability copy, honest caveat}`. The ROLES that hold each capability are DERIVED by
+  # `operator_capabilities/1` — never listed here, so there is one place to be right.
+  @capabilities [
+    {:read_workspace, "Read the operator workspace", nil},
+    # NB: deliberately NOT the word the T150 form/`open_session` handler uses. The sidebar is
+    # GLOBAL chrome, so it renders on the fleet cockpit too — a page whose invariant test refutes
+    # that substring as a proxy for "no drill-in affordance here" (`FleetLiveTest`, RP-J-5). The
+    # row is about the ROLE's reach, not an affordance on the page under it, so it must not read
+    # as one. "acting-as" is the operator-facing term the footer's own switcher already uses.
+    {:tenant_drill_in, "Open a tenant drill-in (a per-account acting-as session)",
+     "Also needs that session opened for the account, and the account in scope."},
+    {:automation_manage, "Kill or re-arm a workflow or an agent",
+     "Only reachable INSIDE an open tenant drill-in, so it needs the drill-in above too."},
+    {:dlq_write, "Replay / resolve the webhook DLQ", nil},
+    {:fleet_publish, "Publish a product on the fleet status page",
+     "Also needs the fleet (`:fleet`) scope granted by the host."},
+    # The register/enroll controls (`FleetRegisterLive`'s `with_admin/1`) are gated by the
+    # SAME rule as publish (`@fleet_admin_roles`), but they are a DIFFERENT control on a
+    # DIFFERENT page — `#register-not-admin` withholds THEM, so they get their own row
+    # rather than pointing the reader at the status-page row and calling it an answer.
+    {:fleet_register, "Register an app / mint an enrollment token",
+     "Also needs the fleet (`:fleet`) scope granted by the host."},
+    {:break_glass, "Emergency break-glass reveal", nil}
+  ]
+
+  # The ONLY two role sets this module RESTATES. Every other row is answered by CALLING the
+  # capability's own predicate, so the panel cannot disagree with the enforcement. These two
+  # have no pure role -> boolean predicate to call:
+  #
+  #   * the DLQ write set is private to `Samen.Web.Operator.WebhookDlqLive` (`@write_roles`),
+  #     whose handler gate governs this surface and must not be re-located (a sabotage patch
+  #     pins those lines);
+  #   * the fleet ADMIN rule (`roles[:fleet] == :operator_admin`) lives inside
+  #     `Samen.Web.Operator.Fleet` (`gate/2`'s `admin?`), reachable only through `gate/2` with
+  #     a mount AND a session — and it gates BOTH fleet writes this panel names (the status
+  #     page opt-in and register/enroll), which is why one set serves two rows.
+  #
+  # `operator_sidebar_role_test.exs` PINS them: it drives the REAL DLQ page, the REAL
+  # `Fleet.gate/2` and the REAL register page for every operator role, and fails if either
+  # restated set stops matching what those surfaces actually allow. Drift is caught by the
+  # gate, not by review.
+  @dlq_write_roles [:operator_admin, :operator_support]
+  @fleet_admin_roles [:operator_admin]
+
+  @doc """
+  The capability matrix the role-help disclosure renders: one row per capability an operator role
+  can hold, with the roles that hold it and whether THIS session's role does.
+
+  Each row is:
+
+      %{key: atom, label: String.t, why: String.t | nil,
+        roles: [operator_role], role_labels: [String.t], mine?: boolean}
+
+  `mine?` is false when no role was resolved for the session (a mount that never ran the
+  on_mount) — the panel then renders the rows WITHOUT ✓/— marks rather than implying the
+  session's role lacks everything.
+  """
+  @spec operator_capabilities(Samen.OperatorPlane.Actor.operator_role() | nil) :: [map()]
+  def operator_capabilities(role \\ nil) do
+    for {key, label, why} <- @capabilities do
+      roles = Enum.filter(Actor.roles(), &holds_capability?(key, &1))
+
+      %{
+        key: key,
+        label: label,
+        why: why,
+        roles: roles,
+        role_labels: Enum.map(roles, &operator_role_short_label/1),
+        mine?: is_atom(role) and role in roles
+      }
+    end
+  end
+
+  # The capability predicates — CALLED wherever one exists (so the panel is derived from the
+  # enforcement, not a second opinion about it): `Actor.may_impersonate?/1` is exactly the gate
+  # `Samen.Impersonation.open/4` applies before minting a session, `Health.may_manage?/1` is the
+  # gate `Health.kill/3` + `Health.rearm/3` apply (`Samen.AI.Agent.Health.may_manage?/1` carries
+  # the same set, and the test pins the two together), and `BreakGlass.authorized?/1` is the gate
+  # `BreakGlass.reveal/1` applies. The remaining two rows are the restated-upstream pair
+  # documented above.
+  defp holds_capability?(:read_workspace, _role), do: true
+  defp holds_capability?(:tenant_drill_in, role), do: Actor.may_impersonate?(role_actor(role))
+  defp holds_capability?(:automation_manage, role), do: Health.may_manage?(role_actor(role))
+  defp holds_capability?(:dlq_write, role), do: role in @dlq_write_roles
+  defp holds_capability?(:fleet_publish, role), do: role in @fleet_admin_roles
+  defp holds_capability?(:fleet_register, role), do: role in @fleet_admin_roles
+  defp holds_capability?(:break_glass, role), do: BreakGlass.authorized?(role_actor(role))
+
+  # A throwaway operator actor for a role probe. The id is inert — every predicate above reads
+  # `operator_role` only (no routing/audit identifier is touched).
+  defp role_actor(role), do: Actor.new("role-help", role)
 
   @doc "Dollars from cents, for the operator money columns."
   def dollars(cents) when is_integer(cents),

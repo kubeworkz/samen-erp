@@ -55,7 +55,8 @@ defmodule Samen.Web.Operator.FleetDetailLive do
   use Phoenix.LiveView
 
   import Samen.UI
-  import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
+  import Samen.Web.Operator.Live,
+    only: [assign_mount: 2, operator_sidebar: 1, role_help_note: 1]
 
   alias Samen.Fleet.{AdminActor, Handle, PublicStatus, Registry, Resolution}
   alias Samen.Web.Fleet.PublicStatus, as: PageStatus
@@ -256,7 +257,7 @@ defmodule Samen.Web.Operator.FleetDetailLive do
     <div id="fleet-detail">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:fleet} />
+          <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Fleet" crumbs={["Operator plane", "Fleet", @app_id]} />
@@ -334,9 +335,20 @@ defmodule Samen.Web.Operator.FleetDetailLive do
               {if @publish_status, do: "Unpublish", else: "Publish on the status page"}
             </button>
 
-            <p :if={!@fleet_ctx.admin?} id="publish-readonly" class="note">
+            <%!-- The withheld control's note IS the disclosure control: it names the role the
+                  publish gate needs (`@fleet_ctx.admin?`), and opening it shows WHAT EACH ROLE MAY
+                  DO, focused on `fleet_publish`. The ✓/— marks come from the same session role the
+                  footer renders — in the shipped fleet host (`Samenerp.FleetAuthz`) the
+                  `:fleet_authority` seam DELEGATES to the operator resolver, so the role that
+                  gates this control and the role this panel marks are one value, never two. --%>
+            <.role_help_note
+              :if={!@fleet_ctx.admin?}
+              id="publish-readonly"
+              focus={:fleet_publish}
+              operator_role={assigns[:samen_operator_role]}
+            >
               Read-only — publishing a product on the public status page requires roles[:fleet] == :operator_admin.
-            </p>
+            </.role_help_note>
 
             <p :if={@publish_error} id="publish-error" style="color:var(--bad,#b91c1c)">{@publish_error}</p>
             <p :if={@publish_note} id="publish-note" class="note">{@publish_note}</p>

@@ -167,7 +167,7 @@ defmodule Samen.Web.Operator.DeskDetailLive do
     <div id="operator-desk-detail">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:desk} />
+          <.operator_sidebar mount={@samen_mount} active={:desk} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Ticket" crumbs={["Operator plane", "Desk", "Ticket"]}>

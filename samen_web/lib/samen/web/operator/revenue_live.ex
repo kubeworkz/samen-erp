@@ -95,7 +95,7 @@ defmodule Samen.Web.Operator.RevenueLive do
     <div id="operator-revenue">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:revenue} />
+          <.operator_sidebar mount={@samen_mount} active={:revenue} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Revenue" crumbs={["Operator plane", "Revenue"]} />

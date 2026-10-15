@@ -20,6 +20,18 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   for a fully-redacted store, in place of the `Samen.MaskingCase` three-proof used when
   a 🔒 field renders).
 
+  ## Write affordances are role-gated AT THE RENDER (S14 / T146)
+
+  `replay`/`resolve` are OFFERED only to the operator roles that may mutate this store
+  (`:operator_admin` / `:operator_support`, read from the AUTHENTICATED principal's
+  `:samen_operator_role` — never a param or the mount). An `:operator_readonly` session
+  (or one that resolved no role) sees the envelopes plus an explanation and NO control,
+  instead of a button whose event the server would refuse. The handlers keep their own
+  `authorize_write/1` gate as the AUTHORITY: hiding is posture, never the enforcement —
+  a forged `phx-click` from a read-only socket is still refused. Both the render gate and
+  the handler read the same `may_write?/1` predicate, so the page can never offer a write
+  the server would deny.
+
   ## Fail-safe
 
   A host that has not yet run the `whk_event` migration reads zero rows (the query is
@@ -34,6 +46,14 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   alias Samen.Web.Operator
   alias Samen.Webhook.Event
 
+  # S14 — the operator roles that may MUTATE the webhook store (replay/resolve). The role is
+  # ONLY ever read from `:samen_operator_role` — the assign `Samen.Web.Operator.Authz`'s
+  # `:require_operator` on_mount derived from the AUTHENTICATED session principal (the T146
+  # role-derivation pattern) — never from the mount or a param. `:operator_readonly`'s
+  # contract is "read the operator CRM only" (`Samen.OperatorPlane.Actor`): it may render
+  # this page, never write through it. `nil`/unknown roles fail closed.
+  @write_roles [:operator_admin, :operator_support]
+
   @impl true
   def mount(_params, session, socket) do
     socket = assign_mount(socket, session)
@@ -44,9 +64,13 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   def load(socket) do
     mount = socket.assigns[:samen_mount]
 
+    # The single write-capability predicate, shared with `authorize_write/1`: what the
+    # render OFFERS and what the handler ACCEPTS can never disagree.
+    can_write = may_write?(socket.assigns)
+
     case mount && Operator.org_id(mount) do
       nil ->
-        assign(socket, no_org: true, envelopes: [], dead_count: 0)
+        assign(socket, no_org: true, envelopes: [], dead_count: 0, can_write: can_write)
 
       _org_id ->
         envelopes = list_envelopes(mount)
@@ -54,18 +78,11 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
         assign(socket,
           no_org: false,
           envelopes: envelopes,
-          dead_count: Enum.count(envelopes, &(&1.status == "dead"))
+          dead_count: Enum.count(envelopes, &(&1.status == "dead")),
+          can_write: can_write
         )
     end
   end
-
-  # S14 — the operator roles that may MUTATE the webhook store (replay/resolve). The role is
-  # ONLY ever read from `:samen_operator_role` — the assign `Samen.Web.Operator.Authz`'s
-  # `:require_operator` on_mount derived from the AUTHENTICATED session principal (the T146
-  # role-derivation pattern) — never from the mount or a param. `:operator_readonly`'s
-  # contract is "read the operator CRM only" (`Samen.OperatorPlane.Actor`): it may render
-  # this page, never write through it. `nil`/unknown roles fail closed.
-  @write_roles [:operator_admin, :operator_support]
 
   @impl true
   def handle_event("replay", %{"id" => id}, socket) do
@@ -89,8 +106,15 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
     {:noreply, load(socket)}
   end
 
+  # The ONE definition of "who may write here" — `:samen_operator_role` ∈ @write_roles, fail
+  # closed on a missing/nil/unknown role. Read by `load/1` to decide whether the page RENDERS
+  # the replay/resolve controls, and by `authorize_write/1` to decide whether the handler
+  # HONOURS them. Takes the assigns map so a plain socket or an unwrapped assigns map both work.
+  defp may_write?(assigns), do: assigns[:samen_operator_role] in @write_roles
+
   # The S14 write gate, three ANDed conjuncts — all strictly narrowing, never widening:
-  #   1. ROLE — `:samen_operator_role` ∈ @write_roles (see above; fail closed on nil);
+  #   1. ROLE — `may_write?/1` (see above; fail closed on nil) — the SAME predicate the
+  #      render-side affordance gate uses, so the UI never offers what this refuses;
   #   2. ORG  — the mount resolves an operator org, the SAME `no_org` fail-secure guard
   #      `load/1` applies to the read path (an org-less mount renders nothing AND writes
   #      nothing — parity, instead of the old write-path bypass);
@@ -100,7 +124,7 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   defp authorize_write(socket) do
     mount = socket.assigns[:samen_mount]
 
-    with true <- socket.assigns[:samen_operator_role] in @write_roles,
+    with true <- may_write?(socket.assigns),
          %Mount{repo: repo} when is_atom(repo) and not is_nil(repo) <- mount,
          org_id when is_binary(org_id) <- Operator.org_id(mount) do
       {:ok, repo}
@@ -133,7 +157,7 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
     <div id="operator-webhooks">
       <.app_shell>
         <:sidebar>
-          <.operator_sidebar mount={@samen_mount} active={:webhooks} />
+          <.operator_sidebar mount={@samen_mount} active={:webhooks} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
         <.topbar title="Webhook DLQ" crumbs={["Operator plane", "Webhook DLQ"]} />
@@ -163,6 +187,23 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
                   · {@dead_count} dead · replay is safe (processing is idempotent) · resolve marks handled
                 </span>
               </div>
+
+              <%!-- S14 render-side role gate — the affordance explanation, rendered ONLY where the
+                    controls are withheld. Hiding is posture; `authorize_write/1` stays the authority.
+                    The note IS the disclosure control: it opens WHAT EACH ROLE MAY DO, focused on
+                    `dlq_write` — the very capability this note withheld — and marks ✓/— against
+                    `:samen_operator_role`, the SAME assign `may_write?/1` reads. A named role the
+                    reader cannot map to their own was still a dead end; this closes it. --%>
+              <.role_help_note
+                :if={!@can_write}
+                id="dlq-readonly"
+                focus={:dlq_write}
+                operator_role={assigns[:samen_operator_role]}
+              >
+                Read-only — replay and resolve require an operator role that may mutate the webhook
+                store (<span class="mono">:operator_admin</span> / <span class="mono">:operator_support</span>).
+                Envelopes stay visible; nothing on this page can be replayed or resolved on this role.
+              </.role_help_note>
 
               <.empty_state
                 :if={@envelopes == []}
@@ -205,22 +246,32 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
                     <pre class="mono" style="max-width:320px;overflow:auto;white-space:pre-wrap">{payload_json(e.payload)}</pre>
                   </td>
                   <td class="d-actions">
-                    <button
-                      :if={e.status == "dead"}
-                      class="btn-replay"
-                      phx-click="replay"
-                      phx-value-id={e.id}
-                    >
-                      Replay
-                    </button>
-                    <button
-                      :if={e.status == "dead"}
-                      class="btn-resolve"
-                      phx-click="resolve"
-                      phx-value-id={e.id}
-                    >
-                      Resolve
-                    </button>
+                    <%= if @can_write do %>
+                      <button
+                        :if={e.status == "dead"}
+                        class="btn-replay"
+                        phx-click="replay"
+                        phx-value-id={e.id}
+                      >
+                        Replay
+                      </button>
+                      <button
+                        :if={e.status == "dead"}
+                        class="btn-resolve"
+                        phx-click="resolve"
+                        phx-value-id={e.id}
+                      >
+                        Resolve
+                      </button>
+                    <% else %>
+                      <span
+                        :if={e.status == "dead"}
+                        class="d-readonly"
+                        style="color:var(--muted);font-size:11px"
+                      >
+                        read-only
+                      </span>
+                    <% end %>
                   </td>
                 </tr>
               </.data_table>

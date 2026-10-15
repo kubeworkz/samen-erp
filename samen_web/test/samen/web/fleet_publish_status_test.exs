@@ -84,6 +84,15 @@ defmodule Samen.Web.FleetPublishStatusTest do
     entries
   end
 
+  # The INSIDE of a withheld-control note (`<details id="…">` … `</details>`), so an assertion
+  # about "the note's panel" cannot accidentally read the sidebar's panel instead.
+  defp note_html(html, id) do
+    case Regex.run(~r|<details[^>]*id="#{Regex.escape(id)}"[^>]*>(.*?)</details>|s, html) do
+      [_, inner] -> inner
+      nil -> flunk("no withheld-control note ##{id} in the rendered page")
+    end
+  end
+
   defp minimal_payload do
     Samen.Fleet.Report.build(app_id: "11111111-1111-4111-8111-111111111111")
     |> Samen.Fleet.Report.to_wire()
@@ -185,6 +194,38 @@ defmodule Samen.Web.FleetPublishStatusTest do
 
       assert published?(app.id)
       assert [%PublicStatus.Entry{slug: "fps1"}] = page_entries()
+    end
+
+    test "the withheld note IS the disclosure — it opens the matrix at fleet_publish, for this session's role",
+         %{app: app} do
+      socket =
+        open(%{fleet: :operator_readonly, fps1: :operator_readonly}, app.id)
+        |> Phoenix.Component.assign(:samen_operator_role, :operator_readonly)
+
+      rendered = html(socket)
+
+      # The control really is withheld (anti-vacuity for the note below it).
+      refute rendered =~ ~s(id="publish-toggle")
+      assert rendered =~ ~s(id="publish-readonly")
+
+      note = note_html(rendered, "publish-readonly")
+
+      # The note names the required role AND opens the answer: the row it focuses is the
+      # capability it withheld, marked withheld for THIS session's role.
+      assert note =~ "roles[:fleet] == :operator_admin"
+      assert note =~ "What each operator role may do"
+      assert note =~ ~s(data-capability="fleet_publish" data-held="false" data-focus="true")
+
+      # POSITIVE CONTROL — the admin gets the control and no withheld-control note at all.
+      admin =
+        open(%{fleet: :operator_admin, fps1: :operator_admin}, app.id)
+        |> Phoenix.Component.assign(:samen_operator_role, :operator_admin)
+
+      assert html(admin) =~ ~s(id="publish-toggle")
+      refute html(admin) =~ "publish-readonly"
+      # …and no withheld-control disclosure at all (`.note-help` is what `<.role_help_note>`
+      # renders), so the note cannot be a decoration that shows for everyone.
+      refute html(admin) =~ "note-help"
     end
 
     test "a fleet admin with NO role in this product cannot publish it", %{app: app} do

@@ -23,6 +23,16 @@ defmodule Samen.Web.WebhookDlqAuthzTest do
       envelope; and it runs only when the mount resolves an operator org (the same
       `no_org` guard `load/1` already enforces — parity, fail-secure).
 
+  ## The affordance gate (S14 follow-up — refuse vs DON'T OFFER)
+
+  A refused event is the enforcement, not the whole answer: rendering a Replay button
+  the server then ignores is a misleading affordance. `load/1` now assigns
+  `can_write: may_write?/1` — the SAME predicate `authorize_write/1` enforces — and the
+  template renders the `replay`/`resolve` controls only under it, WITH an explanation
+  (`#dlq-readonly`) for a role that may only read. The handler gate is untouched and
+  still authoritative: this is posture over enforcement, never a replacement for it
+  (a forged `phx-click` from a read-only socket is refused exactly as before).
+
   ## Anti-tautology
 
   Every refusal is paired with a positive control on the same surface: an
@@ -56,6 +66,18 @@ defmodule Samen.Web.WebhookDlqAuthzTest do
     |> Phoenix.Component.assign(:samen_mount, build_operator_mount(org_id))
     |> Phoenix.Component.assign(:samen_acting_as, false)
     |> Phoenix.Component.assign(:samen_operator_role, role)
+  end
+
+  # Render the page the way the mounted route does — `load/1` (which derives the
+  # affordance from the role) then `render/1`.
+  defp rendered(role) do
+    assigns =
+      role
+      |> socket()
+      |> WebhookDlqLive.load()
+      |> Map.fetch!(:assigns)
+
+    render_html(WebhookDlqLive, assigns)
   end
 
   defp status(id), do: Event.get(Repo, id).status
@@ -129,5 +151,54 @@ defmodule Samen.Web.WebhookDlqAuthzTest do
     {:noreply, _} = WebhookDlqLive.handle_event("resolve", %{"id" => dead.id}, socket(:operator_support))
 
     assert status(dead.id) == "processed"
+  end
+
+  # ==========================================================================
+  # RENDER-SIDE affordance gate — the controls are not merely REFUSED, not OFFERED
+  # ==========================================================================
+
+  test ":operator_readonly renders the envelope but NO replay/resolve control, with the reason",
+       %{dead: dead} do
+    html = rendered(:operator_readonly)
+
+    # The envelope IS listed — so the absence below is about the ROLE, never an empty table
+    # (the anti-vacuity control for this probe).
+    assert html =~ dead.event_id
+    assert html =~ "dead"
+
+    refute html =~ "btn-replay"
+    refute html =~ "btn-resolve"
+    refute html =~ ~s(phx-click="replay")
+    refute html =~ ~s(phx-click="resolve")
+
+    # …and the withhold is EXPLAINED, not silent (the fleet `*-readonly` note pattern).
+    assert html =~ "dlq-readonly"
+    assert html =~ "Read-only"
+  end
+
+  test "a socket with NO resolved operator role is offered no write control either (fail closed)" do
+    html = rendered(nil)
+
+    refute html =~ "btn-replay"
+    refute html =~ "btn-resolve"
+    assert html =~ "dlq-readonly"
+  end
+
+  test "POSITIVE CONTROL — an :operator_admin session IS offered the controls (the probe is refutable)",
+       %{dead: dead} do
+    html = rendered(:operator_admin)
+
+    assert html =~ "btn-replay"
+    assert html =~ "btn-resolve"
+    assert html =~ ~s(phx-value-id="#{dead.id}")
+    refute html =~ "dlq-readonly"
+  end
+
+  test "POSITIVE CONTROL — :operator_support is offered the controls too", %{dead: dead} do
+    html = rendered(:operator_support)
+
+    assert html =~ "btn-replay"
+    assert html =~ "btn-resolve"
+    assert html =~ ~s(phx-value-id="#{dead.id}")
   end
 end
