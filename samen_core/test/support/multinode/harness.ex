@@ -9,6 +9,9 @@ defmodule Samen.MultiNode.Harness do
   topology — leadership and exactly-once are enforced by Postgres, exactly as in
   production — not a single-node simulation.
 
+  `ensure_epmd!/0` resolves the `epmd` the topology needs (PATH, else OTP's own
+  `erts-*/bin`) instead of assuming PATH hygiene — see its doc.
+
   Everything spawns and joins within the caller's lifecycle: no backgrounded
   processes, no polling loops that outlive the test.
   """
@@ -22,8 +25,71 @@ defmodule Samen.MultiNode.Harness do
   def repo_config, do: Application.fetch_env!(:samen_core, Samen.MultiNode.Repo)
 
   @doc """
+  Start the `epmd` daemon this proof needs (idempotent), resolving the executable
+  first.
+
+  `epmd` is NOT reliably on PATH even where `erl` is: OTP ships it in
+  `erts-<vsn>/bin`, and on Windows the EDB installer puts only `erl` on PATH — so a
+  bare `System.cmd("epmd", …)` dies with `:enoent` in the box's own environment,
+  invalidating `setup_all` and turning a healthy proof into a red that looks like a
+  broken gate. Resolve PATH first, then OTP's own erts bin, and start the daemon
+  only through a path that exists; if neither has it, fail with the reason instead
+  of an opaque `:enoent`.
+  """
+  def ensure_epmd! do
+    # `-daemon` is a no-op when epmd is already listening, and the daemon it may
+    # spawn is detached — so nothing here needs an `on_exit` teardown.
+    {_, 0} = System.cmd(epmd_executable!(), ["-daemon"])
+    :ok
+  end
+
+  # Written as explicit branches rather than an `||` chain: `System.find_executable/1`'s
+  # typespec promises a binary, so the compiler (rightly) calls an `||` fallback there dead
+  # code — and this file compiles under `--warnings-as-errors` in the gates, where a dead-code
+  # warning is a red. The runtime nil is still handled, and each rescuer is really exercised
+  # (Windows: `erts_epmd!/0`; neither: the raise).
+  @spec epmd_executable!() :: binary()
+  defp epmd_executable! do
+    case System.find_executable("epmd") do
+      path when is_binary(path) ->
+        path
+
+      _ ->
+        case erts_epmd!() do
+          nil ->
+            raise """
+            epmd (Erlang Port Mapper Daemon) was not found on PATH or in OTP's own
+            erts-*/bin — the L4 multi-node Oban proof cannot start distribution without
+            it. Install a full Erlang/OTP distribution (or put its erts bin on PATH).
+            """
+
+          path ->
+            path
+        end
+    end
+  end
+
+  @spec erts_epmd!() :: binary() | nil
+  defp erts_epmd! do
+    root = to_string(:code.root_dir())
+
+    candidates =
+      for vsn <- Path.wildcard(Path.join(root, "erts-*")),
+          name <- ["epmd", "epmd.exe"],
+          path = Path.join([vsn, "bin", name]),
+          File.regular?(path),
+          do: path
+
+    case candidates do
+      [path | _] -> path
+      [] -> nil
+    end
+  end
+
+  @doc """
   Start Erlang distribution on the primary node (idempotent). Requires a running
-  `epmd` — the `SAMEN_MULTINODE` ci tier / harness starts one first.
+  `epmd` — see `ensure_epmd!/0` (the `SAMEN_MULTINODE` ci tier / harness starts one
+  first).
   """
   def ensure_distribution! do
     unless Node.alive?() do

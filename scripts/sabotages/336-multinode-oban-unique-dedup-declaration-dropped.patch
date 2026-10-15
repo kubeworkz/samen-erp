@@ -1,0 +1,66 @@
+# SABOTAGE: the CROSS-NODE INSERT-TIME EXACTLY-ONCE declaration of the L4 multi-node Oban proof
+# (`Samen.MultiNode.UniqueWorker`'s `unique: [keys: [:key], …]`). This is the tier my earlier
+# multinode report flagged as unfalsifiable: the proof has THREE named tests, but nothing flipped
+# any of them, so its green line was asserted-by-inspection rather than refutable. This patch makes
+# the dedup half of that line refutable, and the proof's own `MUST_FAIL` now catches it.
+#
+# WHAT BREAKS. `unique` is Oban's insert-time exactly-once primitive: enqueuing the SAME logical job
+# (same `"key"` args) any number of times, from EITHER node, collapses to ONE `oban_jobs` row, so
+# the side effect fires ONCE cluster-wide. Dropping the declaration does not change the crash story
+# or the fetch path — it silently turns "fan out this job from both nodes" into one execution PER
+# ENQUEUE (the proof fans it out 40× from A and 40× from B, i.e. 80 executions of one logical job).
+# That is the real regression shape this declaration exists to prevent, and it is a one-line
+# deletion: the kind of edit that looks tidy in review and doubles a customer's side effects in
+# production.
+#
+# WHY THIS AND NOT THE "exactly-once: 120 distinct jobs" TEST. That test's guarantee is
+# `FOR UPDATE SKIP LOCKED` inside Oban's engine, coordinated by Postgres — no file in this
+# repository supplies it, so no in-repo patch can break it, and a patch that faked a double-grab
+# would be sabotaging the detector rather than the guarantee. The tier's exactly-once claim is
+# therefore asserted at two levels: the FETCH level (dependency-enforced, not reachable from here)
+# and the INSERT-time DEDUP level (this declaration — reachable, and until now unrefuted). This
+# patch refutes the level a repository change can actually break, and says so rather than implying
+# the whole tier is now adversarially covered.
+#
+# WHAT THE NAMED TEST SHOWS. With the declaration gone, `exec_count("dedup-key") == 1` reads 80
+# (two nodes × 40 inserts). The assertion is the only thing that moves: the negative control
+# (`NoUniqueWorker`, no `unique`, same body) still fires many times and still asserts > 1, so the
+# failure is the exactly-once claim being false — not the harness failing to boot, not the peers
+# failing to produce, and not a setup error (a `setup_all` failure invalidates all three tests and
+# prints no `N) test …` header, which the harness already fails closed on with "no test-failure
+# headers found").
+#
+# NOT TOUCHED, deliberately: the negative control (`NoUniqueWorker`), the other two proof workers,
+# the `mn_exec` ledger and every detector that reads it, the proof's own enqueue seam
+# (`Harness.insert_each_on/2` — the path that DOES honour `unique`), the two-node topology, and the
+# database both peers share. The sabotage removes ONE worker option and nothing else.
+#
+# The deletion also collapses the call's trailing comma: dropping the last argument of a multi-line
+# call without re-terminating the new last line is a SYNTAX ERROR, not a flip — the first cut of this
+# patch did exactly that and the harness refused it ("suite failed but no test-failure headers found
+# (compile error?)"), which is the fail-closed behaviour a sabotage harness needs. Two lines change,
+# and the result reads exactly like the sibling workers' one-line form. No warning is introduced (the
+# `Oban.Job.states()` reference the option held leaves nothing unused behind), so nothing needs
+# confining for a `--warnings-as-errors` compile.
+#
+# `# ENV:` (added to the harness for exactly this class of patch): the L4 tier is ExUnit-EXCLUDED
+# unless `SAMEN_MULTINODE=1` (`samen_core/test/test_helper.exs`), so a replay that ran this file
+# without the flag would collect 0 tests, exit 0, and be reported as "suite PASSED under sabotage —
+# the guarantee did not flip (vacuous gate)". The header hands exactly that flag to this patch's
+# `mix test`, making the replay actually RUN the three named tests.
+# APP: samen_core
+# TEST_FILES: test/multinode/oban_multinode_test.exs
+# MUST_FAIL: uniqueness dedup: same unique job fanned out from both nodes fires ONCE
+# ENV: SAMEN_MULTINODE=1
+--- a/samen_core/test/support/multinode/workers.ex
++++ b/samen_core/test/support/multinode/workers.ex
+@@ -34,8 +34,7 @@ defmodule Samen.MultiNode.UniqueWorker do
+   """
+   use Oban.Worker,
+     queue: :default,
+-    max_attempts: 1,
+-    unique: [keys: [:key], period: 300, states: Oban.Job.states()]
++    max_attempts: 1
+ 
+   @impl Oban.Worker
+   def perform(%Oban.Job{args: %{"key" => key}}) do

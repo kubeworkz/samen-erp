@@ -26,7 +26,9 @@ defmodule Samen.MultiNode.ObanMultiNodeTest do
   alias Samen.MultiNode.{CountWorker, UniqueWorker, NoUniqueWorker}
 
   setup_all do
-    System.cmd("epmd", ["-daemon"])
+    # Resolves epmd (PATH, else OTP's own erts bin) rather than assuming it is on
+    # PATH — see `Samen.MultiNode.Harness.ensure_epmd!/0`.
+    Harness.ensure_epmd!()
     Harness.ensure_distribution!()
     Harness.create_and_migrate_db!()
     repo = Harness.start_primary_repo!()

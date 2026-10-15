@@ -62,6 +62,14 @@
 #   APP:        the app dir to run tests in (samen_core | samen_web | ...)
 #   TEST_FILES: space-separated test files (relative to APP) that hold the named tests
 #   MUST_FAIL:  a substring of a test name that MUST be among the failures (repeatable)
+#   ENV:        `KEY=value` exported to THIS patch's `mix test` only (repeatable; the name
+#               is validated as a bare identifier). The seam for OPT-IN tiers, whose tests
+#               only RUN under a flag: the L4 multi-node Oban proof is ExUnit-EXCLUDED
+#               unless `SAMEN_MULTINODE=1` (test/test_helper.exs), so a replay of it without
+#               the flag reports "0 tests, 0 failures" and exits 0 — the harness would
+#               (correctly) call that a vacuous gate rather than a flip. A patch that omits
+#               the header is unaffected: with no `# ENV:` lines the command line is
+#               byte-identical to the pre-header form.
 #
 # ── SELECTION / FILTER MODES (additive; DEFAULT no-arg run is UNCHANGED) ──────
 # With no flags this replays ALL patches, in filename order, exactly as before.
@@ -606,11 +614,28 @@ for patch in "${selected[@]}"; do
   meta "$patch" MUST_FAIL > "$WORK/must_fail"
   [[ -s "$WORK/must_fail" ]] || fail "$name: no MUST_FAIL headers"
 
+  # Optional repeatable `# ENV: KEY=value` — assignments for THIS patch's `mix test` only.
+  # Fail-closed on a malformed line: a typo'd variable name would otherwise be handed to
+  # `env` and the replay would run WITHOUT the opt-in flag it declared (0 tests, exit 0) —
+  # a vacuous green indistinguishable from a real one.
+  per_patch_env=()
+  while IFS= read -r assignment; do
+    [[ -n "$assignment" ]] || continue
+    env_var="${assignment%%=*}"
+    if [[ "$assignment" != *=* || ! "$env_var" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      fail "$name: malformed '# ENV:' header (want KEY=value, bare variable name): $assignment"
+    fi
+    per_patch_env+=("$assignment")
+  done < <(meta "$patch" ENV)
+
   echo ""
   if [[ -n "$TEST_DB" ]]; then
     echo "==> sabotage $name (app: $app, db: $TEST_DB)"
   else
     echo "==> sabotage $name (app: $app)"
+  fi
+  if [[ ${#per_patch_env[@]} -gt 0 ]]; then
+    echo "    opt-in env for this patch: ${per_patch_env[*]}"
   fi
 
   # 0. The patch acts on the replay tree only. Pin every path it touches to the
@@ -636,7 +661,8 @@ for patch in "${selected[@]}"; do
   # ARRAY that is empty unless --test-db was given: an empty expansion leaves the command
   # line byte-identical to the pre-flag form.
   (cd "$SHADOW/$app" && env MIX_DEPS_PATH="$REPO_ROOT/$app/deps" \
-     MIX_BUILD_PATH="$BUILD_ROOT/$app" ${TEST_DB_ENV[@]+"${TEST_DB_ENV[@]}"} mix test $test_files) > "$out" 2>&1
+     MIX_BUILD_PATH="$BUILD_ROOT/$app" ${TEST_DB_ENV[@]+"${TEST_DB_ENV[@]}"} \
+     ${per_patch_env[@]+"${per_patch_env[@]}"} mix test $test_files) > "$out" 2>&1
   status=$?
 
   # 5a. Revert before judging, so a failed assertion never strands a dirty tree.
