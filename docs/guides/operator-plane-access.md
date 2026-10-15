@@ -113,6 +113,16 @@ Notes that matter in practice:
   explicit `#dlq-readonly` note and no control at all. The handler keeps its own gate, and both
   read the same `may_write?/1` predicate, so the page can never offer a write the server would
   refuse (`samen_web/lib/samen/web/operator/webhook_dlq_live.ex`).
+- **The DLQ says WHICH silence it is.** Withholding there is per-**row** (the controls render on
+  `dead` envelopes only) *and* per-**role**, so an empty action column used to mean either "nothing
+  has dead-lettered" or "your role may not write" — and the `#dlq-readonly` note appears in only the
+  second case. `#dlq-posture` now renders on **both** postures: it names the resolved
+  `:samen_operator_role` (via the same `operator_role_label/2` the chrome uses, and carrying the
+  same `data-operator-role` atom), states whether writes are offered on this page at all, and reads
+  the dead count — so an operator who is offered nothing knows whether that is the queue or the
+  role. It is a *statement of posture*, never authority: `authorize_write/1` is unchanged, and the
+  posture bar is proven load-bearing by
+  `scripts/sabotages/337-s14-dlq-posture-bar-dropped.patch`.
 - **The chrome names the resolved role.** Every operator page's sidebar footer
   (`Samen.Web.Operator.Live.operator_sidebar/1`) renders the session's `:samen_operator_role` as
   a human label — the *same* assign every write predicate reads — so an operator reading the
@@ -241,8 +251,11 @@ default you are replacing, not a thing to extend.
 **Worked example — the DLQ read-only view:** seed a dead envelope, set
 `config :driftwood, :operator_roster, %{"<you>" => :operator_readonly}`, arm the host, log in,
 and open `/operator/webhooks`. You should see the envelopes, the `#dlq-readonly` explanation, and
-**no** Replay/Resolve control. Flip the roster entry to `:operator_support` and reload: the
-controls appear. (That pair is asserted by `samen_web/test/samen/web/webhook_dlq_authz_test.exs`.)
+**no** Replay/Resolve control — plus a `#dlq-posture` bar reading *Writes withheld* with your role
+named and *"1 dead below still need an operator who may write"*, so the empty action column is
+never mistaken for an empty queue. Flip the roster entry to `:operator_support` and reload: the
+controls appear and the bar reads *Writes offered*. (That pair is asserted by
+`samen_web/test/samen/web/webhook_dlq_authz_test.exs`.)
 
 ### 3.4 Arming for prod (what changes)
 

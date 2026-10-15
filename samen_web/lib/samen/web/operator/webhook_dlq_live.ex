@@ -32,10 +32,25 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   the handler read the same `may_write?/1` predicate, so the page can never offer a write
   the server would deny.
 
-  ## Fail-safe
+  ### The page states its OWN posture, so a silence is never ambiguous
 
-  A host that has not yet run the `whk_event` migration reads zero rows (the query is
-  rescued to `[]`) and sees the honest empty state — never a 500.
+  Withholding here is per-ROW (`dead` only) AND per-ROLE, so an operator could face an empty
+  action column for two unrelated reasons — nothing has dead-lettered, or their role may not
+  write — while the withheld-control note renders ONLY in the second case. `#dlq-posture`
+  closes that gap: it renders on BOTH postures, names the resolved `:samen_operator_role` (or
+  says plainly that none was resolved), states whether writes are offered on this page at all,
+  and reads the dead count — so "nothing to replay" and "you may not replay" are told apart
+  without opening the note. It states posture ONLY; `authorize_write/1` remains the authority.
+
+  ## Fail-safe — and fail-HONEST ("unreadable" is not "empty")
+
+  A host that has not yet run the `whk_event` migration reads zero rows and sees a stated
+  state, never a 500. That state is deliberately NOT the empty state: `list_envelopes/1`
+  reports a bounded reason (`:read_failed`) and the page renders `<.unread_state>` —
+  "could not be read" — because "nothing has dead-lettered" is a claim about the DATA, and a
+  query that raised did not observe it (ADR-014/024/026). The posture bar and the header
+  follow the same rule: `dead_count` is `nil` when the queue is unreadable, and both say the
+  count is unknown instead of reporting a confident `0`.
   """
   use Phoenix.LiveView
 
@@ -70,15 +85,22 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
 
     case mount && Operator.org_id(mount) do
       nil ->
-        assign(socket, no_org: true, envelopes: [], dead_count: 0, can_write: can_write)
+        # `no_org` renders its own branch (no queue, no posture bar) — the count is not
+        # reported at all here, so `unread` stays nil rather than claiming a failed read.
+        assign(socket, no_org: true, envelopes: [], dead_count: 0, unread: nil, can_write: can_write)
 
       _org_id ->
-        envelopes = list_envelopes(mount)
+        {envelopes, unread} = list_envelopes(mount)
 
         assign(socket,
           no_org: false,
           envelopes: envelopes,
-          dead_count: Enum.count(envelopes, &(&1.status == "dead")),
+          # `nil` when the read SUCCEEDED — then this is a real count and the posture bar may
+          # state it. A non-nil reason means the queue could not be read at all, so the count is
+          # UNKNOWN and the bar must say so rather than report a confident `0` (fail-honest: an
+          # unreadable queue is not an empty one).
+          dead_count: if(unread, do: nil, else: Enum.count(envelopes, &(&1.status == "dead"))),
+          unread: unread,
           can_write: can_write
         )
     end
@@ -135,13 +157,17 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
 
   # ---------------------------------------------------------------------------
 
+  # Returns `{envelopes, unread}` — `unread` is a bounded REASON when the read did not
+  # happen, `nil` when it did. A host that has not run the `whk_event` migration is the
+  # common case: the query raises, and the page must report "could not be read", never the
+  # confident empty state that reads as "nothing has dead-lettered" (see the moduledoc).
   defp list_envelopes(%Mount{repo: repo}) when is_atom(repo) and not is_nil(repo) do
-    Event.list_for_operator(repo, limit: 100)
+    {Event.list_for_operator(repo, limit: 100), nil}
   rescue
-    _ -> []
+    _ -> {[], :read_failed}
   end
 
-  defp list_envelopes(_), do: []
+  defp list_envelopes(_), do: {[], :no_repo}
 
   defp safe_enqueue(row, repo) do
     Samen.Webhook.IngestWorker.enqueue(row, repo: repo)
@@ -184,7 +210,7 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
                 <h3>Webhook envelopes</h3>
                 <span class="n">{length(@envelopes)}</span>
                 <span class="lane">
-                  · {@dead_count} dead · replay is safe (processing is idempotent) · resolve marks handled
+                  · <%= if is_nil(@dead_count) do %>dead count unknown (queue unreadable)<% else %>{@dead_count} dead<% end %> · replay is safe (processing is idempotent) · resolve marks handled
                 </span>
               </div>
 
@@ -205,8 +231,80 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
                 Envelopes stay visible; nothing on this page can be replayed or resolved on this role.
               </.role_help_note>
 
+              <%!--
+                S14 follow-up — the page's OWN write posture, stated up front. Withholding here is
+                per-ROW (`dead` only) AND per-ROLE, so an ADMIN whose queue holds no dead envelope saw
+                an empty action column with nothing distinguishing "nothing to replay" from "you may
+                not replay" — the withheld-control note below renders only in the second case. This
+                bar renders on BOTH postures and names (a) the resolved `:samen_operator_role` (via
+                the SAME `operator_role_label/2` the chrome footer uses) and (b) whether writes are
+                offered here at all, so the two silences are distinguishable WITHOUT opening the note.
+                Posture only — `authorize_write/1` stays the authority.
+              --%>
+              <div
+                id="dlq-posture"
+                class={"dlq-posture " <> if(@can_write, do: "dlq-posture-write", else: "dlq-posture-read")}
+                {posture_role_attr(assigns[:samen_operator_role])}
+                data-can-write={to_string(@can_write)}
+                style={"display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:10px 12px;border:1px solid var(--line2);border-left:3px solid #{if @can_write, do: "#3B4CCA", else: "#C4C7D6"};border-radius:8px;background:var(--card);font-size:12.5px;line-height:1.5;color:var(--muted)"}
+              >
+                <span class="dlq-posture-mark" aria-hidden="true">{if @can_write, do: "✓", else: "—"}</span>
+                <span class="dlq-posture-text">
+                  <%= if @can_write do %>
+                    <b>Writes offered.</b>
+                    This session holds
+                    <b>{operator_role_label(assigns[:samen_operator_role], @samen_mount)}</b>
+                    — Replay and Resolve are offered on <b>dead</b> envelopes only, so an empty
+                    action cell on any other row is not a withheld control.
+                    <%= cond do %>
+                      <% is_nil(@dead_count) -> %>
+                        The queue itself <b>could not be read</b>, so this page cannot tell you
+                        whether anything is dead.
+                      <% @dead_count == 0 -> %>
+                        <b>Nothing is dead right now</b>, so there is nothing to replay — an empty
+                        action column means exactly that.
+                      <% true -> %>
+                        <b>{@dead_count} dead</b> below, awaiting a decision.
+                    <% end %>
+                  <% else %>
+                    <b>Writes withheld.</b>
+                    <%= case assigns[:samen_operator_role] do %>
+                      <% nil -> %>
+                        No operator role was resolved for this session, so this page offers no
+                        writes at all.
+                      <% role -> %>
+                        This session holds <b>{operator_role_label(role, @samen_mount)}</b> — replay
+                        and resolve need an operator role that may mutate the webhook store, so the
+                        controls are withheld on this page.
+                    <% end %>
+                    <%= cond do %>
+                      <% is_nil(@dead_count) -> %>
+                        The queue itself <b>could not be read</b>, so whether anything is dead is
+                        unknown here.
+                      <% @dead_count == 0 -> %>
+                        Nothing is dead right now either.
+                      <% true -> %>
+                        <b>{@dead_count} dead</b> below still need an operator who may write — the
+                        queue is NOT empty.
+                    <% end %>
+                  <% end %>
+                </span>
+              </div>
+
+              <%!-- FAIL-HONEST: an unreadable queue is NOT an empty one. Rendered INSTEAD of the
+                    empty state (and before it), so the confident "nothing has dead-lettered" copy
+                    can never be shown for a read that did not happen — e.g. a host that has not yet
+                    run the `whk_event` migration. --%>
+              <.unread_state
+                :if={@envelopes == [] and @unread}
+                class="dlq-unread"
+                reason={@unread}
+                title="Webhook envelopes could not be read."
+                body="The dead-letter store did not answer, so this page cannot tell you whether anything has dead-lettered. A host that has not yet run the whk_event migration reads here — that is not the same as an empty queue."
+              />
+
               <.empty_state
-                :if={@envelopes == []}
+                :if={@envelopes == [] and is_nil(@unread)}
                 class="dlq-empty"
                 icon="✓"
                 title="No webhook envelopes."
@@ -284,6 +382,16 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   end
 
   # -- helpers -----------------------------------------------------------------
+
+  # The role atom this page's write gate actually READ, exposed as the SAME `data-operator-role`
+  # the operator chrome's footer carries — so the posture bar and the footer can be compared in
+  # one render. OMITTED entirely when the session resolved no role: the chrome's rule is that an
+  # unresolved session claims no role atom anywhere (`operator_sidebar_role_test.exs` refutes the
+  # attribute in that case), and the bar says so in words instead.
+  defp posture_role_attr(role) when is_atom(role) and not is_nil(role),
+    do: [{"data-operator-role", to_string(role)}]
+
+  defp posture_role_attr(_unresolved), do: []
 
   defp ts(nil), do: "—"
   defp ts(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M")

@@ -1,0 +1,85 @@
+# SABOTAGE: S14 follow-up — the operator DLQ page's OWN write-posture statement (`#dlq-posture`) is
+# dropped from the render, leaving only the per-role withheld-control note behind. This is the exact
+# regression the bar exists to prevent, and it is INVISIBLE to every other assertion on this surface:
+# the note still explains a read-only withhold, `authorize_write/1` still refuses, and the controls
+# are still offered to an admin. What is lost is the disambiguation — with the bar gone, an ADMIN
+# whose queue holds no dead envelope is back to an empty action column that reads identically to a
+# role that may not write (the note renders only in the second case). So this patch is aimed at the
+# posture probes alone: the bar's own element (and with it the `data-can-write` /
+# `data-operator-role` / dead-count copy they assert on) disappears.
+#
+# NOT TOUCHED, deliberately: `@write_roles`, `may_write?/1`, `authorize_write/1`, the per-row
+# `:if={e.status == "dead"}` control gate, the `#dlq-readonly` note, and the footer's role
+# disclosure. This removes a STATEMENT of posture, never the posture itself — `may_write?/1` and
+# `authorize_write/1` still read the same assign, so the page's behaviour is unchanged and only its
+# silence becomes ambiguous again.
+#
+# No warning is introduced (a deleted block leaves nothing unused) and the replay runs `mix test`,
+# so there is no warning to confine.
+# APP: samen_web
+# TEST_FILES: test/samen/web/webhook_dlq_authz_test.exs
+# MUST_FAIL: an :operator_admin page states writes ARE offered, and names the role it read that from
+# MUST_FAIL: an :operator_readonly page states writes are WITHHELD — and never implies the queue is empty
+# MUST_FAIL: with NO dead envelope the page says so — the admin's blank action column is explained
+# MUST_FAIL: an unresolved role is named honestly — the posture claims no role the session does not hold
+diff --git a/samen_web/lib/samen/web/operator/webhook_dlq_live.ex b/samen_web/lib/samen/web/operator/webhook_dlq_live.ex
+index ddeacb0..2108d50 100644
+--- a/samen_web/lib/samen/web/operator/webhook_dlq_live.ex
++++ b/samen_web/lib/samen/web/operator/webhook_dlq_live.ex
+@@ -241,56 +241,6 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
+                 offered here at all, so the two silences are distinguishable WITHOUT opening the note.
+                 Posture only — `authorize_write/1` stays the authority.
+               --%>
+-              <div
+-                id="dlq-posture"
+-                class={"dlq-posture " <> if(@can_write, do: "dlq-posture-write", else: "dlq-posture-read")}
+-                {posture_role_attr(assigns[:samen_operator_role])}
+-                data-can-write={to_string(@can_write)}
+-                style={"display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:10px 12px;border:1px solid var(--line2);border-left:3px solid #{if @can_write, do: "#3B4CCA", else: "#C4C7D6"};border-radius:8px;background:var(--card);font-size:12.5px;line-height:1.5;color:var(--muted)"}
+-              >
+-                <span class="dlq-posture-mark" aria-hidden="true">{if @can_write, do: "✓", else: "—"}</span>
+-                <span class="dlq-posture-text">
+-                  <%= if @can_write do %>
+-                    <b>Writes offered.</b>
+-                    This session holds
+-                    <b>{operator_role_label(assigns[:samen_operator_role], @samen_mount)}</b>
+-                    — Replay and Resolve are offered on <b>dead</b> envelopes only, so an empty
+-                    action cell on any other row is not a withheld control.
+-                    <%= cond do %>
+-                      <% is_nil(@dead_count) -> %>
+-                        The queue itself <b>could not be read</b>, so this page cannot tell you
+-                        whether anything is dead.
+-                      <% @dead_count == 0 -> %>
+-                        <b>Nothing is dead right now</b>, so there is nothing to replay — an empty
+-                        action column means exactly that.
+-                      <% true -> %>
+-                        <b>{@dead_count} dead</b> below, awaiting a decision.
+-                    <% end %>
+-                  <% else %>
+-                    <b>Writes withheld.</b>
+-                    <%= case assigns[:samen_operator_role] do %>
+-                      <% nil -> %>
+-                        No operator role was resolved for this session, so this page offers no
+-                        writes at all.
+-                      <% role -> %>
+-                        This session holds <b>{operator_role_label(role, @samen_mount)}</b> — replay
+-                        and resolve need an operator role that may mutate the webhook store, so the
+-                        controls are withheld on this page.
+-                    <% end %>
+-                    <%= cond do %>
+-                      <% is_nil(@dead_count) -> %>
+-                        The queue itself <b>could not be read</b>, so whether anything is dead is
+-                        unknown here.
+-                      <% @dead_count == 0 -> %>
+-                        Nothing is dead right now either.
+-                      <% true -> %>
+-                        <b>{@dead_count} dead</b> below still need an operator who may write — the
+-                        queue is NOT empty.
+-                    <% end %>
+-                  <% end %>
+-                </span>
+-              </div>
+-
+               <%!-- FAIL-HONEST: an unreadable queue is NOT an empty one. Rendered INSTEAD of the
+                     empty state (and before it), so the confident "nothing has dead-lettered" copy
+                     can never be shown for a read that did not happen — e.g. a host that has not yet

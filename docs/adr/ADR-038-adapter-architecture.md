@@ -357,7 +357,11 @@ lists `:dead` (and recent `:processed`/`:received`) envelopes **token-blind**: p
 event id, timestamps, attempt count, error summary — no payload rendering beyond the already
 redacted map, no vault tokens, no PII columns (INV-2 verifier tiers cover it). Operator actions:
 **replay** (re-enqueue the processing job; safe because processing is idempotent) and
-**resolve** (mark handled, audited). The view mounts via the operator plane per ADR-010.
+**resolve** (mark handled, audited). Both actions are WRITE affordances and are role-gated on the
+operator principal (`:operator_admin`/`:operator_support`; S14/T146): a read-only operator sees the
+same queue and why it is read-only, never a control the server would refuse — the render gate and
+the handler's `authorize_write/1` read one predicate, and the handler stays the authority (hiding is
+posture, not enforcement). The view mounts via the operator plane per ADR-010.
 
 ## 6 · Rate limiting — BINDING design for T103 (auth) and T19 (ingress)
 

@@ -33,6 +33,16 @@ defmodule Samen.Web.WebhookDlqAuthzTest do
   still authoritative: this is posture over enforcement, never a replacement for it
   (a forged `phx-click` from a read-only socket is refused exactly as before).
 
+  ## The posture statement (S14 follow-up — WHICH silence is it?)
+
+  Withholding on this page is per-ROW (`dead` only) AND per-ROLE, so an ADMIN whose queue holds
+  no dead envelope saw an empty action column with nothing telling the two silences apart —
+  "nothing to replay" vs "you may not replay" — because the withheld-control note renders only
+  in the second case. `#dlq-posture` now renders on BOTH postures: it names the resolved
+  `:samen_operator_role` (or says plainly that none was resolved), states whether writes are
+  offered at all, and reads the dead count. The tests below pin both postures AND the refutable
+  transition between them (the same session, only the dead count changed).
+
   ## Anti-tautology
 
   Every refusal is paired with a positive control on the same surface: an
@@ -81,6 +91,14 @@ defmodule Samen.Web.WebhookDlqAuthzTest do
   end
 
   defp status(id), do: Event.get(Repo, id).status
+
+  # The posture bar's OWN HTML. The chrome footer carries the same `data-operator-role` atom, so
+  # asserting on the whole page could be satisfied by the footer alone — this scopes the probe to
+  # the bar itself. (The bar holds no nested `<div>`, so the lazy match ends at its own close.)
+  defp posture_html(html) do
+    [block] = Regex.run(~r|<div id="dlq-posture".*?</div>|s, html)
+    block
+  end
 
   # ==========================================================================
   # RED — :operator_readonly (and an unresolved role) may not mutate
@@ -200,5 +218,71 @@ defmodule Samen.Web.WebhookDlqAuthzTest do
     assert html =~ "btn-replay"
     assert html =~ "btn-resolve"
     assert html =~ ~s(phx-value-id="#{dead.id}")
+  end
+
+  # ==========================================================================
+  # THE POSTURE STATEMENT — "nothing to replay" vs "you may not replay"
+  # ==========================================================================
+
+  test "an :operator_admin page states writes ARE offered, and names the role it read that from",
+       %{dead: dead} do
+    html = rendered(:operator_admin)
+    bar = posture_html(html)
+
+    assert bar =~ ~s(data-can-write="true")
+    # The posture reads the SAME assign the footer does — never a copy string.
+    assert bar =~ ~s(data-operator-role="operator_admin")
+    assert bar =~ "Writes offered."
+    # …and it says WHERE the controls are (dead rows only), so an empty action cell on any other
+    # row cannot be misread as a withheld control.
+    assert bar =~ "envelopes only"
+    # Anti-vacuity: the dead envelope IS listed — this posture is about a queue with work in it.
+    assert html =~ dead.event_id
+  end
+
+  test "an :operator_readonly page states writes are WITHHELD — and never implies the queue is empty",
+       %{dead: dead} do
+    html = rendered(:operator_readonly)
+    bar = posture_html(html)
+
+    # Anti-vacuity: the dead envelope IS listed — the withhold is about the ROLE, not an empty page.
+    assert html =~ dead.event_id
+
+    assert bar =~ ~s(data-can-write="false")
+    assert bar =~ ~s(data-operator-role="operator_readonly")
+    assert bar =~ "Writes withheld."
+    assert bar =~ "Read-only operator"
+
+    # THE disambiguation: a dead envelope IS waiting, so the withhold is about the ROLE. If this
+    # page ever read as "nothing to replay", an operator would stop looking for a writer.
+    assert bar =~ "still need an operator who may write"
+    refute bar =~ "Nothing is dead right now"
+  end
+
+  test "with NO dead envelope the page says so — the admin's blank action column is explained",
+       %{dead: dead} do
+    # The SAME page and the SAME session, only the dead COUNT changed: the copy must change with
+    # it, or the admin is back to guessing which silence they are looking at.
+    {:ok, _} = Event.mark_processed(Repo, dead)
+
+    html = rendered(:operator_admin)
+    bar = posture_html(html)
+
+    assert bar =~ ~s(data-can-write="true")
+    assert bar =~ "Nothing is dead right now"
+    # Anti-vacuity: the envelope is still LISTED (processed, not dead), so this is about the dead
+    # count and not about an empty table.
+    assert html =~ dead.event_id
+  end
+
+  test "an unresolved role is named honestly — the posture claims no role the session does not hold" do
+    bar = posture_html(rendered(nil))
+
+    assert bar =~ ~s(data-can-write="false")
+    assert bar =~ "No operator role was resolved for this session"
+    refute bar =~ "Writes offered."
+    # No role atom is claimed for a session whose role was never resolved (the chrome's own rule);
+    # the posture bar is not an exception to it.
+    refute bar =~ "data-operator-role="
   end
 end
