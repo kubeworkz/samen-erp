@@ -102,6 +102,7 @@ proven," not as ongoing reference:
 - **Cross-plane chat (ADR-012):** `012a-object-unfurl.md`, `012b-crossplane-chat.md`, `012c-mount-crossplane-chat-driftwood.md`.
 - **Demo coherence (ADR-013):** `013-demo-coherence-build.md`, `seed-5-tenants.md`.
 - **CDC / analytics:** `cdc-analytics-tier.md` (the optional ClickHouse mirror), `free-text-pii-residue.md` (the honest residue in freeform-text PII defense).
+- **Adversarial certification:** `sabotage-certification.md` — the 344-patch sabotage sweep's own per-patch verdict (does each patch's named tests actually flip, and does the tree come back byte-exact) for the newest run, with the host-level interruptions classified and the one unverifiable patch named.
 
 ## Process / planning record
 
