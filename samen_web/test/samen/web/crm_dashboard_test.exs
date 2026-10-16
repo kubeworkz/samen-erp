@@ -138,6 +138,13 @@ defmodule Samen.Web.CRMDashboardTest do
 
     html = render_live(DashboardLive, mount, [org_id])
 
+    # CHROME — the page's own content renders in the shell's MAIN PANEL, inside a `.wrap` pane.
+    # `.dash-grid` is a paddingless grid (its tiles carry the padding), so without the pane the
+    # grid sat flush against the shell edge — the one tenant surface that did (the tenant-chrome sweep,
+    # `tenant_shell_coverage_test.exs`).
+    assert html =~ ~s(<div class="app">)
+    assert html =~ ~r/<main class="main">.*<div class="wrap">.*id="crm-dash-grid"/s
+
     # The dashboard grid + all three chart tiles present.
     assert html =~ ~s(id="crm-dash-grid")
     assert html =~ "dash-value-by-stage"

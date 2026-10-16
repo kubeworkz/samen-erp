@@ -32,7 +32,7 @@ defmodule Samen.Web.Billing.InvoiceLive do
   All write affordances are TENANT-plane only (`Samen.Web.Billing.Live.writable?/1`);
   the hosted invoice/receipt links are rendered tenant-side only (ADR-038 §3.5).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1, writable?: 1]
@@ -210,311 +210,312 @@ defmodule Samen.Web.Billing.InvoiceLive do
     {:noreply, assign(socket, action_error: nil, delete_error: nil)}
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_invoices} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="billing-invoice">
-      <.app_shell>
-        <:sidebar>
-          <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_invoices} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={invoice_label(@invoice)} crumbs={crumbs(@samen_mount, @org_id, invoice_label(@invoice))}>
+      <:actions>
+        <a href={invoices_path(@org_id)} class="btn" style="text-decoration:none">
+          <span class="i">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Back to invoices
+        </a>
+        <.button :if={writable?(@samen_mount) and @invoice != nil} phx-click="edit_invoice" id="edit-invoice">
+          Edit invoice
+        </.button>
+        <.delete_confirm
+          :if={writable?(@samen_mount) and @invoice != nil}
+          id="delete-invoice"
+          message="Delete this invoice? This cannot be undone."
+          phx-click="delete"
+          phx-value-id={@invoice && @invoice.id}
+        />
+      </:actions>
+    </.topbar>
 
-        <.topbar title={invoice_label(@invoice)} crumbs={crumbs(@samen_mount, @org_id, invoice_label(@invoice))}>
-          <:actions>
-            <a href={invoices_path(@org_id)} class="btn" style="text-decoration:none">
-              <span class="i">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-              </span>
-              Back to invoices
-            </a>
-            <.button :if={writable?(@samen_mount) and @invoice != nil} phx-click="edit_invoice" id="edit-invoice">
-              Edit invoice
-            </.button>
-            <.delete_confirm
-              :if={writable?(@samen_mount) and @invoice != nil}
-              id="delete-invoice"
-              message="Delete this invoice? This cannot be undone."
-              phx-click="delete"
-              phx-value-id={@invoice && @invoice.id}
-            />
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Billing invoice org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Billing invoice org: {@org_id}</span>
+      <div :if={@action_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="action-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;display:flex;gap:10px;align-items:center">
+          <span>{@action_error}</span>
+          <button type="button" class="btn" phx-click="dismiss_error" style="font-size:12px">Dismiss</button>
+        </div>
+      </div>
 
-          <div :if={@action_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="action-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;display:flex;gap:10px;align-items:center">
-              <span>{@action_error}</span>
-              <button type="button" class="btn" phx-click="dismiss_error" style="font-size:12px">Dismiss</button>
-            </div>
-          </div>
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
 
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <%= if @invoice == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Invoice not found.</div>
-            </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="invoice-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-                <div style="flex:1;min-width:0">
-                  <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{invoice_label(@invoice)}</h1>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <.pill variant={invoice_status_variant(@invoice)}>{invoice_status_label(@invoice)}</.pill>
-                    <span style="font-size:13px;font-weight:500;color:#3a3b45">{dollars(@invoice.amount_due_cents)}</span>
-                    <span :if={@invoice.due_date} style="font-size:12px;color:var(--muted)">
-                      due {format_date(@invoice.due_date)}
-                    </span>
-                    <span style="font-size:12px;color:var(--muted)">· admin-gated writes · no PII</span>
-                  </div>
-                </div>
+      <%= if @invoice == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Invoice not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="invoice-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div style="flex:1;min-width:0">
+              <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{invoice_label(@invoice)}</h1>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <.pill variant={invoice_status_variant(@invoice)}>{invoice_status_label(@invoice)}</.pill>
+                <span style="font-size:13px;font-weight:500;color:#3a3b45">{dollars(@invoice.amount_due_cents)}</span>
+                <span :if={@invoice.due_date} style="font-size:12px;color:var(--muted)">
+                  due {format_date(@invoice.due_date)}
+                </span>
+                <span style="font-size:12px;color:var(--muted)">· admin-gated writes · no PII</span>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div class="wrap" style="margin-bottom:0;padding-top:10px">
-              <div class="card" id="invoice-facts" style="padding:16px 18px">
-                <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Status</dt>
-                    <dd style="margin:0;font-size:13px">
-                      <.pill variant={invoice_status_variant(@invoice)}>{invoice_status_label(@invoice)}</.pill>
-                    </dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Amount due</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{dollars(@invoice.amount_due_cents)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Amount paid</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{dollars(@invoice.amount_paid_cents)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Tax</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{tax_display(@invoice.tax_amount_cents)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Currency</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{@invoice.currency || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Customer</dt>
-                    <dd style="margin:0;font-size:13px">{customer_name(@invoice)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Due date</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{format_date(@invoice.due_date)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Period</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">
-                      {format_date(@invoice.period_start)} → {format_date(@invoice.period_end)}
-                    </dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Paid at</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@invoice.paid_at)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Provider ref</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace;word-break:break-all">
-                      {@invoice.provider_invoice_ref || "—"}
-                    </dd>
-                  </div>
-                  <div :if={writable?(@samen_mount)} style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Hosted invoice</dt>
-                    <dd style="margin:0;font-size:13px">
-                      <a
-                        :if={@invoice.hosted_invoice_url}
-                        href={@invoice.hosted_invoice_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inv-hosted-invoice-link"
-                      >
-                        View invoice
-                      </a>
-                      <span :if={!@invoice.hosted_invoice_url} style="color:var(--muted)">—</span>
-                    </dd>
-                  </div>
-                  <div :if={writable?(@samen_mount) and @invoice.hosted_receipt_url} style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Hosted receipt</dt>
-                    <dd style="margin:0;font-size:13px">
-                      <a
-                        href={@invoice.hosted_receipt_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inv-hosted-receipt-link"
-                      >
-                        Receipt
-                      </a>
-                    </dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Inserted at</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@invoice.inserted_at)}</dd>
-                  </div>
-                </dl>
+        <div class="wrap" style="margin-bottom:0;padding-top:10px">
+          <div class="card" id="invoice-facts" style="padding:16px 18px">
+            <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Status</dt>
+                <dd style="margin:0;font-size:13px">
+                  <.pill variant={invoice_status_variant(@invoice)}>{invoice_status_label(@invoice)}</.pill>
+                </dd>
               </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Amount due</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{dollars(@invoice.amount_due_cents)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Amount paid</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{dollars(@invoice.amount_paid_cents)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Tax</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{tax_display(@invoice.tax_amount_cents)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Currency</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{@invoice.currency || "—"}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Customer</dt>
+                <dd style="margin:0;font-size:13px">{customer_name(@invoice)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Due date</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{format_date(@invoice.due_date)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Period</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">
+                  {format_date(@invoice.period_start)} → {format_date(@invoice.period_end)}
+                </dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Paid at</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@invoice.paid_at)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Provider ref</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace;word-break:break-all">
+                  {@invoice.provider_invoice_ref || "—"}
+                </dd>
+              </div>
+              <div :if={writable?(@samen_mount)} style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Hosted invoice</dt>
+                <dd style="margin:0;font-size:13px">
+                  <a
+                    :if={@invoice.hosted_invoice_url}
+                    href={@invoice.hosted_invoice_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inv-hosted-invoice-link"
+                  >
+                    View invoice
+                  </a>
+                  <span :if={!@invoice.hosted_invoice_url} style="color:var(--muted)">—</span>
+                </dd>
+              </div>
+              <div :if={writable?(@samen_mount) and @invoice.hosted_receipt_url} style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Hosted receipt</dt>
+                <dd style="margin:0;font-size:13px">
+                  <a
+                    href={@invoice.hosted_receipt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inv-hosted-receipt-link"
+                  >
+                    Receipt
+                  </a>
+                </dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Inserted at</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@invoice.inserted_at)}</dd>
+              </div>
+            </dl>
+          </div>
 
-              <div class="card" id="invoice-lines" style="padding:16px 18px;margin-top:10px">
-                <div class="gtitle" style="margin-bottom:6px">
-                  <h3 style="font-size:13px">Lines</h3>
-                  <span class="n">{length(@invoice.line_items || [])}</span>
-                  <span class="lane">· line items as recorded</span>
-                </div>
-                <table
-                  :if={@invoice.line_items not in [nil, []]}
-                  style="width:100%;border-collapse:collapse;font-size:13px"
+          <div class="card" id="invoice-lines" style="padding:16px 18px;margin-top:10px">
+            <div class="gtitle" style="margin-bottom:6px">
+              <h3 style="font-size:13px">Lines</h3>
+              <span class="n">{length(@invoice.line_items || [])}</span>
+              <span class="lane">· line items as recorded</span>
+            </div>
+            <table
+              :if={@invoice.line_items not in [nil, []]}
+              style="width:100%;border-collapse:collapse;font-size:13px"
+            >
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Description
+                  </th>
+                  <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Qty
+                  </th>
+                  <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={line <- @invoice.line_items} class="invoice-line-row">
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
+                    {line_value(line, :description) || "—"}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
+                    {line_value(line, :quantity) || "—"}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
+                    {line_money(line)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p
+              :if={@invoice.line_items in [nil, []]}
+              style="margin:0;font-size:12px;color:var(--muted)"
+            >
+              No line items recorded on this invoice.
+            </p>
+          </div>
+
+          <div
+            :if={@invoice.tax_lines not in [nil, []]}
+            class="card"
+            id="invoice-tax-lines"
+            style="padding:16px 18px;margin-top:10px"
+          >
+            <div class="gtitle" style="margin-bottom:6px">
+              <h3 style="font-size:13px">Tax breakdown</h3>
+              <span class="n">{length(@invoice.tax_lines)}</span>
+              <span class="lane">· mirrored from the provider</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Name
+                  </th>
+                  <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Jurisdiction
+                  </th>
+                  <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Rate
+                  </th>
+                  <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={tax <- @invoice.tax_lines} class="invoice-tax-row">
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
+                    {tax_value(tax, "display_name") || "—"}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    {tax_value(tax, "jurisdiction") || "—"}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
+                    {tax_rate(tax)}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
+                    {dollars(tax_value(tax, "amount_cents"))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wrap" style="margin-bottom:0;padding-top:10px" id="invoice-status-actions-wrap">
+            <div class="card" id="invoice-status-actions" style="padding:16px 18px">
+              <div class="gtitle" style="margin-bottom:8px">
+                <h3 style="font-size:13px">Status actions</h3>
+                <span class="lane">· admin-gated · moves from {to_string(@invoice.status)} only</span>
+              </div>
+              <div :if={writable?(@samen_mount)} style="display:flex;gap:8px;flex-wrap:wrap">
+                <.button
+                  :for={{key, _target, label, _from} <- @available_transitions}
+                  phx-click="transition"
+                  phx-value-action={key}
+                  id={"transition-" <> key}
                 >
-                  <thead>
-                    <tr>
-                      <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Description
-                      </th>
-                      <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Qty
-                      </th>
-                      <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Amount
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={line <- @invoice.line_items} class="invoice-line-row">
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
-                        {line_value(line, :description) || "—"}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
-                        {line_value(line, :quantity) || "—"}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
-                        {line_money(line)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                  {label}
+                </.button>
                 <p
-                  :if={@invoice.line_items in [nil, []]}
-                  style="margin:0;font-size:12px;color:var(--muted)"
+                  :if={@available_transitions == []}
+                  style="margin:0;font-size:12px;color:var(--muted);align-self:center"
                 >
-                  No line items recorded on this invoice.
+                  No further status moves from {to_string(@invoice.status)}.
                 </p>
               </div>
-
-              <div
-                :if={@invoice.tax_lines not in [nil, []]}
-                class="card"
-                id="invoice-tax-lines"
-                style="padding:16px 18px;margin-top:10px"
+              <p
+                :if={!writable?(@samen_mount)}
+                style="margin:0;font-size:12px;color:var(--muted)"
               >
-                <div class="gtitle" style="margin-bottom:6px">
-                  <h3 style="font-size:13px">Tax breakdown</h3>
-                  <span class="n">{length(@invoice.tax_lines)}</span>
-                  <span class="lane">· mirrored from the provider</span>
-                </div>
-                <table style="width:100%;border-collapse:collapse;font-size:13px">
-                  <thead>
-                    <tr>
-                      <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Name
-                      </th>
-                      <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Jurisdiction
-                      </th>
-                      <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Rate
-                      </th>
-                      <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Amount
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={tax <- @invoice.tax_lines} class="invoice-tax-row">
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
-                        {tax_value(tax, "display_name") || "—"}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        {tax_value(tax, "jurisdiction") || "—"}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
-                        {tax_rate(tax)}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);text-align:right;font-family:monospace">
-                        {dollars(tax_value(tax, "amount_cents"))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="wrap" style="margin-bottom:0;padding-top:10px" id="invoice-status-actions-wrap">
-                <div class="card" id="invoice-status-actions" style="padding:16px 18px">
-                  <div class="gtitle" style="margin-bottom:8px">
-                    <h3 style="font-size:13px">Status actions</h3>
-                    <span class="lane">· admin-gated · moves from {to_string(@invoice.status)} only</span>
-                  </div>
-                  <div :if={writable?(@samen_mount)} style="display:flex;gap:8px;flex-wrap:wrap">
-                    <.button
-                      :for={{key, _target, label, _from} <- @available_transitions}
-                      phx-click="transition"
-                      phx-value-action={key}
-                      id={"transition-" <> key}
-                    >
-                      {label}
-                    </.button>
-                    <p
-                      :if={@available_transitions == []}
-                      style="margin:0;font-size:12px;color:var(--muted);align-self:center"
-                    >
-                      No further status moves from {to_string(@invoice.status)}.
-                    </p>
-                  </div>
-                  <p
-                    :if={!writable?(@samen_mount)}
-                    style="margin:0;font-size:12px;color:var(--muted)"
-                  >
-                    Status is {to_string(@invoice.status)} · no write affordance on this plane.
-                  </p>
-                </div>
-              </div>
+                Status is {to_string(@invoice.status)} · no write affordance on this plane.
+              </p>
             </div>
+          </div>
+        </div>
 
-            <.modal
-              :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
-              id="edit-invoice-modal"
-              title="Edit invoice"
-              on_cancel="cancel_edit"
-            >
-              <.simple_form
-                :let={f}
-                for={@edit_form}
-                id="edit-invoice-form"
-                phx-change="validate_edit"
-                phx-submit="save_edit"
-              >
-                <.form_field field={f[:amount_due_cents]} label="Amount due (cents)" type="number" />
-                <.form_field field={f[:currency]} label="Currency" />
-                <:actions>
-                  <.button variant="primary" type="submit">Save changes</.button>
-                  <.button type="button" phx-click="cancel_edit">Cancel</.button>
-                </:actions>
-              </.simple_form>
-            </.modal>
-          <% end %>
-        <% end %>
-      </.app_shell>
+        <.modal
+          :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
+          id="edit-invoice-modal"
+          title="Edit invoice"
+          on_cancel="cancel_edit"
+        >
+          <.simple_form
+            :let={f}
+            for={@edit_form}
+            id="edit-invoice-form"
+            phx-change="validate_edit"
+            phx-submit="save_edit"
+          >
+            <.form_field field={f[:amount_due_cents]} label="Amount due (cents)" type="number" />
+            <.form_field field={f[:currency]} label="Currency" />
+            <:actions>
+              <.button variant="primary" type="submit">Save changes</.button>
+              <.button type="button" phx-click="cancel_edit">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+      <% end %>
+    <% end %>
     </div>
     """
   end

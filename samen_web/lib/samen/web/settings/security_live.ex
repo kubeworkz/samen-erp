@@ -38,7 +38,7 @@ defmodule Samen.Web.Settings.SecurityLive do
   materializes the resource, which is exactly the "spine mounted but not actually
   wired for login" state T04 ships in.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1]
@@ -249,165 +249,166 @@ defmodule Samen.Web.Settings.SecurityLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:security} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="settings-security">
-      <.app_shell>
-        <:sidebar>
-          <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:security} />
-        </:sidebar>
+    <.topbar title="Security" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Security"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="Security" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Security"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if is_nil(@org_id) do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="security-panel">
-              <div class="gtitle">
-                <h3>Impersonation sessions</h3>
-                <span class="lane">who accessed this org, when, and why — read-only accountability</span>
-              </div>
-
-              <table id="security-sessions-table" class="tbl">
-                <thead>
-                  <tr>
-                    <th scope="col">Operator</th>
-                    <th scope="col">Reason</th>
-                    <th scope="col">Opened</th>
-                    <th scope="col">Expires</th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={s <- @sessions} class="security-session-row">
-                    <td>{s.operator_id}</td>
-                    <td style="font-size:12px">{s.reason}</td>
-                    <td>{fmt(s.opened_at)}</td>
-                    <td>{fmt(s.expires_at)}</td>
-                    <td>
-                      <span class={if s.active?, do: "status-pill status-active", else: "status-pill status-closed"}>
-                        {if s.active?, do: "active", else: "closed"}
-                      </span>
-                    </td>
-                  </tr>
-                  <tr :if={@sessions == []}>
-                    <td colspan="5" style="color:var(--muted)">No impersonation sessions recorded.</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <div class="gtitle" style="margin-top:24px">
-                <h3>Reveal access</h3>
-                <span class="lane">when an operator unmasked customer PII in your org — who, which subject, when, and the reason — read-only accountability</span>
-              </div>
-
-              <table id="security-reveal-table" class="tbl">
-                <thead>
-                  <tr>
-                    <th scope="col">Event</th>
-                    <th scope="col">Operator</th>
-                    <th scope="col">Subject</th>
-                    <th scope="col">Reason</th>
-                    <th scope="col">When</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={e <- @reveal_events} class="security-reveal-row">
-                    <td>{e.label}</td>
-                    <td>{e.actor_id}</td>
-                    <td class="mono" style="font-size:12px">{e.subject_id}</td>
-                    <td style="font-size:12px">{e.reason}</td>
-                    <td>{fmt(e.occurred_at)}</td>
-                  </tr>
-                  <tr :if={@reveal_ledger_unavailable?} id="security-reveal-unavailable">
-                    <td colspan="5" style="color:var(--muted)">
-                      Reveal ledger temporarily unavailable — this is a read error, not a clean record. Retry shortly.
-                    </td>
-                  </tr>
-                  <tr :if={@reveal_events == [] and not @reveal_ledger_unavailable?}>
-                    <td colspan="5" style="color:var(--muted)">No reveal access recorded for this org.</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <div :if={@spine_sessions?} class="gtitle" style="margin-top:24px">
-                <h3>Active login sessions</h3>
-                <span class="lane">devices signed in to your account — revoke any you don't recognize</span>
-              </div>
-
-              <div :if={@spine_sessions?} id="security-login-sessions">
-                <table id="login-sessions-table" class="tbl">
-                  <thead>
-                    <tr>
-                      <th scope="col">Device</th>
-                      <th scope="col">Created</th>
-                      <th scope="col">Last seen</th>
-                      <th scope="col"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={s <- @login_sessions} class="login-session-row" id={"login-session-#{s.id}"}>
-                      <td>{s.device_label || "Unknown device"}</td>
-                      <td>{fmt(s.inserted_at)}</td>
-                      <td>{fmt(s.last_seen_at)}</td>
-                      <td>
-                        <form
-                          method="post"
-                          action={"#{@settings_path}/security/sessions/#{s.id}/revoke"}
-                          id={"revoke-session-#{s.id}"}
-                        >
-                          <input type="hidden" name="_csrf_token" value={@csrf_token} />
-                          <button type="submit" class="btn btn-sm" id={"revoke-session-btn-#{s.id}"}>Revoke</button>
-                        </form>
-                      </td>
-                    </tr>
-                    <tr :if={@login_sessions == []}>
-                      <td colspan="4" style="color:var(--muted)">No active sessions.</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <form
-                  :if={@login_sessions != []}
-                  method="post"
-                  action={"#{@settings_path}/security/sessions/revoke_others"}
-                  id="revoke-others-form"
-                  style="margin-top:10px"
-                >
-                  <input type="hidden" name="_csrf_token" value={@csrf_token} />
-                  <button type="submit" class="btn" id="revoke-others-submit">Revoke all other sessions</button>
-                </form>
-              </div>
-
-              <div class="gtitle" style="margin-top:24px">
-                <h3>Account security</h3>
-                <span class="lane">managed by your identity provider — the framework is honest about this boundary</span>
-              </div>
-
-              <dl id="security-host-managed" style="margin-top:8px">
-                <div :for={{item, note} <- @host_managed} class="host-managed-item" style="margin-bottom:8px">
-                  <dt style="font-weight:600">{item}</dt>
-                  <%= if item == "Two-factor authentication" and @totp_enroll_path do %>
-                    <dd style="margin:0">
-                      <.link navigate={@totp_enroll_path} id="security-2fa-enroll-link">
-                        Set up two-factor authentication →
-                      </.link>
-                    </dd>
-                  <% else %>
-                    <dd style="color:var(--muted);margin:0">{note} <em>Managed by your identity provider.</em></dd>
-                  <% end %>
-                </div>
-              </dl>
-            </div>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="security-panel">
+          <div class="gtitle">
+            <h3>Impersonation sessions</h3>
+            <span class="lane">who accessed this org, when, and why — read-only accountability</span>
           </div>
-        <% end %>
-      </.app_shell>
+
+          <table id="security-sessions-table" class="tbl">
+            <thead>
+              <tr>
+                <th scope="col">Operator</th>
+                <th scope="col">Reason</th>
+                <th scope="col">Opened</th>
+                <th scope="col">Expires</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={s <- @sessions} class="security-session-row">
+                <td>{s.operator_id}</td>
+                <td style="font-size:12px">{s.reason}</td>
+                <td>{fmt(s.opened_at)}</td>
+                <td>{fmt(s.expires_at)}</td>
+                <td>
+                  <span class={if s.active?, do: "status-pill status-active", else: "status-pill status-closed"}>
+                    {if s.active?, do: "active", else: "closed"}
+                  </span>
+                </td>
+              </tr>
+              <tr :if={@sessions == []}>
+                <td colspan="5" style="color:var(--muted)">No impersonation sessions recorded.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="gtitle" style="margin-top:24px">
+            <h3>Reveal access</h3>
+            <span class="lane">when an operator unmasked customer PII in your org — who, which subject, when, and the reason — read-only accountability</span>
+          </div>
+
+          <table id="security-reveal-table" class="tbl">
+            <thead>
+              <tr>
+                <th scope="col">Event</th>
+                <th scope="col">Operator</th>
+                <th scope="col">Subject</th>
+                <th scope="col">Reason</th>
+                <th scope="col">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={e <- @reveal_events} class="security-reveal-row">
+                <td>{e.label}</td>
+                <td>{e.actor_id}</td>
+                <td class="mono" style="font-size:12px">{e.subject_id}</td>
+                <td style="font-size:12px">{e.reason}</td>
+                <td>{fmt(e.occurred_at)}</td>
+              </tr>
+              <tr :if={@reveal_ledger_unavailable?} id="security-reveal-unavailable">
+                <td colspan="5" style="color:var(--muted)">
+                  Reveal ledger temporarily unavailable — this is a read error, not a clean record. Retry shortly.
+                </td>
+              </tr>
+              <tr :if={@reveal_events == [] and not @reveal_ledger_unavailable?}>
+                <td colspan="5" style="color:var(--muted)">No reveal access recorded for this org.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div :if={@spine_sessions?} class="gtitle" style="margin-top:24px">
+            <h3>Active login sessions</h3>
+            <span class="lane">devices signed in to your account — revoke any you don't recognize</span>
+          </div>
+
+          <div :if={@spine_sessions?} id="security-login-sessions">
+            <table id="login-sessions-table" class="tbl">
+              <thead>
+                <tr>
+                  <th scope="col">Device</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Last seen</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={s <- @login_sessions} class="login-session-row" id={"login-session-#{s.id}"}>
+                  <td>{s.device_label || "Unknown device"}</td>
+                  <td>{fmt(s.inserted_at)}</td>
+                  <td>{fmt(s.last_seen_at)}</td>
+                  <td>
+                    <form
+                      method="post"
+                      action={"#{@settings_path}/security/sessions/#{s.id}/revoke"}
+                      id={"revoke-session-#{s.id}"}
+                    >
+                      <input type="hidden" name="_csrf_token" value={@csrf_token} />
+                      <button type="submit" class="btn btn-sm" id={"revoke-session-btn-#{s.id}"}>Revoke</button>
+                    </form>
+                  </td>
+                </tr>
+                <tr :if={@login_sessions == []}>
+                  <td colspan="4" style="color:var(--muted)">No active sessions.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <form
+              :if={@login_sessions != []}
+              method="post"
+              action={"#{@settings_path}/security/sessions/revoke_others"}
+              id="revoke-others-form"
+              style="margin-top:10px"
+            >
+              <input type="hidden" name="_csrf_token" value={@csrf_token} />
+              <button type="submit" class="btn" id="revoke-others-submit">Revoke all other sessions</button>
+            </form>
+          </div>
+
+          <div class="gtitle" style="margin-top:24px">
+            <h3>Account security</h3>
+            <span class="lane">managed by your identity provider — the framework is honest about this boundary</span>
+          </div>
+
+          <dl id="security-host-managed" style="margin-top:8px">
+            <div :for={{item, note} <- @host_managed} class="host-managed-item" style="margin-bottom:8px">
+              <dt style="font-weight:600">{item}</dt>
+              <%= if item == "Two-factor authentication" and @totp_enroll_path do %>
+                <dd style="margin:0">
+                  <.link navigate={@totp_enroll_path} id="security-2fa-enroll-link">
+                    Set up two-factor authentication →
+                  </.link>
+                </dd>
+              <% else %>
+                <dd style="color:var(--muted);margin:0">{note} <em>Managed by your identity provider.</em></dd>
+              <% end %>
+            </div>
+          </dl>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

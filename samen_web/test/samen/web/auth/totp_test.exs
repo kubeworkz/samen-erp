@@ -579,6 +579,14 @@ defmodule Samen.Web.Auth.TotpTest do
       assert tag =~ ~r/action="[^"]+\/security\/2fa"/
       # The enrollment secret rides the POST body (a hidden field), not the URL.
       assert html =~ ~s(name="totp_secret")
+
+      # CHROME (the tenant-chrome sweep, `tenant_shell_coverage_test.exs`) — a signed-in tenant reaches this
+      # page from Settings → Security, so it renders inside the shared shell: the settings
+      # sidebar beside it and the enrolment card in the main panel, not a lone centred card on
+      # an empty viewport.
+      assert html =~ ~s(<div class="app">)
+      assert html =~ ~s(class="side")
+      assert html =~ ~r/<main class="main">.*class="wrap".*id="totp-enroll-setup"/s
     end
 
     test "T110: samen_settings_routes(spine_totp: true) pairs POST /security/2fa with the GET enroll LiveView" do

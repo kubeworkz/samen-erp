@@ -10,13 +10,13 @@
 diff --git a/samen_web/lib/samen/web/settings/security_live.ex b/samen_web/lib/samen/web/settings/security_live.ex
 --- a/samen_web/lib/samen/web/settings/security_live.ex
 +++ b/samen_web/lib/samen/web/settings/security_live.ex
-@@ -290,7 +290,8 @@
-                       </.link>
-                     </dd>
-                   <% else %>
--                    <dd style="color:var(--muted);margin:0">{note} <em>Managed by your identity provider.</em></dd>
-+                    <dd style="color:var(--muted);margin:0">{note} <em>Managed by your identity provider.</em>
-+                      <button type="button" phx-click="revoke_all_sessions">Revoke all sessions</button></dd>
-                   <% end %>
-                 </div>
-               </dl>
+@@ -402,7 +402,8 @@
+                   </.link>
+                 </dd>
+               <% else %>
+-                <dd style="color:var(--muted);margin:0">{note} <em>Managed by your identity provider.</em></dd>
++                <dd style="color:var(--muted);margin:0">{note} <em>Managed by your identity provider.</em>
++                  <button type="button" phx-click="revoke_all_sessions">Revoke all sessions</button></dd>
+               <% end %>
+             </div>
+           </dl>

@@ -75,7 +75,7 @@ defmodule Samen.Web.Support.TicketLive do
   `Samen.Web.Support.TicketsLive`'s existing metrics tile — this page is only
   the per-ticket landing spot.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Support.Live, only: [assign_mount: 2, support_sidebar: 1, writable?: 1]
@@ -340,209 +340,210 @@ defmodule Samen.Web.Support.TicketLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.support_sidebar mount={@samen_mount} org_id={@org_id} active={:support_tickets} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="support-ticket">
-      <.app_shell>
-        <:sidebar>
-          <.support_sidebar mount={@samen_mount} org_id={@org_id} active={:support_tickets} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={ticket_subject(@ticket)} crumbs={crumbs(@samen_mount, @org_id, ticket_subject(@ticket))}>
+      <:actions>
+        <.button>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </:icon>
+          Back to inbox
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title={ticket_subject(@ticket)} crumbs={crumbs(@samen_mount, @org_id, ticket_subject(@ticket))}>
-          <:actions>
-            <.button>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-              </:icon>
-              Back to inbox
-            </.button>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Support org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Support org: {@org_id}</span>
-
-          <%= if @ticket == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Ticket not found.</div>
-            </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="ticket-header" style="padding:18px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Ticket</div>
-                  <div class="tk-subject-title" style="font-weight:600;font-size:15px;color:#2a2b35">
-                    {@ticket.subject}
-                  </div>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                  <.pill variant={status_variant(@ticket.status)}>{status_label(@ticket.status)}</.pill>
-                  <.pill variant={priority_variant(@ticket.priority)}>{priority_label(@ticket.priority)}</.pill>
-                  {sla_badge(@ticket)}
-                  <form :if={writable?(@samen_mount)} id="ticket-status-form" phx-change="set_status" style="margin:0">
-                    <select name="status" aria-label="Set ticket status" style="font-size:12px">
-                      <option
-                        :for={status <- Reads.ticket_statuses()}
-                        value={Atom.to_string(status)}
-                        selected={@ticket.status == status}
-                      >
-                        {status_label(status)}
-                      </option>
-                    </select>
-                  </form>
-                </div>
-              </div>
-              <div :if={@status_error} class="card form-error" id="status-error" style="margin-top:8px;padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-                {@status_error}
+      <%= if @ticket == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Ticket not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="ticket-header" style="padding:18px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Ticket</div>
+              <div class="tk-subject-title" style="font-weight:600;font-size:15px;color:#2a2b35">
+                {@ticket.subject}
               </div>
             </div>
-
-            <div class="wrap" style="margin-bottom:0;padding-top:0">
-              <.tabs>
-                <.tab label="Conversation" href={"?org=#{@org_id}&tab=conversation"} active={@active_tab == "conversation"} />
-                <.tab label="Details" href={"?org=#{@org_id}&tab=details"} active={@active_tab == "details"} />
-              </.tabs>
-            </div>
-
-            <%= if @active_tab == "conversation" do %>
-              <div class="wrap" id="conversation-pane">
-                <%= if @conversations == [] do %>
-                  <.empty_state
-                    class="conversation-empty"
-                    icon="❝"
-                    title="No conversation thread yet."
-                    body="Replies to this ticket appear here as a threaded conversation."
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <.pill variant={status_variant(@ticket.status)}>{status_label(@ticket.status)}</.pill>
+              <.pill variant={priority_variant(@ticket.priority)}>{priority_label(@ticket.priority)}</.pill>
+              {sla_badge(@ticket)}
+              <form :if={writable?(@samen_mount)} id="ticket-status-form" phx-change="set_status" style="margin:0">
+                <select name="status" aria-label="Set ticket status" style="font-size:12px">
+                  <option
+                    :for={status <- Reads.ticket_statuses()}
+                    value={Atom.to_string(status)}
+                    selected={@ticket.status == status}
                   >
-                    <:actions :if={writable?(@samen_mount)}>
-                      <.button variant="primary" phx-click="start_conversation" id="start-conversation-btn">
-                        Start conversation
-                      </.button>
-                    </:actions>
-                  </.empty_state>
-                  <div :if={@conversation_error} class="card form-error" id="conversation-error" style="margin-top:8px;padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-                    {@conversation_error}
+                    {status_label(status)}
+                  </option>
+                </select>
+              </form>
+            </div>
+          </div>
+          <div :if={@status_error} class="card form-error" id="status-error" style="margin-top:8px;padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+            {@status_error}
+          </div>
+        </div>
+
+        <div class="wrap" style="margin-bottom:0;padding-top:0">
+          <.tabs>
+            <.tab label="Conversation" href={"?org=#{@org_id}&tab=conversation"} active={@active_tab == "conversation"} />
+            <.tab label="Details" href={"?org=#{@org_id}&tab=details"} active={@active_tab == "details"} />
+          </.tabs>
+        </div>
+
+        <%= if @active_tab == "conversation" do %>
+          <div class="wrap" id="conversation-pane">
+            <%= if @conversations == [] do %>
+              <.empty_state
+                class="conversation-empty"
+                icon="❝"
+                title="No conversation thread yet."
+                body="Replies to this ticket appear here as a threaded conversation."
+              >
+                <:actions :if={writable?(@samen_mount)}>
+                  <.button variant="primary" phx-click="start_conversation" id="start-conversation-btn">
+                    Start conversation
+                  </.button>
+                </:actions>
+              </.empty_state>
+              <div :if={@conversation_error} class="card form-error" id="conversation-error" style="margin-top:8px;padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+                {@conversation_error}
+              </div>
+            <% else %>
+              <%= for conv <- @conversations do %>
+                <div class="card" id={"conv-#{conv.id}"} style="margin-bottom:12px">
+                  <div style="padding:14px 18px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)">
+                    Channel: {channel_label(conv.channel)} &nbsp;·&nbsp; Status: {conv.status}
                   </div>
-                <% else %>
-                  <%= for conv <- @conversations do %>
-                    <div class="card" id={"conv-#{conv.id}"} style="margin-bottom:12px">
-                      <div style="padding:14px 18px 10px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)">
-                        Channel: {channel_label(conv.channel)} &nbsp;·&nbsp; Status: {conv.status}
-                      </div>
-                      <%= if conv.__messages__ == [] do %>
-                        <div style="padding:18px 20px;color:var(--muted)">No messages yet.</div>
-                      <% else %>
-                        <div style="padding:0 20px">
-                          <%= for msg <- conv.__messages__ do %>
-                            <div class="msg-row" id={"msg-#{msg.id}"} style={"padding:14px 0;border-bottom:1px solid var(--border);#{msg == List.last(conv.__messages__) && "border-bottom:none" || ""}"}>
-                              <div style="display:flex;align-items:flex-start;gap:10px">
-                                <div class="av" style={"width:30px;height:30px;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#{sender_bg(msg.sender_type)};color:#{sender_fg(msg.sender_type)}"}>
-                                  {msg_avatar(msg)}
-                                </div>
-                                <div style="flex:1;min-width:0">
-                                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-                                    <span class="msg-sender" style="font-weight:600;font-size:13px;color:#2a2b35">
-                                      {render_sender(msg)}
-                                    </span>
-                                    <span style="font-size:11px;color:var(--muted)">{sender_type_label(msg.sender_type)}</span>
-                                    <span style="font-size:11px;color:var(--muted);margin-left:auto">{message_type_label(msg.message_type)}</span>
-                                  </div>
-                                  <div class="msg-body" style="font-size:13px;color:#3a3b45;line-height:1.6;white-space:pre-wrap;word-break:break-word">
-                                    {render_body(msg.body)}
-                                  </div>
-                                </div>
+                  <%= if conv.__messages__ == [] do %>
+                    <div style="padding:18px 20px;color:var(--muted)">No messages yet.</div>
+                  <% else %>
+                    <div style="padding:0 20px">
+                      <%= for msg <- conv.__messages__ do %>
+                        <div class="msg-row" id={"msg-#{msg.id}"} style={"padding:14px 0;border-bottom:1px solid var(--border);#{msg == List.last(conv.__messages__) && "border-bottom:none" || ""}"}>
+                          <div style="display:flex;align-items:flex-start;gap:10px">
+                            <div class="av" style={"width:30px;height:30px;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#{sender_bg(msg.sender_type)};color:#{sender_fg(msg.sender_type)}"}>
+                              {msg_avatar(msg)}
+                            </div>
+                            <div style="flex:1;min-width:0">
+                              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                                <span class="msg-sender" style="font-weight:600;font-size:13px;color:#2a2b35">
+                                  {render_sender(msg)}
+                                </span>
+                                <span style="font-size:11px;color:var(--muted)">{sender_type_label(msg.sender_type)}</span>
+                                <span style="font-size:11px;color:var(--muted);margin-left:auto">{message_type_label(msg.message_type)}</span>
+                              </div>
+                              <div class="msg-body" style="font-size:13px;color:#3a3b45;line-height:1.6;white-space:pre-wrap;word-break:break-word">
+                                {render_body(msg.body)}
                               </div>
                             </div>
-                          <% end %>
+                          </div>
                         </div>
                       <% end %>
                     </div>
                   <% end %>
-                <% end %>
-
-                {render_kb_suggestion(@kb_suggestion, writable?(@samen_mount) and @reply_form != nil)}
-                {render_macro_palette(@macros, writable?(@samen_mount) and @reply_form != nil)}
-
-                <div :if={writable?(@samen_mount) and @reply_form != nil} class="card" id="reply-composer" style="padding:16px 18px">
-                  <div class="gtitle" style="margin-bottom:10px"><h3>Reply <small style="font-weight:400;color:var(--muted)">(🔒 body is vault-routed PII)</small></h3></div>
-                  <.simple_form :let={f} for={@reply_form} id="reply-form" phx-change="validate_reply" phx-submit="save_reply">
-                    <.form_field field={f[:body]} label="Message (🔒 PII)" type="textarea" rows="3" placeholder="Write a reply…" />
-                    <.form_field
-                      field={f[:message_type]}
-                      label="Type"
-                      type="select"
-                      options={[{"reply", "reply"}, {"internal note", "note"}]}
-                    />
-                    <:actions>
-                      <.button variant="primary" type="submit">Send reply</.button>
-                    </:actions>
-                  </.simple_form>
                 </div>
-              </div>
-            <% else %>
-              <div class="wrap" id="details-pane">
-                <div class="card" style="padding:20px">
-                  <div class="gtitle" style="margin-bottom:16px"><h3>Ticket details</h3></div>
-                  <table style="width:100%;font-size:13px;border-collapse:collapse">
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:10px 0;color:var(--muted);width:160px">Status</td>
-                      <td style="padding:10px 0"><.pill variant={status_variant(@ticket.status)}>{status_label(@ticket.status)}</.pill></td>
-                    </tr>
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:10px 0;color:var(--muted)">Priority</td>
-                      <td style="padding:10px 0"><.pill variant={priority_variant(@ticket.priority)}>{priority_label(@ticket.priority)}</.pill></td>
-                    </tr>
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:10px 0;color:var(--muted)">SLA deadline</td>
-                      <td style="padding:10px 0;font-size:12px;color:var(--muted)">{format_dt(@ticket.sla_breach_at)}</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:10px 0;color:var(--muted)">Breached</td>
-                      <td style="padding:10px 0">{if @ticket.breached, do: "Yes", else: "No"}</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:10px 0;color:var(--muted)">Resolved at</td>
-                      <td style="padding:10px 0;font-size:12px;color:var(--muted)">{format_dt(@ticket.resolved_at)}</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid var(--border)">
-                      <td style="padding:10px 0;color:var(--muted)">Tags</td>
-                      <td style="padding:10px 0;font-size:12px;color:var(--muted)">{tags_label(@ticket_tags)}</td>
-                    </tr>
-                  </table>
-
-                  {render_csat(@csat)}
-
-                  <%= if @agents != [] do %>
-                    <div class="gtitle" style="margin:20px 0 12px"><h3>Agents <small style="font-weight:400;color:var(--muted)">(PII resolved per plane)</small></h3></div>
-                    <.data_table>
-                      <:head>
-                        <th>Handle</th>
-                        <th>Name (🔒 PII)</th>
-                        <th>Email (🔒 PII)</th>
-                        <th>Role</th>
-                        <th>Status</th>
-                      </:head>
-                      <tr :for={agent <- @agents} class="agent-row" id={"agent-#{agent.id}"}>
-                        <td class="ag-handle" style="font-weight:500">{agent.handle}</td>
-                        <td class="ag-name" style="font-size:12px;color:var(--muted)">{render_agent_name(agent.full_name)}</td>
-                        <td class="ag-email" style="font-size:12px;color:var(--muted)">{render_agent_email(agent.email)}</td>
-                        <td class="ag-role" style="font-size:12px;color:var(--muted)">{agent.role}</td>
-                        <td class="ag-status"><.pill variant={agent_status_variant(agent.status)}>{agent.status}</.pill></td>
-                      </tr>
-                    </.data_table>
-                  <% end %>
-                </div>
-              </div>
+              <% end %>
             <% end %>
-          <% end %>
+
+            {render_kb_suggestion(@kb_suggestion, writable?(@samen_mount) and @reply_form != nil)}
+            {render_macro_palette(@macros, writable?(@samen_mount) and @reply_form != nil)}
+
+            <div :if={writable?(@samen_mount) and @reply_form != nil} class="card" id="reply-composer" style="padding:16px 18px">
+              <div class="gtitle" style="margin-bottom:10px"><h3>Reply <small style="font-weight:400;color:var(--muted)">(🔒 body is vault-routed PII)</small></h3></div>
+              <.simple_form :let={f} for={@reply_form} id="reply-form" phx-change="validate_reply" phx-submit="save_reply">
+                <.form_field field={f[:body]} label="Message (🔒 PII)" type="textarea" rows="3" placeholder="Write a reply…" />
+                <.form_field
+                  field={f[:message_type]}
+                  label="Type"
+                  type="select"
+                  options={[{"reply", "reply"}, {"internal note", "note"}]}
+                />
+                <:actions>
+                  <.button variant="primary" type="submit">Send reply</.button>
+                </:actions>
+              </.simple_form>
+            </div>
+          </div>
+        <% else %>
+          <div class="wrap" id="details-pane">
+            <div class="card" style="padding:20px">
+              <div class="gtitle" style="margin-bottom:16px"><h3>Ticket details</h3></div>
+              <table style="width:100%;font-size:13px;border-collapse:collapse">
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 0;color:var(--muted);width:160px">Status</td>
+                  <td style="padding:10px 0"><.pill variant={status_variant(@ticket.status)}>{status_label(@ticket.status)}</.pill></td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 0;color:var(--muted)">Priority</td>
+                  <td style="padding:10px 0"><.pill variant={priority_variant(@ticket.priority)}>{priority_label(@ticket.priority)}</.pill></td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 0;color:var(--muted)">SLA deadline</td>
+                  <td style="padding:10px 0;font-size:12px;color:var(--muted)">{format_dt(@ticket.sla_breach_at)}</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 0;color:var(--muted)">Breached</td>
+                  <td style="padding:10px 0">{if @ticket.breached, do: "Yes", else: "No"}</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 0;color:var(--muted)">Resolved at</td>
+                  <td style="padding:10px 0;font-size:12px;color:var(--muted)">{format_dt(@ticket.resolved_at)}</td>
+                </tr>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:10px 0;color:var(--muted)">Tags</td>
+                  <td style="padding:10px 0;font-size:12px;color:var(--muted)">{tags_label(@ticket_tags)}</td>
+                </tr>
+              </table>
+
+              {render_csat(@csat)}
+
+              <%= if @agents != [] do %>
+                <div class="gtitle" style="margin:20px 0 12px"><h3>Agents <small style="font-weight:400;color:var(--muted)">(PII resolved per plane)</small></h3></div>
+                <.data_table>
+                  <:head>
+                    <th>Handle</th>
+                    <th>Name (🔒 PII)</th>
+                    <th>Email (🔒 PII)</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                  </:head>
+                  <tr :for={agent <- @agents} class="agent-row" id={"agent-#{agent.id}"}>
+                    <td class="ag-handle" style="font-weight:500">{agent.handle}</td>
+                    <td class="ag-name" style="font-size:12px;color:var(--muted)">{render_agent_name(agent.full_name)}</td>
+                    <td class="ag-email" style="font-size:12px;color:var(--muted)">{render_agent_email(agent.email)}</td>
+                    <td class="ag-role" style="font-size:12px;color:var(--muted)">{agent.role}</td>
+                    <td class="ag-status"><.pill variant={agent_status_variant(agent.status)}>{agent.status}</.pill></td>
+                  </tr>
+                </.data_table>
+              <% end %>
+            </div>
+          </div>
         <% end %>
-      </.app_shell>
+      <% end %>
+    <% end %>
     </div>
     """
   end

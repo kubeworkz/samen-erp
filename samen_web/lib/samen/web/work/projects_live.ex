@@ -5,7 +5,7 @@ defmodule Samen.Web.Work.ProjectsLive do
   Tier-0-shaped surface, same posture as `Samen.Web.Support.Live`'s Sla/Macro
   config rows) + sanctioned create/archive.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1, writable?: 1]
@@ -90,58 +90,59 @@ defmodule Samen.Web.Work.ProjectsLive do
 
   defp with_org(params, socket), do: Map.put(params, "org_id", socket.assigns.org_id)
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_projects} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="work-projects">
-      <.app_shell>
-        <:sidebar>
-          <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_projects} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Projects" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :work), "Projects"]}>
+      <:actions>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_project" id="new-project">
+          New project
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Projects" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :work), "Projects"]}>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad,#b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div id="projects-list">
+          <p :if={@projects == []} id="projects-empty" style="color:var(--muted)">No projects yet.</p>
+          <ul :if={@projects != []} style="list-style:none;padding:0;margin:0">
+            <li :for={p <- @projects} class="project-row" style="padding:10px 0;border-top:1px solid var(--line,#eee);display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:500">{p.name}</span>
+              <.pill variant="info">{p.status}</.pill>
+              <.delete_confirm :if={writable?(@samen_mount)} phx-click="delete" phx-value-id={p.id} />
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-project-modal" title="New project" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-project-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:name]} label="Name" />
           <:actions>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_project" id="new-project">
-              New project
-            </.button>
+            <.button variant="primary" type="submit">Save project</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
           </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad,#b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <div class="wrap">
-            <div id="projects-list">
-              <p :if={@projects == []} id="projects-empty" style="color:var(--muted)">No projects yet.</p>
-              <ul :if={@projects != []} style="list-style:none;padding:0;margin:0">
-                <li :for={p <- @projects} class="project-row" style="padding:10px 0;border-top:1px solid var(--line,#eee);display:flex;justify-content:space-between;align-items:center">
-                  <span style="font-weight:500">{p.name}</span>
-                  <.pill variant="info">{p.status}</.pill>
-                  <.delete_confirm :if={writable?(@samen_mount)} phx-click="delete" phx-value-id={p.id} />
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-project-modal" title="New project" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-project-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:name]} label="Name" />
-              <:actions>
-                <.button variant="primary" type="submit">Save project</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

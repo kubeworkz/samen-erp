@@ -68,6 +68,21 @@ defmodule PawChart.ClinicSurfaceTest do
   end
 
   # ==========================================================================
+  # CHROME (P18) — a host certifies its OWN tenant pages
+  # ==========================================================================
+
+  # The framework's chrome sweep (`samen_web/test/samen/web/tenant_shell_coverage_test.exs`) can
+  # only reach FRAMEWORK LiveViews; `/clinic` is pawchart's own tenant surface, so it certifies its
+  # chrome here: sidebar beside the page, the patient board in the `.wrap` main panel.
+  test "the clinic surface renders INSIDE the app shell, its board in the main panel" do
+    html = render_clinic(@org_a)
+
+    assert html =~ ~s(<div class="app">)
+    assert html =~ ~s(class="side")
+    assert html =~ ~r/<main class="main">.*class="wrap"/s
+  end
+
+  # ==========================================================================
   # ORG-SCOPE red-path (sabotage 181 target) + positive control
   # ==========================================================================
 

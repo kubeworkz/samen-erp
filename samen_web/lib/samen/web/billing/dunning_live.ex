@@ -25,7 +25,7 @@ defmodule Samen.Web.Billing.DunningLive do
   The header metrics (accounts in dunning, total overdue, oldest days) are non-PII bounded
   counts / cent amounts, folded from the same rows.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1]
@@ -82,104 +82,105 @@ defmodule Samen.Web.Billing.DunningLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_dunning} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="billing-dunning">
-      <.app_shell>
-        <:sidebar>
-          <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_dunning} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Dunning" crumbs={crumbs(@samen_mount, @org_id, "Dunning")} />
 
-        <.topbar title="Dunning" crumbs={crumbs(@samen_mount, @org_id, "Dunning")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Billing dunning org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Billing dunning org: {@org_id}</span>
+      <div class="metrics">
+        <.metric label="Accounts in dunning" value={@metrics.accounts} sub="behind on payment">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 8v4M12 16h.01" /><circle cx="12" cy="12" r="9" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Total overdue" value={dollars(@metrics.overdue_cents)} sub="past-due amount">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Past-due invoices" value={@metrics.invoices}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M6 2h9l5 5v15H6z" /><path d="M9 12h7M9 16h7" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Oldest overdue" value={"#{@metrics.max_days_overdue}d"} sub="days past due">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
 
-          <div class="metrics">
-            <.metric label="Accounts in dunning" value={@metrics.accounts} sub="behind on payment">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 8v4M12 16h.01" /><circle cx="12" cy="12" r="9" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Total overdue" value={dollars(@metrics.overdue_cents)} sub="past-due amount">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Past-due invoices" value={@metrics.invoices}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M6 2h9l5 5v15H6z" /><path d="M9 12h7M9 16h7" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Oldest overdue" value={"#{@metrics.max_days_overdue}d"} sub="days past due">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                </svg>
-              </:icon>
-            </.metric>
+      <div class="wrap">
+        <div id="dunning">
+          <div class="gtitle">
+            <h3>Accounts behind on payment</h3>
+            <span class="n">{length(@rows)}</span>
+            <span class="lane">· billing_name via PiiResolution · {plane_note(@samen_mount)}</span>
           </div>
 
-          <div class="wrap">
-            <div id="dunning">
-              <div class="gtitle">
-                <h3>Accounts behind on payment</h3>
-                <span class="n">{length(@rows)}</span>
-                <span class="lane">· billing_name via PiiResolution · {plane_note(@samen_mount)}</span>
-              </div>
+          <.empty_state
+            :if={@rows == []}
+            class="dunning-empty"
+            icon="✓"
+            title="Nobody is behind on payment."
+            body="Accounts with past-due invoices or a past-due / unpaid subscription appear here."
+          />
 
-              <.empty_state
-                :if={@rows == []}
-                class="dunning-empty"
-                icon="✓"
-                title="Nobody is behind on payment."
-                body="Accounts with past-due invoices or a past-due / unpaid subscription appear here."
-              />
-
-              <.data_table :if={@rows != []}>
-                <:head>
-                  <th style="width:28%">Customer</th>
-                  <th style="width:16%">Overdue</th>
-                  <th style="width:14%">Invoices</th>
-                  <th style="width:16%">Oldest</th>
-                  <th style="width:26%">Subscription</th>
-                </:head>
-                <tr :for={row <- @rows} class="dunning-row" id={"dunning-#{row.customer_id}"}>
-                  <td class="d-customer" style="font-weight:500;color:#3a3b45">
-                    {render_billing_name(row.__customer__)}
-                    <div class="d-email" style="font-size:11px;color:var(--muted)">
-                      {render_billing_email(row.__customer__)}
-                    </div>
-                  </td>
-                  <td class="d-amount" style="font-weight:500;color:#3a3b45">
-                    {dollars(row.amount_cents)}
-                  </td>
-                  <td class="d-count" style="color:var(--muted)">
-                    {row.past_due_count}
-                  </td>
-                  <td class="d-days">
-                    <.pill variant={days_variant(row.max_days_overdue)}>{row.max_days_overdue}d past due</.pill>
-                  </td>
-                  <td class="d-sub">
-                    <.pill variant={sub_status_variant(row.sub_status)}>{sub_status_label(row.sub_status)}</.pill>
-                  </td>
-                </tr>
-              </.data_table>
-            </div>
-          </div>
-        <% end %>
-      </.app_shell>
+          <.data_table :if={@rows != []}>
+            <:head>
+              <th style="width:28%">Customer</th>
+              <th style="width:16%">Overdue</th>
+              <th style="width:14%">Invoices</th>
+              <th style="width:16%">Oldest</th>
+              <th style="width:26%">Subscription</th>
+            </:head>
+            <tr :for={row <- @rows} class="dunning-row" id={"dunning-#{row.customer_id}"}>
+              <td class="d-customer" style="font-weight:500;color:#3a3b45">
+                {render_billing_name(row.__customer__)}
+                <div class="d-email" style="font-size:11px;color:var(--muted)">
+                  {render_billing_email(row.__customer__)}
+                </div>
+              </td>
+              <td class="d-amount" style="font-weight:500;color:#3a3b45">
+                {dollars(row.amount_cents)}
+              </td>
+              <td class="d-count" style="color:var(--muted)">
+                {row.past_due_count}
+              </td>
+              <td class="d-days">
+                <.pill variant={days_variant(row.max_days_overdue)}>{row.max_days_overdue}d past due</.pill>
+              </td>
+              <td class="d-sub">
+                <.pill variant={sub_status_variant(row.sub_status)}>{sub_status_label(row.sub_status)}</.pill>
+              </td>
+            </tr>
+          </.data_table>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

@@ -28,7 +28,7 @@ defmodule Samen.Web.Marketing.LeadsLive do
   the domain defines no lead-specific write action (leads ARE CRM people; their CRUD
   lives on the CRM surfaces), so this page wires none.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Marketing.Live, only: [assign_mount: 2, marketing_sidebar: 1, marketing_path: 1, marketing_plane_note: 1, crm_mount: 1]
@@ -84,66 +84,67 @@ defmodule Samen.Web.Marketing.LeadsLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_leads} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="mkt-leads">
-      <.app_shell>
-        <:sidebar>
-          <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_leads} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Leads" crumbs={crumbs(@samen_mount, @org_id, "Leads")}>
+      <:actions>
+        <a href={segments_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Segments</a>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Leads" crumbs={crumbs(@samen_mount, @org_id, "Leads")}>
-          <:actions>
-            <a href={segments_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Segments</a>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
-
-          <div class="wrap">
-            <div id="leads">
-              <div class="gtitle">
-                <h3>Leads</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· lifecycle lead / mql / sql · name+email via PiiResolution · {marketing_plane_note(@samen_mount)}</span>
-              </div>
-              <.list_view
-                id="leads-list"
-                page={@page}
-                state={@list_state}
-                row_class="lead-row"
-                filter_placeholder="Filter leads…"
-                empty_text="No leads in the early funnel yet."
-                empty_icon="➤"
-                empty_body="This lens surfaces contacts in the lead / MQL / SQL lifecycle stages — set a contact's lifecycle stage in CRM and it appears here."
-              >
-                <:head>
-                  <.sort_header field={:display_name} label="Name" sort={@list_state.sort} width="30%" />
-                  <th scope="col" style="width:28%">Email</th>
-                  <.sort_header field={:job_title} label="Title" sort={@list_state.sort} width="20%" />
-                  <th scope="col" style="width:22%">Stage</th>
-                </:head>
-                <:row :let={p}>
-                  <td class="lead-name" style="font-weight:500">
-                    <a href={lead_detail_path(@samen_mount, @org_id, p.id)} class="lead-detail-link" style="color:#3B4CCA;text-decoration:none">
-                      {render_full_name(p.full_name, p.display_name)}
-                    </a>
-                  </td>
-                  <td class="lead-email" style="font-size:12px;color:var(--muted)">{render_email(p.emails)}</td>
-                  <td style="font-size:12px;color:var(--muted)">{p.job_title || "—"}</td>
-                  <td><.lifecycle_pill stage={lifecycle_stage(p)} /></td>
-                </:row>
-              </.list_view>
-            </div>
+      <div class="wrap">
+        <div id="leads">
+          <div class="gtitle">
+            <h3>Leads</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· lifecycle lead / mql / sql · name+email via PiiResolution · {marketing_plane_note(@samen_mount)}</span>
           </div>
-        <% end %>
-      </.app_shell>
+          <.list_view
+            id="leads-list"
+            page={@page}
+            state={@list_state}
+            row_class="lead-row"
+            filter_placeholder="Filter leads…"
+            empty_text="No leads in the early funnel yet."
+            empty_icon="➤"
+            empty_body="This lens surfaces contacts in the lead / MQL / SQL lifecycle stages — set a contact's lifecycle stage in CRM and it appears here."
+          >
+            <:head>
+              <.sort_header field={:display_name} label="Name" sort={@list_state.sort} width="30%" />
+              <th scope="col" style="width:28%">Email</th>
+              <.sort_header field={:job_title} label="Title" sort={@list_state.sort} width="20%" />
+              <th scope="col" style="width:22%">Stage</th>
+            </:head>
+            <:row :let={p}>
+              <td class="lead-name" style="font-weight:500">
+                <a href={lead_detail_path(@samen_mount, @org_id, p.id)} class="lead-detail-link" style="color:#3B4CCA;text-decoration:none">
+                  {render_full_name(p.full_name, p.display_name)}
+                </a>
+              </td>
+              <td class="lead-email" style="font-size:12px;color:var(--muted)">{render_email(p.emails)}</td>
+              <td style="font-size:12px;color:var(--muted)">{p.job_title || "—"}</td>
+              <td><.lifecycle_pill stage={lifecycle_stage(p)} /></td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

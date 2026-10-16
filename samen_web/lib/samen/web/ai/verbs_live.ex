@@ -7,7 +7,7 @@ defmodule Samen.Web.AI.VerbsLive do
   `Samen.Web.AI.Server` → `Samen.AI.Verbs` → `Samen.AI.complete/4` → `Samen.AI.Chokepoint`
   (INV-7). SIMULATED vs live and `:not_configured` are signposted by `ai_result/1`.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -63,52 +63,53 @@ defmodule Samen.Web.AI.VerbsLive do
     Enum.find(Server.verbs(), :summarize, &(Atom.to_string(&1) == v))
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:verbs} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:verbs} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · Verbs"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "Verbs"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:verbs} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · Verbs"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "Verbs"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:verbs} base={ai_base(@samen_mount)} />
 
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
-          <form phx-submit="run" class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
-            <label style="font-size:13px;font-weight:600">Verb</label>
-            <select name="verb" id="ai-verb-select">
-              <option :for={v <- Server.verbs()} value={v} selected={v == @verb}>{v}</option>
-            </select>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+        <form phx-submit="run" class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
+          <label style="font-size:13px;font-weight:600">Verb</label>
+          <select name="verb" id="ai-verb-select">
+            <option :for={v <- Server.verbs()} value={v} selected={v == @verb}>{v}</option>
+          </select>
 
-            <label style="font-size:13px;font-weight:600">Record content / input</label>
-            <textarea name="input" id="ai-verb-input" rows="6" placeholder="Paste the record's content…">{@input}</textarea>
+          <label style="font-size:13px;font-weight:600">Record content / input</label>
+          <textarea name="input" id="ai-verb-input" rows="6" placeholder="Paste the record's content…">{@input}</textarea>
 
-            <label style="font-size:13px;font-weight:600">Classify labels (optional, comma-separated)</label>
-            <input type="text" name="labels" id="ai-verb-labels" value={@labels} placeholder="billing, sales, bug" />
+          <label style="font-size:13px;font-weight:600">Classify labels (optional, comma-separated)</label>
+          <input type="text" name="labels" id="ai-verb-labels" value={@labels} placeholder="billing, sales, bug" />
 
-            <div>
-              <.button variant="primary" type="submit">Run verb</.button>
-            </div>
-          </form>
+          <div>
+            <.button variant="primary" type="submit">Run verb</.button>
+          </div>
+        </form>
 
-          <.ai_result :if={@result} result={@result} id="ai-verbs-result" />
-        </div>
-      <% end %>
-    </.app_shell>
+        <.ai_result :if={@result} result={@result} id="ai-verbs-result" />
+      </div>
+    <% end %>
     """
   end
 end

@@ -13,7 +13,7 @@ defmodule Samen.Web.Settings.InvitationsLive do
   `token_digest`, so this is the only chance to hand it to the invitee until
   a real Delivery adapter is wired (dev/test captures via `LocalSink`).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
@@ -91,103 +91,108 @@ defmodule Samen.Web.Settings.InvitationsLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
     assigns =
       assigns
       |> assign_new(:invited_raw_token, fn -> nil end)
       |> assign_new(:invite_error, fn -> nil end)
+    assigns
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:invitations} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="settings-invitations">
-      <.app_shell>
-        <:sidebar>
-          <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:invitations} />
-        </:sidebar>
+    <.topbar title="Team invitations" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Invitations"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="Team invitations" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Invitations"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if is_nil(@org_id) do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="invitations-panel">
-              <%= if @invited_raw_token do %>
-                <div id="invitation-link-minted" style="border:1px solid #15803D;padding:12px;border-radius:6px;margin-bottom:14px">
-                  <strong>Copy this invite link now — it is shown only once.</strong>
-                  <pre id="invitation-raw-token" style="margin:8px 0;user-select:all">/invite/{@invited_raw_token}</pre>
-                  <button type="button" phx-click="dismiss_token" class="btn" id="invitation-dismiss">Done</button>
-                </div>
-              <% end %>
-
-              <p :if={@invite_error} id="invitation-error" style="color:#B91C1C">{@invite_error}</p>
-
-              <%= if not operator_plane?(@samen_mount) do %>
-                <form id="invite-form" phx-submit="invite" style="margin-bottom:16px">
-                  <fieldset style="border:0;padding:0">
-                    <legend style="font-weight:600;font-size:13px">Invite a teammate</legend>
-                    <input type="email" name="invitation[email]" placeholder="teammate@example.com" required id="invite-email" />
-                    <select name="invitation[role]" id="invite-role">
-                      <option value="member" selected>member</option>
-                      <option value="admin">admin</option>
-                      <option value="viewer">viewer</option>
-                    </select>
-                    <.button type="submit" variant="primary" id="invite-submit">Send invite</.button>
-                  </fieldset>
-                  <p style="color:var(--muted);font-size:12px;margin-top:4px">
-                    You can only invite a role you could yourself hold or manage — no invite above your own rank.
-                  </p>
-                </form>
-              <% else %>
-                <p id="invitations-operator-note" style="color:var(--muted)">
-                  Inviting and revoking are tenant-plane actions.
-                </p>
-              <% end %>
-
-              <table id="invitations-table" class="tbl">
-                <thead>
-                  <tr>
-                    <th scope="col">Email</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Expires</th>
-                    <th scope="col"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={inv <- @invitations} class="invitation-row" id={"invitation-#{inv.id}"}>
-                    <td class="invitation-email">{inv.email}</td>
-                    <td>{inv.role}</td>
-                    <td>
-                      <span class={"status-pill status-#{inv.status}"}>{inv.status}</span>
-                    </td>
-                    <td>{inv.expires_at}</td>
-                    <td>
-                      <button
-                        :if={inv.status == "pending" and not operator_plane?(@samen_mount)}
-                        type="button"
-                        phx-click="revoke"
-                        phx-value-id={inv.id}
-                        class="btn"
-                        id={"invitation-revoke-#{inv.id}"}
-                      >
-                        Revoke
-                      </button>
-                    </td>
-                  </tr>
-                  <tr :if={@invitations == []}>
-                    <td colspan="5" style="color:var(--muted)">No invitations yet.</td>
-                  </tr>
-                </tbody>
-              </table>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="invitations-panel">
+          <%= if @invited_raw_token do %>
+            <div id="invitation-link-minted" style="border:1px solid #15803D;padding:12px;border-radius:6px;margin-bottom:14px">
+              <strong>Copy this invite link now — it is shown only once.</strong>
+              <pre id="invitation-raw-token" style="margin:8px 0;user-select:all">/invite/{@invited_raw_token}</pre>
+              <button type="button" phx-click="dismiss_token" class="btn" id="invitation-dismiss">Done</button>
             </div>
-          </div>
-        <% end %>
-      </.app_shell>
+          <% end %>
+
+          <p :if={@invite_error} id="invitation-error" style="color:#B91C1C">{@invite_error}</p>
+
+          <%= if not operator_plane?(@samen_mount) do %>
+            <form id="invite-form" phx-submit="invite" style="margin-bottom:16px">
+              <fieldset style="border:0;padding:0">
+                <legend style="font-weight:600;font-size:13px">Invite a teammate</legend>
+                <input type="email" name="invitation[email]" placeholder="teammate@example.com" required id="invite-email" />
+                <select name="invitation[role]" id="invite-role">
+                  <option value="member" selected>member</option>
+                  <option value="admin">admin</option>
+                  <option value="viewer">viewer</option>
+                </select>
+                <.button type="submit" variant="primary" id="invite-submit">Send invite</.button>
+              </fieldset>
+              <p style="color:var(--muted);font-size:12px;margin-top:4px">
+                You can only invite a role you could yourself hold or manage — no invite above your own rank.
+              </p>
+            </form>
+          <% else %>
+            <p id="invitations-operator-note" style="color:var(--muted)">
+              Inviting and revoking are tenant-plane actions.
+            </p>
+          <% end %>
+
+          <table id="invitations-table" class="tbl">
+            <thead>
+              <tr>
+                <th scope="col">Email</th>
+                <th scope="col">Role</th>
+                <th scope="col">Status</th>
+                <th scope="col">Expires</th>
+                <th scope="col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={inv <- @invitations} class="invitation-row" id={"invitation-#{inv.id}"}>
+                <td class="invitation-email">{inv.email}</td>
+                <td>{inv.role}</td>
+                <td>
+                  <span class={"status-pill status-#{inv.status}"}>{inv.status}</span>
+                </td>
+                <td>{inv.expires_at}</td>
+                <td>
+                  <button
+                    :if={inv.status == "pending" and not operator_plane?(@samen_mount)}
+                    type="button"
+                    phx-click="revoke"
+                    phx-value-id={inv.id}
+                    class="btn"
+                    id={"invitation-revoke-#{inv.id}"}
+                  >
+                    Revoke
+                  </button>
+                </td>
+              </tr>
+              <tr :if={@invitations == []}>
+                <td colspan="5" style="color:var(--muted)">No invitations yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

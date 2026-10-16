@@ -21,7 +21,7 @@ defmodule Samen.Web.Billing.PlansLive do
   are ADMIN-gated (`RoleAtLeast :admin`), so writes go through `Reads.write_scope/2`
   (same-org, PLANE-PRESERVING role elevation).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1, writable?: 1]
@@ -254,224 +254,225 @@ defmodule Samen.Web.Billing.PlansLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_plans} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="billing-plans">
-      <.app_shell>
-        <:sidebar>
-          <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_plans} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Plans" crumbs={crumbs(@samen_mount, @org_id, "Plans")}>
+      <:actions>
+        <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-plans">
+          {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
+        </.button>
+        <.button :if={writable?(@samen_mount) and not @no_org} phx-click="open_ents" id="manage-entitlements">
+          Entitlements
+        </.button>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_plan" id="new-plan">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New plan
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Plans" crumbs={crumbs(@samen_mount, @org_id, "Plans")}>
-          <:actions>
-            <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-plans">
-              {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
-            </.button>
-            <.button :if={writable?(@samen_mount) and not @no_org} phx-click="open_ents" id="manage-entitlements">
-              Entitlements
-            </.button>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_plan" id="new-plan">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New plan
-            </.button>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Billing plans org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Billing plans org: {@org_id}</span>
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
 
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
+      <div class="wrap">
+        <div id="plans">
+          <div class="gtitle">
+            <h3>Billing Plans</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· Tier-0 config rows · admin-gated writes · no PII</span>
           </div>
-
-          <div class="wrap">
-            <div id="plans">
-              <div class="gtitle">
-                <h3>Billing Plans</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· Tier-0 config rows · admin-gated writes · no PII</span>
-              </div>
-              <.list_view
-                id="plans-list"
-                page={@page}
-                state={@list_state}
-                row_class="plan-row"
-                filter_placeholder="Filter plans…"
-                empty_text="No plans yet."
-                empty_icon="◫"
-                empty_body="Plans define what your customers can subscribe to."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_plan" id="empty-new-plan">New plan</.button>
-                </:empty_actions>
-                <:head>
-                  <.sort_header field={:name} label="Plan" sort={@list_state.sort} width="20%" />
-                  <th scope="col" style="width:14%">Price</th>
-                  <.sort_header field={:interval} label="Interval" sort={@list_state.sort} width="12%" />
-                  <.sort_header field={:enabled} label="Status" sort={@list_state.sort} width="12%" />
-                  <th scope="col" style="width:28%">Entitlements</th>
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:14%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={plan}>
-                  <td class="plan-name">
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <div class="av" style={"width:28px;height:28px;border-radius:6px;background:#{plan_bg(plan.name)};color:#{plan_fg(plan.name)};font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"}>
-                        {String.slice(plan.label || plan.name || "?", 0, 1) |> String.upcase()}
-                      </div>
-                      <div>
-                        <div style="font-weight:600">
-                          <a href={plan_detail_path(plan.id, @org_id)} class="plan-detail-link" style="color:#3a3b45;text-decoration:none">
-                            {plan.label || plan.name}
-                          </a>
-                        </div>
-                        <div style="font-size:11px;color:var(--muted)">{plan.description || plan.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="plan-price" style="font-weight:500;color:#3a3b45">
-                    {primary_price(Map.get(@prices_by_plan, plan.id, []))}
-                  </td>
-                  <td class="plan-interval" style="color:var(--muted)">
-                    {interval_label(plan.interval)}
-                  </td>
-                  <td class="plan-status">
-                    <.pill variant={if plan.enabled, do: "ok", else: "mut"}>
-                      {if plan.enabled, do: "active", else: "disabled"}
-                    </.pill>
-                  </td>
-                  <td class="plan-features">
-                    <div style="display:flex;flex-wrap:wrap;gap:4px">
-                      <span :for={feat <- plan_features(plan)} style="display:inline-block;font-size:11px;padding:2px 7px;background:#F3F4F6;border-radius:4px;color:#374151">
-                        {feat}
-                      </span>
-                    </div>
-                  </td>
-                  <td :if={writable?(@samen_mount)} class="plan-actions">
-                    <div style="display:flex;gap:6px;align-items:center">
-                      <%= if Map.get(plan, :archived_at) do %>
-                        <.pill variant="mut">archived</.pill>
-                        <.button phx-click="restore" phx-value-id={plan.id} class="restore-plan">Restore</.button>
-                      <% else %>
-                        <.button phx-click="edit_plan" phx-value-id={plan.id} class="edit-plan">Edit</.button>
-                        <.button phx-click="toggle_plan" phx-value-id={plan.id}>
-                          {if plan.enabled, do: "Disable", else: "Enable"}
-                        </.button>
-                        <.delete_confirm phx-click="delete" phx-value-id={plan.id} />
-                      <% end %>
-                    </div>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-plan-modal" title="New plan" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-plan-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:name]} label="Name" />
-              <.form_field field={f[:label]} label="Label" />
-              <.form_field field={f[:description]} label="Description" />
-              <.form_field
-                field={f[:interval]}
-                label="Interval"
-                type="select"
-                options={[{"monthly", "monthly"}, {"annual", "annual"}, {"weekly", "weekly"}, {"daily", "daily"}, {"one-time", "one_time"}]}
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Save plan</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-
-          <.modal
-            :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
-            id="edit-plan-modal"
-            title="Edit plan"
-            on_cancel="cancel_edit"
+          <.list_view
+            id="plans-list"
+            page={@page}
+            state={@list_state}
+            row_class="plan-row"
+            filter_placeholder="Filter plans…"
+            empty_text="No plans yet."
+            empty_icon="◫"
+            empty_body="Plans define what your customers can subscribe to."
           >
-            <.simple_form :let={f} for={@edit_form} id="edit-plan-form" phx-change="validate_edit" phx-submit="save_edit">
-              <.form_field field={f[:name]} label="Name" />
-              <.form_field field={f[:label]} label="Label" />
-              <.form_field field={f[:description]} label="Description" />
-              <.form_field
-                field={f[:interval]}
-                label="Interval"
-                type="select"
-                options={[{"monthly", "monthly"}, {"annual", "annual"}, {"weekly", "weekly"}, {"daily", "daily"}, {"one-time", "one_time"}]}
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Save changes</.button>
-                <.button type="button" phx-click="cancel_edit">Cancel</.button>
-              </:actions>
-            </.simple_form>
-
-            <div id="edit-plan-features" style="margin-top:14px;border-top:1px solid #E5E7EB;padding-top:12px">
-              <div style="font-size:12px;font-weight:600;margin-bottom:8px">Entitlements (feature map)</div>
-              <% features = normalize_features(find_plan(assigns_socket(assigns), @edit_plan_id)) %>
-              <div style="display:flex;flex-wrap:wrap;gap:8px">
-                <label :for={feat <- Reads.feature_keys()} style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151">
-                  <input
-                    type="checkbox"
-                    checked={Map.has_key?(features, to_string(feat))}
-                    phx-click="toggle_feature"
-                    phx-value-id={@edit_plan_id}
-                    phx-value-feature={to_string(feat)}
-                    data-feature={to_string(feat)}
-                  />
-                  {humanize_feature(feat)}
-                </label>
-              </div>
-            </div>
-          </.modal>
-
-          <.modal :if={@show_ents and writable?(@samen_mount)} id="entitlements-modal" title="Subscription entitlements" on_cancel="cancel_ents">
-            <%= if @subscriptions == [] do %>
-              <p style="font-size:12px;color:var(--muted)">No subscriptions to entitle yet.</p>
-            <% else %>
-              <form id="grant-entitlement-form" phx-submit="grant_ent" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:14px">
-                <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
-                  Subscription
-                  <select name="subscription_id" required>
-                    <option :for={sub <- @subscriptions} value={sub.id}>{subscription_label(sub)}</option>
-                  </select>
-                </label>
-                <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
-                  Feature
-                  <select name="feature" required>
-                    <option :for={feat <- Reads.feature_keys()} value={to_string(feat)}>{humanize_feature(feat)}</option>
-                  </select>
-                </label>
-                <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
-                  Expires
-                  <input type="date" name="expires_at" />
-                </label>
-                <.button variant="primary" type="submit" id="grant-entitlement">Grant</.button>
-              </form>
-
-              <div id="entitlements-list">
-                <div style="font-size:12px;font-weight:600;margin-bottom:6px">Granted entitlements</div>
-                <p :if={granted_entitlements(@entitlements) == []} style="font-size:12px;color:var(--muted)">None granted yet.</p>
-                <div :for={ent <- granted_entitlements(@entitlements)} class="entitlement-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
-                  <span style="font-weight:600">{humanize_feature(ent.feature)}</span>
-                  <span style="color:var(--muted)">· {subscription_label_for(@subscriptions, ent.subscription_id)}</span>
-                  <.button phx-click="revoke_ent" phx-value-subscription_id={ent.subscription_id} phx-value-feature={to_string(ent.feature)} class="revoke-ent">Revoke</.button>
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_plan" id="empty-new-plan">New plan</.button>
+            </:empty_actions>
+            <:head>
+              <.sort_header field={:name} label="Plan" sort={@list_state.sort} width="20%" />
+              <th scope="col" style="width:14%">Price</th>
+              <.sort_header field={:interval} label="Interval" sort={@list_state.sort} width="12%" />
+              <.sort_header field={:enabled} label="Status" sort={@list_state.sort} width="12%" />
+              <th scope="col" style="width:28%">Entitlements</th>
+              <th :if={writable?(@samen_mount)} scope="col" style="width:14%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={plan}>
+              <td class="plan-name">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="av" style={"width:28px;height:28px;border-radius:6px;background:#{plan_bg(plan.name)};color:#{plan_fg(plan.name)};font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"}>
+                    {String.slice(plan.label || plan.name || "?", 0, 1) |> String.upcase()}
+                  </div>
+                  <div>
+                    <div style="font-weight:600">
+                      <a href={plan_detail_path(plan.id, @org_id)} class="plan-detail-link" style="color:#3a3b45;text-decoration:none">
+                        {plan.label || plan.name}
+                      </a>
+                    </div>
+                    <div style="font-size:11px;color:var(--muted)">{plan.description || plan.name}</div>
+                  </div>
                 </div>
-              </div>
-            <% end %>
-          </.modal>
+              </td>
+              <td class="plan-price" style="font-weight:500;color:#3a3b45">
+                {primary_price(Map.get(@prices_by_plan, plan.id, []))}
+              </td>
+              <td class="plan-interval" style="color:var(--muted)">
+                {interval_label(plan.interval)}
+              </td>
+              <td class="plan-status">
+                <.pill variant={if plan.enabled, do: "ok", else: "mut"}>
+                  {if plan.enabled, do: "active", else: "disabled"}
+                </.pill>
+              </td>
+              <td class="plan-features">
+                <div style="display:flex;flex-wrap:wrap;gap:4px">
+                  <span :for={feat <- plan_features(plan)} style="display:inline-block;font-size:11px;padding:2px 7px;background:#F3F4F6;border-radius:4px;color:#374151">
+                    {feat}
+                  </span>
+                </div>
+              </td>
+              <td :if={writable?(@samen_mount)} class="plan-actions">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <%= if Map.get(plan, :archived_at) do %>
+                    <.pill variant="mut">archived</.pill>
+                    <.button phx-click="restore" phx-value-id={plan.id} class="restore-plan">Restore</.button>
+                  <% else %>
+                    <.button phx-click="edit_plan" phx-value-id={plan.id} class="edit-plan">Edit</.button>
+                    <.button phx-click="toggle_plan" phx-value-id={plan.id}>
+                      {if plan.enabled, do: "Disable", else: "Enable"}
+                    </.button>
+                    <.delete_confirm phx-click="delete" phx-value-id={plan.id} />
+                  <% end %>
+                </div>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-plan-modal" title="New plan" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-plan-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:name]} label="Name" />
+          <.form_field field={f[:label]} label="Label" />
+          <.form_field field={f[:description]} label="Description" />
+          <.form_field
+            field={f[:interval]}
+            label="Interval"
+            type="select"
+            options={[{"monthly", "monthly"}, {"annual", "annual"}, {"weekly", "weekly"}, {"daily", "daily"}, {"one-time", "one_time"}]}
+          />
+          <:actions>
+            <.button variant="primary" type="submit">Save plan</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
+          </:actions>
+        </.simple_form>
+      </.modal>
+
+      <.modal
+        :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
+        id="edit-plan-modal"
+        title="Edit plan"
+        on_cancel="cancel_edit"
+      >
+        <.simple_form :let={f} for={@edit_form} id="edit-plan-form" phx-change="validate_edit" phx-submit="save_edit">
+          <.form_field field={f[:name]} label="Name" />
+          <.form_field field={f[:label]} label="Label" />
+          <.form_field field={f[:description]} label="Description" />
+          <.form_field
+            field={f[:interval]}
+            label="Interval"
+            type="select"
+            options={[{"monthly", "monthly"}, {"annual", "annual"}, {"weekly", "weekly"}, {"daily", "daily"}, {"one-time", "one_time"}]}
+          />
+          <:actions>
+            <.button variant="primary" type="submit">Save changes</.button>
+            <.button type="button" phx-click="cancel_edit">Cancel</.button>
+          </:actions>
+        </.simple_form>
+
+        <div id="edit-plan-features" style="margin-top:14px;border-top:1px solid #E5E7EB;padding-top:12px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:8px">Entitlements (feature map)</div>
+          <% features = normalize_features(find_plan(assigns_socket(assigns), @edit_plan_id)) %>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <label :for={feat <- Reads.feature_keys()} style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151">
+              <input
+                type="checkbox"
+                checked={Map.has_key?(features, to_string(feat))}
+                phx-click="toggle_feature"
+                phx-value-id={@edit_plan_id}
+                phx-value-feature={to_string(feat)}
+                data-feature={to_string(feat)}
+              />
+              {humanize_feature(feat)}
+            </label>
+          </div>
+        </div>
+      </.modal>
+
+      <.modal :if={@show_ents and writable?(@samen_mount)} id="entitlements-modal" title="Subscription entitlements" on_cancel="cancel_ents">
+        <%= if @subscriptions == [] do %>
+          <p style="font-size:12px;color:var(--muted)">No subscriptions to entitle yet.</p>
+        <% else %>
+          <form id="grant-entitlement-form" phx-submit="grant_ent" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-bottom:14px">
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
+              Subscription
+              <select name="subscription_id" required>
+                <option :for={sub <- @subscriptions} value={sub.id}>{subscription_label(sub)}</option>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
+              Feature
+              <select name="feature" required>
+                <option :for={feat <- Reads.feature_keys()} value={to_string(feat)}>{humanize_feature(feat)}</option>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:3px;font-size:12px">
+              Expires
+              <input type="date" name="expires_at" />
+            </label>
+            <.button variant="primary" type="submit" id="grant-entitlement">Grant</.button>
+          </form>
+
+          <div id="entitlements-list">
+            <div style="font-size:12px;font-weight:600;margin-bottom:6px">Granted entitlements</div>
+            <p :if={granted_entitlements(@entitlements) == []} style="font-size:12px;color:var(--muted)">None granted yet.</p>
+            <div :for={ent <- granted_entitlements(@entitlements)} class="entitlement-row" style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+              <span style="font-weight:600">{humanize_feature(ent.feature)}</span>
+              <span style="color:var(--muted)">· {subscription_label_for(@subscriptions, ent.subscription_id)}</span>
+              <.button phx-click="revoke_ent" phx-value-subscription_id={ent.subscription_id} phx-value-feature={to_string(ent.feature)} class="revoke-ent">Revoke</.button>
+            </div>
+          </div>
         <% end %>
-      </.app_shell>
+      </.modal>
+    <% end %>
     </div>
     """
   end

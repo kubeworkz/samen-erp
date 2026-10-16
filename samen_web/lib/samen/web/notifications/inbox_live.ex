@@ -42,7 +42,7 @@ defmodule Samen.Web.Notifications.InboxLive do
   / `mark_all_read` (tenant-plane affordances; kernel-enforced writes that touch NO
   vaulted attribute) decrement it, and a realtime envelope re-count increments it.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -158,96 +158,97 @@ defmodule Samen.Web.Notifications.InboxLive do
       else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.notifications_sidebar
+      mount={@samen_mount}
+      org_id={@org_id}
+      active={:notifications}
+      return_to={@return_to}
+      unread={@unread_count}
+    />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="notifications-inbox">
-      <.app_shell>
-        <:sidebar>
-          <.notifications_sidebar
-            mount={@samen_mount}
-            org_id={@org_id}
-            active={:notifications}
-            return_to={@return_to}
-            unread={@unread_count}
-          />
-        </:sidebar>
+    <.topbar title="Notifications" crumbs={crumbs(@samen_mount, @org_id)}>
+      <:actions>
+        <.button
+          :if={writable?(@samen_mount) and not @no_org and @unread_count > 0}
+          variant="primary"
+          phx-click="mark_all_read"
+          id="mark-all-read"
+        >
+          Mark all read
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Notifications" crumbs={crumbs(@samen_mount, @org_id)}>
-          <:actions>
-            <.button
-              :if={writable?(@samen_mount) and not @no_org and @unread_count > 0}
-              variant="primary"
-              phx-click="mark_all_read"
-              id="mark-all-read"
-            >
-              Mark all read
-            </.button>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Notifications org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Notifications org: {@org_id}</span>
-
-          <div class="wrap">
-            <div id="notifications-panel">
-              <div class="gtitle">
-                <h3>Inbox</h3>
-                <span class="n" id="notifications-unread">{@unread_count}</span>
-                <span class="lane">unread · body via PiiResolution · {plane_note(@samen_mount)}</span>
-              </div>
-              <.list_view
-                id="notifications"
-                page={@page}
-                state={@list_state}
-                row_class="notification-row"
-                filter_placeholder="Filter by event type…"
-                empty_text="No notifications yet."
-                empty_icon="✶"
-                empty_body="System events, mentions, and SLA alerts land here as they happen — nothing needs your attention yet."
-              >
-                <:head>
-                  <.sort_header field={:event_type} label="Event" sort={@list_state.sort} width="16%" />
-                  <th scope="col" style="width:44%">Notification</th>
-                  <th scope="col" style="width:10%">Channel</th>
-                  <.sort_header field={:inserted_at} label="Received" sort={@list_state.sort} width="16%" />
-                  <th scope="col" style="width:14%"><span class="sr-only">Read state</span></th>
-                </:head>
-                <:row :let={n}>
-                  <td class="n-event">
-                    <span class="n-event-type" style="font-size:12px;font-weight:600">{n.event_type}</span>
-                  </td>
-                  <td class="n-body-cell">
-                    <span class="n-body">{n.rendered_body || "—"}</span>
-                    <.subject_card mount={@samen_mount} org_id={@org_id} notification={n} />
-                  </td>
-                  <td class="n-channel" style="font-size:12px;color:var(--muted)">{n.channel}</td>
-                  <td class="n-received" style="font-size:12px;color:var(--muted)">{received_at(n)}</td>
-                  <td class="n-read">
-                    <%= if n.read_at do %>
-                      <span class="n-read-state" style="font-size:12px;color:var(--muted)">read</span>
-                    <% else %>
-                      <span class="n-unread-dot" aria-label="unread" style="color:#B45309;font-weight:700">●</span>
-                      <.button
-                        :if={writable?(@samen_mount)}
-                        phx-click="mark_read"
-                        phx-value-id={n.id}
-                        aria-label="Mark read"
-                      >
-                        Mark read
-                      </.button>
-                    <% end %>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
+      <div class="wrap">
+        <div id="notifications-panel">
+          <div class="gtitle">
+            <h3>Inbox</h3>
+            <span class="n" id="notifications-unread">{@unread_count}</span>
+            <span class="lane">unread · body via PiiResolution · {plane_note(@samen_mount)}</span>
           </div>
-        <% end %>
-      </.app_shell>
+          <.list_view
+            id="notifications"
+            page={@page}
+            state={@list_state}
+            row_class="notification-row"
+            filter_placeholder="Filter by event type…"
+            empty_text="No notifications yet."
+            empty_icon="✶"
+            empty_body="System events, mentions, and SLA alerts land here as they happen — nothing needs your attention yet."
+          >
+            <:head>
+              <.sort_header field={:event_type} label="Event" sort={@list_state.sort} width="16%" />
+              <th scope="col" style="width:44%">Notification</th>
+              <th scope="col" style="width:10%">Channel</th>
+              <.sort_header field={:inserted_at} label="Received" sort={@list_state.sort} width="16%" />
+              <th scope="col" style="width:14%"><span class="sr-only">Read state</span></th>
+            </:head>
+            <:row :let={n}>
+              <td class="n-event">
+                <span class="n-event-type" style="font-size:12px;font-weight:600">{n.event_type}</span>
+              </td>
+              <td class="n-body-cell">
+                <span class="n-body">{n.rendered_body || "—"}</span>
+                <.subject_card mount={@samen_mount} org_id={@org_id} notification={n} />
+              </td>
+              <td class="n-channel" style="font-size:12px;color:var(--muted)">{n.channel}</td>
+              <td class="n-received" style="font-size:12px;color:var(--muted)">{received_at(n)}</td>
+              <td class="n-read">
+                <%= if n.read_at do %>
+                  <span class="n-read-state" style="font-size:12px;color:var(--muted)">read</span>
+                <% else %>
+                  <span class="n-unread-dot" aria-label="unread" style="color:#B45309;font-weight:700">●</span>
+                  <.button
+                    :if={writable?(@samen_mount)}
+                    phx-click="mark_read"
+                    phx-value-id={n.id}
+                    aria-label="Mark read"
+                  >
+                    Mark read
+                  </.button>
+                <% end %>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

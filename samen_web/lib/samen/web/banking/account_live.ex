@@ -19,7 +19,7 @@ defmodule Samen.Web.Banking.AccountLive do
   The statement-line id is a SERVER-side fact merged in at submit (never client
   input — the `org_id` idiom). NON-PII: the Banking PII map is EMPTY (INV-1).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Banking.Live, only: [assign_mount: 2, banking_sidebar: 1, writable?: 1]
@@ -141,136 +141,137 @@ defmodule Samen.Web.Banking.AccountLive do
     end
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.banking_sidebar mount={@samen_mount} org_id={@org_id} active={:banking_accounts} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="banking-account">
-      <.app_shell>
-        <:sidebar>
-          <.banking_sidebar mount={@samen_mount} org_id={@org_id} active={:banking_accounts} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={@account && @account.name || "Bank account"} crumbs={crumbs(@samen_mount, @org_id, @account && @account.name)}>
+    </.topbar>
 
-        <.topbar title={@account && @account.name || "Bank account"} crumbs={crumbs(@samen_mount, @org_id, @account && @account.name)}>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Banking org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Banking org: {@org_id}</span>
-
-          <%= if @account == nil do %>
-            <div class="wrap">
-              <div class="card" id="account-not-found" style="padding:24px">
-                <h3 style="margin-bottom:6px">Bank account not found.</h3>
-                <p style="color:var(--muted);font-size:13px">
-                  It does not exist in this organization, or it was archived.
-                </p>
+      <%= if @account == nil do %>
+        <div class="wrap">
+          <div class="card" id="account-not-found" style="padding:24px">
+            <h3 style="margin-bottom:6px">Bank account not found.</h3>
+            <p style="color:var(--muted);font-size:13px">
+              It does not exist in this organization, or it was archived.
+            </p>
+            <.button variant="secondary" type="button" navigate={accounts_path(@samen_mount, @org_id)}>
+              Back to accounts
+            </.button>
+          </div>
+        </div>
+      <% else %>
+        <div class="wrap">
+          <div class="card" id="account-facts" style="padding:18px 20px;margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+              <div>
+                <div style="font-weight:600;font-size:16px">{@account.name}</div>
+                <div style="color:var(--muted);font-size:12px">
+                  {@account.currency} · GL {gl_label(@gl_accounts, @account.account_id)} · statement balance {cents(@account.statement_balance_cents)}
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <.pill variant={if @account.is_active, do: "ok", else: "mut"}>{if @account.is_active, do: "active", else: "inactive"}</.pill>
                 <.button variant="secondary" type="button" navigate={accounts_path(@samen_mount, @org_id)}>
                   Back to accounts
                 </.button>
               </div>
             </div>
-          <% else %>
-            <div class="wrap">
-              <div class="card" id="account-facts" style="padding:18px 20px;margin-bottom:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-                  <div>
-                    <div style="font-weight:600;font-size:16px">{@account.name}</div>
-                    <div style="color:var(--muted);font-size:12px">
-                      {@account.currency} · GL {gl_label(@gl_accounts, @account.account_id)} · statement balance {cents(@account.statement_balance_cents)}
-                    </div>
-                  </div>
-                  <div style="display:flex;gap:8px;align-items:center">
-                    <.pill variant={if @account.is_active, do: "ok", else: "mut"}>{if @account.is_active, do: "active", else: "inactive"}</.pill>
-                    <.button variant="secondary" type="button" navigate={accounts_path(@samen_mount, @org_id)}>
-                      Back to accounts
-                    </.button>
-                  </div>
-                </div>
-              </div>
+          </div>
 
-              <div id="statement-lines">
-                <div class="gtitle">
-                  <h3>Statement lines</h3>
-                  <span class="n">{length(@lines)}</span>
-                  <span class="lane">· org-scoped · append-only · no PII</span>
-                </div>
-
-                <div :if={@match_error} class="card form-error" id="match-error" style="padding:10px 14px;margin-bottom:8px;color:var(--bad, #b91c1c);font-size:12px">
-                  {@match_error}
-                </div>
-
-                <div :if={@lines == []} class="card" id="lines-empty" style="padding:22px;text-align:center">
-                  <div style="font-weight:600">No statement lines yet.</div>
-                  <p style="color:var(--muted);font-size:13px;margin-top:4px">
-                    Lines arrive with a statement import — the import action ships with the CSV
-                    import surface; until then this ledger stays honestly empty.
-                  </p>
-                </div>
-
-                <table :if={@lines != []} id="lines-table" style="width:100%;border-collapse:collapse">
-                  <thead>
-                    <tr style="text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line, #e5e7eb)">
-                      <th scope="col" style="padding:8px 6px;width:14%">Posted</th>
-                      <th scope="col" style="padding:8px 6px;width:14%">Amount</th>
-                      <th scope="col" style="padding:8px 6px;width:30%">Description</th>
-                      <th scope="col" style="padding:8px 6px;width:16%">Counterparty</th>
-                      <th scope="col" style="padding:8px 6px;width:12%">Status</th>
-                      <th scope="col" style="padding:8px 6px;width:14%"><span class="sr-only">Actions</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={l <- @lines} id={"line-#{l.id}"} style="border-bottom:1px solid var(--line, #f3f4f6);font-size:13px">
-                      <td style="padding:8px 6px">{date(l.posted_at)}</td>
-                      <td style={"padding:8px 6px;font-variant-numeric:tabular-nums;color:#{amount_color(l.amount_cents)}"}>
-                        {signed_cents(l.amount_cents)}
-                      </td>
-                      <td style="padding:8px 6px">{l.description}</td>
-                      <td style="padding:8px 6px;color:var(--muted)">{l.counterparty || "—"}</td>
-                      <td style="padding:8px 6px"><.pill variant={status_variant(l.status)}>{l.status}</.pill></td>
-                      <td style="padding:8px 6px">
-                        <.button
-                          :if={writable?(@samen_mount) and l.status == :unmatched}
-                          variant="secondary"
-                          type="button"
-                          phx-click="open_match"
-                          phx-value-id={l.id}
-                          id={"match-#{l.id}"}
-                        >
-                          Match
-                        </.button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                <div :if={@match_line_id != nil and @match_form != nil} class="card" id="match-form-card" style="padding:14px 16px;margin-top:10px">
-                  <div style="font-weight:600;font-size:13px;margin-bottom:8px">Match this statement line to a journal entry</div>
-                  <.simple_form :let={f} for={@match_form} id="match-form" phx-change="validate_match" phx-submit="save_match">
-                    <.form_field
-                      field={f[:entry_id]}
-                      label="Journal entry"
-                      type="select"
-                      prompt="Choose a journal entry"
-                      options={entry_options(@candidates)}
-                    />
-                    <p style="color:var(--muted);font-size:12px">
-                      Amount-strict: the entry's total (Σ debit − credit) must equal the statement
-                      line within 1¢ — voided entries are not offered.
-                    </p>
-                    <:actions>
-                      <.button variant="primary" type="submit">Create match</.button>
-                      <.button type="button" phx-click="cancel_match">Cancel</.button>
-                    </:actions>
-                  </.simple_form>
-                </div>
-              </div>
+          <div id="statement-lines">
+            <div class="gtitle">
+              <h3>Statement lines</h3>
+              <span class="n">{length(@lines)}</span>
+              <span class="lane">· org-scoped · append-only · no PII</span>
             </div>
-          <% end %>
-        <% end %>
-      </.app_shell>
+
+            <div :if={@match_error} class="card form-error" id="match-error" style="padding:10px 14px;margin-bottom:8px;color:var(--bad, #b91c1c);font-size:12px">
+              {@match_error}
+            </div>
+
+            <div :if={@lines == []} class="card" id="lines-empty" style="padding:22px;text-align:center">
+              <div style="font-weight:600">No statement lines yet.</div>
+              <p style="color:var(--muted);font-size:13px;margin-top:4px">
+                Lines arrive with a statement import — the import action ships with the CSV
+                import surface; until then this ledger stays honestly empty.
+              </p>
+            </div>
+
+            <table :if={@lines != []} id="lines-table" style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr style="text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line, #e5e7eb)">
+                  <th scope="col" style="padding:8px 6px;width:14%">Posted</th>
+                  <th scope="col" style="padding:8px 6px;width:14%">Amount</th>
+                  <th scope="col" style="padding:8px 6px;width:30%">Description</th>
+                  <th scope="col" style="padding:8px 6px;width:16%">Counterparty</th>
+                  <th scope="col" style="padding:8px 6px;width:12%">Status</th>
+                  <th scope="col" style="padding:8px 6px;width:14%"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={l <- @lines} id={"line-#{l.id}"} style="border-bottom:1px solid var(--line, #f3f4f6);font-size:13px">
+                  <td style="padding:8px 6px">{date(l.posted_at)}</td>
+                  <td style={"padding:8px 6px;font-variant-numeric:tabular-nums;color:#{amount_color(l.amount_cents)}"}>
+                    {signed_cents(l.amount_cents)}
+                  </td>
+                  <td style="padding:8px 6px">{l.description}</td>
+                  <td style="padding:8px 6px;color:var(--muted)">{l.counterparty || "—"}</td>
+                  <td style="padding:8px 6px"><.pill variant={status_variant(l.status)}>{l.status}</.pill></td>
+                  <td style="padding:8px 6px">
+                    <.button
+                      :if={writable?(@samen_mount) and l.status == :unmatched}
+                      variant="secondary"
+                      type="button"
+                      phx-click="open_match"
+                      phx-value-id={l.id}
+                      id={"match-#{l.id}"}
+                    >
+                      Match
+                    </.button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div :if={@match_line_id != nil and @match_form != nil} class="card" id="match-form-card" style="padding:14px 16px;margin-top:10px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:8px">Match this statement line to a journal entry</div>
+              <.simple_form :let={f} for={@match_form} id="match-form" phx-change="validate_match" phx-submit="save_match">
+                <.form_field
+                  field={f[:entry_id]}
+                  label="Journal entry"
+                  type="select"
+                  prompt="Choose a journal entry"
+                  options={entry_options(@candidates)}
+                />
+                <p style="color:var(--muted);font-size:12px">
+                  Amount-strict: the entry's total (Σ debit − credit) must equal the statement
+                  line within 1¢ — voided entries are not offered.
+                </p>
+                <:actions>
+                  <.button variant="primary" type="submit">Create match</.button>
+                  <.button type="button" phx-click="cancel_match">Cancel</.button>
+                </:actions>
+              </.simple_form>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
     </div>
     """
   end

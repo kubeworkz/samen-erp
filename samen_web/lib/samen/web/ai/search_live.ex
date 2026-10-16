@@ -7,7 +7,7 @@ defmodule Samen.Web.AI.SearchLive do
   masking-safe by construction (an embedded field is non-PII; the snippet stores only a
   `vt_`-free excerpt) — the UI renders it verbatim and asserts no `vt_*`/plaintext leak.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -52,67 +52,68 @@ defmodule Samen.Web.AI.SearchLive do
   def handle_event("search", %{"q" => q}, socket),
     do: {:noreply, load(socket, socket.assigns.org_id, q: q)}
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:search} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:search} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · Semantic search"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "Semantic search"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:search} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · Semantic search"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "Semantic search"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:search} base={ai_base(@samen_mount)} />
 
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
-          <form phx-submit="search" class="card" style="display:flex;gap:8px;padding:16px">
-            <input type="text" name="q" id="ai-search-input" value={@q} placeholder="Search semantically…" style="flex:1" />
-            <.button variant="primary" type="submit">Search</.button>
-          </form>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+        <form phx-submit="search" class="card" style="display:flex;gap:8px;padding:16px">
+          <input type="text" name="q" id="ai-search-input" value={@q} placeholder="Search semantically…" style="flex:1" />
+          <.button variant="primary" type="submit">Search</.button>
+        </form>
 
-          <div :if={@simulated} id="ai-search-simulated">
-            <.pill variant="warn">SIMULATED ranking — deterministic embedder, not a real model</.pill>
-          </div>
-
-          <div :if={@error} class="card" id="ai-search-error" style="padding:12px">
-            <.pill variant="warn">Search unavailable</.pill>
-          </div>
-
-          <div :if={@q != "" and @hits == [] and is_nil(@error)} id="ai-search-empty">
-            <.empty_state title="No matches" body="No embedded rows in this org matched that query." icon="⌕" />
-          </div>
-
-          <ul :if={@hits != []} id="ai-search-hits" class="card" style="list-style:none;margin:0;padding:8px 0">
-            <li
-              :for={hit <- @hits}
-              class="ai-search-hit"
-              id={"ai-hit-#{hit.source_id}-#{hit.field}"}
-              style="padding:10px 16px;border-bottom:1px solid var(--line,#222)"
-            >
-              <div style="font-size:12px;color:var(--muted)">
-                {short_resource(hit.source_resource)} · {hit.field} · d={fmt_distance(hit.distance)}
-              </div>
-              <div :if={hit.snippet} class="ai-hit-snippet">{hit.snippet}</div>
-              <div :if={is_nil(hit.snippet)} class="ai-hit-snippet" style="color:var(--muted);font-style:italic">
-                (no snippet)
-              </div>
-            </li>
-          </ul>
+        <div :if={@simulated} id="ai-search-simulated">
+          <.pill variant="warn">SIMULATED ranking — deterministic embedder, not a real model</.pill>
         </div>
-      <% end %>
-    </.app_shell>
+
+        <div :if={@error} class="card" id="ai-search-error" style="padding:12px">
+          <.pill variant="warn">Search unavailable</.pill>
+        </div>
+
+        <div :if={@q != "" and @hits == [] and is_nil(@error)} id="ai-search-empty">
+          <.empty_state title="No matches" body="No embedded rows in this org matched that query." icon="⌕" />
+        </div>
+
+        <ul :if={@hits != []} id="ai-search-hits" class="card" style="list-style:none;margin:0;padding:8px 0">
+          <li
+            :for={hit <- @hits}
+            class="ai-search-hit"
+            id={"ai-hit-#{hit.source_id}-#{hit.field}"}
+            style="padding:10px 16px;border-bottom:1px solid var(--line,#222)"
+          >
+            <div style="font-size:12px;color:var(--muted)">
+              {short_resource(hit.source_resource)} · {hit.field} · d={fmt_distance(hit.distance)}
+            </div>
+            <div :if={hit.snippet} class="ai-hit-snippet">{hit.snippet}</div>
+            <div :if={is_nil(hit.snippet)} class="ai-hit-snippet" style="color:var(--muted);font-style:italic">
+              (no snippet)
+            </div>
+          </li>
+        </ul>
+      </div>
+    <% end %>
     """
   end
 

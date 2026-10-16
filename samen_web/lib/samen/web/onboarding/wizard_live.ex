@@ -31,11 +31,30 @@ defmodule Samen.Web.Onboarding.WizardLive do
   the plane's landing view in a real host wiring, where the existing
   `Samen.Web.FirstRun` "no data yet" checklist takes over — complementary,
   not duplicated (ADR-035 §5 A8).
+
+  ## Chrome — a tenant page, so it renders INSIDE the tenant chrome
+
+  This route is mounted under `{Samen.Web.TenantAuthz, :require_tenant}`: whoever
+  reaches it is an AUTHENTICATED tenant user with a real org, not an anonymous
+  visitor. It therefore renders in the SAME two-pane shell every other tenant
+  surface mounts (`Samen.UI.app_shell/1` + `<.topbar>` + a `.wrap` main panel),
+  with the setup steps as its sidebar nav — a full-page card centred on an
+  otherwise empty viewport was the one tenant page with no workspace beside it,
+  no way back to it, and no mobile drawer.
+
+  Keep it honest about routes while you are there: the sidebar
+  (`Samen.Web.Onboarding.Live`) links only this LiveView's OWN `?step=` URLs and
+  the topbar carries plain-string crumbs, because a host can mount the wizard
+  WITHOUT mounting the workspace modules it would otherwise link to (the
+  generated app mounts auth + onboarding + billing + notifications). A crumb or
+  a nav item is a link; a link to a route the host never declared is a
+  `Phoenix.Router.NoRouteError` (X1 / ADR-045 §4.1).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
+  import Samen.Web.Onboarding.Live, only: [onboarding_sidebar: 1]
 
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
@@ -245,139 +264,170 @@ defmodule Samen.Web.Onboarding.WizardLive do
   end
 
   # -- render ------------------------------------------------------------------
+  #
+  # The shell is NOT written here: `use Samen.Web.Tenant.Live` composes `<.app_shell>` around
+  # these two callbacks — `tenant_sidebar/1` as the shell's `:sidebar` slot and `tenant_page/1`
+  # as everything inside `<main>` — so this page CANNOT render outside the chrome. It was one of
+  # the three surfaces the tenant-chrome audit found rendering outside it, and the wrapper (not a
+  # copied shell) is what makes that regression impossible rather than merely detected.
 
-  @impl true
-  def render(assigns) do
-    assigns =
-      assigns
-      |> assign_new(:org_error, fn -> nil end)
-      |> assign_new(:invite_error, fn -> nil end)
-      |> assign_new(:invited_raw_token, fn -> nil end)
-      |> assign_new(:invited?, fn -> false end)
-      |> assign_new(:onboarding_path, fn -> "/onboarding" end)
-      |> assign_new(:samen_acting_as, fn -> false end)
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
+    assigns
+    |> assign_new(:org_error, fn -> nil end)
+    |> assign_new(:invite_error, fn -> nil end)
+    |> assign_new(:invited_raw_token, fn -> nil end)
+    |> assign_new(:invited?, fn -> false end)
+    |> assign_new(:onboarding_path, fn -> "/onboarding" end)
+    |> assign_new(:samen_acting_as, fn -> false end)
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <div id="onboarding" class="wrap" style="max-width:480px;margin:60px auto">
-      <%= cond do %>
-        <% is_nil(@org_id) -> %>
-          <.no_org_card mount={@samen_mount} />
-        <% @complete? -> %>
-          <div id="onboarding-already-done" class="card" style="padding:28px 24px">
-            <h2 style="margin:0 0 4px">You're all set</h2>
-            <p style="margin:0 0 16px;color:var(--muted)">
-              Setup is already complete for {CurrentOrg.name(@samen_mount, @org_id)} — nothing left to do here.
-            </p>
-            <.link
-              navigate={tenant_landing_href(@samen_mount, @org_id)}
-              id="onboarding-goto-workspace"
-              class="btn primary"
-              style="text-decoration:none"
-            >
-              Go to your workspace →
-            </.link>
-          </div>
-        <% true -> %>
-          <div id="onboarding-wizard" class="card" style="padding:28px 24px">
-            <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-            <h2 style="margin:0 0 4px">Set up your workspace</h2>
-            <p style="margin:0 0 18px;color:var(--muted)">Three quick steps — skip any of them.</p>
+    <.onboarding_sidebar
+      mount={@samen_mount}
+      org_id={@org_id}
+      user_id={@user_id}
+      path={@onboarding_path}
+      step={@step}
+      complete?={@complete?}
+    />
+    """
+  end
 
-            <div :if={@step == :org} id="onboarding-step-org">
-              <p :if={@org_error} id="onboarding-org-error" style="color:#B91C1C">{@org_error}</p>
-              <.simple_form
-                for={@org_form}
-                id="onboarding-org-form"
-                action={"#{@onboarding_path}/name_org"}
-                method="post"
-                phx-submit="name_org"
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <div id="onboarding">
+      <%!-- Plain-string crumbs, never `Crumbs.org/2`/`Crumbs.section/3`: those crumb tuples are
+           LINKS to the workspace home (`/crm/dashboard`) and the section roots (`/settings`), and
+           a host that mounts THIS wizard may mount neither — the generated app mounts auth +
+           onboarding + billing + notifications and no CRM at all. A crumb is a link, so a wizard
+           that offers one must offer a route the host declared. See `Samen.Web.Onboarding.Live`. --%>
+      <.topbar title="Set up your workspace" crumbs={["Get started"]} />
+      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+      <div class="wrap">
+        <%= cond do %>
+          <% is_nil(@org_id) -> %>
+            <.no_org_card mount={@samen_mount} />
+          <% @complete? -> %>
+            <div id="onboarding-already-done" class="card" style="max-width:480px;margin:0 auto;padding:28px 24px">
+              <h2 style="margin:0 0 4px">You're all set</h2>
+              <p style="margin:0 0 16px;color:var(--muted)">
+                Setup is already complete for {CurrentOrg.name(@samen_mount, @org_id)} — nothing left to do here.
+              </p>
+              <.link
+                navigate={tenant_landing_href(@samen_mount, @org_id)}
+                id="onboarding-goto-workspace"
+                class="btn primary"
+                style="text-decoration:none"
               >
-                <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-                <input type="hidden" name="org_id" value={@org_id} />
-                <input type="hidden" name="user_id" value={@user_id} />
-                <.form_field field={@org_form[:name]} label="Workspace name" required />
-                <:actions>
-                  <.button type="submit" variant="primary" id="onboarding-org-submit">Continue</.button>
-                  <.link patch={step_link(@onboarding_path, @org_id, @user_id, "plan")} id="onboarding-org-skip" class="btn">
-                    Skip
-                  </.link>
-                </:actions>
-              </.simple_form>
-            </div>
-
-            <div :if={@step == :plan} id="onboarding-step-plan">
-              <p :if={@org_error} id="onboarding-plan-error" style="color:#B91C1C">{@org_error}</p>
-              <%= case @plan_choices do %>
-                <% {:ok, choices} -> %>
-                  <form
-                    id="onboarding-plan-form"
-                    action={"#{@onboarding_path}/plan"}
-                    method="post"
-                    phx-submit="select_plan"
-                    style="margin-bottom:12px"
-                  >
-                    <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-                    <input type="hidden" name="org_id" value={@org_id} />
-                    <input type="hidden" name="user_id" value={@user_id} />
-                    <fieldset style="border:0;padding:0">
-                      <legend style="font-weight:600;font-size:13px">Choose a plan</legend>
-                      <div :for={c <- choices} style="margin:6px 0">
-                        <label>
-                          <input type="radio" name="plan[key]" value={c.key} id={"onboarding-plan-#{c.key}"} required />
-                          {c.label}
-                        </label>
-                      </div>
-                    </fieldset>
-                    <.button type="submit" variant="primary" id="onboarding-plan-submit">Continue</.button>
-                  </form>
-                <% :not_configured -> %>
-                  <p id="onboarding-plan-empty" style="color:var(--muted)">{Onboarding.no_plans_copy()}</p>
-              <% end %>
-              <.link patch={step_link(@onboarding_path, @org_id, @user_id, "invite")} id="onboarding-plan-skip" class="btn">
-                Skip
+                Go to your workspace →
               </.link>
             </div>
+          <% true -> %>
+            <div id="onboarding-wizard" class="card" style="max-width:480px;margin:0 auto;padding:28px 24px">
+              <h2 style="margin:0 0 4px">Set up your workspace</h2>
+              <p style="margin:0 0 18px;color:var(--muted)">Three quick steps — skip any of them.</p>
 
-            <div :if={@step == :invite} id="onboarding-step-invite">
-              <p :if={@invited_raw_token} id="onboarding-invite-sent" style="color:#15803D">
-                Invite sent — copy this link (shown once): <code>/invite/{@invited_raw_token}</code>
-              </p>
-              <p :if={@invited? and is_nil(@invited_raw_token)} id="onboarding-invite-sent" style="color:#15803D">
-                Invite sent — we've emailed them a link to join.
-              </p>
-              <p :if={@invite_error} id="onboarding-invite-error" style="color:#B91C1C">{@invite_error}</p>
+              <div :if={@step == :org} id="onboarding-step-org">
+                <p :if={@org_error} id="onboarding-org-error" style="color:#B91C1C">{@org_error}</p>
+                <.simple_form
+                  for={@org_form}
+                  id="onboarding-org-form"
+                  action={"#{@onboarding_path}/name_org"}
+                  method="post"
+                  phx-submit="name_org"
+                >
+                  <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+                  <input type="hidden" name="org_id" value={@org_id} />
+                  <input type="hidden" name="user_id" value={@user_id} />
+                  <.form_field field={@org_form[:name]} label="Workspace name" required />
+                  <:actions>
+                    <.button type="submit" variant="primary" id="onboarding-org-submit">Continue</.button>
+                    <.link patch={step_link(@onboarding_path, @org_id, @user_id, "plan")} id="onboarding-org-skip" class="btn">
+                      Skip
+                    </.link>
+                  </:actions>
+                </.simple_form>
+              </div>
 
-              <form
-                id="onboarding-invite-form"
-                action={"#{@onboarding_path}/invite"}
-                method="post"
-                phx-submit="invite"
-                style="margin-bottom:16px"
-              >
-                <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-                <input type="hidden" name="org_id" value={@org_id} />
-                <input type="hidden" name="user_id" value={@user_id} />
-                <fieldset style="border:0;padding:0">
-                  <legend style="font-weight:600;font-size:13px">Invite a teammate</legend>
-                  <input type="email" name="invitation[email]" placeholder="teammate@example.com" required id="onboarding-invite-email" />
-                  <select name="invitation[role]" id="onboarding-invite-role">
-                    <option value="member" selected>member</option>
-                    <option value="admin">admin</option>
-                    <option value="viewer">viewer</option>
-                  </select>
-                  <.button type="submit" variant="primary" id="onboarding-invite-submit">Send invite</.button>
-                </fieldset>
-              </form>
+              <div :if={@step == :plan} id="onboarding-step-plan">
+                <p :if={@org_error} id="onboarding-plan-error" style="color:#B91C1C">{@org_error}</p>
+                <%= case @plan_choices do %>
+                  <% {:ok, choices} -> %>
+                    <form
+                      id="onboarding-plan-form"
+                      action={"#{@onboarding_path}/plan"}
+                      method="post"
+                      phx-submit="select_plan"
+                      style="margin-bottom:12px"
+                    >
+                      <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+                      <input type="hidden" name="org_id" value={@org_id} />
+                      <input type="hidden" name="user_id" value={@user_id} />
+                      <fieldset style="border:0;padding:0">
+                        <legend style="font-weight:600;font-size:13px">Choose a plan</legend>
+                        <div :for={c <- choices} style="margin:6px 0">
+                          <label>
+                            <input type="radio" name="plan[key]" value={c.key} id={"onboarding-plan-#{c.key}"} required />
+                            {c.label}
+                          </label>
+                        </div>
+                      </fieldset>
+                      <.button type="submit" variant="primary" id="onboarding-plan-submit">Continue</.button>
+                    </form>
+                  <% :not_configured -> %>
+                    <p id="onboarding-plan-empty" style="color:var(--muted)">{Onboarding.no_plans_copy()}</p>
+                <% end %>
+                <.link patch={step_link(@onboarding_path, @org_id, @user_id, "invite")} id="onboarding-plan-skip" class="btn">
+                  Skip
+                </.link>
+              </div>
 
-              <form action={"#{@onboarding_path}/finish"} method="post" phx-submit="finish" id="onboarding-finish-form">
-                <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-                <input type="hidden" name="org_id" value={@org_id} />
-                <input type="hidden" name="user_id" value={@user_id} />
-                <.button type="submit" variant="primary" id="onboarding-finish">Finish setup</.button>
-              </form>
+              <div :if={@step == :invite} id="onboarding-step-invite">
+                <p :if={@invited_raw_token} id="onboarding-invite-sent" style="color:#15803D">
+                  Invite sent — copy this link (shown once): <code>/invite/{@invited_raw_token}</code>
+                </p>
+                <p :if={@invited? and is_nil(@invited_raw_token)} id="onboarding-invite-sent" style="color:#15803D">
+                  Invite sent — we've emailed them a link to join.
+                </p>
+                <p :if={@invite_error} id="onboarding-invite-error" style="color:#B91C1C">{@invite_error}</p>
+
+                <form
+                  id="onboarding-invite-form"
+                  action={"#{@onboarding_path}/invite"}
+                  method="post"
+                  phx-submit="invite"
+                  style="margin-bottom:16px"
+                >
+                  <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+                  <input type="hidden" name="org_id" value={@org_id} />
+                  <input type="hidden" name="user_id" value={@user_id} />
+                  <fieldset style="border:0;padding:0">
+                    <legend style="font-weight:600;font-size:13px">Invite a teammate</legend>
+                    <input type="email" name="invitation[email]" placeholder="teammate@example.com" required id="onboarding-invite-email" />
+                    <select name="invitation[role]" id="onboarding-invite-role">
+                      <option value="member" selected>member</option>
+                      <option value="admin">admin</option>
+                      <option value="viewer">viewer</option>
+                    </select>
+                    <.button type="submit" variant="primary" id="onboarding-invite-submit">Send invite</.button>
+                  </fieldset>
+                </form>
+
+                <form action={"#{@onboarding_path}/finish"} method="post" phx-submit="finish" id="onboarding-finish-form">
+                  <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+                  <input type="hidden" name="org_id" value={@org_id} />
+                  <input type="hidden" name="user_id" value={@user_id} />
+                  <.button type="submit" variant="primary" id="onboarding-finish">Finish setup</.button>
+                </form>
+              </div>
             </div>
-          </div>
-      <% end %>
+        <% end %>
+      </div>
     </div>
     """
   end

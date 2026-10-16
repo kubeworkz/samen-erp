@@ -44,10 +44,9 @@
 # MUST_FAIL: the wiring gap and the failed read name their doc
 # MUST_FAIL: the load/2 WIRING carries the step
 diff --git a/samen_web/lib/samen/web/tenant/analytics_live.ex b/samen_web/lib/samen/web/tenant/analytics_live.ex
-index 0f8f45c..5a6da59 100644
 --- a/samen_web/lib/samen/web/tenant/analytics_live.ex
 +++ b/samen_web/lib/samen/web/tenant/analytics_live.ex
-@@ -78,8 +78,7 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
+@@ -80,8 +80,7 @@
        logout_form: 1,
        module_nav: 1,
        sidebar: 1,
@@ -57,7 +56,7 @@ index 0f8f45c..5a6da59 100644
      ]
  
    import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, switcher: 1]
-@@ -124,13 +123,11 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
+@@ -126,13 +125,11 @@
  
    defp assign_surface(socket, read, org_id) do
      funnel = Map.get(read, :funnel, [])
@@ -72,70 +71,71 @@ index 0f8f45c..5a6da59 100644
        org_id: org_id,
        # The shell's impersonation banner asks for this unconditionally. A session that carried NO
        # mount never went through `assign_mount/2`'s acting-as read, so it is defaulted here
-@@ -198,37 +195,10 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
-             can be identified from it — we never show an individual person.
-           </p>
+@@ -209,37 +206,11 @@
+           can be identified from it — we never show an individual person.
+         </p>
  
--          <%!-- FAIL-HONEST: `analytics-empty` is an ANSWER, so it renders ONLY when the read
--                answered. Every other outcome says which one it is — a caller with no org, a role
--                the gate refuses, an unmounted seam, or a failed rollup read each get their own
--                statement (with the reason token), never a claim about the org's data. --%>
--          <div :if={@unread} id="analytics-unread">
--            <.unread_state
--              class="analytics-unread"
--              reason={@unread}
--              title={unread_title(@unread)}
--              body={unread_body(@unread)}
--            >
--              <%!-- THE NEXT STEP for this reason — a link only where the destination provably
--                    exists on this host, the doc path NAMED (never a dead href) where it does
--                    not, and nothing at all for a state with no honest step (`no_org`). --%>
--              <:actions :if={@next_step}>
--                <a
--                  :if={@next_step.href}
--                  href={@next_step.href}
--                  id={"unread-next-#{@unread}"}
--                  class="unread-next-step"
--                  target={@next_step.kind == :doc && "_blank"}
--                  rel={@next_step.kind == :doc && "noopener noreferrer"}
--                >{@next_step.label} →</a>
--                <span :if={!@next_step.href} id={"unread-next-#{@unread}"} class="unread-next-step">
--                  {@next_step.label}<span :if={@next_step.path}>: <code class="mono">{@next_step.path}</code></span>
--                </span>
--              </:actions>
--            </.unread_state>
--          </div>
+-        <%!-- FAIL-HONEST: `analytics-empty` is an ANSWER, so it renders ONLY when the read
+-              answered. Every other outcome says which one it is — a caller with no org, a role
+-              the gate refuses, an unmounted seam, or a failed rollup read each get their own
+-              statement (with the reason token), never a claim about the org's data. --%>
+-        <div :if={@unread} id="analytics-unread">
+-          <.unread_state
+-            class="analytics-unread"
+-            reason={@unread}
+-            title={unread_title(@unread)}
+-            body={unread_body(@unread)}
+-          >
+-            <%!-- THE NEXT STEP for this reason — a link only where the destination provably
+-                  exists on this host, the doc path NAMED (never a dead href) where it does
+-                  not, and nothing at all for a state with no honest step (`no_org`). --%>
+-            <:actions :if={@next_step}>
+-              <a
+-                :if={@next_step.href}
+-                href={@next_step.href}
+-                id={"unread-next-#{@unread}"}
+-                class="unread-next-step"
+-                target={@next_step.kind == :doc && "_blank"}
+-                rel={@next_step.kind == :doc && "noopener noreferrer"}
+-              >{@next_step.label} →</a>
+-              <span :if={!@next_step.href} id={"unread-next-#{@unread}"} class="unread-next-step">
+-                {@next_step.label}<span :if={@next_step.path}>: <code class="mono">{@next_step.path}</code></span>
+-              </span>
+-            </:actions>
+-          </.unread_state>
+-        </div>
 -
--          <div :if={!@unread and @funnel == []} id="analytics-empty">
-+          <%!-- SABOTAGE: the page has no way to say WHICH outcome this is — an unmounted seam, a
-+                refused role, an unresolved org and a failed read all fall through to the empty
-+                state below. --%>
-+          <div :if={@funnel == []} id="analytics-empty">
-             <.empty_state
-               icon="📈"
-               title="No activation data yet."
-@@ -236,7 +206,7 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
-             />
-           </div>
- 
--          <div :if={!@unread and @funnel != []} class="card">
-+          <div :if={@funnel != []} class="card">
-             <table id="funnel-table">
-               <thead>
-                 <tr>
-@@ -253,7 +223,7 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
-             </table>
-           </div>
- 
--          <p :if={!@unread and @suppressed_count > 0} id="supp-note" class="supp">
-+          <p :if={@suppressed_count > 0} id="supp-note" class="supp">
-             {@suppressed_count} stage(s) below the k-anonymity floor — suppressed to prevent re-identification.
-           </p>
+-        <div :if={!@unread and @funnel == []} id="analytics-empty">
++        <%!-- SABOTAGE: the page has no way to say WHICH outcome this is — an unmounted seam,
++              a refused role, an unresolved org and a failed read all fall through to the empty
++              state below. --%>
++
++        <div :if={@funnel == []} id="analytics-empty">
+           <.empty_state
+             icon="📈"
+             title="No activation data yet."
+@@ -247,7 +218,7 @@
+           />
          </div>
-@@ -262,38 +232,6 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
+ 
+-        <div :if={!@unread and @funnel != []} class="card">
++        <div :if={@funnel != []} class="card">
+           <table id="funnel-table">
+             <thead>
+               <tr>
+@@ -264,45 +235,13 @@
+           </table>
+         </div>
+ 
+-        <p :if={!@unread and @suppressed_count > 0} id="supp-note" class="supp">
++        <p :if={@suppressed_count > 0} id="supp-note" class="supp">
+           {@suppressed_count} stage(s) below the k-anonymity floor — suppressed to prevent re-identification.
+         </p>
+       </div>
+     </div>
      """
    end
- 
+-
 -  # One title per silence — the read layer's bounded vocabulary, in the words a tenant would use.
 -  #
 -  # NO APOSTROPHES, deliberately: `Phoenix.HTML.Safe` escapes `'` as `&#39;`, so a contraction
@@ -167,10 +167,9 @@ index 0f8f45c..5a6da59 100644
 -    do:
 -      "The activation rollup did not answer, so we cannot tell whether your organization has " <>
 -        "data. Treat it as unknown rather than empty, and try again in a moment."
--
+ 
    # -- the page chrome ---------------------------------------------------------------
  
-   # The sidebar's workspace glyph — `nil` stands for "no mount at all" (a session that carries no
 diff --git a/samen_web/lib/samen/web/tenant/analytics_reads.ex b/samen_web/lib/samen/web/tenant/analytics_reads.ex
 index 062eb9c..f2f2151 100644
 --- a/samen_web/lib/samen/web/tenant/analytics_reads.ex

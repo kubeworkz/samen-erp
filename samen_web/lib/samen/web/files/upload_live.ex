@@ -40,7 +40,7 @@ defmodule Samen.Web.Files.UploadLive do
   POSTURE only — the kernel's `ChokepointGuard` + governed create action enforce
   regardless of plane.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Files.Live, only: [assign_mount: 2, files_sidebar: 1, writable?: 1]
@@ -179,101 +179,102 @@ defmodule Samen.Web.Files.UploadLive do
 
   # -- render -------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.files_sidebar mount={@samen_mount} org_id={@org_id} active={:files} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="files-upload">
-      <.app_shell>
-        <:sidebar>
-          <.files_sidebar mount={@samen_mount} org_id={@org_id} active={:files} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Files" crumbs={crumbs(@samen_mount, @org_id)}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="Files" crumbs={crumbs(@samen_mount, @org_id)}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Files org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Files org: {@org_id}</span>
-
-          <div class="wrap">
-            <div id="files-upload-panel">
-              <div class="gtitle">
-                <h3>Upload a file</h3>
-                <span class="lane">files are held in quarantine until scanned</span>
-              </div>
-
-              <%= if writable?(@samen_mount) do %>
-                <form id="upload-form" phx-submit="upload" phx-change="validate">
-                  <.live_file_input upload={@uploads[@upload_ref]} id="upload-input" />
-
-                  <.button
-                    type="submit"
-                    variant="primary"
-                    id="upload-submit"
-                    disabled={Enum.empty?(@uploads[@upload_ref].entries)}
-                  >
-                    Upload
-                  </.button>
-                </form>
-
-                <%= if @upload_error do %>
-                  <p id="upload-error" style="color:#B91C1C;margin-top:8px">{@upload_error}</p>
-                <% end %>
-
-                <%= if @upload_result do %>
-                  <p id="upload-success" style="color:#15803D;margin-top:8px">
-                    Uploaded — file is <strong>quarantined</strong> pending scan (id: {@upload_result.id}).
-                  </p>
-                <% end %>
-              <% end %>
-            </div>
-
-            <div id="files-list-panel" style="margin-top:24px">
-              <div class="gtitle">
-                <h3>Files</h3>
-                <span class="lane">status · via PiiResolution · {plane_note(@samen_mount)}</span>
-              </div>
-              <.list_view
-                id="files"
-                page={@page}
-                state={@list_state}
-                row_class="file-row"
-                filter_placeholder="Filter by status or content type…"
-                empty_text="No files yet."
-                empty_icon="⊡"
-                empty_body="Upload a file above. All new files are quarantined until a scanner promotes them."
-              >
-                <:head>
-                  <th scope="col" style="width:36%">Filename</th>
-                  <th scope="col" style="width:16%">Type</th>
-                  <.sort_header field={:status} label="Status" sort={@list_state.sort} width="12%" />
-                  <th scope="col" style="width:12%">Size</th>
-                  <.sort_header field={:inserted_at} label="Uploaded" sort={@list_state.sort} width="16%" />
-                  <th scope="col" style="width:8%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={f}>
-                  <td class="f-name">{f.filename || "—"}</td>
-                  <td class="f-type" style="font-size:12px;color:var(--muted)">{f.content_type || "—"}</td>
-                  <td class="f-status">
-                    <span class={"status-pill status-#{f.status}"}>{f.status}</span>
-                  </td>
-                  <td class="f-size" style="font-size:12px;color:var(--muted)">{format_bytes(f.size_bytes)}</td>
-                  <td class="f-uploaded" style="font-size:12px;color:var(--muted)">{uploaded_at(f)}</td>
-                  <td class="f-actions">
-                    <.link :if={f.status == :active} navigate={"/files/#{f.id}"} id={"preview-#{f.id}"}>
-                      Preview
-                    </.link>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
+      <div class="wrap">
+        <div id="files-upload-panel">
+          <div class="gtitle">
+            <h3>Upload a file</h3>
+            <span class="lane">files are held in quarantine until scanned</span>
           </div>
-        <% end %>
-      </.app_shell>
+
+          <%= if writable?(@samen_mount) do %>
+            <form id="upload-form" phx-submit="upload" phx-change="validate">
+              <.live_file_input upload={@uploads[@upload_ref]} id="upload-input" />
+
+              <.button
+                type="submit"
+                variant="primary"
+                id="upload-submit"
+                disabled={Enum.empty?(@uploads[@upload_ref].entries)}
+              >
+                Upload
+              </.button>
+            </form>
+
+            <%= if @upload_error do %>
+              <p id="upload-error" style="color:#B91C1C;margin-top:8px">{@upload_error}</p>
+            <% end %>
+
+            <%= if @upload_result do %>
+              <p id="upload-success" style="color:#15803D;margin-top:8px">
+                Uploaded — file is <strong>quarantined</strong> pending scan (id: {@upload_result.id}).
+              </p>
+            <% end %>
+          <% end %>
+        </div>
+
+        <div id="files-list-panel" style="margin-top:24px">
+          <div class="gtitle">
+            <h3>Files</h3>
+            <span class="lane">status · via PiiResolution · {plane_note(@samen_mount)}</span>
+          </div>
+          <.list_view
+            id="files"
+            page={@page}
+            state={@list_state}
+            row_class="file-row"
+            filter_placeholder="Filter by status or content type…"
+            empty_text="No files yet."
+            empty_icon="⊡"
+            empty_body="Upload a file above. All new files are quarantined until a scanner promotes them."
+          >
+            <:head>
+              <th scope="col" style="width:36%">Filename</th>
+              <th scope="col" style="width:16%">Type</th>
+              <.sort_header field={:status} label="Status" sort={@list_state.sort} width="12%" />
+              <th scope="col" style="width:12%">Size</th>
+              <.sort_header field={:inserted_at} label="Uploaded" sort={@list_state.sort} width="16%" />
+              <th scope="col" style="width:8%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={f}>
+              <td class="f-name">{f.filename || "—"}</td>
+              <td class="f-type" style="font-size:12px;color:var(--muted)">{f.content_type || "—"}</td>
+              <td class="f-status">
+                <span class={"status-pill status-#{f.status}"}>{f.status}</span>
+              </td>
+              <td class="f-size" style="font-size:12px;color:var(--muted)">{format_bytes(f.size_bytes)}</td>
+              <td class="f-uploaded" style="font-size:12px;color:var(--muted)">{uploaded_at(f)}</td>
+              <td class="f-actions">
+                <.link :if={f.status == :active} navigate={"/files/#{f.id}"} id={"preview-#{f.id}"}>
+                  Preview
+                </.link>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

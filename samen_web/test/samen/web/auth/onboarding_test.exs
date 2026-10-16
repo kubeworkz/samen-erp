@@ -430,4 +430,78 @@ defmodule Samen.Web.Auth.OnboardingTest do
       assert "/onboarding" in paths
     end
   end
+
+  # ===========================================================================
+  # 8. The chrome — a tenant page renders INSIDE the tenant shell (tenant-chrome sweep)
+  #
+  # This route is tenant-gated (`{Samen.Web.TenantAuthz, :require_tenant}`), so whoever
+  # reaches it is a signed-in tenant user with a real org — a tenant page, not part of the
+  # pre-actor auth spine. It used to render a lone centred card on an empty viewport: the one
+  # tenant surface with no sidebar beside it, no workspace header and no way back.
+  # ===========================================================================
+
+  describe "WizardLive — the chrome" do
+    test "every state renders INSIDE the app shell, its content in the main panel" do
+      reg = register!()
+      wizard = html(mount_socket(reg.org.id, reg.user.id))
+
+      # The SAME two-pane shell every tenant surface mounts…
+      assert wizard =~ ~s(<div class="app">)
+      assert wizard =~ ~s(class="side")
+      # …and the page's own state is inside <main>, in a `.wrap` pane — not a card floating on
+      # the viewport.
+      assert wizard =~ ~r/<main class="main">.*class="wrap".*id="onboarding-wizard"/s
+
+      done =
+        mount_socket(reg.org.id, reg.user.id)
+        |> goto(:plan)
+        |> goto(:invite)
+        |> event("finish")
+        |> html()
+
+      assert done =~ ~r/<main class="main">.*id="onboarding-already-done"/s
+
+      # RED PATH parity: the no-org state is a tenant page too.
+      assert html(mount_socket(nil, nil)) =~ ~r/<main class="main">.*id="no-org"/s
+    end
+
+    test "the sidebar's nav is the wizard's OWN steps — and a finished wizard offers none" do
+      reg = register!()
+      wizard = html(mount_socket(reg.org.id, reg.user.id))
+
+      for step <- ~w(org plan invite) do
+        assert wizard =~ ~r/step=#{step}"/,
+               "the sidebar is missing the #{step} step link"
+      end
+
+      # The current step is marked with the sheet's active vocabulary (`.nav a.on`).
+      assert wizard =~ ~r/class="on">\s*Name your workspace/s
+
+      done =
+        mount_socket(reg.org.id, reg.user.id)
+        |> goto(:plan)
+        |> goto(:invite)
+        |> event("finish")
+        |> html()
+
+      # Nothing left to navigate: the step nav goes away (the sidebar itself — workspace
+      # header, user footer — stays, because the page is still a tenant page).
+      refute done =~ ~r/step=plan"/
+      assert done =~ ~s(class="side")
+    end
+
+    # The wizard is mounted by hosts that do NOT mount the workspace modules — the generated
+    # app (`samen_core/priv/templates/router_ex.eex`) mounts auth + onboarding + billing +
+    # notifications and no CRM at all. A crumb or a sidebar item is a LINK: linking
+    # `/crm/dashboard` or `/settings` from here would be a `Phoenix.Router.NoRouteError` one
+    # click away on exactly the host the framework scaffolds for you (X1 / ADR-045 §4.1).
+    test "no crumb and no nav item points at a route this host may never have mounted" do
+      reg = register!()
+      page = html(mount_socket(reg.org.id, reg.user.id))
+
+      refute page =~ "/crm/dashboard"
+      refute page =~ ~s(href="/settings")
+      refute page =~ ~s(href="/crm")
+    end
+  end
 end

@@ -39,7 +39,7 @@ defmodule DriftwoodWeb.BrokerLive do
   broker actor is a tenant member of the RESOLVED org; every read goes through Ash with
   that scope, so OrgScope confines the view to the broker's own org.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   require Ash.Query
 
@@ -225,14 +225,17 @@ defmodule DriftwoodWeb.BrokerLive do
   defp status_variant(s) when s in [:out_of_service, "out_of_service", :terminated, "terminated"], do: "bad"
   defp status_variant(_), do: "mut"
 
-  @impl true
-  def render(assigns) do
-    # T148/T158 — default the create/edit-flow assigns so the render is self-sufficient for
-    # the direct-`render/1` harness tests (the live mount always sets them, so this is a
-    # no-op there).
-    assigns =
-      assigns
-      |> Map.put_new(:show_new, false)
+  # -- render ------------------------------------------------------------------
+  #
+  # The shell is NOT written here: `use Samen.Web.Tenant.Live` composes `<.app_shell>` around
+  # these two callbacks — `tenant_sidebar/1` as the shell's `:sidebar` slot and `tenant_page/1`
+  # as everything inside `<main>` — so this page cannot render outside the shared chrome.
+  # `tenant_assigns/1` carries the render-time assign defaults (the wrapper runs it before the
+  # shell renders), which is what the direct-`render/1` harness tests rely on.
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
+    assigns
+    |> Map.put_new(:show_new, false)
       |> Map.put_new(:new_load_form, nil)
       |> Map.put_new(:load_error, nil)
       |> Map.put_new(:load_filter, %{status: nil, q: ""})
@@ -253,484 +256,489 @@ defmodule DriftwoodWeb.BrokerLive do
       |> Map.put_new(:edit_settlement_id, nil)
       |> Map.put_new(:edit_settlement_form, nil)
       |> Map.put_new(:settlement_error, nil)
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.sidebar
+      title="Blue Ridge Logistics"
+      subtitle="Freight brokerage"
+      logo="B"
+      logo_style="background:linear-gradient(150deg,#0E7C5A,#17A06E)"
+    >
+      <:search>
+        <%!-- T148: the search affordance is no longer decorative — it links to the real
+              mounted framework ⌘K search LiveView (`samen_search_routes` → /search). --%>
+        <a href={search_href(@org_id)} class="search" id="broker-search" aria-label="Search loads and carriers" style="text-decoration:none;color:inherit">
+          <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+          </svg>
+          Search loads, carriers…
+          <span class="kbd">⌘K</span>
+        </a>
+      </:search>
+
+      <%!-- ADR-009: the inherited CRM/Billing/Support groups come from the framework
+            `Samen.UI.module_nav`; Driftwood's OWN freight 20% ("Operations") is
+            passed as the `:extra` slot (a vertical's own nav is its business). --%>
+      <.module_nav org_id={@org_id} active={nil}>
+        <:extra>
+          <.nav_group label="Operations">
+            <.nav_item label="Dispatch board" href={"/broker?panel=dashboard&org=#{@org_id}"} active={@panel == "dashboard"}>
+              <:icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="8" rx="1.5" /><rect x="3" y="13" width="8" height="8" rx="1.5" /><rect x="13" y="13" width="8" height="8" rx="1.5" /></svg>
+              </:icon>
+            </.nav_item>
+            <.nav_item label="Loads" href={"/broker?panel=loads&org=#{@org_id}"} active={@panel == "loads"}>
+              <:icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h13l5 5v5H3z" /><circle cx="7.5" cy="17.5" r="1.5" /><circle cx="17.5" cy="17.5" r="1.5" /></svg>
+              </:icon>
+            </.nav_item>
+            <.nav_item label="Drivers" href={"/broker?panel=roster&org=#{@org_id}"} active={@panel == "roster"}>
+              <:icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" /></svg>
+              </:icon>
+            </.nav_item>
+            <.nav_item label="Settlements" href={"/broker?panel=settlements&org=#{@org_id}"} active={@panel == "settlements"}>
+              <:icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+              </:icon>
+            </.nav_item>
+          </.nav_group>
+        </:extra>
+      </.module_nav>
+
+      <:footer>
+        <div class="foot">
+          <div class="av" style="background:#D6E9DF;color:#1E7A45">RM</div>
+          <div class="m"><b>Rosa Medina</b><span>dispatcher</span></div>
+        </div>
+      </:footer>
+    </.sidebar>
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="broker-console">
-      <.app_shell>
-        <:sidebar>
-          <.sidebar
-            title="Blue Ridge Logistics"
-            subtitle="Freight brokerage"
-            logo="B"
-            logo_style="background:linear-gradient(150deg,#0E7C5A,#17A06E)"
+
+      <.topbar title={panel_title(@panel)} crumbs={["Blue Ridge Logistics", "Operations", panel_title(@panel)]}>
+        <:actions>
+          <%!-- T148: "New load" is wired to the real create flow (`create_load/2`).
+                T158: the create action is now CONTEXTUAL to the active panel — "New load" on
+                Loads, "New driver" on Drivers, "New settlement" on Settlements — instead of
+                showing "New load" everywhere regardless of the open panel. The dead "Filter"
+                button T148 removed is replaced by a REAL filter bar inline on the Loads panel
+                (it needs the filtered `load_board/2` read; a header button toggling nothing
+                useful is worse than none). --%>
+          <.button :if={not @no_org and @panel == "loads"} variant="primary" phx-click="new_load" id="new-load">
+            <:icon>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18" /></svg>
+            </:icon>
+            New load
+          </.button>
+          <.button :if={not @no_org and @panel == "roster"} variant="primary" phx-click="new_driver" id="new-driver">
+            <:icon>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18" /></svg>
+            </:icon>
+            New driver
+          </.button>
+          <.button :if={not @no_org and @panel == "settlements"} variant="primary" phx-click="new_settlement" id="new-settlement">
+            <:icon>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18" /></svg>
+            </:icon>
+            New settlement
+          </.button>
+        </:actions>
+      </.topbar>
+
+      <%= if @no_org do %>
+        <%!-- T148: was a dev instruction ("Append ?org=<uuid>"). Now a user-facing empty
+              state that routes a new tenant into the framework onboarding wizard. --%>
+        <div class="wrap" id="no-org">
+          <.empty_state
+            title="No brokerage workspace selected"
+            body="Choose a brokerage from your workspaces to open its dispatch board — or set one up to get started."
+            icon="◈"
           >
-            <:search>
-              <%!-- T148: the search affordance is no longer decorative — it links to the real
-                    mounted framework ⌘K search LiveView (`samen_search_routes` → /search). --%>
-              <a href={search_href(@org_id)} class="search" id="broker-search" aria-label="Search loads and carriers" style="text-decoration:none;color:inherit">
-                <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-                </svg>
-                Search loads, carriers…
-                <span class="kbd">⌘K</span>
-              </a>
-            </:search>
+            <:actions>
+              <a href="/onboarding" class="btn primary" id="no-org-onboarding" style="text-decoration:none">Set up a workspace</a>
+            </:actions>
+          </.empty_state>
+        </div>
+      <% else %>
+        <span id="org-banner" style="display:none">Brokerage org: {@org_id}</span>
 
-            <%!-- ADR-009: the inherited CRM/Billing/Support groups come from the framework
-                  `Samen.UI.module_nav`; Driftwood's OWN freight 20% ("Operations") is
-                  passed as the `:extra` slot (a vertical's own nav is its business). --%>
-            <.module_nav org_id={@org_id} active={nil}>
-              <:extra>
-                <.nav_group label="Operations">
-                  <.nav_item label="Dispatch board" href={"/broker?panel=dashboard&org=#{@org_id}"} active={@panel == "dashboard"}>
-                    <:icon>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5" /><rect x="13" y="3" width="8" height="8" rx="1.5" /><rect x="3" y="13" width="8" height="8" rx="1.5" /><rect x="13" y="13" width="8" height="8" rx="1.5" /></svg>
-                    </:icon>
-                  </.nav_item>
-                  <.nav_item label="Loads" href={"/broker?panel=loads&org=#{@org_id}"} active={@panel == "loads"}>
-                    <:icon>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h13l5 5v5H3z" /><circle cx="7.5" cy="17.5" r="1.5" /><circle cx="17.5" cy="17.5" r="1.5" /></svg>
-                    </:icon>
-                  </.nav_item>
-                  <.nav_item label="Drivers" href={"/broker?panel=roster&org=#{@org_id}"} active={@panel == "roster"}>
-                    <:icon>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" /></svg>
-                    </:icon>
-                  </.nav_item>
-                  <.nav_item label="Settlements" href={"/broker?panel=settlements&org=#{@org_id}"} active={@panel == "settlements"}>
-                    <:icon>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
-                    </:icon>
-                  </.nav_item>
-                </.nav_group>
-              </:extra>
-            </.module_nav>
-
-            <:footer>
-              <div class="foot">
-                <div class="av" style="background:#D6E9DF;color:#1E7A45">RM</div>
-                <div class="m"><b>Rosa Medina</b><span>dispatcher</span></div>
+        <%= if @panel == "dashboard" do %>
+          {dashboard_metrics(assigns)}
+          <div class="wrap">
+            <div id="dashboard">
+              <div class="gtitle">
+                <h3>Loads by status</h3>
+                <span class="lane">· rollup-backed — reads dbs_broker_summary, never raw scans</span>
               </div>
-            </:footer>
-          </.sidebar>
-        </:sidebar>
+              <.data_table>
+                <:head>
+                  <th style="width:40%">Status</th>
+                  <th style="width:30%">Loads</th>
+                  <th style="width:30%">Gross</th>
+                </:head>
+                <tr :for={row <- (@summary && @summary.by_status) || []} class="summary-row">
+                  <td class="s-status"><.pill variant={status_variant(row.status)}>{row.status}</.pill></td>
+                  <td class="s-loads num">{row.load_count}</td>
+                  <td class="s-gross mono num">{dollars(row.gross_cents)}</td>
+                </tr>
+              </.data_table>
 
-        <.topbar title={panel_title(@panel)} crumbs={["Blue Ridge Logistics", "Operations", panel_title(@panel)]}>
-          <:actions>
-            <%!-- T148: "New load" is wired to the real create flow (`create_load/2`).
-                  T158: the create action is now CONTEXTUAL to the active panel — "New load" on
-                  Loads, "New driver" on Drivers, "New settlement" on Settlements — instead of
-                  showing "New load" everywhere regardless of the open panel. The dead "Filter"
-                  button T148 removed is replaced by a REAL filter bar inline on the Loads panel
-                  (it needs the filtered `load_board/2` read; a header button toggling nothing
-                  useful is worse than none). --%>
-            <.button :if={not @no_org and @panel == "loads"} variant="primary" phx-click="new_load" id="new-load">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18" /></svg>
-              </:icon>
-              New load
-            </.button>
-            <.button :if={not @no_org and @panel == "roster"} variant="primary" phx-click="new_driver" id="new-driver">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18" /></svg>
-              </:icon>
-              New driver
-            </.button>
-            <.button :if={not @no_org and @panel == "settlements"} variant="primary" phx-click="new_settlement" id="new-settlement">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18" /></svg>
-              </:icon>
-              New settlement
-            </.button>
-          </:actions>
-        </.topbar>
-
-        <%= if @no_org do %>
-          <%!-- T148: was a dev instruction ("Append ?org=<uuid>"). Now a user-facing empty
-                state that routes a new tenant into the framework onboarding wizard. --%>
-          <div class="wrap" id="no-org">
-            <.empty_state
-              title="No brokerage workspace selected"
-              body="Choose a brokerage from your workspaces to open its dispatch board — or set one up to get started."
-              icon="◈"
-            >
-              <:actions>
-                <a href="/onboarding" class="btn primary" id="no-org-onboarding" style="text-decoration:none">Set up a workspace</a>
-              </:actions>
-            </.empty_state>
-          </div>
-        <% else %>
-          <span id="org-banner" style="display:none">Brokerage org: {@org_id}</span>
-
-          <%= if @panel == "dashboard" do %>
-            {dashboard_metrics(assigns)}
-            <div class="wrap">
-              <div id="dashboard">
-                <div class="gtitle">
-                  <h3>Loads by status</h3>
-                  <span class="lane">· rollup-backed — reads dbs_broker_summary, never raw scans</span>
+              <div class="gtitle"><h3>Settlements</h3></div>
+              <div class="settle">
+                <div class="sh">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.9"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+                  <b>Settlement rollup</b><span class="tag">rollup-backed</span>
                 </div>
-                <.data_table>
-                  <:head>
-                    <th style="width:40%">Status</th>
-                    <th style="width:30%">Loads</th>
-                    <th style="width:30%">Gross</th>
-                  </:head>
-                  <tr :for={row <- (@summary && @summary.by_status) || []} class="summary-row">
-                    <td class="s-status"><.pill variant={status_variant(row.status)}>{row.status}</.pill></td>
-                    <td class="s-loads num">{row.load_count}</td>
-                    <td class="s-gross mono num">{dollars(row.gross_cents)}</td>
-                  </tr>
-                </.data_table>
-
-                <div class="gtitle"><h3>Settlements</h3></div>
-                <div class="settle">
-                  <div class="sh">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.9"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
-                    <b>Settlement rollup</b><span class="tag">rollup-backed</span>
+                <%= if @summary && @summary.settlements do %>
+                  <div class="row"><span class="lab">Settlements</span><span class="val">{@summary.settlements.settlement_count}</span></div>
+                  <div class="row"><span class="lab">Gross</span><span class="val">{dollars(@summary.settlements.gross_cents)}</span></div>
+                  <div class="row net">
+                    <span class="lab">net payable</span>
+                    <span class="val" id="settlement-summary">{dollars(@summary.settlements.net_payable_cents)}</span>
                   </div>
-                  <%= if @summary && @summary.settlements do %>
-                    <div class="row"><span class="lab">Settlements</span><span class="val">{@summary.settlements.settlement_count}</span></div>
-                    <div class="row"><span class="lab">Gross</span><span class="val">{dollars(@summary.settlements.gross_cents)}</span></div>
-                    <div class="row net">
-                      <span class="lab">net payable</span>
-                      <span class="val" id="settlement-summary">{dollars(@summary.settlements.net_payable_cents)}</span>
-                    </div>
-                  <% else %>
-                    <div class="row"><span class="lab" id="settlement-summary">No settlements rolled up yet.</span></div>
-                  <% end %>
-                </div>
-              </div>
-            </div>
-          <% end %>
-
-          <%= if @panel == "loads" do %>
-            <div class="wrap">
-              <div id="loads">
-                <div :if={@delete_load_error} class="card form-error" id="delete-load-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
-                  {@delete_load_error}
-                </div>
-
-                <%!-- T158: the REAL load-board filter (replaces T148's removed dead Filter
-                      button). `phx-change` fires on every keystroke/select change — always
-                      org-scoped underneath (`Reads.load_board/2` never widens past the
-                      broker's own org; the filter only narrows within it). --%>
-                <form phx-change="filter_loads" id="load-filter-form" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-                  <input
-                    type="text"
-                    name="q"
-                    id="load-filter-q"
-                    value={Map.get(@load_filter, :q, "")}
-                    placeholder="Search load reference or lane…"
-                    style="flex:1;min-width:220px;padding:7px 10px;border:1px solid var(--border,#D0D5DD);border-radius:8px;font-size:13px"
-                  />
-                  <select name="status" id="load-filter-status" style="padding:7px 10px;border:1px solid var(--border,#D0D5DD);border-radius:8px;font-size:13px">
-                    <option value="" selected={filter_value(@load_filter, :status) in [nil, ""]}>All statuses</option>
-                    <option :for={{label, val} <- load_status_options()} value={val} selected={filter_value(@load_filter, :status) == val}>
-                      {label}
-                    </option>
-                  </select>
-                  <.button :if={load_filter_active?(@load_filter)} type="button" phx-click="clear_load_filter" id="clear-load-filter">
-                    Clear filter
-                  </.button>
-                </form>
-
-                <div class="gtitle">
-                  <h3>Active loads</h3><span class="n" id="load-count">{length(@loads)}</span>
-                  <span class="lane">· your org — driver names in the clear</span>
-                </div>
-                <%!-- T148: a real empty state for a new/empty org (mirrors the framework CRM /
-                      notifications empty states) instead of a bare header over an empty table.
-                      T158: a SEPARATE honest empty state for "filter matched nothing" — never
-                      fabricated rows, and never conflated with the true zero-loads onboarding
-                      state (the filter-empty state offers "clear filter", not "create a load"). --%>
-                <%= cond do %>
-                  <% @loads == [] and load_filter_active?(@load_filter) -> %>
-                    <.empty_state
-                      title="No loads match this filter"
-                      body="No loads on your board match this search/status. Clear the filter to see your full load board."
-                      icon="◧"
-                    >
-                      <:actions>
-                        <.button phx-click="clear_load_filter" id="empty-clear-load-filter">Clear filter</.button>
-                      </:actions>
-                    </.empty_state>
-                  <% @loads == [] -> %>
-                    <.empty_state
-                      title="No loads yet"
-                      body="Your load board is empty. Post your first load to start dispatching carriers and tracking settlements."
-                      icon="◧"
-                    >
-                      <:actions>
-                        <.button variant="primary" phx-click="new_load" id="empty-new-load">Create your first load</.button>
-                      </:actions>
-                    </.empty_state>
-                  <% true -> %>
-                    <.data_table>
-                      <:head>
-                        <th style="width:28%">Load</th>
-                        <th style="width:20%">Lane</th>
-                        <th style="width:18%">Rate</th>
-                        <th style="width:14%">Status</th>
-                        <th style="width:20%"><span class="sr-only">Actions</span></th>
-                      </:head>
-                      <tr :for={l <- @loads} class="load-row" id={"load-#{l.id}"}>
-                        <td class="l-name"><span class="mono" style="color:#454652;font-weight:500">{l.name}</span></td>
-                        <td class="l-lane carrier">{l.__lane__}</td>
-                        <td class="l-value mono num">{dollars(l.value)}</td>
-                        <td class="l-status"><.pill variant={status_variant(l.status)}>{l.status}</.pill></td>
-                        <td class="l-actions" style="display:flex;gap:6px">
-                          <.button type="button" phx-click="edit_load" phx-value-id={l.id} id={"edit-load-#{l.id}"}>Edit</.button>
-                          <.delete_confirm
-                            id={"delete-load-#{l.id}"}
-                            message="Delete this load? This cannot be undone."
-                            phx-click="delete_load"
-                            phx-value-id={l.id}
-                          />
-                        </td>
-                      </tr>
-                    </.data_table>
+                <% else %>
+                  <div class="row"><span class="lab" id="settlement-summary">No settlements rolled up yet.</span></div>
                 <% end %>
               </div>
             </div>
-          <% end %>
-
-          <%= if @panel == "roster" do %>
-            <div class="wrap">
-              <div id="roster">
-                <div :if={@driver_error} class="card form-error" id="driver-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
-                  {@driver_error}
-                </div>
-                <div class="gtitle">
-                  <h3>Driver roster</h3><span class="n">{length(@drivers)}</span>
-                  <span class="lane">· your org — driver names in the clear</span>
-                </div>
-                <.data_table>
-                  <:head>
-                    <th style="width:20%">Driver</th>
-                    <th style="width:12%">CDL #</th>
-                    <th style="width:8%">State</th>
-                    <th style="width:11%">CDL expiry</th>
-                    <th style="width:11%">Med card</th>
-                    <th style="width:9%">Status</th>
-                    <th style="width:9%">FMCSA</th>
-                    <th style="width:10%">Dispatch</th>
-                    <th style="width:10%"><span class="sr-only">Actions</span></th>
-                  </:head>
-                  <tr :for={d <- @drivers} class="driver-row" id={"driver-#{d.id}"}>
-                    <td>
-                      <div class="drv">
-                        <div class="av" style="background:#DDE7F5;color:#3B4CCA;font-size:10px;font-weight:600">{initials(d.full_name)}</div>
-                        <span class="nm d-name" style="color:#3a3b45;letter-spacing:normal">{driver_name(d.full_name)}</span>
-                      </div>
-                    </td>
-                    <td class="d-cdl"><span class="mono">{d.cdl_number}</span></td>
-                    <td class="d-cdl-state carrier">{d.cdl_state}</td>
-                    <td class="d-cdl-expiry carrier">{d.cdl_expiry}</td>
-                    <td class="d-med-expiry carrier">{d.medical_card_expiry}</td>
-                    <td class="d-status"><.pill variant={status_variant(d.status)}>{d.status}</.pill></td>
-                    <td class="d-fmcsa">
-                      <%= case d.__fmcsa__ do %>
-                        <% :ok -> %>
-                          <span class="fmcsa-ok"><.pill variant="ok">OK</.pill></span>
-                        <% {:blocked, reasons} -> %>
-                          <span class="fmcsa-blocked"><.pill variant="bad">BLOCKED: {Enum.map_join(reasons, ", ", &Reads.reason_label/1)}</.pill></span>
-                      <% end %>
-                    </td>
-                    <td class="d-dispatch">
-                      <%= if Reads.dispatchable?(d) do %>
-                        <button class="dispatch-btn btn" phx-click="dispatch" phx-value-driver={d.id}>Dispatch</button>
-                      <% else %>
-                        <button class="dispatch-btn btn" disabled>Dispatch (blocked)</button>
-                      <% end %>
-                    </td>
-                    <td class="d-actions">
-                      <.button type="button" phx-click="edit_driver" phx-value-driver={d.id} id={"edit-driver-#{d.id}"}>Edit</.button>
-                    </td>
-                  </tr>
-                </.data_table>
-              </div>
-            </div>
-          <% end %>
-
-          <%= if @panel == "settlements" do %>
-            <div class="wrap">
-              <div id="settlements">
-                <div :if={@settlement_error} class="card form-error" id="settlement-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
-                  {@settlement_error}
-                </div>
-                <div class="split">
-                  <div>
-                    <div class="gtitle">
-                      <h3>Settlements</h3><span class="n">{length(@settlements)}</span>
-                      <span class="lane">· reshaped: linehaul − advances − factoring − claims</span>
-                    </div>
-                    <div id="settlement-table">
-                      <.data_table>
-                        <:head>
-                          <th>Linehaul</th>
-                          <th>Advances</th>
-                          <th>Factoring</th>
-                          <th>Claims</th>
-                          <th>Net payable</th>
-                          <th>Status</th>
-                          <th><span class="sr-only">Actions</span></th>
-                        </:head>
-                        <tr :for={s <- @settlements} class="settlement-row" id={"settlement-#{s.id}"}>
-                          <td class="st-linehaul mono num">{dollars(s.linehaul_cents)}</td>
-                          <td class="st-advances mono num">{dollars(s.advances_cents)}</td>
-                          <td class="st-factoring mono num">{dollars(s.factoring_fee_cents)}</td>
-                          <td class="st-claims mono num">{dollars(s.claim_deduction_cents)}</td>
-                          <td class="st-net mono num" style="color:var(--green)">{dollars(s.net_payable_cents)}</td>
-                          <td class="st-carryover" style="display:none">{dollars(s.carryover_cents)}</td>
-                          <td class="st-status"><.pill variant={status_variant(s.status)}>{s.status}</.pill></td>
-                          <td class="st-actions">
-                            <.button type="button" phx-click="edit_settlement" phx-value-settlement={s.id} id={"edit-settlement-#{s.id}"}>Edit</.button>
-                          </td>
-                        </tr>
-                      </.data_table>
-                    </div>
-                  </div>
-
-                  <div :if={List.first(@settlements)}>
-                    <% s = List.first(@settlements) %>
-                    <div class="gtitle"><h3>Carrier settlement</h3></div>
-                    <div class="settle">
-                      <div class="sh">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.9"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
-                        <b>Carrier settlement</b><span class="tag">reshaped</span>
-                      </div>
-                      <div class="row"><span class="lab">Linehaul</span><span class="val">{dollars(s.linehaul_cents)}</span></div>
-                      <div class="row neg"><span class="lab">Advances</span><span class="val">−{dollars(s.advances_cents)}</span></div>
-                      <div class="row neg"><span class="lab">Factoring</span><span class="val">−{dollars(s.factoring_fee_cents)}</span></div>
-                      <div class="row neg"><span class="lab">Claims</span><span class="val">−{dollars(s.claim_deduction_cents)}</span></div>
-                      <div class="row net"><span class="lab">Net payable</span><span class="val">{dollars(s.net_payable_cents)}</span></div>
-                      <div class="foot2">
-                        Kernel <span class="mono" style="color:var(--brand)">Invoice</span> reshaped to two-sided settlement via a bounded-context calculation — the vertical's money model, the substrate's audit &amp; vault underneath.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          <% end %>
-
-          <%!-- T148: the "New load" create modal (mirrors the framework CRM create modal). --%>
-          <.modal :if={@show_new and @new_load_form != nil} id="new-load-modal" title="New load" on_cancel="cancel_new_load">
-            <div :if={@load_error} class="card form-error" id="new-load-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
-              {@load_error}
-            </div>
-            <.simple_form :let={f} for={@new_load_form} id="new-load-form" phx-change="validate_load" phx-submit="save_load">
-              <.form_field field={f[:name]} label="Load reference" placeholder="BRL-4805 reefer" />
-              <.form_field field={f[:lane]} label="Lane (origin-&gt;dest state codes)" placeholder="TX->CA" />
-              <.form_field field={f[:rate]} label="Rate (USD)" type="number" min="0" step="0.01" placeholder="4800.00" />
-              <.form_field field={f[:status]} label="Status" type="select" options={load_status_options()} />
-              <:actions>
-                <.button variant="primary" type="submit" id="save-load">Create load</.button>
-                <.button type="button" phx-click="cancel_new_load">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-
-          <%!-- T158: the "Edit load" modal. Same manual-attrs pattern as create_load/2 (NOT an
-                AshPhoenix.Form) — the Load `value` field is the ADR-036 Money composite and
-                the form only carries a bare dollars string, exactly the constraint T148's
-                create modal already documents. --%>
-          <.modal :if={@show_edit_load and @edit_load_form != nil} id="edit-load-modal" title="Edit load" on_cancel="cancel_edit_load">
-            <div :if={@edit_load_error} class="card form-error" id="edit-load-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
-              {@edit_load_error}
-            </div>
-            <.simple_form :let={f} for={@edit_load_form} id="edit-load-form" phx-change="validate_edit_load" phx-submit="save_edit_load">
-              <.form_field field={f[:name]} label="Load reference" placeholder="BRL-4805 reefer" />
-              <.form_field field={f[:lane]} label="Lane (origin-&gt;dest state codes)" placeholder="TX->CA" />
-              <.form_field field={f[:rate]} label="Rate (USD)" type="number" min="0" step="0.01" placeholder="4800.00" />
-              <.form_field field={f[:status]} label="Status" type="select" options={load_status_options()} />
-              <:actions>
-                <.button variant="primary" type="submit" id="save-edit-load">Save load</.button>
-                <.button type="button" phx-click="cancel_edit_load">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-
-          <%!-- T158: driver create/edit — a genuine `AshPhoenix.Form` over the real Driver
-                `:create`/`:update` actions (mirrors the framework CRM contact create/edit
-                modal exactly). `full_name_field`/`form_field` are the SAME masking-safe
-                components the CRM modal uses — a `%Samen.Masked{}` value (never reachable
-                here: `broker_scope/1` is always plane: :tenant) renders the read-only ••••
-                placeholder by construction, no bespoke branch. FMCSA-gated fields (CDL/med
-                expiry, status) are plain edits — the compliance GATE itself lives on
-                `DispatchEvent.:dispatch`, re-evaluated fresh at dispatch time against
-                whatever this form persists; editing a driver can never skip that check. --%>
-          <.modal :if={@show_new_driver and @new_driver_form != nil} id="new-driver-modal" title="New driver" on_cancel="cancel_new_driver">
-            <.simple_form :let={f} for={@new_driver_form} id="new-driver-form" phx-change="validate_new_driver" phx-submit="save_new_driver">
-              <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
-              <.form_field field={f[:cdl_number]} label="CDL number (🔒 PII)" />
-              <.form_field field={f[:cdl_state]} label="CDL state" placeholder="TX" />
-              <.form_field field={f[:cdl_expiry]} label="CDL expiry" type="date" />
-              <.form_field field={f[:medical_card_expiry]} label="Medical card expiry" type="date" />
-              <.form_field field={f[:eld_provider]} label="ELD provider" type="select" options={eld_provider_options()} />
-              <.form_field field={f[:status]} label="Status" type="select" options={driver_status_options()} />
-              <:actions>
-                <.button variant="primary" type="submit" id="save-new-driver">Add driver</.button>
-                <.button type="button" phx-click="cancel_new_driver">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-
-          <.modal :if={@show_edit_driver and @edit_driver_form != nil} id="edit-driver-modal" title="Edit driver" on_cancel="cancel_edit_driver">
-            <.simple_form :let={f} for={@edit_driver_form} id="edit-driver-form" phx-change="validate_edit_driver" phx-submit="save_edit_driver">
-              <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
-              <.form_field field={f[:cdl_number]} label="CDL number (🔒 PII)" />
-              <.form_field field={f[:cdl_state]} label="CDL state" placeholder="TX" />
-              <.form_field field={f[:cdl_expiry]} label="CDL expiry" type="date" />
-              <.form_field field={f[:medical_card_expiry]} label="Medical card expiry" type="date" />
-              <.form_field field={f[:eld_provider]} label="ELD provider" type="select" options={eld_provider_options()} />
-              <.form_field field={f[:status]} label="Status" type="select" options={driver_status_options()} />
-              <:actions>
-                <.button variant="primary" type="submit" id="save-edit-driver">Save driver</.button>
-                <.button type="button" phx-click="cancel_edit_driver">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-
-          <%!-- T158: settlement create/edit — same `AshPhoenix.Form` pattern; Settlement's
-                stored inputs are plain integer-cents columns (no composite type), so unlike
-                Load's `value` these cast directly through the form. --%>
-          <.modal :if={@show_new_settlement and @new_settlement_form != nil} id="new-settlement-modal" title="New settlement" on_cancel="cancel_new_settlement">
-            <.simple_form :let={f} for={@new_settlement_form} id="new-settlement-form" phx-change="validate_new_settlement" phx-submit="save_new_settlement">
-              <.form_field field={f[:linehaul_cents]} label="Linehaul (cents)" type="number" min="0" />
-              <.form_field field={f[:advances_cents]} label="Advances (cents)" type="number" min="0" />
-              <.form_field field={f[:fuel_surcharge_cents]} label="Fuel surcharge (cents)" type="number" min="0" />
-              <.form_field field={f[:accessorial_cents]} label="Accessorial (cents)" type="number" min="0" />
-              <.form_field field={f[:claim_deduction_cents]} label="Claim deduction (cents)" type="number" min="0" />
-              <.form_field field={f[:factoring_rate_bps]} label="Factoring rate (bps)" type="number" min="0" max="10000" />
-              <.form_field field={f[:currency]} label="Currency" placeholder="USD" />
-              <.form_field field={f[:status]} label="Status" type="select" options={settlement_status_options()} />
-              <:actions>
-                <.button variant="primary" type="submit" id="save-new-settlement">Create settlement</.button>
-                <.button type="button" phx-click="cancel_new_settlement">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-
-          <.modal :if={@show_edit_settlement and @edit_settlement_form != nil} id="edit-settlement-modal" title="Edit settlement" on_cancel="cancel_edit_settlement">
-            <.simple_form :let={f} for={@edit_settlement_form} id="edit-settlement-form" phx-change="validate_edit_settlement" phx-submit="save_edit_settlement">
-              <.form_field field={f[:linehaul_cents]} label="Linehaul (cents)" type="number" min="0" />
-              <.form_field field={f[:advances_cents]} label="Advances (cents)" type="number" min="0" />
-              <.form_field field={f[:fuel_surcharge_cents]} label="Fuel surcharge (cents)" type="number" min="0" />
-              <.form_field field={f[:accessorial_cents]} label="Accessorial (cents)" type="number" min="0" />
-              <.form_field field={f[:claim_deduction_cents]} label="Claim deduction (cents)" type="number" min="0" />
-              <.form_field field={f[:factoring_rate_bps]} label="Factoring rate (bps)" type="number" min="0" max="10000" />
-              <.form_field field={f[:currency]} label="Currency" placeholder="USD" />
-              <.form_field field={f[:status]} label="Status" type="select" options={settlement_status_options()} />
-              <:actions>
-                <.button variant="primary" type="submit" id="save-edit-settlement">Save settlement</.button>
-                <.button type="button" phx-click="cancel_edit_settlement">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
+          </div>
         <% end %>
-      </.app_shell>
+
+        <%= if @panel == "loads" do %>
+          <div class="wrap">
+            <div id="loads">
+              <div :if={@delete_load_error} class="card form-error" id="delete-load-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
+                {@delete_load_error}
+              </div>
+
+              <%!-- T158: the REAL load-board filter (replaces T148's removed dead Filter
+                    button). `phx-change` fires on every keystroke/select change — always
+                    org-scoped underneath (`Reads.load_board/2` never widens past the
+                    broker's own org; the filter only narrows within it). --%>
+              <form phx-change="filter_loads" id="load-filter-form" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+                <input
+                  type="text"
+                  name="q"
+                  id="load-filter-q"
+                  value={Map.get(@load_filter, :q, "")}
+                  placeholder="Search load reference or lane…"
+                  style="flex:1;min-width:220px;padding:7px 10px;border:1px solid var(--border,#D0D5DD);border-radius:8px;font-size:13px"
+                />
+                <select name="status" id="load-filter-status" style="padding:7px 10px;border:1px solid var(--border,#D0D5DD);border-radius:8px;font-size:13px">
+                  <option value="" selected={filter_value(@load_filter, :status) in [nil, ""]}>All statuses</option>
+                  <option :for={{label, val} <- load_status_options()} value={val} selected={filter_value(@load_filter, :status) == val}>
+                    {label}
+                  </option>
+                </select>
+                <.button :if={load_filter_active?(@load_filter)} type="button" phx-click="clear_load_filter" id="clear-load-filter">
+                  Clear filter
+                </.button>
+              </form>
+
+              <div class="gtitle">
+                <h3>Active loads</h3><span class="n" id="load-count">{length(@loads)}</span>
+                <span class="lane">· your org — driver names in the clear</span>
+              </div>
+              <%!-- T148: a real empty state for a new/empty org (mirrors the framework CRM /
+                    notifications empty states) instead of a bare header over an empty table.
+                    T158: a SEPARATE honest empty state for "filter matched nothing" — never
+                    fabricated rows, and never conflated with the true zero-loads onboarding
+                    state (the filter-empty state offers "clear filter", not "create a load"). --%>
+              <%= cond do %>
+                <% @loads == [] and load_filter_active?(@load_filter) -> %>
+                  <.empty_state
+                    title="No loads match this filter"
+                    body="No loads on your board match this search/status. Clear the filter to see your full load board."
+                    icon="◧"
+                  >
+                    <:actions>
+                      <.button phx-click="clear_load_filter" id="empty-clear-load-filter">Clear filter</.button>
+                    </:actions>
+                  </.empty_state>
+                <% @loads == [] -> %>
+                  <.empty_state
+                    title="No loads yet"
+                    body="Your load board is empty. Post your first load to start dispatching carriers and tracking settlements."
+                    icon="◧"
+                  >
+                    <:actions>
+                      <.button variant="primary" phx-click="new_load" id="empty-new-load">Create your first load</.button>
+                    </:actions>
+                  </.empty_state>
+                <% true -> %>
+                  <.data_table>
+                    <:head>
+                      <th style="width:28%">Load</th>
+                      <th style="width:20%">Lane</th>
+                      <th style="width:18%">Rate</th>
+                      <th style="width:14%">Status</th>
+                      <th style="width:20%"><span class="sr-only">Actions</span></th>
+                    </:head>
+                    <tr :for={l <- @loads} class="load-row" id={"load-#{l.id}"}>
+                      <td class="l-name"><span class="mono" style="color:#454652;font-weight:500">{l.name}</span></td>
+                      <td class="l-lane carrier">{l.__lane__}</td>
+                      <td class="l-value mono num">{dollars(l.value)}</td>
+                      <td class="l-status"><.pill variant={status_variant(l.status)}>{l.status}</.pill></td>
+                      <td class="l-actions" style="display:flex;gap:6px">
+                        <.button type="button" phx-click="edit_load" phx-value-id={l.id} id={"edit-load-#{l.id}"}>Edit</.button>
+                        <.delete_confirm
+                          id={"delete-load-#{l.id}"}
+                          message="Delete this load? This cannot be undone."
+                          phx-click="delete_load"
+                          phx-value-id={l.id}
+                        />
+                      </td>
+                    </tr>
+                  </.data_table>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+        <%= if @panel == "roster" do %>
+          <div class="wrap">
+            <div id="roster">
+              <div :if={@driver_error} class="card form-error" id="driver-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
+                {@driver_error}
+              </div>
+              <div class="gtitle">
+                <h3>Driver roster</h3><span class="n">{length(@drivers)}</span>
+                <span class="lane">· your org — driver names in the clear</span>
+              </div>
+              <.data_table>
+                <:head>
+                  <th style="width:20%">Driver</th>
+                  <th style="width:12%">CDL #</th>
+                  <th style="width:8%">State</th>
+                  <th style="width:11%">CDL expiry</th>
+                  <th style="width:11%">Med card</th>
+                  <th style="width:9%">Status</th>
+                  <th style="width:9%">FMCSA</th>
+                  <th style="width:10%">Dispatch</th>
+                  <th style="width:10%"><span class="sr-only">Actions</span></th>
+                </:head>
+                <tr :for={d <- @drivers} class="driver-row" id={"driver-#{d.id}"}>
+                  <td>
+                    <div class="drv">
+                      <div class="av" style="background:#DDE7F5;color:#3B4CCA;font-size:10px;font-weight:600">{initials(d.full_name)}</div>
+                      <span class="nm d-name" style="color:#3a3b45;letter-spacing:normal">{driver_name(d.full_name)}</span>
+                    </div>
+                  </td>
+                  <td class="d-cdl"><span class="mono">{d.cdl_number}</span></td>
+                  <td class="d-cdl-state carrier">{d.cdl_state}</td>
+                  <td class="d-cdl-expiry carrier">{d.cdl_expiry}</td>
+                  <td class="d-med-expiry carrier">{d.medical_card_expiry}</td>
+                  <td class="d-status"><.pill variant={status_variant(d.status)}>{d.status}</.pill></td>
+                  <td class="d-fmcsa">
+                    <%= case d.__fmcsa__ do %>
+                      <% :ok -> %>
+                        <span class="fmcsa-ok"><.pill variant="ok">OK</.pill></span>
+                      <% {:blocked, reasons} -> %>
+                        <span class="fmcsa-blocked"><.pill variant="bad">BLOCKED: {Enum.map_join(reasons, ", ", &Reads.reason_label/1)}</.pill></span>
+                    <% end %>
+                  </td>
+                  <td class="d-dispatch">
+                    <%= if Reads.dispatchable?(d) do %>
+                      <button class="dispatch-btn btn" phx-click="dispatch" phx-value-driver={d.id}>Dispatch</button>
+                    <% else %>
+                      <button class="dispatch-btn btn" disabled>Dispatch (blocked)</button>
+                    <% end %>
+                  </td>
+                  <td class="d-actions">
+                    <.button type="button" phx-click="edit_driver" phx-value-driver={d.id} id={"edit-driver-#{d.id}"}>Edit</.button>
+                  </td>
+                </tr>
+              </.data_table>
+            </div>
+          </div>
+        <% end %>
+
+        <%= if @panel == "settlements" do %>
+          <div class="wrap">
+            <div id="settlements">
+              <div :if={@settlement_error} class="card form-error" id="settlement-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
+                {@settlement_error}
+              </div>
+              <div class="split">
+                <div>
+                  <div class="gtitle">
+                    <h3>Settlements</h3><span class="n">{length(@settlements)}</span>
+                    <span class="lane">· reshaped: linehaul − advances − factoring − claims</span>
+                  </div>
+                  <div id="settlement-table">
+                    <.data_table>
+                      <:head>
+                        <th>Linehaul</th>
+                        <th>Advances</th>
+                        <th>Factoring</th>
+                        <th>Claims</th>
+                        <th>Net payable</th>
+                        <th>Status</th>
+                        <th><span class="sr-only">Actions</span></th>
+                      </:head>
+                      <tr :for={s <- @settlements} class="settlement-row" id={"settlement-#{s.id}"}>
+                        <td class="st-linehaul mono num">{dollars(s.linehaul_cents)}</td>
+                        <td class="st-advances mono num">{dollars(s.advances_cents)}</td>
+                        <td class="st-factoring mono num">{dollars(s.factoring_fee_cents)}</td>
+                        <td class="st-claims mono num">{dollars(s.claim_deduction_cents)}</td>
+                        <td class="st-net mono num" style="color:var(--green)">{dollars(s.net_payable_cents)}</td>
+                        <td class="st-carryover" style="display:none">{dollars(s.carryover_cents)}</td>
+                        <td class="st-status"><.pill variant={status_variant(s.status)}>{s.status}</.pill></td>
+                        <td class="st-actions">
+                          <.button type="button" phx-click="edit_settlement" phx-value-settlement={s.id} id={"edit-settlement-#{s.id}"}>Edit</.button>
+                        </td>
+                      </tr>
+                    </.data_table>
+                  </div>
+                </div>
+
+                <div :if={List.first(@settlements)}>
+                  <% s = List.first(@settlements) %>
+                  <div class="gtitle"><h3>Carrier settlement</h3></div>
+                  <div class="settle">
+                    <div class="sh">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.9"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+                      <b>Carrier settlement</b><span class="tag">reshaped</span>
+                    </div>
+                    <div class="row"><span class="lab">Linehaul</span><span class="val">{dollars(s.linehaul_cents)}</span></div>
+                    <div class="row neg"><span class="lab">Advances</span><span class="val">−{dollars(s.advances_cents)}</span></div>
+                    <div class="row neg"><span class="lab">Factoring</span><span class="val">−{dollars(s.factoring_fee_cents)}</span></div>
+                    <div class="row neg"><span class="lab">Claims</span><span class="val">−{dollars(s.claim_deduction_cents)}</span></div>
+                    <div class="row net"><span class="lab">Net payable</span><span class="val">{dollars(s.net_payable_cents)}</span></div>
+                    <div class="foot2">
+                      Kernel <span class="mono" style="color:var(--brand)">Invoice</span> reshaped to two-sided settlement via a bounded-context calculation — the vertical's money model, the substrate's audit &amp; vault underneath.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <%!-- T148: the "New load" create modal (mirrors the framework CRM create modal). --%>
+        <.modal :if={@show_new and @new_load_form != nil} id="new-load-modal" title="New load" on_cancel="cancel_new_load">
+          <div :if={@load_error} class="card form-error" id="new-load-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
+            {@load_error}
+          </div>
+          <.simple_form :let={f} for={@new_load_form} id="new-load-form" phx-change="validate_load" phx-submit="save_load">
+            <.form_field field={f[:name]} label="Load reference" placeholder="BRL-4805 reefer" />
+            <.form_field field={f[:lane]} label="Lane (origin-&gt;dest state codes)" placeholder="TX->CA" />
+            <.form_field field={f[:rate]} label="Rate (USD)" type="number" min="0" step="0.01" placeholder="4800.00" />
+            <.form_field field={f[:status]} label="Status" type="select" options={load_status_options()} />
+            <:actions>
+              <.button variant="primary" type="submit" id="save-load">Create load</.button>
+              <.button type="button" phx-click="cancel_new_load">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+
+        <%!-- T158: the "Edit load" modal. Same manual-attrs pattern as create_load/2 (NOT an
+              AshPhoenix.Form) — the Load `value` field is the ADR-036 Money composite and
+              the form only carries a bare dollars string, exactly the constraint T148's
+              create modal already documents. --%>
+        <.modal :if={@show_edit_load and @edit_load_form != nil} id="edit-load-modal" title="Edit load" on_cancel="cancel_edit_load">
+          <div :if={@edit_load_error} class="card form-error" id="edit-load-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:12px">
+            {@edit_load_error}
+          </div>
+          <.simple_form :let={f} for={@edit_load_form} id="edit-load-form" phx-change="validate_edit_load" phx-submit="save_edit_load">
+            <.form_field field={f[:name]} label="Load reference" placeholder="BRL-4805 reefer" />
+            <.form_field field={f[:lane]} label="Lane (origin-&gt;dest state codes)" placeholder="TX->CA" />
+            <.form_field field={f[:rate]} label="Rate (USD)" type="number" min="0" step="0.01" placeholder="4800.00" />
+            <.form_field field={f[:status]} label="Status" type="select" options={load_status_options()} />
+            <:actions>
+              <.button variant="primary" type="submit" id="save-edit-load">Save load</.button>
+              <.button type="button" phx-click="cancel_edit_load">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+
+        <%!-- T158: driver create/edit — a genuine `AshPhoenix.Form` over the real Driver
+              `:create`/`:update` actions (mirrors the framework CRM contact create/edit
+              modal exactly). `full_name_field`/`form_field` are the SAME masking-safe
+              components the CRM modal uses — a `%Samen.Masked{}` value (never reachable
+              here: `broker_scope/1` is always plane: :tenant) renders the read-only ••••
+              placeholder by construction, no bespoke branch. FMCSA-gated fields (CDL/med
+              expiry, status) are plain edits — the compliance GATE itself lives on
+              `DispatchEvent.:dispatch`, re-evaluated fresh at dispatch time against
+              whatever this form persists; editing a driver can never skip that check. --%>
+        <.modal :if={@show_new_driver and @new_driver_form != nil} id="new-driver-modal" title="New driver" on_cancel="cancel_new_driver">
+          <.simple_form :let={f} for={@new_driver_form} id="new-driver-form" phx-change="validate_new_driver" phx-submit="save_new_driver">
+            <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
+            <.form_field field={f[:cdl_number]} label="CDL number (🔒 PII)" />
+            <.form_field field={f[:cdl_state]} label="CDL state" placeholder="TX" />
+            <.form_field field={f[:cdl_expiry]} label="CDL expiry" type="date" />
+            <.form_field field={f[:medical_card_expiry]} label="Medical card expiry" type="date" />
+            <.form_field field={f[:eld_provider]} label="ELD provider" type="select" options={eld_provider_options()} />
+            <.form_field field={f[:status]} label="Status" type="select" options={driver_status_options()} />
+            <:actions>
+              <.button variant="primary" type="submit" id="save-new-driver">Add driver</.button>
+              <.button type="button" phx-click="cancel_new_driver">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+
+        <.modal :if={@show_edit_driver and @edit_driver_form != nil} id="edit-driver-modal" title="Edit driver" on_cancel="cancel_edit_driver">
+          <.simple_form :let={f} for={@edit_driver_form} id="edit-driver-form" phx-change="validate_edit_driver" phx-submit="save_edit_driver">
+            <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
+            <.form_field field={f[:cdl_number]} label="CDL number (🔒 PII)" />
+            <.form_field field={f[:cdl_state]} label="CDL state" placeholder="TX" />
+            <.form_field field={f[:cdl_expiry]} label="CDL expiry" type="date" />
+            <.form_field field={f[:medical_card_expiry]} label="Medical card expiry" type="date" />
+            <.form_field field={f[:eld_provider]} label="ELD provider" type="select" options={eld_provider_options()} />
+            <.form_field field={f[:status]} label="Status" type="select" options={driver_status_options()} />
+            <:actions>
+              <.button variant="primary" type="submit" id="save-edit-driver">Save driver</.button>
+              <.button type="button" phx-click="cancel_edit_driver">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+
+        <%!-- T158: settlement create/edit — same `AshPhoenix.Form` pattern; Settlement's
+              stored inputs are plain integer-cents columns (no composite type), so unlike
+              Load's `value` these cast directly through the form. --%>
+        <.modal :if={@show_new_settlement and @new_settlement_form != nil} id="new-settlement-modal" title="New settlement" on_cancel="cancel_new_settlement">
+          <.simple_form :let={f} for={@new_settlement_form} id="new-settlement-form" phx-change="validate_new_settlement" phx-submit="save_new_settlement">
+            <.form_field field={f[:linehaul_cents]} label="Linehaul (cents)" type="number" min="0" />
+            <.form_field field={f[:advances_cents]} label="Advances (cents)" type="number" min="0" />
+            <.form_field field={f[:fuel_surcharge_cents]} label="Fuel surcharge (cents)" type="number" min="0" />
+            <.form_field field={f[:accessorial_cents]} label="Accessorial (cents)" type="number" min="0" />
+            <.form_field field={f[:claim_deduction_cents]} label="Claim deduction (cents)" type="number" min="0" />
+            <.form_field field={f[:factoring_rate_bps]} label="Factoring rate (bps)" type="number" min="0" max="10000" />
+            <.form_field field={f[:currency]} label="Currency" placeholder="USD" />
+            <.form_field field={f[:status]} label="Status" type="select" options={settlement_status_options()} />
+            <:actions>
+              <.button variant="primary" type="submit" id="save-new-settlement">Create settlement</.button>
+              <.button type="button" phx-click="cancel_new_settlement">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+
+        <.modal :if={@show_edit_settlement and @edit_settlement_form != nil} id="edit-settlement-modal" title="Edit settlement" on_cancel="cancel_edit_settlement">
+          <.simple_form :let={f} for={@edit_settlement_form} id="edit-settlement-form" phx-change="validate_edit_settlement" phx-submit="save_edit_settlement">
+            <.form_field field={f[:linehaul_cents]} label="Linehaul (cents)" type="number" min="0" />
+            <.form_field field={f[:advances_cents]} label="Advances (cents)" type="number" min="0" />
+            <.form_field field={f[:fuel_surcharge_cents]} label="Fuel surcharge (cents)" type="number" min="0" />
+            <.form_field field={f[:accessorial_cents]} label="Accessorial (cents)" type="number" min="0" />
+            <.form_field field={f[:claim_deduction_cents]} label="Claim deduction (cents)" type="number" min="0" />
+            <.form_field field={f[:factoring_rate_bps]} label="Factoring rate (bps)" type="number" min="0" max="10000" />
+            <.form_field field={f[:currency]} label="Currency" placeholder="USD" />
+            <.form_field field={f[:status]} label="Status" type="select" options={settlement_status_options()} />
+            <:actions>
+              <.button variant="primary" type="submit" id="save-edit-settlement">Save settlement</.button>
+              <.button type="button" phx-click="cancel_edit_settlement">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+      <% end %>
     </div>
     """
   end

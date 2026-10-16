@@ -22,7 +22,7 @@ defmodule Samen.Web.Search.SearchLive do
   The palette renders identically on either plane; only the resolver decides
   clear-vs-`••••`.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -93,37 +93,38 @@ defmodule Samen.Web.Search.SearchLive do
     _ -> []
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar
-          title={CurrentOrg.name(@samen_mount, @org_id)}
-          subtitle="Search"
-          logo={Mount.label(@samen_mount, :glyph, "S")}
-        >
-          <:search>
-            <.search_box org_id={@org_id} />
-          </:search>
-          <.module_nav {Samen.UI.nav_paths(@samen_mount)} org_id={@org_id} active={:search}>
-            <:extra><.host_nav_extra mount={@samen_mount} org_id={@org_id} /></:extra>
-          </.module_nav>
-        </.sidebar>
-      </:sidebar>
+    <.sidebar
+      title={CurrentOrg.name(@samen_mount, @org_id)}
+      subtitle="Search"
+      logo={Mount.label(@samen_mount, :glyph, "S")}
+    >
+      <:search>
+        <.search_box org_id={@org_id} />
+      </:search>
+      <.module_nav {Samen.UI.nav_paths(@samen_mount)} org_id={@org_id} active={:search}>
+        <:extra><.host_nav_extra mount={@samen_mount} org_id={@org_id} /></:extra>
+      </.module_nav>
+    </.sidebar>
+    """
+  end
 
-      <.topbar title="Search" crumbs={["Search"]} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar title="Search" crumbs={["Search"]} />
 
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="pane">
-          <.command_palette id="cmdk" q={@q} results={@results} event="search" />
-        </div>
-      <% end %>
-    </.app_shell>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="pane">
+        <.command_palette id="cmdk" q={@q} results={@results} event="search" />
+      </div>
+    <% end %>
     """
   end
 end

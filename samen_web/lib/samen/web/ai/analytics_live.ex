@@ -21,7 +21,7 @@ defmodule Samen.Web.AI.AnalyticsLive do
   a UI posture, not a security gate; the kernel's deny-by-default check still runs
   on every submit regardless.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -62,60 +62,61 @@ defmodule Samen.Web.AI.AnalyticsLive do
   def handle_event("ask", %{"question" => question}, socket),
     do: {:noreply, load(socket, socket.assigns.org_id, question: question, run: true)}
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:analytics} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:analytics} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · Analytics"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "Analytics"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:analytics} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · Analytics"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "Analytics"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:analytics} base={ai_base(@samen_mount)} />
 
-      <%= cond do %>
-        <% is_nil(@org_id) -> %>
-          <.no_org_card mount={@samen_mount} />
-        <% is_nil(@aggregate_resource) -> %>
-          <div class="pane" style="padding:16px">
-            <.empty_state
-              title="No aggregate resource configured"
-              body="Set the :ai_aggregate_resource mount label to a use Samen.Aggregate.Resource projection."
-              icon="◫"
-            />
+    <%= cond do %>
+      <% is_nil(@org_id) -> %>
+        <.no_org_card mount={@samen_mount} />
+      <% is_nil(@aggregate_resource) -> %>
+        <div class="pane" style="padding:16px">
+          <.empty_state
+            title="No aggregate resource configured"
+            body="Set the :ai_aggregate_resource mount label to a use Samen.Aggregate.Resource projection."
+            icon="◫"
+          />
+        </div>
+      <% true -> %>
+        <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+          <div class="card" id="ai-analytics-note" style="padding:12px">
+            <.pill variant="info">Token-blind aggregate plane</.pill>
+            <span style="color:var(--muted);font-size:12px;margin-left:8px">
+              cross-tenant totals, k-anon/l-diversity floored; authorized for platform/operator callers only
+            </span>
           </div>
-        <% true -> %>
-          <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
-            <div class="card" id="ai-analytics-note" style="padding:12px">
-              <.pill variant="info">Token-blind aggregate plane</.pill>
-              <span style="color:var(--muted);font-size:12px;margin-left:8px">
-                cross-tenant totals, k-anon/l-diversity floored; authorized for platform/operator callers only
-              </span>
-            </div>
 
-            <%= if analytics_ask_offered?(@samen_mount) do %>
-              <form phx-submit="ask" class="card" id="ai-analytics-ask-form" style="display:flex;gap:8px;padding:16px">
-                <input type="text" name="question" id="ai-analytics-input" value={@question} placeholder="Ask an analytics question…" style="flex:1" />
-                <.button variant="primary" type="submit">Ask</.button>
-              </form>
+          <%= if analytics_ask_offered?(@samen_mount) do %>
+            <form phx-submit="ask" class="card" id="ai-analytics-ask-form" style="display:flex;gap:8px;padding:16px">
+              <input type="text" name="question" id="ai-analytics-input" value={@question} placeholder="Ask an analytics question…" style="flex:1" />
+              <.button variant="primary" type="submit">Ask</.button>
+            </form>
 
-              <.ai_result :if={@result} result={@result} id="ai-analytics-result" />
-            <% else %>
-              <.ai_result result={{:error, :unauthorized}} id="ai-analytics-result" />
-            <% end %>
-          </div>
-      <% end %>
-    </.app_shell>
+            <.ai_result :if={@result} result={@result} id="ai-analytics-result" />
+          <% else %>
+            <.ai_result result={{:error, :unauthorized}} id="ai-analytics-result" />
+          <% end %>
+        </div>
+    <% end %>
     """
   end
 end

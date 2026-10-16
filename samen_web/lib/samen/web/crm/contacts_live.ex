@@ -33,7 +33,7 @@ defmodule Samen.Web.CRM.ContactsLive do
   the same `Samen.Vault.Change` chokepoint as seeds (MC-2); this LiveView never sees
   a token and never unwraps a `%Masked{}`.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -204,141 +204,142 @@ defmodule Samen.Web.CRM.ContactsLive do
     _ -> %{}
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_contacts} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-contacts">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_contacts} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Contacts" crumbs={crumbs(@samen_mount, @org_id, "Contacts")}>
+      <:actions>
+        <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-contacts">
+          {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
+        </.button>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_contact" id="new-contact">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New contact
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Contacts" crumbs={crumbs(@samen_mount, @org_id, "Contacts")}>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
+
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <div :if={@sample_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="sample-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@sample_error}
+        </div>
+      </div>
+
+      <div :if={@first_run and writable?(@samen_mount)} class="wrap" style="margin-bottom:0">
+        <.first_run_card
+          create_event="new_contact"
+          create_label="Add your first contact"
+          sample?={SampleData.offer?(@samen_mount)}
+        />
+      </div>
+
+      <div class="wrap">
+        <div id="contacts-panel">
+          <div class="gtitle">
+            <h3>Contacts</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· name / email / phone via PiiResolution · {plane_note(@samen_mount)}</span>
+          </div>
+          <.list_view
+            id="contacts"
+            page={@page}
+            state={@list_state}
+            row_class="contact-row"
+            filter_placeholder="Filter contacts…"
+            empty_text="No contacts yet."
+            empty_icon="◉"
+            empty_body="Contacts are your people book — names, emails, and phones, all vault-protected."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_contact" id="empty-new-contact">New contact</.button>
+            </:empty_actions>
+            <:empty_sample :if={writable?(@samen_mount) and SampleData.offer?(@samen_mount)}>
+              <.button phx-click="load_sample_data" id="load-sample-data">Load sample data</.button>
+            </:empty_sample>
+            <:head>
+              <.sort_header field={:display_name} label="Name" sort={@list_state.sort} width="24%" />
+              <th scope="col" style="width:20%">Email</th>
+              <th scope="col" style="width:14%">Phone</th>
+              <th scope="col" style="width:20%">Company</th>
+              <.sort_header field={:job_title} label="Title" sort={@list_state.sort} width="14%" />
+              <th :if={writable?(@samen_mount)} scope="col" style="width:8%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={p}>
+              <td class="p-name">
+                <a href={contact_path(@samen_mount, @org_id, p.id)} style="display:flex;align-items:center;gap:8px;text-decoration:none">
+                  <div class="av" style="width:28px;height:28px;border-radius:50%;background:#DDE7F5;color:#3B4CCA;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    {contact_initials(p.full_name, p.display_name)}
+                  </div>
+                  <span class="p-full-name" style="font-weight:500;color:#3B4CCA">
+                    {render_full_name(p.full_name, p.display_name)}
+                  </span>
+                </a>
+              </td>
+              <td class="p-email" style="font-size:12px;color:var(--muted)">
+                {render_email(p.emails)}
+              </td>
+              <td class="p-phone" style="font-size:12px;color:var(--muted)">
+                {render_phone(p.phones)}
+              </td>
+              <td class="p-company" style="color:var(--muted)">{(p.company_id && Map.get(@company_names, p.company_id)) || "—"}</td>
+              <td class="p-title" style="color:var(--muted);font-size:12px">{p.job_title || "—"}</td>
+              <td :if={writable?(@samen_mount)} class="p-actions">
+                <%= if Map.get(p, :archived_at) do %>
+                  <.pill variant="mut">archived</.pill>
+                  <.button phx-click="restore" phx-value-id={p.id} class="restore-contact">Restore</.button>
+                <% else %>
+                  <.delete_confirm phx-click="delete" phx-value-id={p.id} />
+                <% end %>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-contact-modal" title="New contact" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-contact-form" phx-change="validate_new" phx-submit="save_new">
+          <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
+          <.form_field field={f[:display_name]} label="Display name" />
+          <.form_field field={f[:job_title]} label="Job title" />
+          <.form_field
+            field={f[:company_id]}
+            label="Company"
+            type="select"
+            prompt="No company"
+            options={Enum.map(@company_names, fn {id, name} -> {name, id} end)}
+          />
           <:actions>
-            <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-contacts">
-              {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
-            </.button>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_contact" id="new-contact">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New contact
-            </.button>
+            <.button variant="primary" type="submit">Save contact</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
           </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
-
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <div :if={@sample_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="sample-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@sample_error}
-            </div>
-          </div>
-
-          <div :if={@first_run and writable?(@samen_mount)} class="wrap" style="margin-bottom:0">
-            <.first_run_card
-              create_event="new_contact"
-              create_label="Add your first contact"
-              sample?={SampleData.offer?(@samen_mount)}
-            />
-          </div>
-
-          <div class="wrap">
-            <div id="contacts-panel">
-              <div class="gtitle">
-                <h3>Contacts</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· name / email / phone via PiiResolution · {plane_note(@samen_mount)}</span>
-              </div>
-              <.list_view
-                id="contacts"
-                page={@page}
-                state={@list_state}
-                row_class="contact-row"
-                filter_placeholder="Filter contacts…"
-                empty_text="No contacts yet."
-                empty_icon="◉"
-                empty_body="Contacts are your people book — names, emails, and phones, all vault-protected."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_contact" id="empty-new-contact">New contact</.button>
-                </:empty_actions>
-                <:empty_sample :if={writable?(@samen_mount) and SampleData.offer?(@samen_mount)}>
-                  <.button phx-click="load_sample_data" id="load-sample-data">Load sample data</.button>
-                </:empty_sample>
-                <:head>
-                  <.sort_header field={:display_name} label="Name" sort={@list_state.sort} width="24%" />
-                  <th scope="col" style="width:20%">Email</th>
-                  <th scope="col" style="width:14%">Phone</th>
-                  <th scope="col" style="width:20%">Company</th>
-                  <.sort_header field={:job_title} label="Title" sort={@list_state.sort} width="14%" />
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:8%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={p}>
-                  <td class="p-name">
-                    <a href={contact_path(@samen_mount, @org_id, p.id)} style="display:flex;align-items:center;gap:8px;text-decoration:none">
-                      <div class="av" style="width:28px;height:28px;border-radius:50%;background:#DDE7F5;color:#3B4CCA;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                        {contact_initials(p.full_name, p.display_name)}
-                      </div>
-                      <span class="p-full-name" style="font-weight:500;color:#3B4CCA">
-                        {render_full_name(p.full_name, p.display_name)}
-                      </span>
-                    </a>
-                  </td>
-                  <td class="p-email" style="font-size:12px;color:var(--muted)">
-                    {render_email(p.emails)}
-                  </td>
-                  <td class="p-phone" style="font-size:12px;color:var(--muted)">
-                    {render_phone(p.phones)}
-                  </td>
-                  <td class="p-company" style="color:var(--muted)">{(p.company_id && Map.get(@company_names, p.company_id)) || "—"}</td>
-                  <td class="p-title" style="color:var(--muted);font-size:12px">{p.job_title || "—"}</td>
-                  <td :if={writable?(@samen_mount)} class="p-actions">
-                    <%= if Map.get(p, :archived_at) do %>
-                      <.pill variant="mut">archived</.pill>
-                      <.button phx-click="restore" phx-value-id={p.id} class="restore-contact">Restore</.button>
-                    <% else %>
-                      <.delete_confirm phx-click="delete" phx-value-id={p.id} />
-                    <% end %>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-contact-modal" title="New contact" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-contact-form" phx-change="validate_new" phx-submit="save_new">
-              <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
-              <.form_field field={f[:display_name]} label="Display name" />
-              <.form_field field={f[:job_title]} label="Job title" />
-              <.form_field
-                field={f[:company_id]}
-                label="Company"
-                type="select"
-                prompt="No company"
-                options={Enum.map(@company_names, fn {id, name} -> {name, id} end)}
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Save contact</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

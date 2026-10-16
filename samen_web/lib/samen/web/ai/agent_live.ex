@@ -71,7 +71,7 @@ defmodule Samen.Web.AI.AgentLive do
   ADR-042 Class B: the list, the detail, the turn log and the transcript all render from
   `mount`/`load` with no socket; cancel/approve/reject are `phx-click` writes.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -198,41 +198,42 @@ defmodule Samen.Web.AI.AgentLive do
 
   # ---------------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:agents} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:agents} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · Agent runs"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "Agent runs"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:agents} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · Agent runs"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "Agent runs"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:agents} base={ai_base(@samen_mount)} />
 
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="pane" id="ai-agents" style="display:flex;flex-direction:column;gap:16px;padding:16px">
-          <.outcome_card :if={@outcome} outcome={@outcome} />
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="pane" id="ai-agents" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+        <.outcome_card :if={@outcome} outcome={@outcome} />
 
-          <%= if @detail do %>
-            <.run_detail detail={@detail} base={ai_base(@samen_mount)} />
-          <% else %>
-            <.run_list runs={@runs} base={ai_base(@samen_mount)} />
-          <% end %>
-        </div>
-      <% end %>
-    </.app_shell>
+        <%= if @detail do %>
+          <.run_detail detail={@detail} base={ai_base(@samen_mount)} />
+        <% else %>
+          <.run_list runs={@runs} base={ai_base(@samen_mount)} />
+        <% end %>
+      </div>
+    <% end %>
     """
   end
 

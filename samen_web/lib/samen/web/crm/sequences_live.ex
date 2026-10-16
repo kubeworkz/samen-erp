@@ -40,7 +40,7 @@ defmodule Samen.Web.CRM.SequencesLive do
   activity leaderboard renders `Task.owner_id`) and NEVER calls
   `Samen.Api.PiiResolution`/`Samen.Vault.reveal/3` — there is no vault field on this path.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1, writable?: 1]
@@ -142,170 +142,171 @@ defmodule Samen.Web.CRM.SequencesLive do
 
   defp normalize_person_id(_), do: Ash.UUID.generate()
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_sequences} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-sequences">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_sequences} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Sequences" crumbs={[Crumbs.org(@samen_mount, @org_id),  "CRM",  "Sequences"]} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.topbar title="Sequences" crumbs={[Crumbs.org(@samen_mount, @org_id),  "CRM",  "Sequences"]} />
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
+      <%= if not @scope_mounted do %>
+        <div class="wrap">
+          <.empty_state
+            class="sequences-not-mounted"
+            icon="✦"
+            title="Sequences are not enabled for this workspace."
+            body="This host has not mounted the Outreach scope. Mount Samen.Scopes.Outreach to enroll contacts into multi-step sequences."
+          />
+        </div>
+      <% else %>
+        <div class="wrap" style="display:flex;flex-direction:column;gap:18px;padding:16px 20px">
+          <%!-- The fail-honest send banner. sends_configured? is read from the delivery
+               seam — never assumed. When no sender is wired, a due step is recorded
+               :blocked (honest), NEVER faked delivered. --%>
+          <div
+            :if={not @sends_configured}
+            id="sequences-sends-not-configured"
+            data-state="not_configured"
+            class="card"
+            style="padding:12px 16px;display:flex;align-items:center;gap:10px"
+          >
+            <.pill variant="bad"><span id="sequences-send-badge">No sender configured</span></.pill>
+            <span style="color:var(--muted);font-size:12px;line-height:1.5">
+              No email provider is wired for this workspace, so a step that comes due is recorded
+              <b>blocked</b> — never delivered. This is honest: enrollments still track state, but nothing sends
+              until a provider is configured. Sends route through the same delivery chokepoint the rest of the
+              platform uses.
+            </span>
+          </div>
+          <div
+            :if={@sends_configured}
+            id="sequences-sends-configured"
+            data-state="configured"
+            style="font-size:12px;color:var(--muted)"
+          >
+            A delivery provider is wired — due steps send through the shared chokepoint. A step that cannot
+            send (suppressed / provider error) is still recorded honestly, never faked delivered.
+          </div>
 
-          <%= if not @scope_mounted do %>
-            <div class="wrap">
-              <.empty_state
-                class="sequences-not-mounted"
-                icon="✦"
-                title="Sequences are not enabled for this workspace."
-                body="This host has not mounted the Outreach scope. Mount Samen.Scopes.Outreach to enroll contacts into multi-step sequences."
-              />
-            </div>
-          <% else %>
-            <div class="wrap" style="display:flex;flex-direction:column;gap:18px;padding:16px 20px">
-              <%!-- The fail-honest send banner. sends_configured? is read from the delivery
-                   seam — never assumed. When no sender is wired, a due step is recorded
-                   :blocked (honest), NEVER faked delivered. --%>
+          <%!-- Enroll flow — tenant plane only (writable?). Uses the EXISTING :enroll action. --%>
+          <div :if={writable?(@samen_mount)} id="sequences-enroll">
+            <%= if @sequences == [] do %>
+              <p style="font-size:13px;color:var(--muted)">
+                No sequences exist yet — create a sequence before enrolling contacts.
+              </p>
+            <% else %>
+              <form phx-submit="enroll" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Sequence
+                  <select name="sequence_id" id="enroll-sequence" required style="min-width:200px">
+                    <option :for={s <- @sequences} value={s.id}>{s.name}</option>
+                  </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Contact id (uuid)
+                  <input
+                    type="text"
+                    name="person_id"
+                    id="enroll-person-id"
+                    placeholder="contact uuid"
+                    aria-label="Contact id"
+                    style="min-width:260px"
+                  />
+                </label>
+                <.button variant="primary" type="submit">Enroll contact</.button>
+              </form>
               <div
-                :if={not @sends_configured}
-                id="sequences-sends-not-configured"
-                data-state="not_configured"
-                class="card"
-                style="padding:12px 16px;display:flex;align-items:center;gap:10px"
+                :if={@enroll_notice}
+                id="sequences-enroll-notice"
+                role="status"
+                style="margin-top:8px;font-size:12px;line-height:1.5"
+                class={notice_class(@enroll_notice)}
               >
-                <.pill variant="bad"><span id="sequences-send-badge">No sender configured</span></.pill>
-                <span style="color:var(--muted);font-size:12px;line-height:1.5">
-                  No email provider is wired for this workspace, so a step that comes due is recorded
-                  <b>blocked</b> — never delivered. This is honest: enrollments still track state, but nothing sends
-                  until a provider is configured. Sends route through the same delivery chokepoint the rest of the
-                  platform uses.
-                </span>
+                {notice_text(@enroll_notice)}
               </div>
-              <div
-                :if={@sends_configured}
-                id="sequences-sends-configured"
-                data-state="configured"
-                style="font-size:12px;color:var(--muted)"
-              >
-                A delivery provider is wired — due steps send through the shared chokepoint. A step that cannot
-                send (suppressed / provider error) is still recorded honestly, never faked delivered.
-              </div>
+            <% end %>
+          </div>
 
-              <%!-- Enroll flow — tenant plane only (writable?). Uses the EXISTING :enroll action. --%>
-              <div :if={writable?(@samen_mount)} id="sequences-enroll">
-                <%= if @sequences == [] do %>
-                  <p style="font-size:13px;color:var(--muted)">
-                    No sequences exist yet — create a sequence before enrolling contacts.
-                  </p>
-                <% else %>
-                  <form phx-submit="enroll" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-                    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
-                      Sequence
-                      <select name="sequence_id" id="enroll-sequence" required style="min-width:200px">
-                        <option :for={s <- @sequences} value={s.id}>{s.name}</option>
-                      </select>
-                    </label>
-                    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
-                      Contact id (uuid)
-                      <input
-                        type="text"
-                        name="person_id"
-                        id="enroll-person-id"
-                        placeholder="contact uuid"
-                        aria-label="Contact id"
-                        style="min-width:260px"
-                      />
-                    </label>
-                    <.button variant="primary" type="submit">Enroll contact</.button>
-                  </form>
-                  <div
-                    :if={@enroll_notice}
-                    id="sequences-enroll-notice"
-                    role="status"
-                    style="margin-top:8px;font-size:12px;line-height:1.5"
-                    class={notice_class(@enroll_notice)}
-                  >
-                    {notice_text(@enroll_notice)}
-                  </div>
-                <% end %>
-              </div>
+          <%!-- Sequences list --%>
+          <section id="sequences-list">
+            <h3 style="margin:0 0 8px;font-size:13px;font-weight:600">Sequences</h3>
+            <%= if @sequences == [] do %>
+              <.empty_state class="sequences-empty" icon="✦" title="No sequences yet." />
+            <% else %>
+              <.data_table>
+                <:head>
+                  <th style="width:50%">Sequence</th>
+                  <th style="width:25%">Status</th>
+                  <th style="width:25%">Steps</th>
+                </:head>
+                <tr :for={s <- @sequences} class="sequence-row" id={"sequence-#{s.id}"}>
+                  <td style="font-weight:500;color:var(--ink)">{s.name}</td>
+                  <td><.pill variant={sequence_status_variant(s.status)}>{s.status}</.pill></td>
+                  <td style="font-size:12px;color:var(--muted)">{step_count(s.steps)}</td>
+                </tr>
+              </.data_table>
+            <% end %>
+          </section>
 
-              <%!-- Sequences list --%>
-              <section id="sequences-list">
-                <h3 style="margin:0 0 8px;font-size:13px;font-weight:600">Sequences</h3>
-                <%= if @sequences == [] do %>
-                  <.empty_state class="sequences-empty" icon="✦" title="No sequences yet." />
-                <% else %>
-                  <.data_table>
-                    <:head>
-                      <th style="width:50%">Sequence</th>
-                      <th style="width:25%">Status</th>
-                      <th style="width:25%">Steps</th>
-                    </:head>
-                    <tr :for={s <- @sequences} class="sequence-row" id={"sequence-#{s.id}"}>
-                      <td style="font-weight:500;color:var(--ink)">{s.name}</td>
-                      <td><.pill variant={sequence_status_variant(s.status)}>{s.status}</.pill></td>
-                      <td style="font-size:12px;color:var(--muted)">{step_count(s.steps)}</td>
-                    </tr>
-                  </.data_table>
-                <% end %>
-              </section>
+          <%!-- Enrollments list + per-enrollment step-send status --%>
+          <section id="enrollments-list">
+            <h3 style="margin:0 0 8px;font-size:13px;font-weight:600">Enrollments</h3>
+            <%= if @enrollments == [] do %>
+              <.empty_state class="enrollments-empty" icon="✦" title="No enrollments yet." />
+            <% else %>
+              <.data_table>
+                <:head>
+                  <th style="width:22%">Contact</th>
+                  <th style="width:23%">Sequence</th>
+                  <th style="width:15%">Step</th>
+                  <th style="width:20%">Enrollment</th>
+                  <th style="width:20%">Send status</th>
+                </:head>
+                <tr :for={e <- @enrollments} class="enrollment-row" id={"enrollment-#{e.id}"}>
+                  <td class="enrollment-contact" style="font-size:12px;color:var(--muted)">{person_chip(e.person_id)}</td>
+                  <td style="font-size:12px;color:var(--muted)">{sequence_name(@sequences, e.sequence_id)}</td>
+                  <td style="font-size:12px;color:var(--muted)">{e.current_step}</td>
+                  <td>
+                    <.pill variant={enrollment_status_variant(e.status)}>{enrollment_status_label(e)}</.pill>
+                  </td>
+                  <td class="enrollment-send-status">
+                    <%= for send <- current_and_past_sends(@step_sends, e) do %>
+                      <.pill variant={step_status_variant(send.status)}>
+                        <span class="step-send-label">{step_status_label(send.status)}</span>
+                      </.pill>
+                    <% end %>
+                    <span
+                      :if={current_and_past_sends(@step_sends, e) == []}
+                      class="step-send-label"
+                      style="font-size:12px;color:var(--muted)"
+                    >
+                      {no_send_label(e)}
+                    </span>
+                  </td>
+                </tr>
+              </.data_table>
+            <% end %>
+          </section>
 
-              <%!-- Enrollments list + per-enrollment step-send status --%>
-              <section id="enrollments-list">
-                <h3 style="margin:0 0 8px;font-size:13px;font-weight:600">Enrollments</h3>
-                <%= if @enrollments == [] do %>
-                  <.empty_state class="enrollments-empty" icon="✦" title="No enrollments yet." />
-                <% else %>
-                  <.data_table>
-                    <:head>
-                      <th style="width:22%">Contact</th>
-                      <th style="width:23%">Sequence</th>
-                      <th style="width:15%">Step</th>
-                      <th style="width:20%">Enrollment</th>
-                      <th style="width:20%">Send status</th>
-                    </:head>
-                    <tr :for={e <- @enrollments} class="enrollment-row" id={"enrollment-#{e.id}"}>
-                      <td class="enrollment-contact" style="font-size:12px;color:var(--muted)">{person_chip(e.person_id)}</td>
-                      <td style="font-size:12px;color:var(--muted)">{sequence_name(@sequences, e.sequence_id)}</td>
-                      <td style="font-size:12px;color:var(--muted)">{e.current_step}</td>
-                      <td>
-                        <.pill variant={enrollment_status_variant(e.status)}>{enrollment_status_label(e)}</.pill>
-                      </td>
-                      <td class="enrollment-send-status">
-                        <%= for send <- current_and_past_sends(@step_sends, e) do %>
-                          <.pill variant={step_status_variant(send.status)}>
-                            <span class="step-send-label">{step_status_label(send.status)}</span>
-                          </.pill>
-                        <% end %>
-                        <span
-                          :if={current_and_past_sends(@step_sends, e) == []}
-                          class="step-send-label"
-                          style="font-size:12px;color:var(--muted)"
-                        >
-                          {no_send_label(e)}
-                        </span>
-                      </td>
-                    </tr>
-                  </.data_table>
-                <% end %>
-              </section>
-
-              <div id="sequences-honesty-note" style="font-size:11px;color:var(--muted);line-height:1.5">
-                Send status is the real per-step outcome — a step is shown "Delivered" only when a configured
-                provider genuinely accepted it. A keyless/blocked/failed step is never faked as sent.
-              </div>
-            </div>
-          <% end %>
-        <% end %>
-      </.app_shell>
+          <div id="sequences-honesty-note" style="font-size:11px;color:var(--muted);line-height:1.5">
+            Send status is the real per-step outcome — a step is shown "Delivered" only when a configured
+            provider genuinely accepted it. A keyless/blocked/failed step is never faked as sent.
+          </div>
+        </div>
+      <% end %>
+    <% end %>
     </div>
     """
   end

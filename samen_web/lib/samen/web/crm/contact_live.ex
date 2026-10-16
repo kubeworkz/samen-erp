@@ -31,7 +31,7 @@ defmodule Samen.Web.CRM.ContactLive do
   posture as before. Delete carries the `delete_confirm/1` interlock and navigates back
   to the contacts list.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -301,188 +301,189 @@ defmodule Samen.Web.CRM.ContactLive do
     end
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_contacts} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-contact">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_contacts} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={contact_name(@contact) |> to_title()} crumbs={crumbs(@samen_mount, @org_id, contact_name(@contact) |> to_title())}>
+      <:actions>
+        <a href={contacts_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">
+          <span class="i">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Back to contacts
+        </a>
+        <.button :if={@contact != nil} phx-click="edit_contact" id="edit-contact">
+          Edit contact
+        </.button>
+        <.delete_confirm
+          :if={writable?(@samen_mount) and @contact != nil}
+          id="delete-contact"
+          message="Delete this contact? This cannot be undone."
+          phx-click="delete_contact"
+          phx-value-id={@contact && @contact.id}
+        />
+      </:actions>
+    </.topbar>
 
-        <.topbar title={contact_name(@contact) |> to_title()} crumbs={crumbs(@samen_mount, @org_id, contact_name(@contact) |> to_title())}>
-          <:actions>
-            <a href={contacts_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">
-              <span class="i">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-              </span>
-              Back to contacts
-            </a>
-            <.button :if={@contact != nil} phx-click="edit_contact" id="edit-contact">
-              Edit contact
-            </.button>
-            <.delete_confirm
-              :if={writable?(@samen_mount) and @contact != nil}
-              id="delete-contact"
-              message="Delete this contact? This cannot be undone."
-              phx-click="delete_contact"
-              phx-value-id={@contact && @contact.id}
-            />
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
 
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
+      <%= if @contact == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Contact not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="contact-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div class="av" style="width:46px;height:46px;border-radius:50%;background:#DDE7F5;color:#3B4CCA;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              {contact_initials(@contact)}
+            </div>
+            <div style="flex:1;min-width:0">
+              <h1 class="c-full-name" style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 2px">
+                {render_full_name(@contact.full_name, @contact.display_name)}
+              </h1>
+              <div style="font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                <span class="c-title">{@contact.job_title || "—"}</span>
+                <span :if={@company_name}>· {@company_name}</span>
+                <.lifecycle_pill stage={lifecycle_stage(@contact)} />
+                <.social_links custom={@contact.custom} />
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="c-email" style="font-size:12px;color:var(--muted)">{render_email(@contact.emails)}</span>
+              <span class="c-phone" style="font-size:12px;color:var(--muted)">{render_phone(@contact.phones)}</span>
             </div>
           </div>
+          <div style="padding:6px 20px 0;font-size:11px;color:var(--muted)">· name / email / phone via PiiResolution · {plane_note(@samen_mount)}</div>
+        </div>
 
-          <%= if @contact == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Contact not found.</div>
-            </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="contact-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-                <div class="av" style="width:46px;height:46px;border-radius:50%;background:#DDE7F5;color:#3B4CCA;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                  {contact_initials(@contact)}
-                </div>
-                <div style="flex:1;min-width:0">
-                  <h1 class="c-full-name" style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 2px">
-                    {render_full_name(@contact.full_name, @contact.display_name)}
-                  </h1>
-                  <div style="font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-                    <span class="c-title">{@contact.job_title || "—"}</span>
-                    <span :if={@company_name}>· {@company_name}</span>
-                    <.lifecycle_pill stage={lifecycle_stage(@contact)} />
-                    <.social_links custom={@contact.custom} />
-                  </div>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                  <span class="c-email" style="font-size:12px;color:var(--muted)">{render_email(@contact.emails)}</span>
-                  <span class="c-phone" style="font-size:12px;color:var(--muted)">{render_phone(@contact.phones)}</span>
-                </div>
+        <div class="wrap" style="margin-bottom:0;padding-top:8px">
+          <.tabs>
+            <.tab label="Overview" href={"?org=#{@org_id}&tab=overview"} active={@active_tab == "overview"} />
+            <.tab label="Activity" href={"?org=#{@org_id}&tab=activity"} active={@active_tab == "activity"} />
+            <.tab label="Deals" href={"?org=#{@org_id}&tab=deals"} active={@active_tab == "deals"} />
+          </.tabs>
+        </div>
+
+        <%= case @active_tab do %>
+          <% "activity" -> %>
+            <div class="wrap" id="activity-pane">
+              <div class="card" style="padding:8px 4px 12px">
+                <.timeline
+                  entries={merge_timeline(timeline_entries(@activities), mail_timeline_entries(@mail))}
+                  empty={timeline_empty(assigns)}
+                >
+                  <:composer :if={composer?(@samen_mount) and @activity_form != nil}>
+                    {activity_composer(assigns)}
+                  </:composer>
+                </.timeline>
               </div>
-              <div style="padding:6px 20px 0;font-size:11px;color:var(--muted)">· name / email / phone via PiiResolution · {plane_note(@samen_mount)}</div>
             </div>
-
-            <div class="wrap" style="margin-bottom:0;padding-top:8px">
-              <.tabs>
-                <.tab label="Overview" href={"?org=#{@org_id}&tab=overview"} active={@active_tab == "overview"} />
-                <.tab label="Activity" href={"?org=#{@org_id}&tab=activity"} active={@active_tab == "activity"} />
-                <.tab label="Deals" href={"?org=#{@org_id}&tab=deals"} active={@active_tab == "deals"} />
-              </.tabs>
+          <% "deals" -> %>
+            <div class="wrap" id="deals-pane">
+              <%= if @deals == [] do %>
+                <.empty_state
+                  class="deals-empty"
+                  icon="◇"
+                  title="No deals yet."
+                  body="Deals linked to this contact's company appear here — start one from the Pipeline."
+                />
+              <% else %>
+                <.data_table>
+                  <:head>
+                    <th style="width:50%">Deal</th>
+                    <th style="width:22%">Stage</th>
+                    <th style="width:14%">Status</th>
+                    <th style="width:14%">Value</th>
+                  </:head>
+                  <tr :for={opp <- @deals} class="deal-row" id={"deal-#{opp.id}"}>
+                    <td style="font-weight:500;color:#3a3b45">{opp.name}</td>
+                    <td style="color:var(--muted)">{stage_label(opp)}</td>
+                    <td><.pill variant={opp_status_variant(opp.status)}>{opp.status}</.pill></td>
+                    <td style="color:var(--muted)">{dollars(opp.value)}</td>
+                  </tr>
+                </.data_table>
+              <% end %>
             </div>
-
-            <%= case @active_tab do %>
-              <% "activity" -> %>
-                <div class="wrap" id="activity-pane">
-                  <div class="card" style="padding:8px 4px 12px">
-                    <.timeline
-                      entries={merge_timeline(timeline_entries(@activities), mail_timeline_entries(@mail))}
-                      empty={timeline_empty(assigns)}
-                    >
-                      <:composer :if={composer?(@samen_mount) and @activity_form != nil}>
-                        {activity_composer(assigns)}
-                      </:composer>
-                    </.timeline>
-                  </div>
-                </div>
-              <% "deals" -> %>
-                <div class="wrap" id="deals-pane">
-                  <%= if @deals == [] do %>
-                    <.empty_state
-                      class="deals-empty"
-                      icon="◇"
-                      title="No deals yet."
-                      body="Deals linked to this contact's company appear here — start one from the Pipeline."
-                    />
-                  <% else %>
-                    <.data_table>
-                      <:head>
-                        <th style="width:50%">Deal</th>
-                        <th style="width:22%">Stage</th>
-                        <th style="width:14%">Status</th>
-                        <th style="width:14%">Value</th>
-                      </:head>
-                      <tr :for={opp <- @deals} class="deal-row" id={"deal-#{opp.id}"}>
-                        <td style="font-weight:500;color:#3a3b45">{opp.name}</td>
-                        <td style="color:var(--muted)">{stage_label(opp)}</td>
-                        <td><.pill variant={opp_status_variant(opp.status)}>{opp.status}</.pill></td>
-                        <td style="color:var(--muted)">{dollars(opp.value)}</td>
-                      </tr>
-                    </.data_table>
-                  <% end %>
-                </div>
-              <% _ -> %>
-                <div class="wrap" id="overview-pane">
-                  <div class="card" style="padding:20px">
-                    <div class="gtitle" style="margin-bottom:16px"><h3>Contact details</h3></div>
-                    <table style="width:100%;font-size:13px;border-collapse:collapse">
-                      <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:10px 0;color:var(--muted);width:160px">Name (🔒 PII)</td>
-                        <td style="padding:10px 0" class="ov-name">{render_full_name(@contact.full_name, @contact.display_name)}</td>
-                      </tr>
-                      <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:10px 0;color:var(--muted)">Email (🔒 PII)</td>
-                        <td style="padding:10px 0" class="ov-email">{render_email(@contact.emails)}</td>
-                      </tr>
-                      <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:10px 0;color:var(--muted)">Phone (🔒 PII)</td>
-                        <td style="padding:10px 0" class="ov-phone">{render_phone(@contact.phones)}</td>
-                      </tr>
-                      <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:10px 0;color:var(--muted)">Title</td>
-                        <td style="padding:10px 0">{@contact.job_title || "—"}</td>
-                      </tr>
-                      <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:10px 0;color:var(--muted)">Company</td>
-                        <td style="padding:10px 0">{@company_name || "—"}</td>
-                      </tr>
-                      <tr style="border-bottom:1px solid var(--border)">
-                        <td style="padding:10px 0;color:var(--muted)">Lifecycle stage</td>
-                        <td style="padding:10px 0"><.lifecycle_pill stage={lifecycle_stage(@contact)} /> {if lifecycle_stage(@contact) == nil, do: "—", else: ""}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding:10px 0;color:var(--muted)">Social</td>
-                        <td style="padding:10px 0"><.social_links custom={@contact.custom} /></td>
-                      </tr>
-                    </table>
-                  </div>
-                </div>
-            <% end %>
-
-            <%!-- The edit modal renders on BOTH planes (AC-G1-7): on the operator plane the
-                 vaulted full_name arrives as %Masked{} and renders the read-only ••••
-                 placeholder with NO name attribute — masking is by construction of the
-                 value, never a plane branch here. Non-vaulted fields stay editable; the
-                 kernel (OrgScope + Samen.Pii.WriteGuard) enforces the write rules. --%>
-            <.modal :if={@show_edit and @edit_form != nil} id="edit-contact-modal" title="Edit contact" on_cancel="cancel_edit">
-              <.simple_form :let={f} for={@edit_form} id="edit-contact-form" phx-change="validate_edit" phx-submit="save_edit">
-                <%!-- display_name is deliberately NOT on this form: it is a non-vaulted
-                     attribute that duplicates the person's name, and echoing it into an
-                     editable input would leak the name on the operator plane (the A2
-                     ContactEditLive fixture set this posture). --%>
-                <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
-                <.form_field field={f[:job_title]} label="Job title" />
-                <:actions>
-                  <.button variant="primary" type="submit">Save contact</.button>
-                  <.button type="button" phx-click="cancel_edit">Cancel</.button>
-                </:actions>
-              </.simple_form>
-            </.modal>
-          <% end %>
+          <% _ -> %>
+            <div class="wrap" id="overview-pane">
+              <div class="card" style="padding:20px">
+                <div class="gtitle" style="margin-bottom:16px"><h3>Contact details</h3></div>
+                <table style="width:100%;font-size:13px;border-collapse:collapse">
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px 0;color:var(--muted);width:160px">Name (🔒 PII)</td>
+                    <td style="padding:10px 0" class="ov-name">{render_full_name(@contact.full_name, @contact.display_name)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px 0;color:var(--muted)">Email (🔒 PII)</td>
+                    <td style="padding:10px 0" class="ov-email">{render_email(@contact.emails)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px 0;color:var(--muted)">Phone (🔒 PII)</td>
+                    <td style="padding:10px 0" class="ov-phone">{render_phone(@contact.phones)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px 0;color:var(--muted)">Title</td>
+                    <td style="padding:10px 0">{@contact.job_title || "—"}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px 0;color:var(--muted)">Company</td>
+                    <td style="padding:10px 0">{@company_name || "—"}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px 0;color:var(--muted)">Lifecycle stage</td>
+                    <td style="padding:10px 0"><.lifecycle_pill stage={lifecycle_stage(@contact)} /> {if lifecycle_stage(@contact) == nil, do: "—", else: ""}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:10px 0;color:var(--muted)">Social</td>
+                    <td style="padding:10px 0"><.social_links custom={@contact.custom} /></td>
+                  </tr>
+                </table>
+              </div>
+            </div>
         <% end %>
-      </.app_shell>
+
+        <%!-- The edit modal renders on BOTH planes (AC-G1-7): on the operator plane the
+             vaulted full_name arrives as %Masked{} and renders the read-only ••••
+             placeholder with NO name attribute — masking is by construction of the
+             value, never a plane branch here. Non-vaulted fields stay editable; the
+             kernel (OrgScope + Samen.Pii.WriteGuard) enforces the write rules. --%>
+        <.modal :if={@show_edit and @edit_form != nil} id="edit-contact-modal" title="Edit contact" on_cancel="cancel_edit">
+          <.simple_form :let={f} for={@edit_form} id="edit-contact-form" phx-change="validate_edit" phx-submit="save_edit">
+            <%!-- display_name is deliberately NOT on this form: it is a non-vaulted
+                 attribute that duplicates the person's name, and echoing it into an
+                 editable input would leak the name on the operator plane (the A2
+                 ContactEditLive fixture set this posture). --%>
+            <.full_name_field field={f[:full_name]} label="Full name (🔒 PII)" />
+            <.form_field field={f[:job_title]} label="Job title" />
+            <:actions>
+              <.button variant="primary" type="submit">Save contact</.button>
+              <.button type="button" phx-click="cancel_edit">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+      <% end %>
+    <% end %>
     </div>
     """
   end

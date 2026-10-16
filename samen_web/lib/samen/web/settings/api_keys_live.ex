@@ -9,7 +9,7 @@ defmodule Samen.Web.Settings.ApiKeysLive do
   (`effective_scopes/2`). Mint/revoke are tenant-plane, admin-gated (the `ApiKey` create
   policy); an operator-plane view is read-only.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
@@ -96,107 +96,112 @@ defmodule Samen.Web.Settings.ApiKeysLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
     assigns =
       assigns
       |> assign_new(:minted_key, fn -> nil end)
       |> assign_new(:mint_error, fn -> nil end)
+    assigns
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:api_keys} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="settings-api-keys">
-      <.app_shell>
-        <:sidebar>
-          <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:api_keys} />
-        </:sidebar>
+    <.topbar title="API keys" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "API keys"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="API keys" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "API keys"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if is_nil(@org_id) do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="api-keys-panel">
-              <%= if @minted_key do %>
-                <div id="api-key-minted" style="border:1px solid #15803D;padding:12px;border-radius:6px;margin-bottom:14px">
-                  <strong>Copy your new key now — it is shown only once.</strong>
-                  <pre id="api-key-raw" style="margin:8px 0;user-select:all">{@minted_key.raw}</pre>
-                  <button type="button" phx-click="dismiss_key" class="btn" id="api-key-dismiss">Done</button>
-                </div>
-              <% end %>
-
-              <p :if={@mint_error} id="api-key-error" style="color:#B91C1C">{@mint_error}</p>
-
-              <%= if not operator_plane?(@samen_mount) do %>
-                <form id="api-key-mint-form" phx-submit="mint" style="margin-bottom:16px">
-                  <fieldset style="border:0;padding:0">
-                    <legend style="font-weight:600;font-size:13px">Mint a key</legend>
-                    <label style="margin-right:12px">
-                      <input type="checkbox" name="key[read]" value="1" checked /> read
-                    </label>
-                    <label style="margin-right:12px">
-                      <input type="checkbox" name="key[write]" value="1" /> write
-                    </label>
-                    <.button type="submit" variant="primary" id="api-key-mint">Mint key</.button>
-                  </fieldset>
-                  <p style="color:var(--muted);font-size:12px;margin-top:4px">
-                    Authority is bounded by your role — a viewer cannot mint a write key.
-                  </p>
-                </form>
-              <% else %>
-                <p id="api-key-operator-note" style="color:var(--muted)">
-                  Minting and revoking are tenant-plane actions.
-                </p>
-              <% end %>
-
-              <table id="api-keys-table" class="tbl">
-                <thead>
-                  <tr>
-                    <th scope="col">Key</th>
-                    <th scope="col">Plane</th>
-                    <th scope="col">Scopes</th>
-                    <th scope="col">Minter role</th>
-                    <th scope="col">Status</th>
-                    <th scope="col"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={k <- @keys} class="api-key-row" id={"api-key-#{k.id}"}>
-                    <td><code>{k.digest_prefix}…</code></td>
-                    <td>{k.plane}</td>
-                    <td style="font-size:12px">{format_scopes(k.scopes)}</td>
-                    <td>{k.minter_role}</td>
-                    <td>
-                      <span class={if k.revoked?, do: "status-pill status-revoked", else: "status-pill status-active"}>
-                        {if k.revoked?, do: "revoked", else: "active"}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        :if={not k.revoked? and not operator_plane?(@samen_mount)}
-                        type="button"
-                        phx-click="revoke"
-                        phx-value-id={k.id}
-                        class="btn"
-                        id={"api-key-revoke-#{k.id}"}
-                      >
-                        Revoke
-                      </button>
-                    </td>
-                  </tr>
-                  <tr :if={@keys == []}>
-                    <td colspan="6" style="color:var(--muted)">No API keys yet.</td>
-                  </tr>
-                </tbody>
-              </table>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="api-keys-panel">
+          <%= if @minted_key do %>
+            <div id="api-key-minted" style="border:1px solid #15803D;padding:12px;border-radius:6px;margin-bottom:14px">
+              <strong>Copy your new key now — it is shown only once.</strong>
+              <pre id="api-key-raw" style="margin:8px 0;user-select:all">{@minted_key.raw}</pre>
+              <button type="button" phx-click="dismiss_key" class="btn" id="api-key-dismiss">Done</button>
             </div>
-          </div>
-        <% end %>
-      </.app_shell>
+          <% end %>
+
+          <p :if={@mint_error} id="api-key-error" style="color:#B91C1C">{@mint_error}</p>
+
+          <%= if not operator_plane?(@samen_mount) do %>
+            <form id="api-key-mint-form" phx-submit="mint" style="margin-bottom:16px">
+              <fieldset style="border:0;padding:0">
+                <legend style="font-weight:600;font-size:13px">Mint a key</legend>
+                <label style="margin-right:12px">
+                  <input type="checkbox" name="key[read]" value="1" checked /> read
+                </label>
+                <label style="margin-right:12px">
+                  <input type="checkbox" name="key[write]" value="1" /> write
+                </label>
+                <.button type="submit" variant="primary" id="api-key-mint">Mint key</.button>
+              </fieldset>
+              <p style="color:var(--muted);font-size:12px;margin-top:4px">
+                Authority is bounded by your role — a viewer cannot mint a write key.
+              </p>
+            </form>
+          <% else %>
+            <p id="api-key-operator-note" style="color:var(--muted)">
+              Minting and revoking are tenant-plane actions.
+            </p>
+          <% end %>
+
+          <table id="api-keys-table" class="tbl">
+            <thead>
+              <tr>
+                <th scope="col">Key</th>
+                <th scope="col">Plane</th>
+                <th scope="col">Scopes</th>
+                <th scope="col">Minter role</th>
+                <th scope="col">Status</th>
+                <th scope="col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={k <- @keys} class="api-key-row" id={"api-key-#{k.id}"}>
+                <td><code>{k.digest_prefix}…</code></td>
+                <td>{k.plane}</td>
+                <td style="font-size:12px">{format_scopes(k.scopes)}</td>
+                <td>{k.minter_role}</td>
+                <td>
+                  <span class={if k.revoked?, do: "status-pill status-revoked", else: "status-pill status-active"}>
+                    {if k.revoked?, do: "revoked", else: "active"}
+                  </span>
+                </td>
+                <td>
+                  <button
+                    :if={not k.revoked? and not operator_plane?(@samen_mount)}
+                    type="button"
+                    phx-click="revoke"
+                    phx-value-id={k.id}
+                    class="btn"
+                    id={"api-key-revoke-#{k.id}"}
+                  >
+                    Revoke
+                  </button>
+                </td>
+              </tr>
+              <tr :if={@keys == []}>
+                <td colspan="6" style="color:var(--muted)">No API keys yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

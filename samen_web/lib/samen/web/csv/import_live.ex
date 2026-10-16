@@ -20,7 +20,7 @@ defmodule Samen.Web.Csv.ImportLive do
   files upload). POSTURE only — an operator-plane import would be refused
   row-by-row by the kernel guards regardless.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
@@ -115,79 +115,78 @@ defmodule Samen.Web.Csv.ImportLive do
 
   # -- render -------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns), do: ~H""
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="csv-import">
-      <.app_shell>
-        <:sidebar></:sidebar>
+    <.topbar title={"Import #{@resource_name} CSV"} crumbs={[Crumbs.org(@samen_mount, @org_id),  "Import"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title={"Import #{@resource_name} CSV"} crumbs={[Crumbs.org(@samen_mount, @org_id),  "Import"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if CurrentOrg.no_org?(@samen_mount, nil) and is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="csv-import-panel">
+          <div class="gtitle">
+            <h3>Import {@resource_name} rows</h3>
+            <span class="lane">every row through the governed create — bad mappings are rejected whole-file</span>
+          </div>
 
-        <%= if CurrentOrg.no_org?(@samen_mount, nil) and is_nil(@org_id) do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="csv-import-panel">
-              <div class="gtitle">
-                <h3>Import {@resource_name} rows</h3>
-                <span class="lane">every row through the governed create — bad mappings are rejected whole-file</span>
-              </div>
+          <%= if writable?(@samen_mount) do %>
+            <form id="csv-import-form" phx-submit="import" phx-change="validate">
+              <.live_file_input upload={@uploads.csv_upload} id="csv-import-input" />
 
-              <%= if writable?(@samen_mount) do %>
-                <form id="csv-import-form" phx-submit="import" phx-change="validate">
-                  <.live_file_input upload={@uploads.csv_upload} id="csv-import-input" />
+              <.button
+                type="submit"
+                variant="primary"
+                id="csv-import-submit"
+                disabled={Enum.empty?(@uploads.csv_upload.entries)}
+              >
+                Import
+              </.button>
+            </form>
+          <% else %>
+            <p id="csv-import-refused" style="color:var(--muted)">
+              Import is a tenant-plane action.
+            </p>
+          <% end %>
 
-                  <.button
-                    type="submit"
-                    variant="primary"
-                    id="csv-import-submit"
-                    disabled={Enum.empty?(@uploads.csv_upload.entries)}
-                  >
-                    Import
-                  </.button>
-                </form>
-              <% else %>
-                <p id="csv-import-refused" style="color:var(--muted)">
-                  Import is a tenant-plane action.
-                </p>
-              <% end %>
+          <%= if @import_error do %>
+            <p id="csv-import-error" style="color:#B91C1C;margin-top:8px">{@import_error}</p>
+          <% end %>
 
-              <%= if @import_error do %>
-                <p id="csv-import-error" style="color:#B91C1C;margin-top:8px">{@import_error}</p>
-              <% end %>
-
-              <%= if @report do %>
-                <div id="csv-import-report" style="margin-top:12px">
-                  <p id="csv-import-created" style="color:#15803D">
-                    Imported <strong>{@report.created}</strong> of {@report.total} row(s).
-                  </p>
-                  <%= if @report.errors != [] do %>
-                    <table id="csv-import-errors" class="tbl" style="margin-top:8px">
-                      <thead>
-                        <tr>
-                          <th scope="col" style="width:12%">Row</th>
-                          <th scope="col">Error</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr :for={e <- @report.errors} class="csv-error-row">
-                          <td>{e.row}</td>
-                          <td style="font-size:12px;color:var(--muted)">{e.error}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  <% end %>
-                </div>
+          <%= if @report do %>
+            <div id="csv-import-report" style="margin-top:12px">
+              <p id="csv-import-created" style="color:#15803D">
+                Imported <strong>{@report.created}</strong> of {@report.total} row(s).
+              </p>
+              <%= if @report.errors != [] do %>
+                <table id="csv-import-errors" class="tbl" style="margin-top:8px">
+                  <thead>
+                    <tr>
+                      <th scope="col" style="width:12%">Row</th>
+                      <th scope="col">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr :for={e <- @report.errors} class="csv-error-row">
+                      <td>{e.row}</td>
+                      <td style="font-size:12px;color:var(--muted)">{e.error}</td>
+                    </tr>
+                  </tbody>
+                </table>
               <% end %>
             </div>
-          </div>
-        <% end %>
-      </.app_shell>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

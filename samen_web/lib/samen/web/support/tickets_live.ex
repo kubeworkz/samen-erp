@@ -23,7 +23,7 @@ defmodule Samen.Web.Support.TicketsLive do
   the tenant plane only (`Samen.Web.Support.Live.writable?/1`); enforcement stays in
   the kernel (OrgScope + RoleAtLeast(:member) on every ticket write).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Support.Live, only: [assign_mount: 2, support_sidebar: 1, writable?: 1]
@@ -145,143 +145,144 @@ defmodule Samen.Web.Support.TicketsLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.support_sidebar mount={@samen_mount} org_id={@org_id} active={:support_tickets} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="support">
-      <.app_shell>
-        <:sidebar>
-          <.support_sidebar mount={@samen_mount} org_id={@org_id} active={:support_tickets} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Support" crumbs={crumbs(@samen_mount, @org_id, "Inbox")}>
+      <:actions>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_ticket" id="new-ticket">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New ticket
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Support" crumbs={crumbs(@samen_mount, @org_id, "Inbox")}>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Support org: {@org_id}</span>
+
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <div class="metrics">
+        <.metric label="Open tickets" value={(@metrics && @metrics.open_tickets) || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Breaching SLA" value={(@metrics && @metrics.breaching_sla) || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Solved this week" value={(@metrics && @metrics.solved_this_week) || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="CSAT avg" value={csat_display(@metrics && @metrics.csat_avg)} sub="/ 5">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
+
+      <div class="wrap">
+        <div id="tickets">
+          <div class="gtitle">
+            <h3>Ticket Inbox</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· agent PII via PiiResolution · {plane_note(@samen_mount)}</span>
+          </div>
+          <.list_view
+            id="tickets-list"
+            page={@page}
+            state={@list_state}
+            row_class="ticket-row"
+            filter_placeholder="Filter tickets…"
+            empty_text="No tickets yet."
+            empty_icon="⚑"
+            empty_body="Support tickets from your customers land here with status and SLA state."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_ticket" id="empty-new-ticket">New ticket</.button>
+            </:empty_actions>
+            <:head>
+              <.sort_header field={:subject} label="Subject" sort={@list_state.sort} width="30%" />
+              <.sort_header field={:status} label="Status" sort={@list_state.sort} width="12%" />
+              <.sort_header field={:priority} label="Priority" sort={@list_state.sort} width="12%" />
+              <th scope="col" style="width:20%">SLA</th>
+              <th scope="col" style="width:16%">Assignee</th>
+              <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={ticket}>
+              <td class="tk-subject">
+                <a href={"#{support_path(@samen_mount)}/tickets/#{ticket.id}?org=#{@org_id}"} style="font-weight:500;color:#3a3b45;text-decoration:none">
+                  {ticket.subject}
+                </a>
+              </td>
+              <td class="tk-status">
+                <.pill variant={status_variant(ticket.status)}>{status_label(ticket.status)}</.pill>
+              </td>
+              <td class="tk-priority">
+                <.pill variant={priority_variant(ticket.priority)}>{priority_label(ticket.priority)}</.pill>
+              </td>
+              <td class="tk-sla" style="font-size:12px;color:var(--muted)">
+                {sla_cell(ticket)}
+              </td>
+              <td class="tk-assignee" style="font-size:12px;color:var(--muted)">
+                {render_assignee(ticket, @agents_by_id)}
+              </td>
+              <td :if={writable?(@samen_mount)} class="tk-actions">
+                <.delete_confirm phx-click="delete" phx-value-id={ticket.id} />
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-ticket-modal" title="New ticket" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-ticket-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:subject]} label="Subject" />
+          <.form_field
+            field={f[:priority]}
+            label="Priority"
+            type="select"
+            options={[{"low", "low"}, {"normal", "normal"}, {"high", "high"}, {"urgent", "urgent"}]}
+          />
           <:actions>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_ticket" id="new-ticket">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New ticket
-            </.button>
+            <.button variant="primary" type="submit">Save ticket</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
           </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Support org: {@org_id}</span>
-
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <div class="metrics">
-            <.metric label="Open tickets" value={(@metrics && @metrics.open_tickets) || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Breaching SLA" value={(@metrics && @metrics.breaching_sla) || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Solved this week" value={(@metrics && @metrics.solved_this_week) || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="CSAT avg" value={csat_display(@metrics && @metrics.csat_avg)} sub="/ 5">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
-
-          <div class="wrap">
-            <div id="tickets">
-              <div class="gtitle">
-                <h3>Ticket Inbox</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· agent PII via PiiResolution · {plane_note(@samen_mount)}</span>
-              </div>
-              <.list_view
-                id="tickets-list"
-                page={@page}
-                state={@list_state}
-                row_class="ticket-row"
-                filter_placeholder="Filter tickets…"
-                empty_text="No tickets yet."
-                empty_icon="⚑"
-                empty_body="Support tickets from your customers land here with status and SLA state."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_ticket" id="empty-new-ticket">New ticket</.button>
-                </:empty_actions>
-                <:head>
-                  <.sort_header field={:subject} label="Subject" sort={@list_state.sort} width="30%" />
-                  <.sort_header field={:status} label="Status" sort={@list_state.sort} width="12%" />
-                  <.sort_header field={:priority} label="Priority" sort={@list_state.sort} width="12%" />
-                  <th scope="col" style="width:20%">SLA</th>
-                  <th scope="col" style="width:16%">Assignee</th>
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={ticket}>
-                  <td class="tk-subject">
-                    <a href={"#{support_path(@samen_mount)}/tickets/#{ticket.id}?org=#{@org_id}"} style="font-weight:500;color:#3a3b45;text-decoration:none">
-                      {ticket.subject}
-                    </a>
-                  </td>
-                  <td class="tk-status">
-                    <.pill variant={status_variant(ticket.status)}>{status_label(ticket.status)}</.pill>
-                  </td>
-                  <td class="tk-priority">
-                    <.pill variant={priority_variant(ticket.priority)}>{priority_label(ticket.priority)}</.pill>
-                  </td>
-                  <td class="tk-sla" style="font-size:12px;color:var(--muted)">
-                    {sla_cell(ticket)}
-                  </td>
-                  <td class="tk-assignee" style="font-size:12px;color:var(--muted)">
-                    {render_assignee(ticket, @agents_by_id)}
-                  </td>
-                  <td :if={writable?(@samen_mount)} class="tk-actions">
-                    <.delete_confirm phx-click="delete" phx-value-id={ticket.id} />
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-ticket-modal" title="New ticket" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-ticket-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:subject]} label="Subject" />
-              <.form_field
-                field={f[:priority]}
-                label="Priority"
-                type="select"
-                options={[{"low", "low"}, {"normal", "normal"}, {"high", "high"}, {"urgent", "urgent"}]}
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Save ticket</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

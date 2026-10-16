@@ -19,7 +19,7 @@ defmodule Samen.Web.CRM.CompaniesLive do
   the org reads its own companies; on the operator plane the same page renders the same
   rows (Company has no PII to mask — the masking proof lives on the Contacts page).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1, writable?: 1]
@@ -140,142 +140,143 @@ defmodule Samen.Web.CRM.CompaniesLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_companies} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-companies">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_companies} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Companies" crumbs={crumbs(@samen_mount, @org_id, "Companies")}>
+      <:actions>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_company" id="new-company">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New company
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Companies" crumbs={crumbs(@samen_mount, @org_id, "Companies")}>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
+
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <div class="metrics">
+        <.metric label="Companies" value={@metrics && @metrics.companies || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Contacts" value={@metrics && @metrics.contacts || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Open opportunities" value={@metrics && @metrics.open_opps || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric
+          label="Pipeline value"
+          value={dollars((@metrics && @metrics.pipeline_value) || 0)}
+          sub="open opportunities"
+        >
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
+
+      <div class="wrap">
+        <div id="companies">
+          <div class="gtitle">
+            <h3>Companies</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· org-scoped · no PII</span>
+          </div>
+          <.list_view
+            id="companies-list"
+            page={@page}
+            state={@list_state}
+            row_class="company-row"
+            filter_placeholder="Filter companies…"
+            empty_text="No companies yet."
+            empty_icon="▣"
+            empty_body="Companies group your contacts, deals, and activity in one place."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_company" id="empty-new-company">New company</.button>
+            </:empty_actions>
+            <:head>
+              <.sort_header field={:name} label="Name" sort={@list_state.sort} width="30%" />
+              <th scope="col" style="width:16%">Type / Role</th>
+              <.sort_header field={:industry} label="Industry" sort={@list_state.sort} width="16%" />
+              <.sort_header field={:size} label="Size" sort={@list_state.sort} width="14%" />
+              <th scope="col" style="width:16%">Website</th>
+              <th :if={writable?(@samen_mount)} scope="col" style="width:8%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={c}>
+              <td class="c-name">
+                <a href={company_path(@samen_mount, @org_id, c.id)} style="display:flex;align-items:center;gap:8px;text-decoration:none">
+                  <div class="av" style="width:28px;height:28px;border-radius:6px;background:#E3EDF7;color:#3B4CCA;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    {company_initials(c.name)}
+                  </div>
+                  <span style="font-weight:500;color:#3B4CCA">{c.name}</span>
+                </a>
+              </td>
+              <td class="c-role">
+                <.pill variant={role_variant(company_role(c))}>{company_role(c)}</.pill>
+              </td>
+              <td class="c-industry" style="color:var(--muted)">{c.industry || "—"}</td>
+              <td class="c-size" style="color:var(--muted)">{c.size || "—"}</td>
+              <td class="c-website" style="color:var(--muted);font-size:12px">{Map.get(c, :website) || "—"}</td>
+              <td :if={writable?(@samen_mount)} class="c-actions">
+                <.delete_confirm phx-click="delete" phx-value-id={c.id} />
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-company-modal" title="New company" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-company-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:name]} label="Name" />
+          <.form_field field={f[:industry]} label="Industry" />
+          <.form_field field={f[:size]} label="Size" />
+          <.form_field field={f[:website]} label="Website" type="url" />
+          <.form_field field={f[:notes]} label="Notes" type="textarea" />
           <:actions>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_company" id="new-company">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New company
-            </.button>
+            <.button variant="primary" type="submit">Save company</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
           </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
-
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <div class="metrics">
-            <.metric label="Companies" value={@metrics && @metrics.companies || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Contacts" value={@metrics && @metrics.contacts || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Open opportunities" value={@metrics && @metrics.open_opps || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric
-              label="Pipeline value"
-              value={dollars((@metrics && @metrics.pipeline_value) || 0)}
-              sub="open opportunities"
-            >
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
-
-          <div class="wrap">
-            <div id="companies">
-              <div class="gtitle">
-                <h3>Companies</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· org-scoped · no PII</span>
-              </div>
-              <.list_view
-                id="companies-list"
-                page={@page}
-                state={@list_state}
-                row_class="company-row"
-                filter_placeholder="Filter companies…"
-                empty_text="No companies yet."
-                empty_icon="▣"
-                empty_body="Companies group your contacts, deals, and activity in one place."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_company" id="empty-new-company">New company</.button>
-                </:empty_actions>
-                <:head>
-                  <.sort_header field={:name} label="Name" sort={@list_state.sort} width="30%" />
-                  <th scope="col" style="width:16%">Type / Role</th>
-                  <.sort_header field={:industry} label="Industry" sort={@list_state.sort} width="16%" />
-                  <.sort_header field={:size} label="Size" sort={@list_state.sort} width="14%" />
-                  <th scope="col" style="width:16%">Website</th>
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:8%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={c}>
-                  <td class="c-name">
-                    <a href={company_path(@samen_mount, @org_id, c.id)} style="display:flex;align-items:center;gap:8px;text-decoration:none">
-                      <div class="av" style="width:28px;height:28px;border-radius:6px;background:#E3EDF7;color:#3B4CCA;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                        {company_initials(c.name)}
-                      </div>
-                      <span style="font-weight:500;color:#3B4CCA">{c.name}</span>
-                    </a>
-                  </td>
-                  <td class="c-role">
-                    <.pill variant={role_variant(company_role(c))}>{company_role(c)}</.pill>
-                  </td>
-                  <td class="c-industry" style="color:var(--muted)">{c.industry || "—"}</td>
-                  <td class="c-size" style="color:var(--muted)">{c.size || "—"}</td>
-                  <td class="c-website" style="color:var(--muted);font-size:12px">{Map.get(c, :website) || "—"}</td>
-                  <td :if={writable?(@samen_mount)} class="c-actions">
-                    <.delete_confirm phx-click="delete" phx-value-id={c.id} />
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-company-modal" title="New company" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-company-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:name]} label="Name" />
-              <.form_field field={f[:industry]} label="Industry" />
-              <.form_field field={f[:size]} label="Size" />
-              <.form_field field={f[:website]} label="Website" type="url" />
-              <.form_field field={f[:notes]} label="Notes" type="textarea" />
-              <:actions>
-                <.button variant="primary" type="submit">Save company</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

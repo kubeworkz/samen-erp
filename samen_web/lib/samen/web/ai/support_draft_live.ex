@@ -11,7 +11,7 @@ defmodule Samen.Web.AI.SupportDraftLive do
   `org_id` is injected into the draft attrs from the TRUSTED scope by the server, never from
   client params; the draft LIST is org-scoped (patch 142).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -84,66 +84,67 @@ defmodule Samen.Web.AI.SupportDraftLive do
   defp present(""), do: nil
   defp present(v), do: v
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:support} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:support} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · Support draft"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "Support draft"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:support} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · Support draft"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "Support draft"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:support} base={ai_base(@samen_mount)} />
 
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
-          <form phx-submit="compose" class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
-            <label style="font-size:13px;font-weight:600">Recipient subscriber id (token)</label>
-            <input type="text" name="to_subscriber_id" id="ai-support-subscriber" value={@to_subscriber_id} placeholder="subscriber UUID" />
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+        <form phx-submit="compose" class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
+          <label style="font-size:13px;font-weight:600">Recipient subscriber id (token)</label>
+          <input type="text" name="to_subscriber_id" id="ai-support-subscriber" value={@to_subscriber_id} placeholder="subscriber UUID" />
 
-            <label style="font-size:13px;font-weight:600">Inbound ref (object-ref, optional)</label>
-            <input type="text" name="inbound_ref" id="ai-support-inbound" value={@inbound_ref} />
+          <label style="font-size:13px;font-weight:600">Inbound ref (object-ref, optional)</label>
+          <input type="text" name="inbound_ref" id="ai-support-inbound" value={@inbound_ref} />
 
-            <label style="font-size:13px;font-weight:600">Draft instruction</label>
-            <textarea name="instruction" id="ai-support-instruction" rows="3">{@instruction}</textarea>
+          <label style="font-size:13px;font-weight:600">Draft instruction</label>
+          <textarea name="instruction" id="ai-support-instruction" rows="3">{@instruction}</textarea>
 
-            <div><.button variant="primary" type="submit">Compose draft (never sends)</.button></div>
-          </form>
+          <div><.button variant="primary" type="submit">Compose draft (never sends)</.button></div>
+        </form>
 
-          <.compose_outcome :if={@outcome} outcome={@outcome} />
+        <.compose_outcome :if={@outcome} outcome={@outcome} />
 
-          <div class="card" id="ai-support-drafts" style="padding:16px">
-            <h3 style="margin:0 0 8px;font-size:14px">Drafts in this org</h3>
-            <%= if @drafts == [] do %>
-              <.empty_state title="No drafts yet" body="Compose one above. Drafts are human-approved before any send." icon="✎" />
-            <% else %>
-              <ul style="list-style:none;margin:0;padding:0">
-                <li :for={d <- @drafts} class="ai-draft-row" id={"ai-draft-#{d.id}"} data-simulated={to_string(draft_simulated?(d))} style="padding:8px 0;border-bottom:1px solid var(--line,#222)">
-                  <.pill variant={status_variant(d.status)}>{d.status}</.pill>
-                  <%!-- PP-16: a stored keyless/deterministic (SIMULATED) draft carries the loud
-                        honesty badge from the persisted `:simulated` provenance — never laundered
-                        as a genuine model reply. --%>
-                  <.pill :if={draft_simulated?(d)} variant="warn"><span class="ai-draft-badge">SIMULATED — not a real model</span></.pill>
-                  <span style="margin-left:8px">{draft_body(d)}</span>
-                </li>
-              </ul>
-            <% end %>
-          </div>
+        <div class="card" id="ai-support-drafts" style="padding:16px">
+          <h3 style="margin:0 0 8px;font-size:14px">Drafts in this org</h3>
+          <%= if @drafts == [] do %>
+            <.empty_state title="No drafts yet" body="Compose one above. Drafts are human-approved before any send." icon="✎" />
+          <% else %>
+            <ul style="list-style:none;margin:0;padding:0">
+              <li :for={d <- @drafts} class="ai-draft-row" id={"ai-draft-#{d.id}"} data-simulated={to_string(draft_simulated?(d))} style="padding:8px 0;border-bottom:1px solid var(--line,#222)">
+                <.pill variant={status_variant(d.status)}>{d.status}</.pill>
+                <%!-- PP-16: a stored keyless/deterministic (SIMULATED) draft carries the loud
+                      honesty badge from the persisted `:simulated` provenance — never laundered
+                      as a genuine model reply. --%>
+                <.pill :if={draft_simulated?(d)} variant="warn"><span class="ai-draft-badge">SIMULATED — not a real model</span></.pill>
+                <span style="margin-left:8px">{draft_body(d)}</span>
+              </li>
+            </ul>
+          <% end %>
         </div>
-      <% end %>
-    </.app_shell>
+      </div>
+    <% end %>
     """
   end
 

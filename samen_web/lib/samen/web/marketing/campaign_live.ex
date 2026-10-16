@@ -21,7 +21,7 @@ defmodule Samen.Web.Marketing.CampaignLive do
   This LiveView never calls `Samen.Vault.reveal/3`, never unwraps a `%Masked{}`, and has no
   "show plaintext" branch. A `%Masked{}` recipient email renders `••••` verbatim.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Marketing.Live, only: [assign_mount: 2, marketing_sidebar: 1, marketing_path: 1, marketing_plane_note: 1]
@@ -147,130 +147,131 @@ defmodule Samen.Web.Marketing.CampaignLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_campaigns} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="mkt-campaign">
-      <.app_shell>
-        <:sidebar>
-          <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_campaigns} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={campaign_title(@campaign)} crumbs={crumbs(@samen_mount, @org_id, campaign_title(@campaign))}>
+      <:actions>
+        <a href={campaigns_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Back to campaigns</a>
+      </:actions>
+    </.topbar>
 
-        <.topbar title={campaign_title(@campaign)} crumbs={crumbs(@samen_mount, @org_id, campaign_title(@campaign))}>
-          <:actions>
-            <a href={campaigns_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Back to campaigns</a>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
-
-          <%= if @campaign == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Campaign not found.</div>
+      <%= if @campaign == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Campaign not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="campaign-header" style="padding:18px 20px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0">{@campaign.name}</h1>
+              <.pill variant={status_variant(@campaign.status)}>{@campaign.status}</.pill>
             </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="campaign-header" style="padding:18px 20px">
-                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-                  <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0">{@campaign.name}</h1>
-                  <.pill variant={status_variant(@campaign.status)}>{@campaign.status}</.pill>
+            <div :if={@campaign.description} style="font-size:12px;color:var(--muted);margin-top:4px">{@campaign.description}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:6px">· consent + suppression enforced on every send · {marketing_plane_note(@samen_mount)}</div>
+          </div>
+        </div>
+
+        <%= if composer?(@samen_mount) do %>
+          <div class="wrap" id="compose-pane" style="margin-bottom:0;padding-top:8px">
+            <div class="card" style="padding:18px 20px">
+              <div class="gtitle" style="margin-bottom:12px"><h3>Compose &amp; send</h3></div>
+              <form id="send-campaign-form" phx-submit="send_campaign" style="display:flex;flex-direction:column;gap:10px">
+                <label style="font-size:12px;color:var(--muted)">Template
+                  <select name="send[template_id]" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:280px">
+                    <option value="">— select a template —</option>
+                    <option :for={t <- @templates} value={t.id}>{t.name} — {t.subject_line}</option>
+                  </select>
+                </label>
+                <label style="font-size:12px;color:var(--muted)">Segment (audience)
+                  <select name="send[segment_id]" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:280px">
+                    <option value="">— select a segment —</option>
+                    <option :for={s <- @segments} value={s.id}>{s.name} ({s.subscriber_count} subscribers)</option>
+                  </select>
+                </label>
+                <div>
+                  <.button variant="primary" type="submit">Send to segment</.button>
                 </div>
-                <div :if={@campaign.description} style="font-size:12px;color:var(--muted);margin-top:4px">{@campaign.description}</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:6px">· consent + suppression enforced on every send · {marketing_plane_note(@samen_mount)}</div>
-              </div>
+              </form>
             </div>
-
-            <%= if composer?(@samen_mount) do %>
-              <div class="wrap" id="compose-pane" style="margin-bottom:0;padding-top:8px">
-                <div class="card" style="padding:18px 20px">
-                  <div class="gtitle" style="margin-bottom:12px"><h3>Compose &amp; send</h3></div>
-                  <form id="send-campaign-form" phx-submit="send_campaign" style="display:flex;flex-direction:column;gap:10px">
-                    <label style="font-size:12px;color:var(--muted)">Template
-                      <select name="send[template_id]" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:280px">
-                        <option value="">— select a template —</option>
-                        <option :for={t <- @templates} value={t.id}>{t.name} — {t.subject_line}</option>
-                      </select>
-                    </label>
-                    <label style="font-size:12px;color:var(--muted)">Segment (audience)
-                      <select name="send[segment_id]" style="display:block;margin-top:4px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:280px">
-                        <option value="">— select a segment —</option>
-                        <option :for={s <- @segments} value={s.id}>{s.name} ({s.subscriber_count} subscribers)</option>
-                      </select>
-                    </label>
-                    <div>
-                      <.button variant="primary" type="submit">Send to segment</.button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            <% end %>
-
-            <div :if={@notice} class="wrap" style="margin-bottom:0;padding-top:8px">
-              <div class="card send-notice" style="padding:12px 16px;font-size:13px;color:#2a2b35">{@notice}</div>
-            </div>
-
-            <div :if={@send_results not in [nil, []]} class="wrap" id="send-results" style="margin-bottom:0;padding-top:8px">
-              <div class="card" style="padding:8px 4px 12px">
-                <div class="gtitle" style="margin-bottom:8px;padding:6px 16px 0"><h3>Send results</h3></div>
-                <.data_table>
-                  <:head>
-                    <th style="width:60%">Subscriber</th>
-                    <th style="width:40%">Result</th>
-                  </:head>
-                  <tr :for={r <- @send_results} class="send-result-row" id={"send-result-#{r.subscriber_id}"}>
-                    <td style="font-size:12px;color:var(--muted)">{short_id(r.subscriber_id)}</td>
-                    <td>{result_pill(r.result)}</td>
-                  </tr>
-                </.data_table>
-              </div>
-            </div>
-
-            <div class="wrap" id="audience-pane" style="margin-bottom:0;padding-top:8px">
-              <div class="gtitle"><h3>Recipients (first segment)</h3><span class="n">{length(@audience)}</span>
-                <span class="lane">· email via PiiResolution · {marketing_plane_note(@samen_mount)}</span>
-              </div>
-              <%= if @audience == [] do %>
-                <.empty_state
-                  class="recipients-empty"
-                  icon="◔"
-                  title="No subscribers in the first segment yet."
-                  body="Add subscribers to the campaign's segment and they appear here as recipients."
-                />
-              <% else %>
-                <.data_table>
-                  <:head>
-                    <th style="width:50%">Email</th>
-                    <th style="width:25%">Status</th>
-                    <th style="width:25%">Source</th>
-                  </:head>
-                  <tr :for={s <- @audience} class="recipient-row" id={"recipient-#{s.id}"}>
-                    <td class="recipient-email" style="font-size:12px;color:var(--muted)">{s.email}</td>
-                    <td><.pill variant={sub_status_variant(s.status)}>{s.status}</.pill></td>
-                    <td style="font-size:12px;color:var(--muted)">{s.source || "—"}</td>
-                  </tr>
-                </.data_table>
-              <% end %>
-            </div>
-
-            <div class="wrap" id="events-pane" style="padding-top:8px">
-              <div class="gtitle"><h3>Delivery events</h3></div>
-              <div class="card" style="padding:14px 16px;display:flex;gap:8px;flex-wrap:wrap">
-                <%= if @event_counts == %{} and @sends == [] do %>
-                  <span style="color:var(--muted);font-size:13px">No sends yet.</span>
-                <% else %>
-                  <.pill variant="info">queued {Enum.count(@sends, &(&1.status == :queued))}</.pill>
-                  <.pill :for={{type, count} <- @event_counts} variant={event_variant(type)}>{type} {count}</.pill>
-                <% end %>
-              </div>
-            </div>
-          <% end %>
+          </div>
         <% end %>
-      </.app_shell>
+
+        <div :if={@notice} class="wrap" style="margin-bottom:0;padding-top:8px">
+          <div class="card send-notice" style="padding:12px 16px;font-size:13px;color:#2a2b35">{@notice}</div>
+        </div>
+
+        <div :if={@send_results not in [nil, []]} class="wrap" id="send-results" style="margin-bottom:0;padding-top:8px">
+          <div class="card" style="padding:8px 4px 12px">
+            <div class="gtitle" style="margin-bottom:8px;padding:6px 16px 0"><h3>Send results</h3></div>
+            <.data_table>
+              <:head>
+                <th style="width:60%">Subscriber</th>
+                <th style="width:40%">Result</th>
+              </:head>
+              <tr :for={r <- @send_results} class="send-result-row" id={"send-result-#{r.subscriber_id}"}>
+                <td style="font-size:12px;color:var(--muted)">{short_id(r.subscriber_id)}</td>
+                <td>{result_pill(r.result)}</td>
+              </tr>
+            </.data_table>
+          </div>
+        </div>
+
+        <div class="wrap" id="audience-pane" style="margin-bottom:0;padding-top:8px">
+          <div class="gtitle"><h3>Recipients (first segment)</h3><span class="n">{length(@audience)}</span>
+            <span class="lane">· email via PiiResolution · {marketing_plane_note(@samen_mount)}</span>
+          </div>
+          <%= if @audience == [] do %>
+            <.empty_state
+              class="recipients-empty"
+              icon="◔"
+              title="No subscribers in the first segment yet."
+              body="Add subscribers to the campaign's segment and they appear here as recipients."
+            />
+          <% else %>
+            <.data_table>
+              <:head>
+                <th style="width:50%">Email</th>
+                <th style="width:25%">Status</th>
+                <th style="width:25%">Source</th>
+              </:head>
+              <tr :for={s <- @audience} class="recipient-row" id={"recipient-#{s.id}"}>
+                <td class="recipient-email" style="font-size:12px;color:var(--muted)">{s.email}</td>
+                <td><.pill variant={sub_status_variant(s.status)}>{s.status}</.pill></td>
+                <td style="font-size:12px;color:var(--muted)">{s.source || "—"}</td>
+              </tr>
+            </.data_table>
+          <% end %>
+        </div>
+
+        <div class="wrap" id="events-pane" style="padding-top:8px">
+          <div class="gtitle"><h3>Delivery events</h3></div>
+          <div class="card" style="padding:14px 16px;display:flex;gap:8px;flex-wrap:wrap">
+            <%= if @event_counts == %{} and @sends == [] do %>
+              <span style="color:var(--muted);font-size:13px">No sends yet.</span>
+            <% else %>
+              <.pill variant="info">queued {Enum.count(@sends, &(&1.status == :queued))}</.pill>
+              <.pill :for={{type, count} <- @event_counts} variant={event_variant(type)}>{type} {count}</.pill>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
     </div>
     """
   end

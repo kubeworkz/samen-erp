@@ -40,7 +40,7 @@ defmodule PawChartWeb.ClinicLive do
   A fresh clinic with no patients/pets renders real empty states (never a stub/crash);
   a page with no resolvable org renders the framework `no_org_card`.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [writable?: 1]
@@ -244,145 +244,152 @@ defmodule PawChartWeb.ClinicLive do
   # Render
   # ==========================================================================
 
-  @impl true
-  def render(assigns) do
+  # -- render ------------------------------------------------------------------
+  #
+  # The shell is NOT written here: `use Samen.Web.Tenant.Live` composes `<.app_shell>` around
+  # these two callbacks — `tenant_sidebar/1` as the shell's `:sidebar` slot and `tenant_page/1`
+  # as everything inside `<main>` — so this page cannot render outside the shared chrome.
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.clinic_sidebar mount={@samen_mount} org_id={@org_id} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="clinic">
-      <.app_shell>
-        <:sidebar>
-          <.clinic_sidebar mount={@samen_mount} org_id={@org_id} return_to={@return_to} />
-        </:sidebar>
 
-        <.topbar title="Clinic" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Clinic", "Patients & Pets"]} />
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+      <.topbar title="Clinic" crumbs={[CurrentOrg.name(@samen_mount, @org_id), "Clinic", "Patients & Pets"]} />
+      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Clinic org: {@org_id}</span>
+      <%= if @no_org do %>
+        <.no_org_card mount={@samen_mount} />
+      <% else %>
+        <span id="org-banner" style="display:none">Clinic org: {@org_id}</span>
 
-          <div class="wrap" style="display:flex;flex-direction:column;gap:22px;padding:16px 20px">
-            <p style="font-size:12px;color:var(--muted);line-height:1.5;margin:0">
-              Your clinic's patients (the pet owners you bill and message) and their pets (the clinical
-              record). Owner name / email / phone and a pet's microchip are 🔒 vaulted — your clinic reads
-              them in the clear; the platform operator sees <b>••••</b>.
-            </p>
+        <div class="wrap" style="display:flex;flex-direction:column;gap:22px;padding:16px 20px">
+          <p style="font-size:12px;color:var(--muted);line-height:1.5;margin:0">
+            Your clinic's patients (the pet owners you bill and message) and their pets (the clinical
+            record). Owner name / email / phone and a pet's microchip are 🔒 vaulted — your clinic reads
+            them in the clear; the platform operator sees <b>••••</b>.
+          </p>
 
-            <%!-- Selected patient detail (via ?patient=<id>) --%>
-            <section :if={@selected_owner} id="patient-detail" class="card" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-                <h3 style="margin:0;font-size:14px;font-weight:650" class="owner-detail-name">{owner_name(@selected_owner)}</h3>
-                <div style="display:flex;gap:8px">
-                  <.button :if={writable?(@samen_mount)} phx-click="edit_owner" phx-value-id={@selected_owner.id}>Edit patient</.button>
-                  <.link patch={"/clinic?org=#{@org_id}"} class="btn">Back to all</.link>
-                </div>
+          <%!-- Selected patient detail (via ?patient=<id>) --%>
+          <section :if={@selected_owner} id="patient-detail" class="card" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <h3 style="margin:0;font-size:14px;font-weight:650" class="owner-detail-name">{owner_name(@selected_owner)}</h3>
+              <div style="display:flex;gap:8px">
+                <.button :if={writable?(@samen_mount)} phx-click="edit_owner" phx-value-id={@selected_owner.id}>Edit patient</.button>
+                <.link patch={"/clinic?org=#{@org_id}"} class="btn">Back to all</.link>
               </div>
-              <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px">
-                <div><span style="color:var(--muted)">Email</span><br /><span class="owner-detail-email">{owner_email(@selected_owner)}</span></div>
-                <div><span style="color:var(--muted)">Phone</span><br /><span class="owner-detail-phone">{owner_phone(@selected_owner)}</span></div>
-                <div><span style="color:var(--muted)">Marketing</span><br />{marketing_label(@selected_owner)}</div>
-              </div>
+            </div>
+            <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px">
+              <div><span style="color:var(--muted)">Email</span><br /><span class="owner-detail-email">{owner_email(@selected_owner)}</span></div>
+              <div><span style="color:var(--muted)">Phone</span><br /><span class="owner-detail-phone">{owner_phone(@selected_owner)}</span></div>
+              <div><span style="color:var(--muted)">Marketing</span><br />{marketing_label(@selected_owner)}</div>
+            </div>
 
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px">
-                <h4 style="margin:0;font-size:12px;font-weight:600;color:var(--muted)">Pets</h4>
-                <.button :if={writable?(@samen_mount)} phx-click="new_pet" phx-value-owner_id={@selected_owner.id}>New pet for this patient</.button>
-              </div>
-              <%= if @selected_pets == [] do %>
-                <.empty_state class="owner-pets-empty" icon="🐾" title="No pets on file for this patient yet." />
-              <% else %>
-                <.data_table>
-                  <:head>
-                    <th style="width:28%">Pet</th>
-                    <th style="width:18%">Species</th>
-                    <th style="width:18%">Breed</th>
-                    <th style="width:24%">Microchip 🔒</th>
-                    <th style="width:12%"></th>
-                  </:head>
-                  <tr :for={p <- @selected_pets} class="owner-pet-row" id={"owner-pet-#{p.id}"}>
-                    <td style="font-weight:500">{p.name}</td>
-                    <td style="font-size:12px;color:var(--muted)">{p.species}</td>
-                    <td style="font-size:12px;color:var(--muted)">{p.breed || "—"}</td>
-                    <td class="pet-microchip mono" style="font-size:12px">{pet_microchip(p)}</td>
-                    <td><.button :if={writable?(@samen_mount)} phx-click="edit_pet" phx-value-id={p.id}>Edit</.button></td>
-                  </tr>
-                </.data_table>
-              <% end %>
-            </section>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px">
+              <h4 style="margin:0;font-size:12px;font-weight:600;color:var(--muted)">Pets</h4>
+              <.button :if={writable?(@samen_mount)} phx-click="new_pet" phx-value-owner_id={@selected_owner.id}>New pet for this patient</.button>
+            </div>
+            <%= if @selected_pets == [] do %>
+              <.empty_state class="owner-pets-empty" icon="🐾" title="No pets on file for this patient yet." />
+            <% else %>
+              <.data_table>
+                <:head>
+                  <th style="width:28%">Pet</th>
+                  <th style="width:18%">Species</th>
+                  <th style="width:18%">Breed</th>
+                  <th style="width:24%">Microchip 🔒</th>
+                  <th style="width:12%"></th>
+                </:head>
+                <tr :for={p <- @selected_pets} class="owner-pet-row" id={"owner-pet-#{p.id}"}>
+                  <td style="font-weight:500">{p.name}</td>
+                  <td style="font-size:12px;color:var(--muted)">{p.species}</td>
+                  <td style="font-size:12px;color:var(--muted)">{p.breed || "—"}</td>
+                  <td class="pet-microchip mono" style="font-size:12px">{pet_microchip(p)}</td>
+                  <td><.button :if={writable?(@samen_mount)} phx-click="edit_pet" phx-value-id={p.id}>Edit</.button></td>
+                </tr>
+              </.data_table>
+            <% end %>
+          </section>
 
-            <%!-- Patients (owners) --%>
-            <section id="patients-list">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-                <h3 style="margin:0;font-size:13px;font-weight:600">Patients (owners)</h3>
-                <.button :if={writable?(@samen_mount)} variant="primary" phx-click="new_owner">New patient</.button>
-              </div>
-              <%= if @owners == [] do %>
-                <.empty_state
-                  class="patients-empty"
-                  icon="👤"
-                  title="No patients yet."
-                  body="Add your first patient (a pet owner) to start building the clinical record."
-                />
-              <% else %>
-                <.data_table>
-                  <:head>
-                    <th style="width:26%">Owner 🔒</th>
-                    <th style="width:26%">Email 🔒</th>
-                    <th style="width:20%">Phone 🔒</th>
-                    <th style="width:14%">Marketing</th>
-                    <th style="width:14%"></th>
-                  </:head>
-                  <tr :for={o <- @owners} class="patient-row" id={"patient-#{o.id}"}>
-                    <td class="p-name" style="font-weight:500">
-                      <.link patch={"/clinic?org=#{@org_id}&patient=#{o.id}"}>{owner_name(o)}</.link>
-                    </td>
-                    <td class="p-email" style="font-size:12px;color:var(--muted)">{owner_email(o)}</td>
-                    <td class="p-phone" style="font-size:12px;color:var(--muted)">{owner_phone(o)}</td>
-                    <td>{marketing_label(o)}</td>
-                    <td>
-                      <.button :if={writable?(@samen_mount)} phx-click="edit_owner" phx-value-id={o.id}>Edit</.button>
-                    </td>
-                  </tr>
-                </.data_table>
-              <% end %>
-            </section>
+          <%!-- Patients (owners) --%>
+          <section id="patients-list">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+              <h3 style="margin:0;font-size:13px;font-weight:600">Patients (owners)</h3>
+              <.button :if={writable?(@samen_mount)} variant="primary" phx-click="new_owner">New patient</.button>
+            </div>
+            <%= if @owners == [] do %>
+              <.empty_state
+                class="patients-empty"
+                icon="👤"
+                title="No patients yet."
+                body="Add your first patient (a pet owner) to start building the clinical record."
+              />
+            <% else %>
+              <.data_table>
+                <:head>
+                  <th style="width:26%">Owner 🔒</th>
+                  <th style="width:26%">Email 🔒</th>
+                  <th style="width:20%">Phone 🔒</th>
+                  <th style="width:14%">Marketing</th>
+                  <th style="width:14%"></th>
+                </:head>
+                <tr :for={o <- @owners} class="patient-row" id={"patient-#{o.id}"}>
+                  <td class="p-name" style="font-weight:500">
+                    <.link patch={"/clinic?org=#{@org_id}&patient=#{o.id}"}>{owner_name(o)}</.link>
+                  </td>
+                  <td class="p-email" style="font-size:12px;color:var(--muted)">{owner_email(o)}</td>
+                  <td class="p-phone" style="font-size:12px;color:var(--muted)">{owner_phone(o)}</td>
+                  <td>{marketing_label(o)}</td>
+                  <td>
+                    <.button :if={writable?(@samen_mount)} phx-click="edit_owner" phx-value-id={o.id}>Edit</.button>
+                  </td>
+                </tr>
+              </.data_table>
+            <% end %>
+          </section>
 
-            <%!-- Pets --%>
-            <section id="pets-list">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
-                <h3 style="margin:0;font-size:13px;font-weight:600">Pets (clinical records)</h3>
-                <.button :if={writable?(@samen_mount)} variant="primary" phx-click="new_pet">New pet</.button>
-              </div>
-              <%= if @pets == [] do %>
-                <.empty_state
-                  class="pets-empty"
-                  icon="🐾"
-                  title="No pets yet."
-                  body="Add a pet and link it to its owner to open a clinical record."
-                />
-              <% else %>
-                <.data_table>
-                  <:head>
-                    <th style="width:22%">Pet</th>
-                    <th style="width:14%">Species</th>
-                    <th style="width:14%">Breed</th>
-                    <th style="width:20%">Microchip 🔒</th>
-                    <th style="width:16%">Owner</th>
-                    <th style="width:14%"></th>
-                  </:head>
-                  <tr :for={p <- @pets} class="pet-row" id={"pet-#{p.id}"}>
-                    <td style="font-weight:500">{p.name}</td>
-                    <td style="font-size:12px;color:var(--muted)">{p.species}</td>
-                    <td style="font-size:12px;color:var(--muted)">{p.breed || "—"}</td>
-                    <td class="pet-microchip mono" style="font-size:12px">{pet_microchip(p)}</td>
-                    <td style="font-size:12px;color:var(--muted)">{owner_ref(@owners, p.owner_id)}</td>
-                    <td><.button :if={writable?(@samen_mount)} phx-click="edit_pet" phx-value-id={p.id}>Edit</.button></td>
-                  </tr>
-                </.data_table>
-              <% end %>
-            </section>
-          </div>
-        <% end %>
-      </.app_shell>
+          <%!-- Pets --%>
+          <section id="pets-list">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+              <h3 style="margin:0;font-size:13px;font-weight:600">Pets (clinical records)</h3>
+              <.button :if={writable?(@samen_mount)} variant="primary" phx-click="new_pet">New pet</.button>
+            </div>
+            <%= if @pets == [] do %>
+              <.empty_state
+                class="pets-empty"
+                icon="🐾"
+                title="No pets yet."
+                body="Add a pet and link it to its owner to open a clinical record."
+              />
+            <% else %>
+              <.data_table>
+                <:head>
+                  <th style="width:22%">Pet</th>
+                  <th style="width:14%">Species</th>
+                  <th style="width:14%">Breed</th>
+                  <th style="width:20%">Microchip 🔒</th>
+                  <th style="width:16%">Owner</th>
+                  <th style="width:14%"></th>
+                </:head>
+                <tr :for={p <- @pets} class="pet-row" id={"pet-#{p.id}"}>
+                  <td style="font-weight:500">{p.name}</td>
+                  <td style="font-size:12px;color:var(--muted)">{p.species}</td>
+                  <td style="font-size:12px;color:var(--muted)">{p.breed || "—"}</td>
+                  <td class="pet-microchip mono" style="font-size:12px">{pet_microchip(p)}</td>
+                  <td style="font-size:12px;color:var(--muted)">{owner_ref(@owners, p.owner_id)}</td>
+                  <td><.button :if={writable?(@samen_mount)} phx-click="edit_pet" phx-value-id={p.id}>Edit</.button></td>
+                </tr>
+              </.data_table>
+            <% end %>
+          </section>
+        </div>
+      <% end %>
 
       <%!-- Patient (owner) modal — tenant plane only --%>
       <.modal :if={@owner_modal && writable?(@samen_mount)} id="owner-modal" title={owner_modal_title(@owner_modal)} on_cancel="cancel_owner">

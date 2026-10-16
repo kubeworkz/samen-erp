@@ -30,7 +30,7 @@ defmodule Samen.Web.Notifications.PreferencesLive do
   `?recipient=` param; with NEITHER, the panel renders an honest "no recipient
   wired" card rather than guessing an identity.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -213,88 +213,89 @@ defmodule Samen.Web.Notifications.PreferencesLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.notifications_sidebar
+      mount={@samen_mount}
+      org_id={@org_id}
+      active={:notifications_settings}
+      return_to={@return_to}
+    />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="notification-preferences">
-      <.app_shell>
-        <:sidebar>
-          <.notifications_sidebar
-            mount={@samen_mount}
-            org_id={@org_id}
-            active={:notifications_settings}
-            return_to={@return_to}
-          />
-        </:sidebar>
+    <.topbar title="Notification settings" crumbs={crumbs(@samen_mount, @org_id)} />
 
-        <.topbar title="Notification settings" crumbs={crumbs(@samen_mount, @org_id)} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="preferences-panel" class="card" style="padding:18px 20px">
-              <div class="gtitle">
-                <h3>Notification preferences</h3>
-                <span class="lane">per event type · in-app default on · email opt-in · {plane_note(@samen_mount)}</span>
-              </div>
-
-              <%= if @recipient_id == nil do %>
-                <div id="no-recipient" style="padding:14px 0;color:var(--muted)">
-                  No recipient is wired on this mount. Pass a <code>:recipient_id</code>
-                  mount label (the authenticated user) or a <code>?recipient=</code> param
-                  to manage per-user notification preferences.
-                </div>
-              <% else %>
-                <span id="preferences-recipient" style="display:none">{@recipient_id}</span>
-                <.simple_form for={@form} id="preferences-form" phx-change="save">
-                  <table class="tbl" id="preferences-grid">
-                    <thead>
-                      <tr>
-                        <th scope="col" style="width:50%">Event</th>
-                        <th scope="col" style="width:25%">In-app</th>
-                        <th scope="col" style="width:25%">Email</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr :for={row <- @rows} id={"pref-#{row.event_type}"} class="pref-row">
-                        <td>
-                          <span style="font-weight:600;font-size:13px">{row.label}</span>
-                          <span class="pref-event" style="display:block;font-size:11px;color:var(--muted)">
-                            {row.event_type}<span :if={!row.explicit}> · default</span>
-                          </span>
-                        </td>
-                        <td>
-                          <.form_field
-                            field={@form["#{row.event_type}__in_app"]}
-                            type="select"
-                            options={[{"On", "on"}, {"Off", "off"}]}
-                            disabled={!writable?(@samen_mount)}
-                          />
-                        </td>
-                        <td>
-                          <.form_field
-                            field={@form["#{row.event_type}__email"]}
-                            type="select"
-                            options={[{"On", "on"}, {"Off", "off"}]}
-                            disabled={!writable?(@samen_mount)}
-                          />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </.simple_form>
-                <p style="margin-top:10px;font-size:12px;color:var(--muted)">
-                  Toggles save immediately. An event switched off writes no notification
-                  record at all (suppressed at dispatch, not hidden in the inbox).
-                </p>
-              <% end %>
-            </div>
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="preferences-panel" class="card" style="padding:18px 20px">
+          <div class="gtitle">
+            <h3>Notification preferences</h3>
+            <span class="lane">per event type · in-app default on · email opt-in · {plane_note(@samen_mount)}</span>
           </div>
-        <% end %>
-      </.app_shell>
+
+          <%= if @recipient_id == nil do %>
+            <div id="no-recipient" style="padding:14px 0;color:var(--muted)">
+              No recipient is wired on this mount. Pass a <code>:recipient_id</code>
+              mount label (the authenticated user) or a <code>?recipient=</code> param
+              to manage per-user notification preferences.
+            </div>
+          <% else %>
+            <span id="preferences-recipient" style="display:none">{@recipient_id}</span>
+            <.simple_form for={@form} id="preferences-form" phx-change="save">
+              <table class="tbl" id="preferences-grid">
+                <thead>
+                  <tr>
+                    <th scope="col" style="width:50%">Event</th>
+                    <th scope="col" style="width:25%">In-app</th>
+                    <th scope="col" style="width:25%">Email</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={row <- @rows} id={"pref-#{row.event_type}"} class="pref-row">
+                    <td>
+                      <span style="font-weight:600;font-size:13px">{row.label}</span>
+                      <span class="pref-event" style="display:block;font-size:11px;color:var(--muted)">
+                        {row.event_type}<span :if={!row.explicit}> · default</span>
+                      </span>
+                    </td>
+                    <td>
+                      <.form_field
+                        field={@form["#{row.event_type}__in_app"]}
+                        type="select"
+                        options={[{"On", "on"}, {"Off", "off"}]}
+                        disabled={!writable?(@samen_mount)}
+                      />
+                    </td>
+                    <td>
+                      <.form_field
+                        field={@form["#{row.event_type}__email"]}
+                        type="select"
+                        options={[{"On", "on"}, {"Off", "off"}]}
+                        disabled={!writable?(@samen_mount)}
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </.simple_form>
+            <p style="margin-top:10px;font-size:12px;color:var(--muted)">
+              Toggles save immediately. An event switched off writes no notification
+              record at all (suppressed at dispatch, not hidden in the inbox).
+            </p>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

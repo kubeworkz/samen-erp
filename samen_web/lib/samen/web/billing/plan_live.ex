@@ -27,7 +27,7 @@ defmodule Samen.Web.Billing.PlanLive do
   exactly as a direct API call would. All write affordances are TENANT-plane only
   (`Samen.Web.Billing.Live.writable?/1`).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1, writable?: 1]
@@ -185,238 +185,239 @@ defmodule Samen.Web.Billing.PlanLive do
     {:noreply, assign(socket, action_error: nil, delete_error: nil)}
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_plans} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="billing-plan">
-      <.app_shell>
-        <:sidebar>
-          <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_plans} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={plan_label(@plan)} crumbs={crumbs(@samen_mount, @org_id, plan_label(@plan))}>
+      <:actions>
+        <a href={plans_path(@org_id)} class="btn" style="text-decoration:none">
+          <span class="i">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Back to plans
+        </a>
+        <.button :if={writable?(@samen_mount) and @plan != nil} phx-click="edit_plan" id="edit-plan">
+          Edit plan
+        </.button>
+        <.delete_confirm
+          :if={writable?(@samen_mount) and @plan != nil}
+          id="archive-plan"
+          label="Archive"
+          message="Archive this plan? It can be restored from the plans list's archived view."
+          phx-click="delete"
+          phx-value-id={@plan && @plan.id}
+        />
+      </:actions>
+    </.topbar>
 
-        <.topbar title={plan_label(@plan)} crumbs={crumbs(@samen_mount, @org_id, plan_label(@plan))}>
-          <:actions>
-            <a href={plans_path(@org_id)} class="btn" style="text-decoration:none">
-              <span class="i">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Billing plan org: {@org_id}</span>
+
+      <div :if={@action_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="action-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;display:flex;gap:10px;align-items:center">
+          <span>{@action_error}</span>
+          <button type="button" class="btn" phx-click="dismiss_error" style="font-size:12px">Dismiss</button>
+        </div>
+      </div>
+
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <%= if @plan == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Plan not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="plan-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div class="av" style={"width:46px;height:46px;border-radius:8px;background:#{plan_bg(@plan.name)};color:#{plan_fg(@plan.name)};font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"}>
+              {String.slice(@plan.label || @plan.name || "?", 0, 1) |> String.upcase()}
+            </div>
+            <div style="flex:1;min-width:0">
+              <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{plan_label(@plan)}</h1>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <.pill variant={if @plan.enabled, do: "ok", else: "mut"}>
+                  {if @plan.enabled, do: "active", else: "disabled"}
+                </.pill>
+                <span style="font-size:12px;color:var(--muted)">{interval_label(@plan.interval)}</span>
+                <span style="font-size:13px;font-weight:500;color:#3a3b45">{primary_price(@prices)}</span>
+                <span style="font-size:12px;color:var(--muted)">· Tier-0 config · admin-gated writes · no PII</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wrap" style="margin-bottom:0;padding-top:10px">
+          <div class="card" id="plan-facts" style="padding:16px 18px">
+            <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Name</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{@plan.name || "—"}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Label</dt>
+                <dd style="margin:0;font-size:13px">{@plan.label || "—"}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Description</dt>
+                <dd style="margin:0;font-size:13px">{@plan.description || "—"}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Interval</dt>
+                <dd style="margin:0;font-size:13px">{interval_label(@plan.interval)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Status</dt>
+                <dd style="margin:0;font-size:13px">
+                  <.pill variant={if @plan.enabled, do: "ok", else: "mut"}>
+                    {if @plan.enabled, do: "active", else: "disabled"}
+                  </.pill>
+                </dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Provider ref</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace;word-break:break-all">
+                  {@plan.provider_plan_ref || "—"}
+                </dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Inserted at</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@plan.inserted_at)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="card" id="plan-features" style="padding:16px 18px;margin-top:10px">
+            <div class="gtitle" style="margin-bottom:6px">
+              <h3 style="font-size:13px">Entitlements</h3>
+              <span class="n">{length(granted_features(@plan))}</span>
+              <span class="lane">· feature map · fail-closed allowlist</span>
+            </div>
+            <div :if={granted_features(@plan) != []} style="display:flex;flex-wrap:wrap;gap:6px">
+              <span
+                :for={feat <- granted_features(@plan)}
+                style="display:inline-block;font-size:11px;padding:3px 8px;background:#F3F4F6;border-radius:4px;color:#374151"
+              >
+                {humanize_feature(feat)}
               </span>
-              Back to plans
-            </a>
-            <.button :if={writable?(@samen_mount) and @plan != nil} phx-click="edit_plan" id="edit-plan">
-              Edit plan
-            </.button>
-            <.delete_confirm
-              :if={writable?(@samen_mount) and @plan != nil}
-              id="archive-plan"
-              label="Archive"
-              message="Archive this plan? It can be restored from the plans list's archived view."
-              phx-click="delete"
-              phx-value-id={@plan && @plan.id}
-            />
-          </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Billing plan org: {@org_id}</span>
-
-          <div :if={@action_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="action-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;display:flex;gap:10px;align-items:center">
-              <span>{@action_error}</span>
-              <button type="button" class="btn" phx-click="dismiss_error" style="font-size:12px">Dismiss</button>
             </div>
+            <p :if={granted_features(@plan) == []} style="margin:0;font-size:12px;color:var(--muted)">
+              No features granted on this plan.
+            </p>
           </div>
 
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
+          <div class="card" id="plan-prices" style="padding:16px 18px;margin-top:10px">
+            <div class="gtitle" style="margin-bottom:6px">
+              <h3 style="font-size:13px">Prices</h3>
+              <span class="n">{length(@prices)}</span>
             </div>
-          </div>
-
-          <%= if @plan == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Plan not found.</div>
-            </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="plan-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-                <div class="av" style={"width:46px;height:46px;border-radius:8px;background:#{plan_bg(@plan.name)};color:#{plan_fg(@plan.name)};font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"}>
-                  {String.slice(@plan.label || @plan.name || "?", 0, 1) |> String.upcase()}
-                </div>
-                <div style="flex:1;min-width:0">
-                  <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{plan_label(@plan)}</h1>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <.pill variant={if @plan.enabled, do: "ok", else: "mut"}>
-                      {if @plan.enabled, do: "active", else: "disabled"}
+            <table :if={@prices != []} style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Price
+                  </th>
+                  <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Interval
+                  </th>
+                  <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    Active
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={price <- @prices} class="plan-price-row">
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);font-family:monospace">
+                    {dollars(price.unit_amount)}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                    {interval_label(price.interval)}
+                  </td>
+                  <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
+                    <.pill variant={if price.active, do: "ok", else: "mut"}>
+                      {if price.active, do: "active", else: "inactive"}
                     </.pill>
-                    <span style="font-size:12px;color:var(--muted)">{interval_label(@plan.interval)}</span>
-                    <span style="font-size:13px;font-weight:500;color:#3a3b45">{primary_price(@prices)}</span>
-                    <span style="font-size:12px;color:var(--muted)">· Tier-0 config · admin-gated writes · no PII</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p :if={@prices == []} style="margin:0;font-size:12px;color:var(--muted)">No prices yet.</p>
+          </div>
 
-            <div class="wrap" style="margin-bottom:0;padding-top:10px">
-              <div class="card" id="plan-facts" style="padding:16px 18px">
-                <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Name</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{@plan.name || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Label</dt>
-                    <dd style="margin:0;font-size:13px">{@plan.label || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Description</dt>
-                    <dd style="margin:0;font-size:13px">{@plan.description || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Interval</dt>
-                    <dd style="margin:0;font-size:13px">{interval_label(@plan.interval)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Status</dt>
-                    <dd style="margin:0;font-size:13px">
-                      <.pill variant={if @plan.enabled, do: "ok", else: "mut"}>
-                        {if @plan.enabled, do: "active", else: "disabled"}
-                      </.pill>
-                    </dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Provider ref</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace;word-break:break-all">
-                      {@plan.provider_plan_ref || "—"}
-                    </dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Inserted at</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@plan.inserted_at)}</dd>
-                  </div>
-                </dl>
+          <div class="wrap" style="margin-bottom:0;padding-top:10px" id="plan-status-actions-wrap">
+            <div class="card" id="plan-status-actions" style="padding:16px 18px">
+              <div class="gtitle" style="margin-bottom:8px">
+                <h3 style="font-size:13px">Status actions</h3>
+                <span class="lane">· admin-gated · subscriptions keep their own state</span>
               </div>
-
-              <div class="card" id="plan-features" style="padding:16px 18px;margin-top:10px">
-                <div class="gtitle" style="margin-bottom:6px">
-                  <h3 style="font-size:13px">Entitlements</h3>
-                  <span class="n">{length(granted_features(@plan))}</span>
-                  <span class="lane">· feature map · fail-closed allowlist</span>
-                </div>
-                <div :if={granted_features(@plan) != []} style="display:flex;flex-wrap:wrap;gap:6px">
-                  <span
-                    :for={feat <- granted_features(@plan)}
-                    style="display:inline-block;font-size:11px;padding:3px 8px;background:#F3F4F6;border-radius:4px;color:#374151"
-                  >
-                    {humanize_feature(feat)}
-                  </span>
-                </div>
-                <p :if={granted_features(@plan) == []} style="margin:0;font-size:12px;color:var(--muted)">
-                  No features granted on this plan.
+              <div :if={writable?(@samen_mount)} style="display:flex;gap:8px;flex-wrap:wrap">
+                <.button phx-click="toggle_enabled" id="toggle-enabled">
+                  {if @plan.enabled, do: "Disable plan", else: "Enable plan"}
+                </.button>
+                <p style="margin:0;font-size:12px;color:var(--muted);align-self:center">
+                  Disabling stops NEW sign-ups; existing subscriptions keep their state.
                 </p>
               </div>
-
-              <div class="card" id="plan-prices" style="padding:16px 18px;margin-top:10px">
-                <div class="gtitle" style="margin-bottom:6px">
-                  <h3 style="font-size:13px">Prices</h3>
-                  <span class="n">{length(@prices)}</span>
-                </div>
-                <table :if={@prices != []} style="width:100%;border-collapse:collapse;font-size:13px">
-                  <thead>
-                    <tr>
-                      <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Price
-                      </th>
-                      <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Interval
-                      </th>
-                      <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        Active
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={price <- @prices} class="plan-price-row">
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);font-family:monospace">
-                        {dollars(price.unit_amount)}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                        {interval_label(price.interval)}
-                      </td>
-                      <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
-                        <.pill variant={if price.active, do: "ok", else: "mut"}>
-                          {if price.active, do: "active", else: "inactive"}
-                        </.pill>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <p :if={@prices == []} style="margin:0;font-size:12px;color:var(--muted)">No prices yet.</p>
-              </div>
-
-              <div class="wrap" style="margin-bottom:0;padding-top:10px" id="plan-status-actions-wrap">
-                <div class="card" id="plan-status-actions" style="padding:16px 18px">
-                  <div class="gtitle" style="margin-bottom:8px">
-                    <h3 style="font-size:13px">Status actions</h3>
-                    <span class="lane">· admin-gated · subscriptions keep their own state</span>
-                  </div>
-                  <div :if={writable?(@samen_mount)} style="display:flex;gap:8px;flex-wrap:wrap">
-                    <.button phx-click="toggle_enabled" id="toggle-enabled">
-                      {if @plan.enabled, do: "Disable plan", else: "Enable plan"}
-                    </.button>
-                    <p style="margin:0;font-size:12px;color:var(--muted);align-self:center">
-                      Disabling stops NEW sign-ups; existing subscriptions keep their state.
-                    </p>
-                  </div>
-                  <p :if={!writable?(@samen_mount)} style="margin:0;font-size:12px;color:var(--muted)">
-                    Plan is {if @plan.enabled, do: "active", else: "disabled"} · no write affordance on this plane.
-                  </p>
-                </div>
-              </div>
+              <p :if={!writable?(@samen_mount)} style="margin:0;font-size:12px;color:var(--muted)">
+                Plan is {if @plan.enabled, do: "active", else: "disabled"} · no write affordance on this plane.
+              </p>
             </div>
+          </div>
+        </div>
 
-            <.modal
-              :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
-              id="edit-plan-modal"
-              title="Edit plan"
-              on_cancel="cancel_edit"
-            >
-              <.simple_form
-                :let={f}
-                for={@edit_form}
-                id="edit-plan-form"
-                phx-change="validate_edit"
-                phx-submit="save_edit"
-              >
-                <.form_field field={f[:name]} label="Name" />
-                <.form_field field={f[:label]} label="Label" />
-                <.form_field field={f[:description]} label="Description" />
-                <.form_field
-                  field={f[:interval]}
-                  label="Interval"
-                  type="select"
-                  options={[
-                    {"monthly", "monthly"},
-                    {"annual", "annual"},
-                    {"weekly", "weekly"},
-                    {"daily", "daily"},
-                    {"one-time", "one_time"}
-                  ]}
-                />
-                <:actions>
-                  <.button variant="primary" type="submit">Save changes</.button>
-                  <.button type="button" phx-click="cancel_edit">Cancel</.button>
-                </:actions>
-              </.simple_form>
-            </.modal>
-          <% end %>
-        <% end %>
-      </.app_shell>
+        <.modal
+          :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
+          id="edit-plan-modal"
+          title="Edit plan"
+          on_cancel="cancel_edit"
+        >
+          <.simple_form
+            :let={f}
+            for={@edit_form}
+            id="edit-plan-form"
+            phx-change="validate_edit"
+            phx-submit="save_edit"
+          >
+            <.form_field field={f[:name]} label="Name" />
+            <.form_field field={f[:label]} label="Label" />
+            <.form_field field={f[:description]} label="Description" />
+            <.form_field
+              field={f[:interval]}
+              label="Interval"
+              type="select"
+              options={[
+                {"monthly", "monthly"},
+                {"annual", "annual"},
+                {"weekly", "weekly"},
+                {"daily", "daily"},
+                {"one-time", "one_time"}
+              ]}
+            />
+            <:actions>
+              <.button variant="primary" type="submit">Save changes</.button>
+              <.button type="button" phx-click="cancel_edit">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+      <% end %>
+    <% end %>
     </div>
     """
   end

@@ -40,7 +40,7 @@ defmodule Samen.Web.CRM.PipelineLive do
   non-vaulted (`group_by!/3` would REFUSE a vaulted group field), so no card field masks and
   no per-plane masking proof is required for this surface. Reads still ride Ash/OrgScope.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1]
@@ -141,88 +141,89 @@ defmodule Samen.Web.CRM.PipelineLive do
     %Board{board | groups: Enum.map(groups, fn g -> if g.key == group.key, do: updated, else: g end)}
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_pipeline} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-pipeline">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_pipeline} return_to={@return_to} />
-        </:sidebar>
+    <%!-- No create CTA: the pipeline is a read-only kanban LENS over opportunities
+         (no UI create/move flow — T51 defers move to the governed Opportunity :update
+         action). A primary button with no phx-click is the exact decorative-CTA defect
+         AC-G1-1 eliminates (gate WSA-GATE2-P2-01). --%>
+    <.topbar title="Pipeline" crumbs={crumbs(@samen_mount, @org_id, "Pipeline")} />
 
-        <%!-- No create CTA: the pipeline is a read-only kanban LENS over opportunities
-             (no UI create/move flow — T51 defers move to the governed Opportunity :update
-             action). A primary button with no phx-click is the exact decorative-CTA defect
-             AC-G1-1 eliminates (gate WSA-GATE2-P2-01). --%>
-        <.topbar title="Pipeline" crumbs={crumbs(@samen_mount, @org_id, "Pipeline")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
+      <div class="metrics">
+        <.metric label="Pipeline stages" value={length(@board.groups)}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M5 3v18M12 6v15M19 9v12" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Opportunities" value={@total_opps}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Pipeline value" value={dollars(@total_value_cents)} sub="all stages">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
+
+      <div class="wrap">
+        <%= if @board.groups == [] do %>
+          <.empty_state
+            class="pipeline-empty"
+            icon="◇"
+            title="No pipeline stages yet."
+            body="Stages appear here once your pipeline has stages configured and opportunities in flight."
+          />
         <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
-
-          <div class="metrics">
-            <.metric label="Pipeline stages" value={length(@board.groups)}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M5 3v18M12 6v15M19 9v12" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Opportunities" value={@total_opps}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Pipeline value" value={dollars(@total_value_cents)} sub="all stages">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
-
-          <div class="wrap">
-            <%= if @board.groups == [] do %>
-              <.empty_state
-                class="pipeline-empty"
-                icon="◇"
-                title="No pipeline stages yet."
-                body="Stages appear here once your pipeline has stages configured and opportunities in flight."
-              />
-            <% else %>
-              <.board id="pipeline" board={@board} load_more_event="board_load_more" empty_col_text="No opportunities">
-                <:col_header :let={group}>
-                  <h3 class="bcol-t" id={"stage-#{stage_dom(group.key)}"}>{group.label}</h3>
-                  <span class="bcol-n">{group.count}</span>
-                  <.pill variant={stage_variant(stage_type(@stage_meta, group.key))}>
-                    {stage_type(@stage_meta, group.key)}
-                  </.pill>
-                </:col_header>
-                <:card :let={opp}>
-                  <div class="opp-row" id={"opp-#{opp.id}"}>
-                    <div class="opp-name">
-                      <span class="mono" style="color:#454652;font-weight:500">{opp.name}</span>
-                    </div>
-                    <div class="opp-meta">
-                      <span class="opp-value mono num">{dollars(opp.value)}</span>
-                      <.pill variant={status_variant(opp.status)}>{opp.status}</.pill>
-                    </div>
-                    <div class="opp-close" style="color:var(--muted);font-size:12px">
-                      {opp.close_date || "—"} · {(opp.value && opp.value.currency) || "USD"}
-                    </div>
-                  </div>
-                </:card>
-              </.board>
-            <% end %>
-          </div>
+          <.board id="pipeline" board={@board} load_more_event="board_load_more" empty_col_text="No opportunities">
+            <:col_header :let={group}>
+              <h3 class="bcol-t" id={"stage-#{stage_dom(group.key)}"}>{group.label}</h3>
+              <span class="bcol-n">{group.count}</span>
+              <.pill variant={stage_variant(stage_type(@stage_meta, group.key))}>
+                {stage_type(@stage_meta, group.key)}
+              </.pill>
+            </:col_header>
+            <:card :let={opp}>
+              <div class="opp-row" id={"opp-#{opp.id}"}>
+                <div class="opp-name">
+                  <span class="mono" style="color:#454652;font-weight:500">{opp.name}</span>
+                </div>
+                <div class="opp-meta">
+                  <span class="opp-value mono num">{dollars(opp.value)}</span>
+                  <.pill variant={status_variant(opp.status)}>{opp.status}</.pill>
+                </div>
+                <div class="opp-close" style="color:var(--muted);font-size:12px">
+                  {opp.close_date || "—"} · {(opp.value && opp.value.currency) || "USD"}
+                </div>
+              </div>
+            </:card>
+          </.board>
         <% end %>
-      </.app_shell>
+      </div>
+    <% end %>
     </div>
     """
   end

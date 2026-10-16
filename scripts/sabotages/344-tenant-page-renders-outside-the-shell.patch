@@ -1,0 +1,35 @@
+# SABOTAGE: the TENANT WRAPPER STOPS COMPOSING THE CHROME — `Samen.Web.Tenant.Live.shell/1`
+# renders the page's own callback and nothing else, dropping `<.app_shell>` and the sidebar slot it
+# fed. Every page that mounts the wrapper therefore renders the exact defect the wrapper exists to
+# make impossible: a lone card or a bare grid on an empty viewport — no sidebar beside it, no
+# workspace header, no mobile drawer, no way back (the tenant-chrome finding).
+#
+# Aimed at the CONSTRUCTION only: the wrapper still refuses a page-owned `render/1`, still requires
+# both callbacks, and every read, aggregate and denominator underneath is untouched — the pages
+# still show the RIGHT numbers to the RIGHT org. What disappears is the chrome they are rendered
+# inside, which is what the sweep, the dashboard's render proof and the wrapper's own composition
+# proof exist to catch. Targeted at `shell/1` rather than at one adopter, so ONE sabotage certifies
+# the wrapper's guarantee for EVERY page that mounts it — the pages the chrome audit fixed included.
+#
+# No warning is introduced (`shell/1` still receives the same map: the sidebar mark-up is built and
+# passed, simply not rendered) and the replay runs `mix test`, so nothing is confined or silenced.
+# APP: samen_web
+# TEST_FILES: test/samen/web/tenant_shell_coverage_test.exs test/samen/web/crm_dashboard_test.exs test/samen/web/tenant_live_wrapper_test.exs
+# MUST_FAIL: every tenant page opens the shared app shell AND a main-panel wrapper
+# MUST_FAIL: FIRST-CLIENT: DashboardLive renders stat tiles + all three chart SVGs from aggregates
+# MUST_FAIL: the page's markup renders INSIDE the shell's main panel
+diff --git a/samen_web/lib/samen/web/tenant/live.ex b/samen_web/lib/samen/web/tenant/live.ex
+--- a/samen_web/lib/samen/web/tenant/live.ex
++++ b/samen_web/lib/samen/web/tenant/live.ex
+@@ -212,10 +212,7 @@
+ 
+   defp shell(assigns) do
+     ~H"""
+-    <.app_shell>
+-      <:sidebar>{@sidebar_html}</:sidebar>
+-      {@page_html}
+-    </.app_shell>
++    {@page_html}
+     """
+   end
+ end

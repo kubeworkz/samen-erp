@@ -32,7 +32,7 @@ defmodule Samen.Web.CRM.ContactsGalleryLive do
   the resolver's per-plane decision, asserted with the sanctioned three-part `Samen.MaskingCase`
   proof.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1]
@@ -116,46 +116,47 @@ defmodule Samen.Web.CRM.ContactsGalleryLive do
 
   defp parse_after(_), do: nil
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_gallery} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-contacts-gallery">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_gallery} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Contacts — Gallery" crumbs={crumbs(@samen_mount, @org_id, "Gallery")} />
 
-        <.topbar title="Contacts — Gallery" crumbs={crumbs(@samen_mount, @org_id, "Gallery")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
-
-          <div class="wrap">
-            <.gallery
-              id="contacts-gallery"
-              page={@page}
-              prev_href={@prev_href}
-              next_href={@next_href}
-              empty_text="No contacts yet."
-              empty_body="Contacts you add will appear here as cards."
-            >
-              <:media :let={person}>
-                <div class="gcard-mono" aria-hidden="true">{monogram(person)}</div>
-              </:media>
-              <:card :let={person}>
-                <div class="gcard-name mono" id={"contact-card-#{person.id}"}>{person.display_name}</div>
-                <div class="gcard-sub">{render_name(person.full_name, person.display_name)}</div>
-                <div :if={person.job_title} class="gcard-title">{person.job_title}</div>
-                <div class="gcard-email mono">{render_email(person.emails)}</div>
-              </:card>
-            </.gallery>
-          </div>
-        <% end %>
-      </.app_shell>
+      <div class="wrap">
+        <.gallery
+          id="contacts-gallery"
+          page={@page}
+          prev_href={@prev_href}
+          next_href={@next_href}
+          empty_text="No contacts yet."
+          empty_body="Contacts you add will appear here as cards."
+        >
+          <:media :let={person}>
+            <div class="gcard-mono" aria-hidden="true">{monogram(person)}</div>
+          </:media>
+          <:card :let={person}>
+            <div class="gcard-name mono" id={"contact-card-#{person.id}"}>{person.display_name}</div>
+            <div class="gcard-sub">{render_name(person.full_name, person.display_name)}</div>
+            <div :if={person.job_title} class="gcard-title">{person.job_title}</div>
+            <div class="gcard-email mono">{render_email(person.emails)}</div>
+          </:card>
+        </.gallery>
+      </div>
+    <% end %>
     </div>
     """
   end

@@ -24,7 +24,7 @@ defmodule Samen.Web.Support.KbLive do
   same split every framework LiveView documents). No PII on this scope (CMS
   has no 🔒 mark) — nothing here touches `Samen.Api.PiiResolution`.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Support.Live, only: [assign_mount: 2, support_sidebar: 1, writable?: 1]
@@ -144,99 +144,100 @@ defmodule Samen.Web.Support.KbLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.support_sidebar mount={@samen_mount} org_id={@org_id} active={:support_kb} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="support-kb">
-      <.app_shell>
-        <:sidebar>
-          <.support_sidebar mount={@samen_mount} org_id={@org_id} active={:support_kb} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Knowledge base" crumbs={crumbs(@samen_mount, @org_id)}>
+      <:actions>
+        <.button :if={writable?(@samen_mount) and @kb_mount} variant="primary" phx-click="new_article" id="new-article">
+          New article
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Knowledge base" crumbs={crumbs(@samen_mount, @org_id)}>
-          <:actions>
-            <.button :if={writable?(@samen_mount) and @kb_mount} variant="primary" phx-click="new_article" id="new-article">
-              New article
-            </.button>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Support org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Support org: {@org_id}</span>
+      <%= if @kb_mount == nil do %>
+        <div class="wrap">
+          <.empty_state
+            class="kb-not-adopted"
+            icon="📚"
+            title="Knowledge base not set up."
+            body="Wire the host's CMS namespace on the Support mount via the kb_namespace: label (e.g. kb_namespace: Driftwood.Cms) to enable the knowledge base here."
+          />
+        </div>
+      <% else %>
+        <div :if={@save_error} class="wrap" style="margin-bottom:0">
+          <div class="card form-error" id="kb-save-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+            {@save_error}
+          </div>
+        </div>
 
-          <%= if @kb_mount == nil do %>
-            <div class="wrap">
+        <div class="wrap">
+          <div id="kb-articles">
+            <div class="gtitle">
+              <h3>Articles</h3>
+              <span class="n">{length(@articles)}</span>
+            </div>
+
+            <%= if @articles == [] do %>
               <.empty_state
-                class="kb-not-adopted"
+                class="kb-empty"
                 icon="📚"
-                title="Knowledge base not set up."
-                body="Wire the host's CMS namespace on the Support mount via the kb_namespace: label (e.g. kb_namespace: Driftwood.Cms) to enable the knowledge base here."
-              />
-            </div>
-          <% else %>
-            <div :if={@save_error} class="wrap" style="margin-bottom:0">
-              <div class="card form-error" id="kb-save-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-                {@save_error}
-              </div>
-            </div>
+                title="No articles yet."
+                body="Author your first knowledge-base article — internal notes for agents, or public self-serve help."
+              >
+                <:actions :if={writable?(@samen_mount)}>
+                  <.button variant="primary" phx-click="new_article" id="empty-new-article">New article</.button>
+                </:actions>
+              </.empty_state>
+            <% else %>
+              <.data_table>
+                <:head>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Visibility</th>
+                  <th :if={writable?(@samen_mount)}><span class="sr-only">Actions</span></th>
+                </:head>
+                <tr :for={a <- @articles} class="kb-article-row" id={"kb-article-#{a.id}"}>
+                  <td class="kb-title">
+                    <a href="#" phx-click="edit_article" phx-value-id={a.id} style="font-weight:500;color:#3a3b45;text-decoration:none">
+                      {a.title}
+                    </a>
+                  </td>
+                  <td class="kb-status"><.pill variant={status_variant(a.status)}>{a.status}</.pill></td>
+                  <td class="kb-visibility"><.pill variant={visibility_variant(a.visibility)}>{a.visibility}</.pill></td>
+                  <td :if={writable?(@samen_mount)} class="kb-actions">
+                    <.button :if={a.status != :published} phx-click="publish" phx-value-id={a.id} class="kb-publish-btn">Publish</.button>
+                  </td>
+                </tr>
+              </.data_table>
+            <% end %>
+          </div>
+        </div>
 
-            <div class="wrap">
-              <div id="kb-articles">
-                <div class="gtitle">
-                  <h3>Articles</h3>
-                  <span class="n">{length(@articles)}</span>
-                </div>
+        <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-article-modal" title="New article" on_cancel="cancel_new">
+          <.article_form form={@new_form} on_change="validate_new" on_submit="save_new" on_cancel="cancel_new" submit_label="Save article" />
+        </.modal>
 
-                <%= if @articles == [] do %>
-                  <.empty_state
-                    class="kb-empty"
-                    icon="📚"
-                    title="No articles yet."
-                    body="Author your first knowledge-base article — internal notes for agents, or public self-serve help."
-                  >
-                    <:actions :if={writable?(@samen_mount)}>
-                      <.button variant="primary" phx-click="new_article" id="empty-new-article">New article</.button>
-                    </:actions>
-                  </.empty_state>
-                <% else %>
-                  <.data_table>
-                    <:head>
-                      <th>Title</th>
-                      <th>Status</th>
-                      <th>Visibility</th>
-                      <th :if={writable?(@samen_mount)}><span class="sr-only">Actions</span></th>
-                    </:head>
-                    <tr :for={a <- @articles} class="kb-article-row" id={"kb-article-#{a.id}"}>
-                      <td class="kb-title">
-                        <a href="#" phx-click="edit_article" phx-value-id={a.id} style="font-weight:500;color:#3a3b45;text-decoration:none">
-                          {a.title}
-                        </a>
-                      </td>
-                      <td class="kb-status"><.pill variant={status_variant(a.status)}>{a.status}</.pill></td>
-                      <td class="kb-visibility"><.pill variant={visibility_variant(a.visibility)}>{a.visibility}</.pill></td>
-                      <td :if={writable?(@samen_mount)} class="kb-actions">
-                        <.button :if={a.status != :published} phx-click="publish" phx-value-id={a.id} class="kb-publish-btn">Publish</.button>
-                      </td>
-                    </tr>
-                  </.data_table>
-                <% end %>
-              </div>
-            </div>
-
-            <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-article-modal" title="New article" on_cancel="cancel_new">
-              <.article_form form={@new_form} on_change="validate_new" on_submit="save_new" on_cancel="cancel_new" submit_label="Save article" />
-            </.modal>
-
-            <.modal :if={@edit_id != nil and @edit_form != nil and writable?(@samen_mount)} id="edit-article-modal" title="Edit article" on_cancel="cancel_edit">
-              <.article_form form={@edit_form} on_change="validate_edit" on_submit="save_edit" on_cancel="cancel_edit" submit_label="Save changes" />
-            </.modal>
-          <% end %>
-        <% end %>
-      </.app_shell>
+        <.modal :if={@edit_id != nil and @edit_form != nil and writable?(@samen_mount)} id="edit-article-modal" title="Edit article" on_cancel="cancel_edit">
+          <.article_form form={@edit_form} on_change="validate_edit" on_submit="save_edit" on_cancel="cancel_edit" submit_label="Save changes" />
+        </.modal>
+      <% end %>
+    <% end %>
     </div>
     """
   end

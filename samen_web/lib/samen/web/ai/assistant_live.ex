@@ -49,7 +49,7 @@ defmodule Samen.Web.AI.AssistantLive do
   ADR-042 Class B: list/detail/turns/grounding render from `mount`/`load` with no socket;
   sends, creates, and renames are `phx-click`/`phx-submit` writes.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -505,195 +505,196 @@ defmodule Samen.Web.AI.AssistantLive do
   # Render
   # ---------------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:assistant} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:assistant} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · Assistant"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "Assistant"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:assistant} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · Assistant"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "Assistant"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:assistant} base={ai_base(@samen_mount)} />
 
-      <%= if is_nil(@org_id) do %>
-        <.no_org_card mount={@samen_mount} />
-      <% else %>
-        <div class="pane" id="ai-assistant" style="display:flex;gap:16px;padding:16px">
-          <div class="card" id="assistant-rail" style="flex:0 0 280px;padding:12px;display:flex;flex-direction:column;gap:12px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <b style="font-size:13px">Assistants</b>
-              <span style="color:var(--muted);font-size:12px">({length(@assistants)}/4)</span>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="pane" id="ai-assistant" style="display:flex;gap:16px;padding:16px">
+        <div class="card" id="assistant-rail" style="flex:0 0 280px;padding:12px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <b style="font-size:13px">Assistants</b>
+            <span style="color:var(--muted);font-size:12px">({length(@assistants)}/4)</span>
+          </div>
+          <%= if @assistants == [] do %>
+            <.empty_state title="No assistants yet" body="Create the first assistant for this org — or seed General." icon="✦" />
+          <% else %>
+            <ul id="assistant-list" style="list-style:none;margin:0;padding:0">
+              <li :for={a <- @assistants} id={"assistant-#{a.id}"} class="assistant-row" data-name={a.name} style="padding:6px 4px;border-bottom:1px solid var(--line,#222)">
+                <a href={assistant_path(@samen_mount, a.id, nil)} id={"assistant-open-#{a.id}"} class={@assistant_id == a.id && "on"} style="font-size:13px">
+                  {a.title} <span style="color:var(--muted)">({a.name})</span>
+                </a>
+                <span :if={a.model_id} style="margin-left:6px;color:var(--muted);font-size:11px">{a.model_id}</span>
+                <span :if={a.tools != []} style="margin-left:6px;color:var(--muted);font-size:11px" class="assistant-tools-badge" data-tools={Enum.join(a.tools, ",")} >tools: {Enum.join(a.tools, ", ")}</span>
+                <span :if={a.tools == []} style="margin-left:6px;color:var(--muted);font-size:11px" >no tools</span>
+              </li>
+            </ul>
+          <% end %>
+
+          <form phx-submit="create-assistant" id="assistant-create-form" class="card" style="padding:10px;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:12px;font-weight:600">New assistant</span>
+            <input type="text" name="assistant_name" placeholder="name (a-z0-9_.-)" style="font-size:12px" />
+            <input type="text" name="assistant_title" placeholder="Title" style="font-size:12px" />
+            <textarea name="system_prompt" rows="2" placeholder="System prompt" style="font-size:12px"></textarea>
+            <input type="text" name="model_id" placeholder="model_id (optional)" style="font-size:12px" />
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:11px;color:var(--muted)">Tools (subset of tenant surface — leave empty for chat-only)</span>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <label :for={t <- @available_tools} style="font-size:12px;display:flex;gap:4px;align-items:center">
+                  <input type="checkbox" name="tools[]" value={t} /> {t}
+                </label>
+              </div>
+              <span style="font-size:11px;color:var(--muted)">or comma-separated: </span>
+              <input type="text" name="assistant_tools" placeholder="search_records, fetch_record" style="font-size:12px" />
             </div>
-            <%= if @assistants == [] do %>
-              <.empty_state title="No assistants yet" body="Create the first assistant for this org — or seed General." icon="✦" />
+            <.button variant="secondary" type="submit" id="assistant-create">Create</.button>
+          </form>
+
+          <div style="display:flex;align-items:center;gap:8px">
+            <b style="font-size:13px">Conversations</b>
+            <.button variant="secondary" phx-click="create-conversation" id="assistant-conv-new">New</.button>
+          </div>
+          <div :if={@assistant_id != nil and @assistant_usage} id="assistant-usage" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <.pill variant="info"><span id="assistant-usage-threads">{@assistant_usage.conversation_count} threads</span></.pill>
+            <span style="color:var(--muted);font-size:12px" id="assistant-usage-tokens">{@assistant_usage.message_count} msgs · {@assistant_usage.total_tokens} tokens</span>
+            <span style="color:var(--muted);font-size:11px" id="assistant-usage-cost">est. ${:erlang.float_to_binary(@assistant_usage.estimated_cost * 1.0, decimals: 6)}</span>
+          </div>
+
+          <form :if={@assistant_id != nil} phx-submit="assistant-recall" id="assistant-recall-form" style="display:flex;gap:6px">
+            <input type="text" name="query" value={@recall_query} placeholder="Search conversations (title)" style="flex:1;font-size:12px" id="assistant-recall-input" />
+            <.button variant="secondary" type="submit" id="assistant-recall">Search</.button>
+            <.button :if={@recall_query != ""} variant="secondary" phx-click="assistant-recall-clear" type="button" id="assistant-recall-clear">Clear</.button>
+          </form>
+
+          <div :if={@assistant_recall} id="assistant-recall-results" class="card" style="padding:8px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <b style="font-size:12px">Recall</b>
+              <span style="color:var(--muted);font-size:11px" id="assistant-recall-state">{@assistant_recall.state}</span>
+              <.pill :if={Map.get(@assistant_recall, :simulated, false)} variant="warn"><span id="assistant-recall-sim-badge">SIMULATED ranking</span></.pill>
+              <.pill :if={Map.get(@assistant_recall, :simulated) == false} variant="ok"><span id="assistant-recall-live-badge">Live ranking</span></.pill>
+            </div>
+            <div :if={@assistant_recall.state == :not_configured} id="assistant-recall-hint" style="color:var(--muted);font-size:12px">{Map.get(@assistant_recall, :configuration_hint, "")}</div>
+            <ul :if={@assistant_recall.hits != []} style="list-style:none;margin:0;padding:0">
+              <li :for={hit <- @assistant_recall.hits} class="assistant-recall-hit" id={"assistant-recall-hit-#{hit.conversation.id}"} style="padding:4px 0;border-bottom:1px solid var(--line,#222)">
+                <a href={assistant_path(@samen_mount, @assistant_id, hit.conversation.id)} style="font-size:12px">{hit.conversation.title}</a>
+                <span :if={hit.snippet} style="margin-left:6px;color:var(--muted);font-size:11px" class="assistant-recall-snippet">{hit.snippet}</span>
+              </li>
+            </ul>
+            <div :if={@assistant_recall.hits == [] and @assistant_recall.state not in [:not_configured, :error]} style="color:var(--muted);font-size:12px" id="assistant-recall-empty">No matches.</div>
+          </div>
+
+          <%= if @assistant_id == nil do %>
+            <div id="assistant-conv-empty" style="color:var(--muted);font-size:12px">Pick an assistant first.</div>
+          <% else %>
+            <%= if @conversations == [] do %>
+              <.empty_state title="No conversations" body="Start a new thread under this assistant." icon="◷" />
             <% else %>
-              <ul id="assistant-list" style="list-style:none;margin:0;padding:0">
-                <li :for={a <- @assistants} id={"assistant-#{a.id}"} class="assistant-row" data-name={a.name} style="padding:6px 4px;border-bottom:1px solid var(--line,#222)">
-                  <a href={assistant_path(@samen_mount, a.id, nil)} id={"assistant-open-#{a.id}"} class={@assistant_id == a.id && "on"} style="font-size:13px">
-                    {a.title} <span style="color:var(--muted)">({a.name})</span>
-                  </a>
-                  <span :if={a.model_id} style="margin-left:6px;color:var(--muted);font-size:11px">{a.model_id}</span>
-                  <span :if={a.tools != []} style="margin-left:6px;color:var(--muted);font-size:11px" class="assistant-tools-badge" data-tools={Enum.join(a.tools, ",")} >tools: {Enum.join(a.tools, ", ")}</span>
-                  <span :if={a.tools == []} style="margin-left:6px;color:var(--muted);font-size:11px" >no tools</span>
+              <ul id="assistant-conv-list" style="list-style:none;margin:0;padding:0">
+                <li :for={c <- @conversations} id={"conv-#{c.id}"} class="conv-row" style="padding:6px 4px;border-bottom:1px solid var(--line,#222)">
+                  <a href={assistant_path(@samen_mount, @assistant_id, c.id)} id={"conv-open-#{c.id}"} style="font-size:13px">{c.title}</a>
+                  <span style="margin-left:6px;color:var(--muted);font-size:11px">{c.message_count} msgs</span>
                 </li>
               </ul>
             <% end %>
-
-            <form phx-submit="create-assistant" id="assistant-create-form" class="card" style="padding:10px;display:flex;flex-direction:column;gap:6px">
-              <span style="font-size:12px;font-weight:600">New assistant</span>
-              <input type="text" name="assistant_name" placeholder="name (a-z0-9_.-)" style="font-size:12px" />
-              <input type="text" name="assistant_title" placeholder="Title" style="font-size:12px" />
-              <textarea name="system_prompt" rows="2" placeholder="System prompt" style="font-size:12px"></textarea>
-              <input type="text" name="model_id" placeholder="model_id (optional)" style="font-size:12px" />
-              <div style="display:flex;flex-direction:column;gap:4px">
-                <span style="font-size:11px;color:var(--muted)">Tools (subset of tenant surface — leave empty for chat-only)</span>
-                <div style="display:flex;flex-wrap:wrap;gap:6px">
-                  <label :for={t <- @available_tools} style="font-size:12px;display:flex;gap:4px;align-items:center">
-                    <input type="checkbox" name="tools[]" value={t} /> {t}
-                  </label>
-                </div>
-                <span style="font-size:11px;color:var(--muted)">or comma-separated: </span>
-                <input type="text" name="assistant_tools" placeholder="search_records, fetch_record" style="font-size:12px" />
-              </div>
-              <.button variant="secondary" type="submit" id="assistant-create">Create</.button>
-            </form>
-
-            <div style="display:flex;align-items:center;gap:8px">
-              <b style="font-size:13px">Conversations</b>
-              <.button variant="secondary" phx-click="create-conversation" id="assistant-conv-new">New</.button>
-            </div>
-            <div :if={@assistant_id != nil and @assistant_usage} id="assistant-usage" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <.pill variant="info"><span id="assistant-usage-threads">{@assistant_usage.conversation_count} threads</span></.pill>
-              <span style="color:var(--muted);font-size:12px" id="assistant-usage-tokens">{@assistant_usage.message_count} msgs · {@assistant_usage.total_tokens} tokens</span>
-              <span style="color:var(--muted);font-size:11px" id="assistant-usage-cost">est. ${:erlang.float_to_binary(@assistant_usage.estimated_cost * 1.0, decimals: 6)}</span>
-            </div>
-
-            <form :if={@assistant_id != nil} phx-submit="assistant-recall" id="assistant-recall-form" style="display:flex;gap:6px">
-              <input type="text" name="query" value={@recall_query} placeholder="Search conversations (title)" style="flex:1;font-size:12px" id="assistant-recall-input" />
-              <.button variant="secondary" type="submit" id="assistant-recall">Search</.button>
-              <.button :if={@recall_query != ""} variant="secondary" phx-click="assistant-recall-clear" type="button" id="assistant-recall-clear">Clear</.button>
-            </form>
-
-            <div :if={@assistant_recall} id="assistant-recall-results" class="card" style="padding:8px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <b style="font-size:12px">Recall</b>
-                <span style="color:var(--muted);font-size:11px" id="assistant-recall-state">{@assistant_recall.state}</span>
-                <.pill :if={Map.get(@assistant_recall, :simulated, false)} variant="warn"><span id="assistant-recall-sim-badge">SIMULATED ranking</span></.pill>
-                <.pill :if={Map.get(@assistant_recall, :simulated) == false} variant="ok"><span id="assistant-recall-live-badge">Live ranking</span></.pill>
-              </div>
-              <div :if={@assistant_recall.state == :not_configured} id="assistant-recall-hint" style="color:var(--muted);font-size:12px">{Map.get(@assistant_recall, :configuration_hint, "")}</div>
-              <ul :if={@assistant_recall.hits != []} style="list-style:none;margin:0;padding:0">
-                <li :for={hit <- @assistant_recall.hits} class="assistant-recall-hit" id={"assistant-recall-hit-#{hit.conversation.id}"} style="padding:4px 0;border-bottom:1px solid var(--line,#222)">
-                  <a href={assistant_path(@samen_mount, @assistant_id, hit.conversation.id)} style="font-size:12px">{hit.conversation.title}</a>
-                  <span :if={hit.snippet} style="margin-left:6px;color:var(--muted);font-size:11px" class="assistant-recall-snippet">{hit.snippet}</span>
-                </li>
-              </ul>
-              <div :if={@assistant_recall.hits == [] and @assistant_recall.state not in [:not_configured, :error]} style="color:var(--muted);font-size:12px" id="assistant-recall-empty">No matches.</div>
-            </div>
-
-            <%= if @assistant_id == nil do %>
-              <div id="assistant-conv-empty" style="color:var(--muted);font-size:12px">Pick an assistant first.</div>
-            <% else %>
-              <%= if @conversations == [] do %>
-                <.empty_state title="No conversations" body="Start a new thread under this assistant." icon="◷" />
-              <% else %>
-                <ul id="assistant-conv-list" style="list-style:none;margin:0;padding:0">
-                  <li :for={c <- @conversations} id={"conv-#{c.id}"} class="conv-row" style="padding:6px 4px;border-bottom:1px solid var(--line,#222)">
-                    <a href={assistant_path(@samen_mount, @assistant_id, c.id)} id={"conv-open-#{c.id}"} style="font-size:13px">{c.title}</a>
-                    <span style="margin-left:6px;color:var(--muted);font-size:11px">{c.message_count} msgs</span>
-                  </li>
-                </ul>
-              <% end %>
-            <% end %>
-          </div>
-
-          <div class="card" id="assistant-main" style="flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0">
-            <%= cond do %>
-              <% is_nil(@assistant_id) -> %>
-                <.empty_state title="Pick an assistant" body="Create one or pick an existing assistant to start a conversation." icon="✦" />
-              <% is_nil(@conversation_id) -> %>
-                <.empty_state title="Pick a conversation" body={"Start a new thread under #{(@assistant && @assistant.title) || "this assistant"}."} icon="◷" />
-              <% is_nil(@detail) -> %>
-                <.empty_state title="Conversation not found" body="That thread does not exist in this org." icon="?" />
-              <% true -> %>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <.pill variant="info"><span id="assistant-conv-title">{@detail.title}</span></.pill>
-                  <span :if={@assistant && @assistant.model_id} style="color:var(--muted);font-size:12px">model: {@assistant.model_id}</span>
-                  <.pill :if={@assistant && @assistant.tools != []} variant="info"><span id="assistant-tools-active" data-tools={Enum.join(@assistant.tools, ",")}>tools: {Enum.join(@assistant.tools, ", ")}</span></.pill>
-                  <span :if={@assistant_run} style="color:var(--muted);font-size:11px" id="assistant-run-id">run: {@assistant_run.id} · {@assistant_run.state}</span>
-                  <a :if={@assistant_run} href={"/ai/agents/#{@assistant_run.id}"} style="font-size:11px">View run →</a>
-                  <.pill :if={@detail.masked?} variant="warn"><span id="assistant-masked-badge">•••• masked transcript</span></.pill>
-                </div>
-
-                <div id="assistant-transcript" style="display:flex;flex-direction:column;gap:8px;min-height:180px">
-                  <%= if @detail.turns == [] do %>
-                    <.empty_state title="No messages yet" body="Say hello — history is re-scrubbed per turn (INV-7) and persists as a vault transcript." icon="💬" />
-                  <% else %>
-                    <div :for={t <- @detail.turns} class="assistant-turn" data-role={t["role"]} style="padding:8px 10px;border:1px solid var(--line,#222);border-radius:8px">
-                      <span style="font-size:11px;color:var(--muted);text-transform:uppercase">{t["role"]}</span>
-                      <pre class="assistant-turn-content" style="white-space:pre-wrap;margin:4px 0 0;font-size:13px">{t["content"]}</pre>
-                    </div>
-                  <% end %>
-
-                  <div :if={@streaming and @stream_buffer != ""} id="assistant-stream" class="assistant-turn" data-role="assistant" style="padding:8px 10px;border:1px dashed var(--line,#444);border-radius:8px">
-                    <span style="font-size:11px;color:var(--muted)">streaming…</span>
-                    <pre class="assistant-turn-content" style="white-space:pre-wrap;margin:4px 0 0;font-size:13px">{@stream_buffer}</pre>
-                  </div>
-                </div>
-
-                <div :if={@outcome} id="assistant-outcome" style="margin-top:4px">
-                  <.ai_result result={normalize_outcome(@outcome)} id="assistant-result" />
-                </div>
-                <div :if={@outcome == {:error, :budget_exhausted}} id="assistant-budget-exhausted" class="card" data-state="budget_exhausted" style="padding:10px">
-                  <.pill variant="warn">Stopped at a budget</.pill>
-                  <span style="margin-left:8px;font-size:13px">This conversation hit its message/token budget — <b>no partial answer was promoted</b> (fail-honest, like the agent loop).</span>
-                </div>
-
-                <div :if={@assistant_approval} class="card" id="assistant-decision-card" data-approval={@assistant_approval.id} style="padding:14px;border-color:#F0B429">
-                  <div style="display:flex;align-items:center;gap:8px">
-                    <.pill variant="warn"><span id="assistant-decision-badge">Awaiting your decision</span></.pill>
-                    <span style="color:var(--muted);font-size:12px">The assistant PROPOSED this write — it has not run without your approval (ADR-043 §6.2).</span>
-                  </div>
-                  <dl :if={@assistant_provenance} id="assistant-decision-provenance" style="margin:10px 0 0;font-size:13px">
-                    <div><dt style="display:inline;color:var(--muted)">tool:</dt> <dd style="display:inline;margin:0" id="assistant-prov-tool">{@assistant_provenance.tool_kind}</dd></div>
-                    <div><dt style="display:inline;color:var(--muted)">turn:</dt> <dd style="display:inline;margin:0" id="assistant-prov-turn">{@assistant_provenance.turn_index}</dd></div>
-                    <div><dt style="display:inline;color:var(--muted)">arg keys:</dt> <dd style="display:inline;margin:0" id="assistant-prov-argkeys" class="mono">{Enum.join(@assistant_provenance.arg_keys, ", ")}</dd></div>
-                    <div><dt style="display:inline;color:var(--muted)">args digest:</dt> <dd style="display:inline;margin:0" id="assistant-prov-digest" class="mono">{@assistant_provenance.args_digest}</dd></div>
-                  </dl>
-                  <p style="margin:8px 0 0;color:var(--muted);font-size:12px">
-                    Only key NAMES + digest (never values — INV-1). Approving executes as you, once, inside the decision.
-                    Deadline: <span id="assistant-decision-deadline">{@assistant_approval.deadline_at}</span>.
-                  </p>
-                  <div style="margin-top:10px;display:flex;gap:8px">
-                    <.button variant="primary" phx-click="approve" phx-value-id={@assistant_approval.id} id="assistant-approve" data-confirm="Approve this write? It will execute once, as you.">Approve + execute</.button>
-                    <.button variant="secondary" phx-click="reject" phx-value-id={@assistant_approval.id} id="assistant-reject">Reject</.button>
-                  </div>
-                </div>
-
-                <form phx-submit="send" id="assistant-composer" class="card" style="display:flex;gap:8px;padding:10px;align-items:flex-end">
-                  <textarea name="input" id="assistant-input" rows="3" placeholder="Type a message…" style="flex:1">{@input}</textarea>
-                  <.button variant="primary" type="submit" id="assistant-send">Send</.button>
-                </form>
-
-                <div id="assistant-grounding" style="color:var(--muted);font-size:11px">
-                  History: last {@detail.turns |> length()} turn(s) re-scrubbed per §3.2a. File-drop grounding (allowlisted catalog fields) rides the next turn as :grounding (EG1-scrubbed).
-                </div>
-            <% end %>
-          </div>
+          <% end %>
         </div>
-      <% end %>
-    </.app_shell>
+
+        <div class="card" id="assistant-main" style="flex:1;padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0">
+          <%= cond do %>
+            <% is_nil(@assistant_id) -> %>
+              <.empty_state title="Pick an assistant" body="Create one or pick an existing assistant to start a conversation." icon="✦" />
+            <% is_nil(@conversation_id) -> %>
+              <.empty_state title="Pick a conversation" body={"Start a new thread under #{(@assistant && @assistant.title) || "this assistant"}."} icon="◷" />
+            <% is_nil(@detail) -> %>
+              <.empty_state title="Conversation not found" body="That thread does not exist in this org." icon="?" />
+            <% true -> %>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <.pill variant="info"><span id="assistant-conv-title">{@detail.title}</span></.pill>
+                <span :if={@assistant && @assistant.model_id} style="color:var(--muted);font-size:12px">model: {@assistant.model_id}</span>
+                <.pill :if={@assistant && @assistant.tools != []} variant="info"><span id="assistant-tools-active" data-tools={Enum.join(@assistant.tools, ",")}>tools: {Enum.join(@assistant.tools, ", ")}</span></.pill>
+                <span :if={@assistant_run} style="color:var(--muted);font-size:11px" id="assistant-run-id">run: {@assistant_run.id} · {@assistant_run.state}</span>
+                <a :if={@assistant_run} href={"/ai/agents/#{@assistant_run.id}"} style="font-size:11px">View run →</a>
+                <.pill :if={@detail.masked?} variant="warn"><span id="assistant-masked-badge">•••• masked transcript</span></.pill>
+              </div>
+
+              <div id="assistant-transcript" style="display:flex;flex-direction:column;gap:8px;min-height:180px">
+                <%= if @detail.turns == [] do %>
+                  <.empty_state title="No messages yet" body="Say hello — history is re-scrubbed per turn (INV-7) and persists as a vault transcript." icon="💬" />
+                <% else %>
+                  <div :for={t <- @detail.turns} class="assistant-turn" data-role={t["role"]} style="padding:8px 10px;border:1px solid var(--line,#222);border-radius:8px">
+                    <span style="font-size:11px;color:var(--muted);text-transform:uppercase">{t["role"]}</span>
+                    <pre class="assistant-turn-content" style="white-space:pre-wrap;margin:4px 0 0;font-size:13px">{t["content"]}</pre>
+                  </div>
+                <% end %>
+
+                <div :if={@streaming and @stream_buffer != ""} id="assistant-stream" class="assistant-turn" data-role="assistant" style="padding:8px 10px;border:1px dashed var(--line,#444);border-radius:8px">
+                  <span style="font-size:11px;color:var(--muted)">streaming…</span>
+                  <pre class="assistant-turn-content" style="white-space:pre-wrap;margin:4px 0 0;font-size:13px">{@stream_buffer}</pre>
+                </div>
+              </div>
+
+              <div :if={@outcome} id="assistant-outcome" style="margin-top:4px">
+                <.ai_result result={normalize_outcome(@outcome)} id="assistant-result" />
+              </div>
+              <div :if={@outcome == {:error, :budget_exhausted}} id="assistant-budget-exhausted" class="card" data-state="budget_exhausted" style="padding:10px">
+                <.pill variant="warn">Stopped at a budget</.pill>
+                <span style="margin-left:8px;font-size:13px">This conversation hit its message/token budget — <b>no partial answer was promoted</b> (fail-honest, like the agent loop).</span>
+              </div>
+
+              <div :if={@assistant_approval} class="card" id="assistant-decision-card" data-approval={@assistant_approval.id} style="padding:14px;border-color:#F0B429">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <.pill variant="warn"><span id="assistant-decision-badge">Awaiting your decision</span></.pill>
+                  <span style="color:var(--muted);font-size:12px">The assistant PROPOSED this write — it has not run without your approval (ADR-043 §6.2).</span>
+                </div>
+                <dl :if={@assistant_provenance} id="assistant-decision-provenance" style="margin:10px 0 0;font-size:13px">
+                  <div><dt style="display:inline;color:var(--muted)">tool:</dt> <dd style="display:inline;margin:0" id="assistant-prov-tool">{@assistant_provenance.tool_kind}</dd></div>
+                  <div><dt style="display:inline;color:var(--muted)">turn:</dt> <dd style="display:inline;margin:0" id="assistant-prov-turn">{@assistant_provenance.turn_index}</dd></div>
+                  <div><dt style="display:inline;color:var(--muted)">arg keys:</dt> <dd style="display:inline;margin:0" id="assistant-prov-argkeys" class="mono">{Enum.join(@assistant_provenance.arg_keys, ", ")}</dd></div>
+                  <div><dt style="display:inline;color:var(--muted)">args digest:</dt> <dd style="display:inline;margin:0" id="assistant-prov-digest" class="mono">{@assistant_provenance.args_digest}</dd></div>
+                </dl>
+                <p style="margin:8px 0 0;color:var(--muted);font-size:12px">
+                  Only key NAMES + digest (never values — INV-1). Approving executes as you, once, inside the decision.
+                  Deadline: <span id="assistant-decision-deadline">{@assistant_approval.deadline_at}</span>.
+                </p>
+                <div style="margin-top:10px;display:flex;gap:8px">
+                  <.button variant="primary" phx-click="approve" phx-value-id={@assistant_approval.id} id="assistant-approve" data-confirm="Approve this write? It will execute once, as you.">Approve + execute</.button>
+                  <.button variant="secondary" phx-click="reject" phx-value-id={@assistant_approval.id} id="assistant-reject">Reject</.button>
+                </div>
+              </div>
+
+              <form phx-submit="send" id="assistant-composer" class="card" style="display:flex;gap:8px;padding:10px;align-items:flex-end">
+                <textarea name="input" id="assistant-input" rows="3" placeholder="Type a message…" style="flex:1">{@input}</textarea>
+                <.button variant="primary" type="submit" id="assistant-send">Send</.button>
+              </form>
+
+              <div id="assistant-grounding" style="color:var(--muted);font-size:11px">
+                History: last {@detail.turns |> length()} turn(s) re-scrubbed per §3.2a. File-drop grounding (allowlisted catalog fields) rides the next turn as :grounding (EG1-scrubbed).
+              </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
     """
   end
 

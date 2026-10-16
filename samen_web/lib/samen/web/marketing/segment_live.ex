@@ -25,7 +25,7 @@ defmodule Samen.Web.Marketing.SegmentLive do
   call would. All write affordances are TENANT-plane only
   (`Samen.Web.Marketing.Live.writable?/1`).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -168,156 +168,157 @@ defmodule Samen.Web.Marketing.SegmentLive do
     {:noreply, assign(socket, delete_error: nil)}
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_segments} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="mkt-segment">
-      <.app_shell>
-        <:sidebar>
-          <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_segments} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={segment_label(@segment)} crumbs={crumbs(@samen_mount, @org_id, segment_label(@segment))}>
+      <:actions>
+        <a href={segments_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">
+          <span class="i">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Back to segments
+        </a>
+        <.button :if={writable?(@samen_mount) and @segment != nil} phx-click="edit_segment" id="edit-segment">
+          Edit segment
+        </.button>
+        <.delete_confirm
+          :if={writable?(@samen_mount) and @segment != nil}
+          id="archive-segment"
+          label="Archive"
+          message="Archive this segment? It can be restored from the segments list's archived view."
+          phx-click="delete"
+          phx-value-id={@segment && @segment.id}
+        />
+      </:actions>
+    </.topbar>
 
-        <.topbar title={segment_label(@segment)} crumbs={crumbs(@samen_mount, @org_id, segment_label(@segment))}>
-          <:actions>
-            <a href={segments_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">
-              <span class="i">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-              </span>
-              Back to segments
-            </a>
-            <.button :if={writable?(@samen_mount) and @segment != nil} phx-click="edit_segment" id="edit-segment">
-              Edit segment
-            </.button>
-            <.delete_confirm
-              :if={writable?(@samen_mount) and @segment != nil}
-              id="archive-segment"
-              label="Archive"
-              message="Archive this segment? It can be restored from the segments list's archived view."
-              phx-click="delete"
-              phx-value-id={@segment && @segment.id}
-            />
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;display:flex;gap:10px;align-items:center">
+          <span>{@delete_error}</span>
+          <button type="button" class="btn" phx-click="dismiss_error" style="font-size:12px">Dismiss</button>
+        </div>
+      </div>
 
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;display:flex;gap:10px;align-items:center">
-              <span>{@delete_error}</span>
-              <button type="button" class="btn" phx-click="dismiss_error" style="font-size:12px">Dismiss</button>
+      <%= if @segment == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Segment not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="segment-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div class="av" style={"width:46px;height:46px;border-radius:8px;background:#EFF6FF;color:#3B4CCA;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"}>
+              {String.slice(@segment.name || "?", 0, 1) |> String.upcase()}
+            </div>
+            <div style="flex:1;min-width:0">
+              <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{segment_label(@segment)}</h1>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <.pill variant="mut">{@segment.subscriber_count} subscribers</.pill>
+                <span style="font-size:12px;color:var(--muted)">· non-PII audience config · admin-gated writes · {marketing_plane_note(@samen_mount)}</span>
+              </div>
             </div>
           </div>
+        </div>
 
-          <%= if @segment == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Segment not found.</div>
-            </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="segment-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-                <div class="av" style={"width:46px;height:46px;border-radius:8px;background:#EFF6FF;color:#3B4CCA;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0"}>
-                  {String.slice(@segment.name || "?", 0, 1) |> String.upcase()}
-                </div>
-                <div style="flex:1;min-width:0">
-                  <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{segment_label(@segment)}</h1>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <.pill variant="mut">{@segment.subscriber_count} subscribers</.pill>
-                    <span style="font-size:12px;color:var(--muted)">· non-PII audience config · admin-gated writes · {marketing_plane_note(@samen_mount)}</span>
-                  </div>
-                </div>
+        <div class="wrap" style="margin-bottom:0;padding-top:10px">
+          <div class="card" id="segment-facts" style="padding:16px 18px">
+            <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Name</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{@segment.name || "—"}</dd>
               </div>
-            </div>
-
-            <div class="wrap" style="margin-bottom:0;padding-top:10px">
-              <div class="card" id="segment-facts" style="padding:16px 18px">
-                <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Name</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{@segment.name || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Description</dt>
-                    <dd style="margin:0;font-size:13px">{@segment.description || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Filter criteria</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{filter_summary(@segment.filter_criteria)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Subscribers</dt>
-                    <dd style="margin:0;font-size:13px">{@segment.subscriber_count}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Inserted at</dt>
-                    <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@segment.inserted_at)}</dd>
-                  </div>
-                </dl>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Description</dt>
+                <dd style="margin:0;font-size:13px">{@segment.description || "—"}</dd>
               </div>
-
-              <div class="card" id="segment-audience" style="padding:16px 18px;margin-top:10px">
-                <div class="gtitle" style="margin-bottom:6px">
-                  <h3 style="font-size:13px">Audience</h3>
-                  <span class="n">{length(@audience)}</span>
-                  <span class="lane">· status-filtered preview · email via PiiResolution · first {length(@audience)} rows</span>
-                </div>
-                <%= if @audience == [] do %>
-                  <p style="margin:0;font-size:12px;color:var(--muted)">No matching subscribers yet.</p>
-                <% else %>
-                  <table style="width:100%;border-collapse:collapse;font-size:13px">
-                    <thead>
-                      <tr>
-                        <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                          Email
-                        </th>
-                        <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr :for={sub <- @audience} class="audience-row" id={"audience-#{sub.id}"}>
-                        <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);font-size:12px;color:var(--muted)">{sub.email}</td>
-                        <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
-                          <.pill variant={sub_status_variant(sub.status)}>{sub.status}</.pill>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                <% end %>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Filter criteria</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{filter_summary(@segment.filter_criteria)}</dd>
               </div>
-            </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Subscribers</dt>
+                <dd style="margin:0;font-size:13px">{@segment.subscriber_count}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Inserted at</dt>
+                <dd style="margin:0;font-size:13px;font-family:monospace">{format_ts(@segment.inserted_at)}</dd>
+              </div>
+            </dl>
+          </div>
 
-            <.modal
-              :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
-              id="edit-segment-modal"
-              title="Edit segment"
-              on_cancel="cancel_edit"
-            >
-              <.simple_form
-                :let={f}
-                for={@edit_form}
-                id="edit-segment-form"
-                phx-change="validate_edit"
-                phx-submit="save_edit"
-              >
-                <.form_field field={f[:name]} label="Name" />
-                <.form_field field={f[:description]} label="Description" type="textarea" />
-                <:actions>
-                  <.button variant="primary" type="submit">Save changes</.button>
-                  <.button type="button" phx-click="cancel_edit">Cancel</.button>
-                </:actions>
-              </.simple_form>
-            </.modal>
-          <% end %>
-        <% end %>
-      </.app_shell>
+          <div class="card" id="segment-audience" style="padding:16px 18px;margin-top:10px">
+            <div class="gtitle" style="margin-bottom:6px">
+              <h3 style="font-size:13px">Audience</h3>
+              <span class="n">{length(@audience)}</span>
+              <span class="lane">· status-filtered preview · email via PiiResolution · first {length(@audience)} rows</span>
+            </div>
+            <%= if @audience == [] do %>
+              <p style="margin:0;font-size:12px;color:var(--muted)">No matching subscribers yet.</p>
+            <% else %>
+              <table style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr>
+                    <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                      Email
+                    </th>
+                    <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={sub <- @audience} class="audience-row" id={"audience-#{sub.id}"}>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);font-size:12px;color:var(--muted)">{sub.email}</td>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb)">
+                      <.pill variant={sub_status_variant(sub.status)}>{sub.status}</.pill>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            <% end %>
+          </div>
+        </div>
+
+        <.modal
+          :if={@show_edit and @edit_form != nil and writable?(@samen_mount)}
+          id="edit-segment-modal"
+          title="Edit segment"
+          on_cancel="cancel_edit"
+        >
+          <.simple_form
+            :let={f}
+            for={@edit_form}
+            id="edit-segment-form"
+            phx-change="validate_edit"
+            phx-submit="save_edit"
+          >
+            <.form_field field={f[:name]} label="Name" />
+            <.form_field field={f[:description]} label="Description" type="textarea" />
+            <:actions>
+              <.button variant="primary" type="submit">Save changes</.button>
+              <.button type="button" phx-click="cancel_edit">Cancel</.button>
+            </:actions>
+          </.simple_form>
+        </.modal>
+      <% end %>
+    <% end %>
     </div>
     """
   end

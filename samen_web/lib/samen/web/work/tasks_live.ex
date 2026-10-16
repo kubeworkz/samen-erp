@@ -15,7 +15,7 @@ defmodule Samen.Web.Work.TasksLive do
   `delete_confirm/1` (=archive, ADR-040 §5.9 — never a hard delete via this
   surface). Write affordances are offered on the tenant plane only.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1, work_path: 1, writable?: 1]
@@ -122,107 +122,108 @@ defmodule Samen.Web.Work.TasksLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_tasks} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="work">
-      <.app_shell>
-        <:sidebar>
-          <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_tasks} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Work" crumbs={crumbs(@samen_mount, @org_id, "Tasks")}>
+      <:actions>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_task" id="new-task">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New task
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Work" crumbs={crumbs(@samen_mount, @org_id, "Tasks")}>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Work org: {@org_id}</span>
+
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div id="tasks">
+          <div class="gtitle">
+            <h3>Task Inbox</h3>
+            <span class="n">{length(@page.items)}</span>
+          </div>
+          <.list_view
+            id="tasks-list"
+            page={@page}
+            state={@list_state}
+            row_class="task-row"
+            filter_placeholder="Filter tasks…"
+            empty_text="No tasks yet."
+            empty_icon="✓"
+            empty_body="Tasks land here with status, priority, and due date."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_task" id="empty-new-task">New task</.button>
+            </:empty_actions>
+            <:head>
+              <.sort_header field={:title} label="Title" sort={@list_state.sort} width="34%" />
+              <.sort_header field={:status} label="Status" sort={@list_state.sort} width="16%" />
+              <.sort_header field={:priority} label="Priority" sort={@list_state.sort} width="16%" />
+              <.sort_header field={:due_at} label="Due" sort={@list_state.sort} width="20%" />
+              <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={task}>
+              <td class="wk-title">
+                <a href={"#{work_path(@samen_mount)}/tasks/#{task.id}?org=#{@org_id}"} style="font-weight:500;color:#3a3b45;text-decoration:none">
+                  {task.title || "(untitled)"}
+                </a>
+              </td>
+              <td class="wk-status">
+                <.pill variant={status_variant(task.status)}>{status_label(task.status)}</.pill>
+              </td>
+              <td class="wk-priority">
+                <.pill variant={priority_variant(task.priority)}>{priority_label(task.priority)}</.pill>
+              </td>
+              <td class="wk-due" style="font-size:12px;color:var(--muted)">
+                {due_cell(task)}
+              </td>
+              <td :if={writable?(@samen_mount)} class="wk-actions">
+                <.delete_confirm phx-click="delete" phx-value-id={task.id} />
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-task-modal" title="New task" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-task-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:title]} label="Title" />
+          <.form_field
+            field={f[:priority]}
+            label="Priority"
+            type="select"
+            options={[{"low", "low"}, {"normal", "normal"}, {"high", "high"}, {"urgent", "urgent"}]}
+          />
           <:actions>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_task" id="new-task">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New task
-            </.button>
+            <.button variant="primary" type="submit">Save task</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
           </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Work org: {@org_id}</span>
-
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <div class="wrap">
-            <div id="tasks">
-              <div class="gtitle">
-                <h3>Task Inbox</h3>
-                <span class="n">{length(@page.items)}</span>
-              </div>
-              <.list_view
-                id="tasks-list"
-                page={@page}
-                state={@list_state}
-                row_class="task-row"
-                filter_placeholder="Filter tasks…"
-                empty_text="No tasks yet."
-                empty_icon="✓"
-                empty_body="Tasks land here with status, priority, and due date."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_task" id="empty-new-task">New task</.button>
-                </:empty_actions>
-                <:head>
-                  <.sort_header field={:title} label="Title" sort={@list_state.sort} width="34%" />
-                  <.sort_header field={:status} label="Status" sort={@list_state.sort} width="16%" />
-                  <.sort_header field={:priority} label="Priority" sort={@list_state.sort} width="16%" />
-                  <.sort_header field={:due_at} label="Due" sort={@list_state.sort} width="20%" />
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={task}>
-                  <td class="wk-title">
-                    <a href={"#{work_path(@samen_mount)}/tasks/#{task.id}?org=#{@org_id}"} style="font-weight:500;color:#3a3b45;text-decoration:none">
-                      {task.title || "(untitled)"}
-                    </a>
-                  </td>
-                  <td class="wk-status">
-                    <.pill variant={status_variant(task.status)}>{status_label(task.status)}</.pill>
-                  </td>
-                  <td class="wk-priority">
-                    <.pill variant={priority_variant(task.priority)}>{priority_label(task.priority)}</.pill>
-                  </td>
-                  <td class="wk-due" style="font-size:12px;color:var(--muted)">
-                    {due_cell(task)}
-                  </td>
-                  <td :if={writable?(@samen_mount)} class="wk-actions">
-                    <.delete_confirm phx-click="delete" phx-value-id={task.id} />
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-task-modal" title="New task" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-task-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:title]} label="Title" />
-              <.form_field
-                field={f[:priority]}
-                label="Priority"
-                type="select"
-                options={[{"low", "low"}, {"normal", "normal"}, {"high", "high"}, {"urgent", "urgent"}]}
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Save task</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

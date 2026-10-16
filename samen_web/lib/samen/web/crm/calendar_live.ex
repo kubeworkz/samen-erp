@@ -33,7 +33,7 @@ defmodule Samen.Web.CRM.CalendarLive do
   `Samen.Web.Reads.MaskedGroupKeyError`), so no event field masks and no per-plane masking
   proof is required for this surface. Reads still ride Ash/OrgScope.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1]
@@ -122,56 +122,57 @@ defmodule Samen.Web.CRM.CalendarLive do
   defp total_opps(%Board{groups: groups}),
     do: Enum.reduce(groups, 0, fn g, acc -> acc + (g.count || length(g.rows)) end)
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_calendar} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-calendar">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_calendar} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Calendar" crumbs={crumbs(@samen_mount, @org_id, "Calendar")} />
 
-        <.topbar title="Calendar" crumbs={crumbs(@samen_mount, @org_id, "Calendar")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
+      <div class="metrics">
+        <.metric label="Opportunities this month" value={@total_opps} sub="by close date">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
 
-          <div class="metrics">
-            <.metric label="Opportunities this month" value={@total_opps} sub="by close date">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
-
-          <div class="wrap">
-            <.calendar
-              id="crm-cal"
-              board={@board}
-              month={@month}
-              prev_href={@prev_href}
-              next_href={@next_href}
-              empty_cell_text=""
-            >
-              <:event :let={opp}>
-                <div class="opp-ev" id={"opp-#{opp.id}"}>
-                  <span class="mono opp-ev-name">{opp.name}</span>
-                  <span class="opp-ev-meta">
-                    <span class="mono num">{dollars(opp.value)}</span>
-                    <.pill variant={status_variant(opp.status)}>{opp.status}</.pill>
-                  </span>
-                </div>
-              </:event>
-            </.calendar>
-          </div>
-        <% end %>
-      </.app_shell>
+      <div class="wrap">
+        <.calendar
+          id="crm-cal"
+          board={@board}
+          month={@month}
+          prev_href={@prev_href}
+          next_href={@next_href}
+          empty_cell_text=""
+        >
+          <:event :let={opp}>
+            <div class="opp-ev" id={"opp-#{opp.id}"}>
+              <span class="mono opp-ev-name">{opp.name}</span>
+              <span class="opp-ev-meta">
+                <span class="mono num">{dollars(opp.value)}</span>
+                <.pill variant={status_variant(opp.status)}>{opp.status}</.pill>
+              </span>
+            </div>
+          </:event>
+        </.calendar>
+      </div>
+    <% end %>
     </div>
     """
   end

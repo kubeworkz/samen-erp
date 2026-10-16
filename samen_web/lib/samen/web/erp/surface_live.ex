@@ -34,7 +34,7 @@ defmodule Samen.Web.Erp.SurfaceLive do
     * no export path exists on any ERP surface.
   """
 
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
@@ -260,139 +260,140 @@ defmodule Samen.Web.Erp.SurfaceLive do
 
   defp default_line_rows(surface), do: if(Erp.line_fields(surface) != [], do: [nil], else: [])
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.erp_sidebar
+      mount={@samen_mount}
+      org_id={@org_id}
+      active={@surface && :"erp_#{@surface}"}
+      return_to={@return_to}
+    />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="erp-surface">
-      <.app_shell>
-        <:sidebar>
-          <.erp_sidebar
-            mount={@samen_mount}
-            org_id={@org_id}
-            active={@surface && :"erp_#{@surface}"}
-            return_to={@return_to}
-          />
-        </:sidebar>
-
-        <.topbar
-          title={if(@surface, do: Erp.label(@surface), else: "Not found")}
-          crumbs={crumbs(@samen_mount, @org_id, @surface)}
+    <.topbar
+      title={if(@surface, do: Erp.label(@surface), else: "Not found")}
+      crumbs={crumbs(@samen_mount, @org_id, @surface)}
+    >
+      <:actions>
+        <.button
+          :if={writable?(@samen_mount) and @org_id != nil and @resource != nil}
+          variant="primary"
+          phx-click="new_record"
+          id="new-record"
         >
-          <:actions>
-            <.button
-              :if={writable?(@samen_mount) and @org_id != nil and @resource != nil}
-              variant="primary"
-              phx-click="new_record"
-              id="new-record"
-            >
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New {Erp.record_label(@surface)}
-            </.button>
-          </:actions>
-        </.topbar>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New {Erp.record_label(@surface)}
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <div class="wrap">
-          <%= if is_nil(@org_id) do %>
-            <.no_org_card mount={@samen_mount} />
-          <% else %>
-            <div :if={@surface} class="gtitle">
-              <h3>{Erp.label(@surface)}</h3>
-              <span class="n">{length(@page.items)}</span>
-              <span class="lane">· org-scoped · governed writes</span>
-            </div>
-            <%= if is_nil(@surface) or @unmounted do %>
-              <div class="card" style="padding:16px;color:var(--muted)">
-                This surface is not available on this workspace's mounted modules.
-              </div>
-            <% else %>
-              <table style="width:100%;border-collapse:collapse;font-size:13px">
-                <thead>
-                  <tr>
-                    <th :for={col <- Erp.columns(@surface)} scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
-                      {col |> Atom.to_string() |> String.replace("_", " ")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={row <- @page.items}>
-                    <td
-                      :for={{col, index} <- Enum.with_index(Erp.columns(@surface))}
-                      style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)"
+    <div class="wrap">
+      <%= if is_nil(@org_id) do %>
+        <.no_org_card mount={@samen_mount} />
+      <% else %>
+        <div :if={@surface} class="gtitle">
+          <h3>{Erp.label(@surface)}</h3>
+          <span class="n">{length(@page.items)}</span>
+          <span class="lane">· org-scoped · governed writes</span>
+        </div>
+        <%= if is_nil(@surface) or @unmounted do %>
+          <div class="card" style="padding:16px;color:var(--muted)">
+            This surface is not available on this workspace's mounted modules.
+          </div>
+        <% else %>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr>
+                <th :for={col <- Erp.columns(@surface)} scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">
+                  {col |> Atom.to_string() |> String.replace("_", " ")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={row <- @page.items}>
+                <td
+                  :for={{col, index} <- Enum.with_index(Erp.columns(@surface))}
+                  style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)"
+                >
+                  <%= if index == 0 do %>
+                    <a
+                      href={detail_href(@surface, row, @org_id)}
+                      class="erp-row-link"
+                      style="color:inherit;text-decoration:underline;text-underline-offset:2px"
                     >
-                      <%= if index == 0 do %>
-                        <a
-                          href={detail_href(@surface, row, @org_id)}
-                          class="erp-row-link"
-                          style="color:inherit;text-decoration:underline;text-underline-offset:2px"
-                        >
-                          {render_cell(row, col)}
-                        </a>
-                      <% else %>
-                        {render_cell(row, col)}
-                      <% end %>
-                    </td>
-                  </tr>
+                      {render_cell(row, col)}
+                    </a>
+                  <% else %>
+                    {render_cell(row, col)}
+                  <% end %>
+                </td>
+              </tr>
 
-                  <tr :if={@page.items == []}>
-                    <td colspan={length(Erp.columns(@surface))} style="padding:16px 8px;color:var(--muted)">
-                      Nothing here yet.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            <% end %>
-          <% end %>
+              <tr :if={@page.items == []}>
+                <td colspan={length(Erp.columns(@surface))} style="padding:16px 8px;color:var(--muted)">
+                  Nothing here yet.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        <% end %>
+      <% end %>
+    </div>
+
+    <.modal :if={@show_new and @new_form != nil} id="new-record-modal" title={"New " <> Erp.record_label(@surface)} on_cancel="cancel_new">
+      <.simple_form :let={f} for={@new_form} id="new-record-form" phx-change="validate_new" phx-submit="save_new">
+        <.form_field
+          :for={{field, type, opts} <- Erp.create_fields(@surface)}
+          field={f[field]}
+          label={humanize(field)}
+          type={input_type(type)}
+          options={opts[:options] || []}
+          placeholder={opts[:placeholder]}
+        />
+
+        <div :if={Erp.line_fields(@surface) != []} id="line-rows" style="margin-bottom:4px">
+          <div class="field-label" style="font-size:12px;font-weight:600;margin-bottom:6px">Lines</div>
+          <div
+            :for={{_row, index} <- Enum.with_index(@line_rows)}
+            style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"
+          >
+            <input
+              :for={{field, type, opts} <- Erp.line_fields(@surface)}
+              type={input_type(type)}
+              name={"#{f.name}[lines][#{index}][#{field}]"}
+              value={line_input_value(@line_values, index, field)}
+              placeholder={opts[:placeholder] || humanize(field)}
+              style="font-size:12px;padding:6px 8px;flex:1;min-width:110px"
+            />
+          </div>
+          <div :if={line_errors(f) != []} class="field-errors" id="lines-errors" style="margin-bottom:6px">
+            <p :for={msg <- line_errors(f)} class="field-error" style="margin:0;color:var(--bad, #b91c1c);font-size:12px">
+              {error_text(msg)}
+            </p>
+          </div>
+          <.button type="button" phx-click="add_line" id="add-line" style="margin-bottom:4px">
+            Add line
+          </.button>
         </div>
 
-        <.modal :if={@show_new and @new_form != nil} id="new-record-modal" title={"New " <> Erp.record_label(@surface)} on_cancel="cancel_new">
-          <.simple_form :let={f} for={@new_form} id="new-record-form" phx-change="validate_new" phx-submit="save_new">
-            <.form_field
-              :for={{field, type, opts} <- Erp.create_fields(@surface)}
-              field={f[field]}
-              label={humanize(field)}
-              type={input_type(type)}
-              options={opts[:options] || []}
-              placeholder={opts[:placeholder]}
-            />
-
-            <div :if={Erp.line_fields(@surface) != []} id="line-rows" style="margin-bottom:4px">
-              <div class="field-label" style="font-size:12px;font-weight:600;margin-bottom:6px">Lines</div>
-              <div
-                :for={{_row, index} <- Enum.with_index(@line_rows)}
-                style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"
-              >
-                <input
-                  :for={{field, type, opts} <- Erp.line_fields(@surface)}
-                  type={input_type(type)}
-                  name={"#{f.name}[lines][#{index}][#{field}]"}
-                  value={line_input_value(@line_values, index, field)}
-                  placeholder={opts[:placeholder] || humanize(field)}
-                  style="font-size:12px;padding:6px 8px;flex:1;min-width:110px"
-                />
-              </div>
-              <div :if={line_errors(f) != []} class="field-errors" id="lines-errors" style="margin-bottom:6px">
-                <p :for={msg <- line_errors(f)} class="field-error" style="margin:0;color:var(--bad, #b91c1c);font-size:12px">
-                  {error_text(msg)}
-                </p>
-              </div>
-              <.button type="button" phx-click="add_line" id="add-line" style="margin-bottom:4px">
-                Add line
-              </.button>
-            </div>
-
-            <:actions>
-              <.button variant="primary" type="submit" id="save-record">Save</.button>
-              <.button type="button" phx-click="cancel_new">Cancel</.button>
-            </:actions>
-          </.simple_form>
-        </.modal>
-      </.app_shell>
+        <:actions>
+          <.button variant="primary" type="submit" id="save-record">Save</.button>
+          <.button type="button" phx-click="cancel_new">Cancel</.button>
+        </:actions>
+      </.simple_form>
+    </.modal>
     </div>
     """
   end

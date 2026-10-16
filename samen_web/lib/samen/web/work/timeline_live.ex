@@ -39,7 +39,7 @@ defmodule Samen.Web.Work.TimelineLive do
   `Samen.Web.Reads.MaskedGroupKeyError`), so no bar field masks and no per-plane masking proof is
   required for this surface. Reads still ride Ash/OrgScope.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1]
@@ -161,56 +161,57 @@ defmodule Samen.Web.Work.TimelineLive do
   defp total_tasks(%Board{groups: groups}),
     do: Enum.reduce(groups, 0, fn g, acc -> acc + (g.count || length(g.rows)) end)
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_timeline} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="work-timeline">
-      <.app_shell>
-        <:sidebar>
-          <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_timeline} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Timeline" crumbs={crumbs(@samen_mount, @org_id, "Timeline")} />
 
-        <.topbar title="Timeline" crumbs={crumbs(@samen_mount, @org_id, "Timeline")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Work org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Work org: {@org_id}</span>
+      <div class="metrics">
+        <.metric label="Tasks in window" value={@total_tasks} sub="by created → due">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M3 6h18M3 12h12M3 18h7" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
 
-          <div class="metrics">
-            <.metric label="Tasks in window" value={@total_tasks} sub="by created → due">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M3 6h18M3 12h12M3 18h7" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
-
-          <div class="wrap">
-            <.gantt
-              id="work-gantt"
-              board={@board}
-              range_start={@range_start}
-              range_end={@range_end}
-              start_field={:inserted_at}
-              end_field={:due_at}
-              window_label={@window_label}
-              today={DateTime.utc_now()}
-              prev_href={@prev_href}
-              next_href={@next_href}
-              empty_text="No tasks"
-            >
-              <:bar :let={task}>
-                <span class="mono gantt-bar-name" id={"task-bar-#{task.id}"}>{task.title || "(untitled)"}</span>
-                <.pill variant={priority_variant(task.priority)}>{priority_label(task.priority)}</.pill>
-              </:bar>
-            </.gantt>
-          </div>
-        <% end %>
-      </.app_shell>
+      <div class="wrap">
+        <.gantt
+          id="work-gantt"
+          board={@board}
+          range_start={@range_start}
+          range_end={@range_end}
+          start_field={:inserted_at}
+          end_field={:due_at}
+          window_label={@window_label}
+          today={DateTime.utc_now()}
+          prev_href={@prev_href}
+          next_href={@next_href}
+          empty_text="No tasks"
+        >
+          <:bar :let={task}>
+            <span class="mono gantt-bar-name" id={"task-bar-#{task.id}"}>{task.title || "(untitled)"}</span>
+            <.pill variant={priority_variant(task.priority)}>{priority_label(task.priority)}</.pill>
+          </:bar>
+        </.gantt>
+      </div>
+    <% end %>
     </div>
     """
   end

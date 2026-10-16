@@ -42,6 +42,17 @@ defmodule DriftwoodWeb.BrokerFreightUiRenderTest do
     )
   end
 
+  # P18 CHROME — the framework's chrome sweep (`samen_web/test/samen/web/tenant_shell_coverage_test.exs`)
+  # can only reach FRAMEWORK pages, so each host certifies its OWN tenant LiveViews: `/broker` is
+  # driftwood's, and it renders inside the shared shell — sidebar beside it, panel in the main area.
+  test "the broker cockpit renders INSIDE the app shell, its panel in the main panel" do
+    html = render(base_assigns(%{panel: "dashboard"}))
+
+    assert html =~ ~s(<div class="app">)
+    assert html =~ ~s(class="side")
+    assert html =~ ~r/<main class="main">.*class="wrap"/s
+  end
+
   test "the topbar create action is CONTEXTUAL — 'New load' on Loads, absent elsewhere" do
     loads_html = render(base_assigns(%{panel: "loads"}))
     roster_html = render(base_assigns(%{panel: "roster"}))

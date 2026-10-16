@@ -21,7 +21,7 @@ defmodule Samen.Web.Settings.ProfileLive do
   `Samen.Web.Settings.Reads.current_user_id/3` (param → session → host mount label),
   never invented by the framework.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
@@ -97,72 +97,77 @@ defmodule Samen.Web.Settings.ProfileLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
     assigns =
       assigns
       |> assign_new(:save_error, fn -> nil end)
       |> assign_new(:flash_ok, fn -> nil end)
+    assigns
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:profile} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="settings-profile">
-      <.app_shell>
-        <:sidebar>
-          <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:profile} />
-        </:sidebar>
+    <.topbar title="Profile" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Profile"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="Profile" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Profile"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= cond do %>
+      <% is_nil(@org_id) -> %>
+        <.no_org_card mount={@samen_mount} />
 
-        <%= cond do %>
-          <% is_nil(@org_id) -> %>
-            <.no_org_card mount={@samen_mount} />
+      <% is_nil(@user_id) or is_nil(@user) -> %>
+        <div class="wrap">
+          <div class="card" id="settings-no-user" style="padding:22px 20px;color:var(--muted)">
+            <div style="font-weight:600;color:#2a2b35;margin-bottom:6px">No user in context</div>
+            <p style="margin:0">
+              The settings surfaces read the current user from your identity provider
+              (the host wires it); none is set here.
+            </p>
+          </div>
+        </div>
 
-          <% is_nil(@user_id) or is_nil(@user) -> %>
-            <div class="wrap">
-              <div class="card" id="settings-no-user" style="padding:22px 20px;color:var(--muted)">
-                <div style="font-weight:600;color:#2a2b35;margin-bottom:6px">No user in context</div>
-                <p style="margin:0">
-                  The settings surfaces read the current user from your identity provider
-                  (the host wires it); none is set here.
-                </p>
-              </div>
+      <% true -> %>
+        <div class="wrap">
+          <div id="settings-profile-panel">
+            <div class="gtitle">
+              <h3>Your profile</h3>
+              <span class="lane">{plane_note(@samen_mount)}</span>
             </div>
 
-          <% true -> %>
-            <div class="wrap">
-              <div id="settings-profile-panel">
-                <div class="gtitle">
-                  <h3>Your profile</h3>
-                  <span class="lane">{plane_note(@samen_mount)}</span>
-                </div>
+            <p :if={@flash_ok} id="settings-profile-ok" style="color:#15803D;margin:8px 0">{@flash_ok}</p>
+            <p :if={@save_error} id="settings-profile-error" style="color:#B91C1C;margin:8px 0">{@save_error}</p>
 
-                <p :if={@flash_ok} id="settings-profile-ok" style="color:#15803D;margin:8px 0">{@flash_ok}</p>
-                <p :if={@save_error} id="settings-profile-error" style="color:#B91C1C;margin:8px 0">{@save_error}</p>
+            <.simple_form for={@form} id="settings-profile-form" phx-submit="save">
+              <.form_field field={@form[:handle]} label="Handle" />
 
-                <.simple_form for={@form} id="settings-profile-form" phx-submit="save">
-                  <.form_field field={@form[:handle]} label="Handle" />
+              <%= if operator_plane?(@samen_mount) do %>
+                <.form_field field={@form[:full_name]} label="Full name" />
+                <.form_field field={@form[:emails]} label="Email" />
+              <% else %>
+                <.form_field field={@form[:first]} label="First name" />
+                <.form_field field={@form[:last]} label="Last name" />
+                <.form_field field={@form[:email]} label="Email" type="email" />
+              <% end %>
 
-                  <%= if operator_plane?(@samen_mount) do %>
-                    <.form_field field={@form[:full_name]} label="Full name" />
-                    <.form_field field={@form[:emails]} label="Email" />
-                  <% else %>
-                    <.form_field field={@form[:first]} label="First name" />
-                    <.form_field field={@form[:last]} label="Last name" />
-                    <.form_field field={@form[:email]} label="Email" type="email" />
-                  <% end %>
-
-                  <:actions>
-                    <.button type="submit" variant="primary" id="settings-profile-save">Save</.button>
-                  </:actions>
-                </.simple_form>
-              </div>
-            </div>
-        <% end %>
-      </.app_shell>
+              <:actions>
+                <.button type="submit" variant="primary" id="settings-profile-save">Save</.button>
+              </:actions>
+            </.simple_form>
+          </div>
+        </div>
+    <% end %>
     </div>
     """
   end

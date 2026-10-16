@@ -33,7 +33,7 @@ defmodule Samen.Web.Erp.DetailLive do
   the work order's item (the facts a reader needs to act); the AP bill's
   lines are an embedded attribute, read with the row.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   require Ash.Query
 
@@ -300,154 +300,155 @@ defmodule Samen.Web.Erp.DetailLive do
   defp leaf_message(%{message: message}) when is_binary(message), do: message
   defp leaf_message(other), do: Exception.message(other)
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.erp_sidebar
+      mount={@samen_mount}
+      org_id={@org_id}
+      active={@surface && :"erp_#{@surface}"}
+      return_to={@return_to}
+    />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="erp-detail">
-      <.app_shell>
-        <:sidebar>
-          <.erp_sidebar
-            mount={@samen_mount}
-            org_id={@org_id}
-            active={@surface && :"erp_#{@surface}"}
-            return_to={@return_to}
-          />
-        </:sidebar>
-
-        <.topbar
-          title={topbar_title(@surface, @record)}
-          crumbs={crumbs(@samen_mount, @org_id, @surface, @record)}
+    <.topbar
+      title={topbar_title(@surface, @record)}
+      crumbs={crumbs(@samen_mount, @org_id, @surface, @record)}
+    >
+      <:actions>
+        <a href={list_href(@surface, @org_id)} class="btn" style="text-decoration:none">
+          <span class="i">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Back to {if(@surface, do: Erp.label(@surface), else: "ERP")}
+        </a>
+        <.button
+          :if={writable?(@samen_mount) and @record != nil and @missing == nil}
+          phx-click="edit_record"
+          id="edit-record"
         >
-          <:actions>
-            <a href={list_href(@surface, @org_id)} class="btn" style="text-decoration:none">
-              <span class="i">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-              </span>
-              Back to {if(@surface, do: Erp.label(@surface), else: "ERP")}
-            </a>
-            <.button
-              :if={writable?(@samen_mount) and @record != nil and @missing == nil}
-              phx-click="edit_record"
-              id="edit-record"
-            >
-              Edit {if(@surface, do: Erp.record_label(@surface), else: "record")}
-            </.button>
-          </:actions>
-        </.topbar>
+          Edit {if(@surface, do: Erp.record_label(@surface), else: "record")}
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <div class="wrap">
-          <%= if @missing == :no_org do %>
-            <.no_org_card mount={@samen_mount} />
-          <% else %>
-            <div :if={@action_error} id="action-error" class="card form-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:10px">
-              {@action_error}
-              <.button type="button" phx-click="dismiss_error" id="dismiss-error" style="margin-left:10px">
-                Dismiss
-              </.button>
-            </div>
-
-            <%= if @missing in [:unknown_surface, :unmounted] do %>
-              <div class="card" style="padding:16px;color:var(--muted)">
-                This surface is not available on this workspace's mounted modules.
-              </div>
-            <% else %>
-              <div :if={@missing == :not_found} class="card" style="padding:16px;color:var(--muted)">
-                {if(@surface, do: Erp.record_label(@surface), else: "Record")} not found.
-              </div>
-
-              <div :if={@missing == nil} id="erp-detail-body">
-                <div class="gtitle">
-                  <h3>{record_title(@surface, @record)}</h3>
-                  <span class="lane">· org-scoped · governed writes</span>
-                </div>
-
-                <div class="card" id="erp-facts" style="padding:16px 18px">
-                  <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
-                    <div :for={field <- Erp.detail_fields(@surface)} style="display:contents">
-                      <dt style="font-size:12px;font-weight:600;color:var(--muted)">{humanize(field)}</dt>
-                      <dd style="margin:0;font-size:13px;font-family:monospace;word-break:break-all">
-                        {fact_value(@record, field)}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <div :if={Erp.line_fields(@surface) != []} class="card" id="erp-lines" style="padding:16px 18px;margin-top:10px">
-                  <div class="gtitle" style="margin-bottom:6px">
-                    <h3 style="font-size:13px">Lines</h3>
-                    <span class="n">{length(lines_of(@record))}</span>
-                  </div>
-                  <table :if={lines_of(@record) != []} style="width:100%;border-collapse:collapse;font-size:13px">
-                    <thead>
-                      <tr>
-                        <th
-                          :for={{field, _type, _opts} <- Erp.line_fields(@surface)}
-                          scope="col"
-                          style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)"
-                        >
-                          {humanize(field)}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr :for={line <- lines_of(@record)}>
-                        <td
-                          :for={{field, _type, _opts} <- Erp.line_fields(@surface)}
-                          style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);font-family:monospace"
-                        >
-                          {line_value(line, field)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div :if={lines_of(@record) == []} style="color:var(--muted);font-size:13px;padding:8px 0">
-                    No lines.
-                  </div>
-                </div>
-
-                <div
-                  :if={writable?(@samen_mount) and allowed_transitions(@record, @surface) != []}
-                  id="erp-transitions"
-                  class="card"
-                  style="padding:12px 16px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"
-                >
-                  <span style="font-size:12px;font-weight:600;color:var(--muted)">Status actions</span>
-                  <.button
-                    :for={{action, label, _from} <- allowed_transitions(@record, @surface)}
-                    id={"transition-#{action}"}
-                    type="button"
-                    phx-click="transition"
-                    phx-value-action={action}
-                  >
-                    {label}
-                  </.button>
-                </div>
-              </div>
-            <% end %>
-          <% end %>
+    <div class="wrap">
+      <%= if @missing == :no_org do %>
+        <.no_org_card mount={@samen_mount} />
+      <% else %>
+        <div :if={@action_error} id="action-error" class="card form-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:10px">
+          {@action_error}
+          <.button type="button" phx-click="dismiss_error" id="dismiss-error" style="margin-left:10px">
+            Dismiss
+          </.button>
         </div>
 
-        <.modal :if={@show_edit and @edit_form != nil} id="erp-edit-modal" title={"Edit " <> Erp.record_label(@surface)} on_cancel="cancel_edit">
-          <.simple_form :let={f} for={@edit_form} id="erp-edit-form" phx-change="validate_edit" phx-submit="save_edit">
-            <.form_field
-              :for={{field, type, opts} <- Erp.edit_fields(@surface)}
-              field={f[field]}
-              label={humanize(field)}
-              type={input_type(type)}
-              options={opts[:options] || []}
-              placeholder={opts[:placeholder]}
-            />
-            <:actions>
-              <.button variant="primary" type="submit">Save changes</.button>
-              <.button type="button" phx-click="cancel_edit">Cancel</.button>
-            </:actions>
-          </.simple_form>
-        </.modal>
-      </.app_shell>
+        <%= if @missing in [:unknown_surface, :unmounted] do %>
+          <div class="card" style="padding:16px;color:var(--muted)">
+            This surface is not available on this workspace's mounted modules.
+          </div>
+        <% else %>
+          <div :if={@missing == :not_found} class="card" style="padding:16px;color:var(--muted)">
+            {if(@surface, do: Erp.record_label(@surface), else: "Record")} not found.
+          </div>
+
+          <div :if={@missing == nil} id="erp-detail-body">
+            <div class="gtitle">
+              <h3>{record_title(@surface, @record)}</h3>
+              <span class="lane">· org-scoped · governed writes</span>
+            </div>
+
+            <div class="card" id="erp-facts" style="padding:16px 18px">
+              <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
+                <div :for={field <- Erp.detail_fields(@surface)} style="display:contents">
+                  <dt style="font-size:12px;font-weight:600;color:var(--muted)">{humanize(field)}</dt>
+                  <dd style="margin:0;font-size:13px;font-family:monospace;word-break:break-all">
+                    {fact_value(@record, field)}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+
+            <div :if={Erp.line_fields(@surface) != []} class="card" id="erp-lines" style="padding:16px 18px;margin-top:10px">
+              <div class="gtitle" style="margin-bottom:6px">
+                <h3 style="font-size:13px">Lines</h3>
+                <span class="n">{length(lines_of(@record))}</span>
+              </div>
+              <table :if={lines_of(@record) != []} style="width:100%;border-collapse:collapse;font-size:13px">
+                <thead>
+                  <tr>
+                    <th
+                      :for={{field, _type, _opts} <- Erp.line_fields(@surface)}
+                      scope="col"
+                      style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)"
+                    >
+                      {humanize(field)}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={line <- lines_of(@record)}>
+                    <td
+                      :for={{field, _type, _opts} <- Erp.line_fields(@surface)}
+                      style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);font-family:monospace"
+                    >
+                      {line_value(line, field)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div :if={lines_of(@record) == []} style="color:var(--muted);font-size:13px;padding:8px 0">
+                No lines.
+              </div>
+            </div>
+
+            <div
+              :if={writable?(@samen_mount) and allowed_transitions(@record, @surface) != []}
+              id="erp-transitions"
+              class="card"
+              style="padding:12px 16px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"
+            >
+              <span style="font-size:12px;font-weight:600;color:var(--muted)">Status actions</span>
+              <.button
+                :for={{action, label, _from} <- allowed_transitions(@record, @surface)}
+                id={"transition-#{action}"}
+                type="button"
+                phx-click="transition"
+                phx-value-action={action}
+              >
+                {label}
+              </.button>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+
+    <.modal :if={@show_edit and @edit_form != nil} id="erp-edit-modal" title={"Edit " <> Erp.record_label(@surface)} on_cancel="cancel_edit">
+      <.simple_form :let={f} for={@edit_form} id="erp-edit-form" phx-change="validate_edit" phx-submit="save_edit">
+        <.form_field
+          :for={{field, type, opts} <- Erp.edit_fields(@surface)}
+          field={f[field]}
+          label={humanize(field)}
+          type={input_type(type)}
+          options={opts[:options] || []}
+          placeholder={opts[:placeholder]}
+        />
+        <:actions>
+          <.button variant="primary" type="submit">Save changes</.button>
+          <.button type="button" phx-click="cancel_edit">Cancel</.button>
+        </:actions>
+      </.simple_form>
+    </.modal>
     </div>
     """
   end

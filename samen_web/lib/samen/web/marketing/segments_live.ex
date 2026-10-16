@@ -38,7 +38,7 @@ defmodule Samen.Web.Marketing.SegmentsLive do
   vault, and has no "show plaintext" branch. This page offers NO subscriber write —
   subscribers enter through consented paths (`Reads.add_subscriber/3`, ADR-011 §7.3).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -174,141 +174,142 @@ defmodule Samen.Web.Marketing.SegmentsLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_segments} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="mkt-segments">
-      <.app_shell>
-        <:sidebar>
-          <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_segments} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Segments" crumbs={crumbs(@samen_mount, @org_id, "Segments")}>
+      <:actions>
+        <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-segments">
+          {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
+        </.button>
+        <a href={leads_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Leads</a>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_segment" id="new-segment">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New segment
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Segments" crumbs={crumbs(@samen_mount, @org_id, "Segments")}>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
+
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div id="segments">
+          <div class="gtitle">
+            <h3>Audience segments</h3>
+            <span class="n">{length(@page.items)}</span>
+          </div>
+          <.list_view
+            id="segments-list"
+            page={@page}
+            state={@list_state}
+            row_class="segment-row"
+            filter_placeholder="Filter segments…"
+            empty_text="No segments yet."
+            empty_icon="◔"
+            empty_body="Segments are the audiences your campaigns send to."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_segment" id="empty-new-segment">New segment</.button>
+            </:empty_actions>
+            <:head>
+              <.sort_header field={:name} label="Segment" sort={@list_state.sort} width="30%" />
+              <.sort_header field={:subscriber_count} label="Subscribers" sort={@list_state.sort} width="18%" />
+              <th scope="col" style="width:42%">Filter</th>
+              <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={s}>
+              <td style="font-weight:500">
+                <a href={segment_detail_path(@samen_mount, @org_id, s.id)} class="segment-detail-link" style="color:#3B4CCA;text-decoration:none">{s.name}</a>
+                <div :if={s.description} style="font-size:12px;color:var(--muted)">{s.description}</div>
+              </td>
+              <td style="color:var(--muted)">{s.subscriber_count}</td>
+              <td style="font-size:12px;color:var(--muted)">{filter_summary(s.filter_criteria)}</td>
+              <td :if={writable?(@samen_mount)} class="segment-actions">
+                <%= if Map.get(s, :archived_at) do %>
+                  <.pill variant="mut">archived</.pill>
+                  <.button phx-click="restore" phx-value-id={s.id} class="restore-segment">Restore</.button>
+                <% else %>
+                  <.delete_confirm phx-click="delete" phx-value-id={s.id} />
+                <% end %>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div id="subscribers">
+          <div class="gtitle">
+            <h3>Subscribers</h3>
+            <span class="n">{length(@sub_page.items)}</span>
+            <span class="lane">· email via PiiResolution · {marketing_plane_note(@samen_mount)}</span>
+          </div>
+          <%= if @sub_page.items == [] do %>
+            <.empty_state
+              class="subscribers-empty"
+              icon="◔"
+              title="No subscribers yet."
+              body="Subscribers you add to this segment appear here with status and source."
+            />
+          <% else %>
+            <.data_table>
+              <:head>
+                <th scope="col" style="width:44%">Email</th>
+                <th scope="col" style="width:20%">Status</th>
+                <th scope="col" style="width:20%">Consent</th>
+                <th scope="col" style="width:16%">Suppressed</th>
+              </:head>
+              <tr :for={s <- @sub_page.items} class="subscriber-row" id={"subscriber-#{s.id}"}>
+                <td class="subscriber-email" style="font-size:12px;color:var(--muted)">{s.email}</td>
+                <td><.pill variant={sub_status_variant(s.status)}>{s.status}</.pill></td>
+                <td style="font-size:12px;color:var(--muted)">{if s.consent_at, do: "opted-in", else: "—"}</td>
+                <td>
+                  <span :if={MapSet.member?(@suppressed_ids, s.id)} class="suppressed-flag"><.pill variant="bad">suppressed</.pill></span>
+                  <span :if={!MapSet.member?(@suppressed_ids, s.id)} style="color:var(--muted);font-size:12px">—</span>
+                </td>
+              </tr>
+            </.data_table>
+            <div :if={@sub_page.has_more} class="subscribers-bounded-note" style="color:var(--muted);font-size:12px;margin-top:8px">
+              Showing the first {@sub_page.page_size} subscribers — the audience is larger.
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-segment-modal" title="New segment" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-segment-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:name]} label="Name" />
+          <.form_field field={f[:description]} label="Description" type="textarea" />
           <:actions>
-            <.button :if={not @no_org} phx-click="toggle_archived" id="toggle-archived-segments">
-              {if @list_state.show_archived, do: "Hide archived", else: "Show archived"}
-            </.button>
-            <a href={leads_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">Leads</a>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_segment" id="new-segment">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New segment
-            </.button>
+            <.button variant="primary" type="submit">Save segment</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
           </:actions>
-        </.topbar>
-
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
-
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
-          </div>
-
-          <div class="wrap">
-            <div id="segments">
-              <div class="gtitle">
-                <h3>Audience segments</h3>
-                <span class="n">{length(@page.items)}</span>
-              </div>
-              <.list_view
-                id="segments-list"
-                page={@page}
-                state={@list_state}
-                row_class="segment-row"
-                filter_placeholder="Filter segments…"
-                empty_text="No segments yet."
-                empty_icon="◔"
-                empty_body="Segments are the audiences your campaigns send to."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_segment" id="empty-new-segment">New segment</.button>
-                </:empty_actions>
-                <:head>
-                  <.sort_header field={:name} label="Segment" sort={@list_state.sort} width="30%" />
-                  <.sort_header field={:subscriber_count} label="Subscribers" sort={@list_state.sort} width="18%" />
-                  <th scope="col" style="width:42%">Filter</th>
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={s}>
-                  <td style="font-weight:500">
-                    <a href={segment_detail_path(@samen_mount, @org_id, s.id)} class="segment-detail-link" style="color:#3B4CCA;text-decoration:none">{s.name}</a>
-                    <div :if={s.description} style="font-size:12px;color:var(--muted)">{s.description}</div>
-                  </td>
-                  <td style="color:var(--muted)">{s.subscriber_count}</td>
-                  <td style="font-size:12px;color:var(--muted)">{filter_summary(s.filter_criteria)}</td>
-                  <td :if={writable?(@samen_mount)} class="segment-actions">
-                    <%= if Map.get(s, :archived_at) do %>
-                      <.pill variant="mut">archived</.pill>
-                      <.button phx-click="restore" phx-value-id={s.id} class="restore-segment">Restore</.button>
-                    <% else %>
-                      <.delete_confirm phx-click="delete" phx-value-id={s.id} />
-                    <% end %>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <div class="wrap">
-            <div id="subscribers">
-              <div class="gtitle">
-                <h3>Subscribers</h3>
-                <span class="n">{length(@sub_page.items)}</span>
-                <span class="lane">· email via PiiResolution · {marketing_plane_note(@samen_mount)}</span>
-              </div>
-              <%= if @sub_page.items == [] do %>
-                <.empty_state
-                  class="subscribers-empty"
-                  icon="◔"
-                  title="No subscribers yet."
-                  body="Subscribers you add to this segment appear here with status and source."
-                />
-              <% else %>
-                <.data_table>
-                  <:head>
-                    <th scope="col" style="width:44%">Email</th>
-                    <th scope="col" style="width:20%">Status</th>
-                    <th scope="col" style="width:20%">Consent</th>
-                    <th scope="col" style="width:16%">Suppressed</th>
-                  </:head>
-                  <tr :for={s <- @sub_page.items} class="subscriber-row" id={"subscriber-#{s.id}"}>
-                    <td class="subscriber-email" style="font-size:12px;color:var(--muted)">{s.email}</td>
-                    <td><.pill variant={sub_status_variant(s.status)}>{s.status}</.pill></td>
-                    <td style="font-size:12px;color:var(--muted)">{if s.consent_at, do: "opted-in", else: "—"}</td>
-                    <td>
-                      <span :if={MapSet.member?(@suppressed_ids, s.id)} class="suppressed-flag"><.pill variant="bad">suppressed</.pill></span>
-                      <span :if={!MapSet.member?(@suppressed_ids, s.id)} style="color:var(--muted);font-size:12px">—</span>
-                    </td>
-                  </tr>
-                </.data_table>
-                <div :if={@sub_page.has_more} class="subscribers-bounded-note" style="color:var(--muted);font-size:12px;margin-top:8px">
-                  Showing the first {@sub_page.page_size} subscribers — the audience is larger.
-                </div>
-              <% end %>
-            </div>
-          </div>
-
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-segment-modal" title="New segment" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-segment-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:name]} label="Name" />
-              <.form_field field={f[:description]} label="Description" type="textarea" />
-              <:actions>
-                <.button variant="primary" type="submit">Save segment</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

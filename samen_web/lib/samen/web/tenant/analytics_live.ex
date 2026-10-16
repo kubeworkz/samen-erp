@@ -53,8 +53,11 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
 
   ## Chrome — the message belongs to the PAGE, not to the viewport
 
-  Every state renders inside the shared shell (`Samen.UI.app_shell/1` + `<.topbar>` + a `.wrap`
-  main panel): the same chrome every other tenant surface mounts, with the workspace sidebar
+  Every state renders inside the shared shell — and on this page the shell is STRUCTURAL:
+  `use Samen.Web.Tenant.Live` composes `<.app_shell>` around `tenant_sidebar/1` and
+  `tenant_page/1`, so this page has no `render/1` of its own to get wrong and cannot render
+  outside the chrome. Its own half is `<.topbar>` + a `.wrap` main panel (the tenant-chrome wrapper;
+  `Samen.Web.Tenant.Live`): the same chrome every other tenant surface mounts, with the sidebar
   beside it and the Insights group marking where the reader is. A silence is a state OF a page —
   a heading, a scope note and a card in the main panel — not a stray sentence floating on an
   unstyled viewport. The answered empty state is the kit's `empty_state/1` (a measured zero) and
@@ -68,11 +71,10 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
   TOKEN (`data-unread-reason="…"`, rendered by `unread_state/1`) is unchanged and stays in the
   DOM, so support can quote a machine-readable reason without the page having to speak jargon.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI,
     only: [
-      app_shell: 1,
       empty_state: 1,
       host_nav_extra: 1,
       logout_form: 1,
@@ -140,125 +142,133 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
     )
   end
 
-  @impl true
-  def render(assigns) do
+  # -- render ------------------------------------------------------------------
+  #
+  # The shell is NOT written here: `use Samen.Web.Tenant.Live` composes `<.app_shell>` around
+  # these two callbacks, so this page cannot render outside the chrome. `tenant_sidebar/1`
+  # mounts the page's sidebar (the shell's `:sidebar` slot); `tenant_page/1` is everything the
+  # reader sees inside `<main>` — the topbar, the acting-as banner and the `.wrap` main panel.
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar
-          title={CurrentOrg.name(@samen_mount, @org_id)}
-          subtitle="Insights"
-          logo={glyph(@samen_mount)}
-        >
-          <:switcher>
-            <.switcher :if={@samen_mount} mount={@samen_mount} org_id={@org_id} compact />
-          </:switcher>
+    <.sidebar
+      title={CurrentOrg.name(@samen_mount, @org_id)}
+      subtitle="Insights"
+      logo={glyph(@samen_mount)}
+    >
+      <:switcher>
+        <.switcher :if={@samen_mount} mount={@samen_mount} org_id={@org_id} compact />
+      </:switcher>
 
-          <%!-- The INHERITED nav, resolved off THIS host's own path labels — the page links
-                exactly the modules the host mounted and nothing more (the X1 dead-link guard,
-                the same `nav_paths/1` seam every other framework sidebar renders through). --%>
-          <.module_nav
-            :if={@samen_mount}
-            {nav_paths(@samen_mount)}
-            org_id={@org_id}
-            active={:analytics}
-          >
-            <:extra><.host_nav_extra mount={@samen_mount} org_id={@org_id} /></:extra>
-          </.module_nav>
+      <%!-- The INHERITED nav, resolved off THIS host's own path labels — the page links
+            exactly the modules the host mounted and nothing more (the X1 dead-link guard,
+            the same `nav_paths/1` seam every other framework sidebar renders through). --%>
+      <.module_nav
+        :if={@samen_mount}
+        {nav_paths(@samen_mount)}
+        org_id={@org_id}
+        active={:analytics}
+      >
+        <:extra><.host_nav_extra mount={@samen_mount} org_id={@org_id} /></:extra>
+      </.module_nav>
 
-          <:footer>
-            <div :if={@samen_mount} class="foot">
-              <div class="av" style="background:#DDE2F5;color:#3B4CCA">
-                {Mount.label(@samen_mount, :user_initials, "S")}
-              </div>
-              <div class="m">
-                <b>{Mount.label(@samen_mount, :user_name, "Signed in")}</b>
-                <span>{Mount.label(@samen_mount, :user_role, "admin")}</span>
-              </div>
-              <.logout_form />
-            </div>
-          </:footer>
-        </.sidebar>
-      </:sidebar>
-
-      <.topbar title="Activation" crumbs={crumbs(@samen_mount, @org_id)} />
-
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-      <div class="wrap">
-        <div id="tenant-analytics">
-          <div class="gtitle">
-            <h3>Your organization</h3>
-            <span class="lane">activation funnel · your own organization only</span>
+      <:footer>
+        <div :if={@samen_mount} class="foot">
+          <div class="av" style="background:#DDE2F5;color:#3B4CCA">
+            {Mount.label(@samen_mount, :user_initials, "S")}
           </div>
-
-          <p class="scope-note" id="activation-scope-note">
-            Counts cover your own organization only. A stage reached by fewer people than the
-            privacy floor is shown as <span class="mono">⊘</span> instead of a number, so nobody
-            can be identified from it — we never show an individual person.
-          </p>
-
-          <%!-- FAIL-HONEST: `analytics-empty` is an ANSWER, so it renders ONLY when the read
-                answered. Every other outcome says which one it is — a caller with no org, a role
-                the gate refuses, an unmounted seam, or a failed rollup read each get their own
-                statement (with the reason token), never a claim about the org's data. --%>
-          <div :if={@unread} id="analytics-unread">
-            <.unread_state
-              class="analytics-unread"
-              reason={@unread}
-              title={unread_title(@unread)}
-              body={unread_body(@unread)}
-            >
-              <%!-- THE NEXT STEP for this reason — a link only where the destination provably
-                    exists on this host, the doc path NAMED (never a dead href) where it does
-                    not, and nothing at all for a state with no honest step (`no_org`). --%>
-              <:actions :if={@next_step}>
-                <a
-                  :if={@next_step.href}
-                  href={@next_step.href}
-                  id={"unread-next-#{@unread}"}
-                  class="unread-next-step"
-                  target={@next_step.kind == :doc && "_blank"}
-                  rel={@next_step.kind == :doc && "noopener noreferrer"}
-                >{@next_step.label} →</a>
-                <span :if={!@next_step.href} id={"unread-next-#{@unread}"} class="unread-next-step">
-                  {@next_step.label}<span :if={@next_step.path}>: <code class="mono">{@next_step.path}</code></span>
-                </span>
-              </:actions>
-            </.unread_state>
+          <div class="m">
+            <b>{Mount.label(@samen_mount, :user_name, "Signed in")}</b>
+            <span>{Mount.label(@samen_mount, :user_role, "admin")}</span>
           </div>
-
-          <div :if={!@unread and @funnel == []} id="analytics-empty">
-            <.empty_state
-              icon="📈"
-              title="No activation data yet."
-              body="We read the activation rollup for your organization and it came back with no rows — nobody in this organization has completed a signup, a first run or a first record yet."
-            />
-          </div>
-
-          <div :if={!@unread and @funnel != []} class="card">
-            <table id="funnel-table">
-              <thead>
-                <tr>
-                  <th>Stage</th>
-                  <th>People reached</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={row <- @funnel} id={"stage-#{row.stage}"} class="funnel-row">
-                  <td class="f-stage">{stage_label(row.stage)}</td>
-                  <td class="f-count">{cell(row.actor_count)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <p :if={!@unread and @suppressed_count > 0} id="supp-note" class="supp">
-            {@suppressed_count} stage(s) below the k-anonymity floor — suppressed to prevent re-identification.
-          </p>
+          <.logout_form />
         </div>
+      </:footer>
+    </.sidebar>
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar title="Activation" crumbs={crumbs(@samen_mount, @org_id)} />
+
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+
+    <div class="wrap">
+      <div id="tenant-analytics">
+        <div class="gtitle">
+          <h3>Your organization</h3>
+          <span class="lane">activation funnel · your own organization only</span>
+        </div>
+
+        <p class="scope-note" id="activation-scope-note">
+          Counts cover your own organization only. A stage reached by fewer people than the
+          privacy floor is shown as <span class="mono">⊘</span> instead of a number, so nobody
+          can be identified from it — we never show an individual person.
+        </p>
+
+        <%!-- FAIL-HONEST: `analytics-empty` is an ANSWER, so it renders ONLY when the read
+              answered. Every other outcome says which one it is — a caller with no org, a role
+              the gate refuses, an unmounted seam, or a failed rollup read each get their own
+              statement (with the reason token), never a claim about the org's data. --%>
+        <div :if={@unread} id="analytics-unread">
+          <.unread_state
+            class="analytics-unread"
+            reason={@unread}
+            title={unread_title(@unread)}
+            body={unread_body(@unread)}
+          >
+            <%!-- THE NEXT STEP for this reason — a link only where the destination provably
+                  exists on this host, the doc path NAMED (never a dead href) where it does
+                  not, and nothing at all for a state with no honest step (`no_org`). --%>
+            <:actions :if={@next_step}>
+              <a
+                :if={@next_step.href}
+                href={@next_step.href}
+                id={"unread-next-#{@unread}"}
+                class="unread-next-step"
+                target={@next_step.kind == :doc && "_blank"}
+                rel={@next_step.kind == :doc && "noopener noreferrer"}
+              >{@next_step.label} →</a>
+              <span :if={!@next_step.href} id={"unread-next-#{@unread}"} class="unread-next-step">
+                {@next_step.label}<span :if={@next_step.path}>: <code class="mono">{@next_step.path}</code></span>
+              </span>
+            </:actions>
+          </.unread_state>
+        </div>
+
+        <div :if={!@unread and @funnel == []} id="analytics-empty">
+          <.empty_state
+            icon="📈"
+            title="No activation data yet."
+            body="We read the activation rollup for your organization and it came back with no rows — nobody in this organization has completed a signup, a first run or a first record yet."
+          />
+        </div>
+
+        <div :if={!@unread and @funnel != []} class="card">
+          <table id="funnel-table">
+            <thead>
+              <tr>
+                <th>Stage</th>
+                <th>People reached</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={row <- @funnel} id={"stage-#{row.stage}"} class="funnel-row">
+                <td class="f-stage">{stage_label(row.stage)}</td>
+                <td class="f-count">{cell(row.actor_count)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p :if={!@unread and @suppressed_count > 0} id="supp-note" class="supp">
+          {@suppressed_count} stage(s) below the k-anonymity floor — suppressed to prevent re-identification.
+        </p>
       </div>
-    </.app_shell>
+    </div>
     """
   end
 

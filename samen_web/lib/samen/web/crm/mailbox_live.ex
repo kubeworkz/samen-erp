@@ -28,7 +28,7 @@ defmodule Samen.Web.CRM.MailboxLive do
   and has NO "show plaintext" branch. The mailbox address renders exactly as the
   resolver returned it — `%Masked{}` renders `••••` via `Phoenix.HTML.Safe`.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1, writable?: 1]
@@ -87,74 +87,75 @@ defmodule Samen.Web.CRM.MailboxLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_mailbox} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-mailbox">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_mailbox} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Mailbox" crumbs={[Crumbs.org(@samen_mount, @org_id),  "CRM",  "Mailbox"]} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.topbar title="Mailbox" crumbs={[Crumbs.org(@samen_mount, @org_id),  "CRM",  "Mailbox"]} />
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <%= cond do %>
-              <% not @provider_configured -> %>
-                <.empty_state
-                  class="mailbox-not-configured"
-                  icon="✉"
-                  title="Mailbox sync is not configured."
-                  body={not_configured_body(@scope_mounted)}
-                />
-                <div id="mailbox-honesty-note" style="padding:8px 20px;font-size:11px;color:var(--muted)">
-                  No provider is wired, so nothing has been synced and nothing can be. This is not an empty
-                  inbox — see docs/guides/mailbox-seam.md for the adapter callbacks a real connector implements.
-                </div>
-              <% @connections == [] -> %>
-                <.empty_state
-                  class="mailbox-none-connected"
-                  icon="✉"
-                  title="No mailbox connected yet."
-                  body="Connect your mailbox to thread email onto the right contact and company timelines."
-                />
-                <div :if={writable?(@samen_mount)} id="mailbox-connect" style="padding:0 20px 16px">
-                  <.button id="mailbox-connect-button" phx-click="connect">Connect mailbox</.button>
-                  <div
-                    :if={@connect_notice}
-                    id="mailbox-connect-notice"
-                    role="status"
-                    style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.5"
-                  >
-                    {@connect_notice}
-                  </div>
-                </div>
-              <% true -> %>
-                <.data_table>
-                  <:head>
-                    <th style="width:40%">Mailbox</th>
-                    <th style="width:20%">Provider</th>
-                    <th style="width:20%">Status</th>
-                    <th style="width:20%">Last synced</th>
-                  </:head>
-                  <tr :for={c <- @connections} class="mailbox-row" id={"mailbox-#{c.id}"}>
-                    <td class="mailbox-address" style="font-weight:500;color:var(--ink)">{c.address}</td>
-                    <td style="font-size:12px;color:var(--muted)">{c.provider}</td>
-                    <td><.pill variant={status_variant(c.status)}>{c.status}</.pill></td>
-                    <td style="font-size:12px;color:var(--muted)">{synced_at(c.last_synced_at)}</td>
-                  </tr>
-                </.data_table>
-                <div style="padding:6px 20px 0;font-size:11px;color:var(--muted)">
-                  · mailbox address via PiiResolution
-                </div>
-            <% end %>
-          </div>
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <%= cond do %>
+          <% not @provider_configured -> %>
+            <.empty_state
+              class="mailbox-not-configured"
+              icon="✉"
+              title="Mailbox sync is not configured."
+              body={not_configured_body(@scope_mounted)}
+            />
+            <div id="mailbox-honesty-note" style="padding:8px 20px;font-size:11px;color:var(--muted)">
+              No provider is wired, so nothing has been synced and nothing can be. This is not an empty
+              inbox — see docs/guides/mailbox-seam.md for the adapter callbacks a real connector implements.
+            </div>
+          <% @connections == [] -> %>
+            <.empty_state
+              class="mailbox-none-connected"
+              icon="✉"
+              title="No mailbox connected yet."
+              body="Connect your mailbox to thread email onto the right contact and company timelines."
+            />
+            <div :if={writable?(@samen_mount)} id="mailbox-connect" style="padding:0 20px 16px">
+              <.button id="mailbox-connect-button" phx-click="connect">Connect mailbox</.button>
+              <div
+                :if={@connect_notice}
+                id="mailbox-connect-notice"
+                role="status"
+                style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.5"
+              >
+                {@connect_notice}
+              </div>
+            </div>
+          <% true -> %>
+            <.data_table>
+              <:head>
+                <th style="width:40%">Mailbox</th>
+                <th style="width:20%">Provider</th>
+                <th style="width:20%">Status</th>
+                <th style="width:20%">Last synced</th>
+              </:head>
+              <tr :for={c <- @connections} class="mailbox-row" id={"mailbox-#{c.id}"}>
+                <td class="mailbox-address" style="font-weight:500;color:var(--ink)">{c.address}</td>
+                <td style="font-size:12px;color:var(--muted)">{c.provider}</td>
+                <td><.pill variant={status_variant(c.status)}>{c.status}</.pill></td>
+                <td style="font-size:12px;color:var(--muted)">{synced_at(c.last_synced_at)}</td>
+              </tr>
+            </.data_table>
+            <div style="padding:6px 20px 0;font-size:11px;color:var(--muted)">
+              · mailbox address via PiiResolution
+            </div>
         <% end %>
-      </.app_shell>
+      </div>
+    <% end %>
     </div>
     """
   end

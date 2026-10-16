@@ -7,7 +7,7 @@ defmodule Samen.Web.Chat.ThreadsLive do
   No PII on the thread header (subject/kind/status), so the list itself is plane-neutral; the
   masking lives in the room (`Samen.Web.Chat.ThreadLive`) where bodies + identities render.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2]
@@ -211,158 +211,159 @@ defmodule Samen.Web.Chat.ThreadsLive do
   defp open_error_copy({:pii_shaped_reason, _}), do: "The reason must name the ticket, not the person."
   defp open_error_copy(_), do: "The impersonation session could not be opened."
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <div class="side-min">
+      <b>{CurrentOrg.name(@samen_mount, @org_id)}</b>
+      <span>Chat</span>
+      <.switcher :if={tenant_plane?(assigns)} mount={@samen_mount} org_id={@org_id} return_to={@return_to} compact />
+    </div>
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="chat-threads">
-      <.app_shell>
-        <:sidebar>
-          <div class="side-min">
-            <b>{CurrentOrg.name(@samen_mount, @org_id)}</b>
-            <span>Chat</span>
-            <.switcher :if={tenant_plane?(assigns)} mount={@samen_mount} org_id={@org_id} return_to={@return_to} compact />
-          </div>
-        </:sidebar>
+    <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id),  "Chat"]}>
+      <:actions>
+        <span class="lane">{plane_note(@samen_mount)}</span>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id),  "Chat"]}>
-          <:actions>
-            <span class="lane">{plane_note(@samen_mount)}</span>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= cond do %>
-          <% @impersonation == :out_of_scope -> %>
-            <div class="wrap">
-              <div class="card" id="out-of-scope" style="padding:22px 20px">
-                <div style="color:var(--red);font-weight:600" id="not-in-scope">
-                  This account is not in your scope.
-                </div>
-                <p style="color:var(--muted);margin:10px 0 0;font-size:13px">
-                  Your operator assignment does not cover this tenant, so its conversations are not
-                  available to you and no impersonation session can be opened for it.
-                </p>
-              </div>
+    <%= cond do %>
+      <% @impersonation == :out_of_scope -> %>
+        <div class="wrap">
+          <div class="card" id="out-of-scope" style="padding:22px 20px">
+            <div style="color:var(--red);font-weight:600" id="not-in-scope">
+              This account is not in your scope.
             </div>
-          <% @impersonation == :denied -> %>
-          <div class="wrap">
-            <div class="card" id="impersonation-required" style="padding:22px 20px">
-              <div style="color:var(--red);font-weight:600" id="no-session">
-                Access denied — no active impersonation session for this tenant.
-              </div>
-              <p style="color:var(--muted);margin:10px 0 14px;font-size:13px">
-                Reading a specific tenant's chat is a per-tenant drill-in: it requires a short-TTL,
-                reason-required <b>impersonation session</b>, recorded in the tenant's audit ledger
-                (who / when / why). Start one below — the conversation still renders masked.
-              </p>
-              <div :if={@open_error} id="open-error" style="color:#B42318;font-size:12px;margin-bottom:8px">
-                {@open_error}
-              </div>
-              <form phx-submit="open_session" id="open-session-form" style="display:flex;gap:8px;align-items:flex-start">
+            <p style="color:var(--muted);margin:10px 0 0;font-size:13px">
+              Your operator assignment does not cover this tenant, so its conversations are not
+              available to you and no impersonation session can be opened for it.
+            </p>
+          </div>
+        </div>
+      <% @impersonation == :denied -> %>
+      <div class="wrap">
+        <div class="card" id="impersonation-required" style="padding:22px 20px">
+          <div style="color:var(--red);font-weight:600" id="no-session">
+            Access denied — no active impersonation session for this tenant.
+          </div>
+          <p style="color:var(--muted);margin:10px 0 14px;font-size:13px">
+            Reading a specific tenant's chat is a per-tenant drill-in: it requires a short-TTL,
+            reason-required <b>impersonation session</b>, recorded in the tenant's audit ledger
+            (who / when / why). Start one below — the conversation still renders masked.
+          </p>
+          <div :if={@open_error} id="open-error" style="color:#B42318;font-size:12px;margin-bottom:8px">
+            {@open_error}
+          </div>
+          <form phx-submit="open_session" id="open-session-form" style="display:flex;gap:8px;align-items:flex-start">
+            <input
+              type="text"
+              name="reason"
+              id="session-reason-input"
+              placeholder="Reason (e.g. ticket #1234: dispatch dispute)"
+              style="flex:1;padding:8px 10px;border:1px solid #D0D5DD;border-radius:8px;font-size:13px"
+            />
+            <button type="submit" id="start-session-btn" style="padding:8px 14px;border-radius:8px;background:#3B4CCA;color:#fff;font-size:13px">
+              Start session (masked)
+            </button>
+          </form>
+        </div>
+      </div>
+      <% true -> %>
+      <%= if @no_org do %>
+        <.no_org_card mount={@samen_mount} />
+      <% else %>
+      <div class="wrap">
+        <div :if={@flash_note} id="chat-flash" class="chat-flash">{@flash_note}</div>
+
+        <div :if={@session_info} id="session-accountability" class="card" style="padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+          <b style="color:inherit">Masked impersonation session.</b>
+          operator <span class="mono">{@session_info.operator_id}</span>
+          · reason: <span id="session-reason">{@session_info.reason}</span>
+          · expires <span id="session-expiry">{@session_info.expires_at}</span>
+          — recorded in this tenant's audit ledger.
+        </div>
+
+        <%= if tenant_plane?(assigns) do %>
+          <div class="card chat-settings" id="chat-identity-setting" style="margin-bottom:16px">
+            <div class="gtitle" style="margin-top:0">
+              <h3>Identity disclosure to support</h3>
+              <.pill variant={if @expose_identity, do: "info", else: "mut"}>
+                {if @expose_identity, do: "org-wide", else: "masked"}
+              </.pill>
+            </div>
+            <p style="color:var(--muted);margin:6px 0 12px">
+              When ON, SaaS support sees the REAL identity of your team's chat participants
+              (state 3, tenant-wide). When OFF, participants stay <code>••••</code> unless the
+              person who starts a conversation opts to share their own name (state 2).
+            </p>
+            <form phx-change="toggle_disclosure" id="disclosure-form">
+              <label class="chat-switch">
                 <input
-                  type="text"
-                  name="reason"
-                  id="session-reason-input"
-                  placeholder="Reason (e.g. ticket #1234: dispatch dispute)"
-                  style="flex:1;padding:8px 10px;border:1px solid #D0D5DD;border-radius:8px;font-size:13px"
+                  type="checkbox"
+                  name="expose_identity"
+                  checked={@expose_identity}
+                  id="expose-identity-toggle"
                 />
-                <button type="submit" id="start-session-btn" style="padding:8px 14px;border-radius:8px;background:#3B4CCA;color:#fff;font-size:13px">
-                  Start session (masked)
-                </button>
-              </form>
-            </div>
+                <span>Expose participant identity to SaaS support (tenant-wide)</span>
+              </label>
+            </form>
           </div>
-          <% true -> %>
-          <%= if @no_org do %>
-            <.no_org_card mount={@samen_mount} />
-          <% else %>
-          <div class="wrap">
-            <div :if={@flash_note} id="chat-flash" class="chat-flash">{@flash_note}</div>
 
-            <div :if={@session_info} id="session-accountability" class="card" style="padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--muted)">
-              <b style="color:inherit">Masked impersonation session.</b>
-              operator <span class="mono">{@session_info.operator_id}</span>
-              · reason: <span id="session-reason">{@session_info.reason}</span>
-              · expires <span id="session-expiry">{@session_info.expires_at}</span>
-              — recorded in this tenant's audit ledger.
-            </div>
-
-            <%= if tenant_plane?(assigns) do %>
-              <div class="card chat-settings" id="chat-identity-setting" style="margin-bottom:16px">
-                <div class="gtitle" style="margin-top:0">
-                  <h3>Identity disclosure to support</h3>
-                  <.pill variant={if @expose_identity, do: "info", else: "mut"}>
-                    {if @expose_identity, do: "org-wide", else: "masked"}
-                  </.pill>
-                </div>
-                <p style="color:var(--muted);margin:6px 0 12px">
-                  When ON, SaaS support sees the REAL identity of your team's chat participants
-                  (state 3, tenant-wide). When OFF, participants stay <code>••••</code> unless the
-                  person who starts a conversation opts to share their own name (state 2).
-                </p>
-                <form phx-change="toggle_disclosure" id="disclosure-form">
-                  <label class="chat-switch">
-                    <input
-                      type="checkbox"
-                      name="expose_identity"
-                      checked={@expose_identity}
-                      id="expose-identity-toggle"
-                    />
-                    <span>Expose participant identity to SaaS support (tenant-wide)</span>
-                  </label>
-                </form>
-              </div>
-
-              <div class="card chat-new" id="chat-new-conversation" style="margin-bottom:16px">
-                <div class="gtitle" style="margin-top:0"><h3>New conversation</h3></div>
-                <form phx-submit="new_conversation" id="new-conversation-form">
-                  <input type="text" name="subject" placeholder="Subject…" autocomplete="off" required />
-                  <input type="text" name="handle" placeholder="Your handle (e.g. dispatch)" autocomplete="off" />
-                  <label class="chat-switch" style="margin:10px 0">
-                    <input type="checkbox" name="share_identity" id="share-identity-optin" />
-                    <span>Share MY identity with support for this conversation (initiator opt-in)</span>
-                  </label>
-                  <.button variant="primary" type="submit">Start conversation</.button>
-                </form>
-              </div>
-            <% end %>
-
-            <div id="threads">
-              <div class="gtitle">
-                <h3>Conversations</h3>
-                <span class="n">{length(@threads)}</span>
-              </div>
-              <.empty_state
-                :if={@threads == []}
-                class="threads-empty"
-                icon="❝"
-                title="No conversations yet."
-                body="Start a conversation above — it shows up here for both sides of the thread."
-              />
-              <.data_table :if={@threads != []}>
-                <:head>
-                  <th style="width:50%">Subject</th>
-                  <th style="width:20%">Kind</th>
-                  <th style="width:15%">Status</th>
-                  <th style="width:15%">Disclosure</th>
-                </:head>
-                <tr :for={t <- @threads} class="thread-row" id={"thread-#{t.id}"}>
-                  <td>
-                    <a href={thread_path(@samen_mount, @org_id, t.id)} style="color:#3B4CCA;text-decoration:none">
-                      {t.subject || "Conversation"}
-                    </a>
-                  </td>
-                  <td style="color:var(--muted)">{t.kind}</td>
-                  <td><.pill variant={status_variant(t.status)}>{t.status}</.pill></td>
-                  <td style="color:var(--muted)">{t.disclosure_mode}</td>
-                </tr>
-              </.data_table>
-            </div>
+          <div class="card chat-new" id="chat-new-conversation" style="margin-bottom:16px">
+            <div class="gtitle" style="margin-top:0"><h3>New conversation</h3></div>
+            <form phx-submit="new_conversation" id="new-conversation-form">
+              <input type="text" name="subject" placeholder="Subject…" autocomplete="off" required />
+              <input type="text" name="handle" placeholder="Your handle (e.g. dispatch)" autocomplete="off" />
+              <label class="chat-switch" style="margin:10px 0">
+                <input type="checkbox" name="share_identity" id="share-identity-optin" />
+                <span>Share MY identity with support for this conversation (initiator opt-in)</span>
+              </label>
+              <.button variant="primary" type="submit">Start conversation</.button>
+            </form>
           </div>
-          <% end %>
         <% end %>
-      </.app_shell>
+
+        <div id="threads">
+          <div class="gtitle">
+            <h3>Conversations</h3>
+            <span class="n">{length(@threads)}</span>
+          </div>
+          <.empty_state
+            :if={@threads == []}
+            class="threads-empty"
+            icon="❝"
+            title="No conversations yet."
+            body="Start a conversation above — it shows up here for both sides of the thread."
+          />
+          <.data_table :if={@threads != []}>
+            <:head>
+              <th style="width:50%">Subject</th>
+              <th style="width:20%">Kind</th>
+              <th style="width:15%">Status</th>
+              <th style="width:15%">Disclosure</th>
+            </:head>
+            <tr :for={t <- @threads} class="thread-row" id={"thread-#{t.id}"}>
+              <td>
+                <a href={thread_path(@samen_mount, @org_id, t.id)} style="color:#3B4CCA;text-decoration:none">
+                  {t.subject || "Conversation"}
+                </a>
+              </td>
+              <td style="color:var(--muted)">{t.kind}</td>
+              <td><.pill variant={status_variant(t.status)}>{t.status}</.pill></td>
+              <td style="color:var(--muted)">{t.disclosure_mode}</td>
+            </tr>
+          </.data_table>
+        </div>
+      </div>
+      <% end %>
+    <% end %>
     </div>
     """
   end

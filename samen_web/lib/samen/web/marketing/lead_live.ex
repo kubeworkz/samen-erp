@@ -28,7 +28,7 @@ defmodule Samen.Web.Marketing.LeadLive do
   the lens uses (same repo + plane → identical PII resolution). No `:crm_namespace`
   label → the page is inert (honest not-found), never a crash.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
 
@@ -117,104 +117,105 @@ defmodule Samen.Web.Marketing.LeadLive do
     )
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_leads} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="mkt-lead">
-      <.app_shell>
-        <:sidebar>
-          <.marketing_sidebar mount={@samen_mount} org_id={@org_id} active={:marketing_leads} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title={lead_title(@lead)} crumbs={crumbs(@samen_mount, @org_id, lead_title(@lead))}>
+      <:actions>
+        <a href={leads_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">
+          <span class="i">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </span>
+          Back to leads
+        </a>
+        <a
+          :if={@lead != nil}
+          href={crm_contact_path(@samen_mount, @org_id, @lead_id)}
+          class="btn"
+          id="open-in-crm"
+          style="text-decoration:none"
+        >
+          Open in CRM
+        </a>
+      </:actions>
+    </.topbar>
 
-        <.topbar title={lead_title(@lead)} crumbs={crumbs(@samen_mount, @org_id, lead_title(@lead))}>
-          <:actions>
-            <a href={leads_path(@samen_mount, @org_id)} class="btn" style="text-decoration:none">
-              <span class="i">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M19 12H5M12 5l-7 7 7 7" />
-                </svg>
-              </span>
-              Back to leads
-            </a>
-            <a
-              :if={@lead != nil}
-              href={crm_contact_path(@samen_mount, @org_id, @lead_id)}
-              class="btn"
-              id="open-in-crm"
-              style="text-decoration:none"
-            >
-              Open in CRM
-            </a>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Marketing org: {@org_id}</span>
-
-          <%= if @lead == nil do %>
-            <div class="wrap">
-              <div class="card" style="padding:22px 20px;color:var(--muted)">Lead not found.</div>
+      <%= if @lead == nil do %>
+        <div class="wrap">
+          <div class="card" style="padding:22px 20px;color:var(--muted)">Lead not found.</div>
+        </div>
+      <% else %>
+        <div class="wrap" style="margin-bottom:0">
+          <div class="card" id="lead-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div class="av" style="width:46px;height:46px;border-radius:8px;background:#F5F3FF;color:#7C3AED;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              {initials(@lead)}
             </div>
-          <% else %>
-            <div class="wrap" style="margin-bottom:0">
-              <div class="card" id="lead-header" style="padding:18px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-                <div class="av" style="width:46px;height:46px;border-radius:8px;background:#F5F3FF;color:#7C3AED;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                  {initials(@lead)}
-                </div>
-                <div style="flex:1;min-width:0">
-                  <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{lead_display_name(@lead)}</h1>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <.lifecycle_pill stage={lifecycle_stage(@lead)} />
-                    <span style="font-size:12px;color:var(--muted)">· CRM person · read-only lens · {marketing_plane_note(@samen_mount)}</span>
-                  </div>
-                </div>
+            <div style="flex:1;min-width:0">
+              <h1 style="font-weight:600;font-size:18px;color:#2a2b35;margin:0 0 4px">{lead_display_name(@lead)}</h1>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <.lifecycle_pill stage={lifecycle_stage(@lead)} />
+                <span style="font-size:12px;color:var(--muted)">· CRM person · read-only lens · {marketing_plane_note(@samen_mount)}</span>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div class="wrap" style="margin-bottom:0;padding-top:10px">
-              <div class="card" id="lead-facts" style="padding:16px 18px">
-                <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Name</dt>
-                    <dd style="margin:0;font-size:13px">{render_full_name(@lead.full_name, @lead.display_name)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Email</dt>
-                    <dd style="margin:0;font-size:13px">{render_email(@lead.emails)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Phone</dt>
-                    <dd style="margin:0;font-size:13px">{render_phone(@lead.phones)}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Title</dt>
-                    <dd style="margin:0;font-size:13px">{@lead.job_title || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Company</dt>
-                    <dd style="margin:0;font-size:13px">{@company_name || "—"}</dd>
-                  </div>
-                  <div style="display:contents">
-                    <dt style="font-size:12px;font-weight:600;color:var(--muted)">Lifecycle stage</dt>
-                    <dd style="margin:0;font-size:13px">
-                      <.lifecycle_pill stage={lifecycle_stage(@lead)} />
-                      <span :if={lifecycle_stage(@lead) == nil} style="color:var(--muted)">—</span>
-                    </dd>
-                  </div>
-                </dl>
+        <div class="wrap" style="margin-bottom:0;padding-top:10px">
+          <div class="card" id="lead-facts" style="padding:16px 18px">
+            <dl style="display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:8px 16px;margin:0">
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Name</dt>
+                <dd style="margin:0;font-size:13px">{render_full_name(@lead.full_name, @lead.display_name)}</dd>
               </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Email</dt>
+                <dd style="margin:0;font-size:13px">{render_email(@lead.emails)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Phone</dt>
+                <dd style="margin:0;font-size:13px">{render_phone(@lead.phones)}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Title</dt>
+                <dd style="margin:0;font-size:13px">{@lead.job_title || "—"}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Company</dt>
+                <dd style="margin:0;font-size:13px">{@company_name || "—"}</dd>
+              </div>
+              <div style="display:contents">
+                <dt style="font-size:12px;font-weight:600;color:var(--muted)">Lifecycle stage</dt>
+                <dd style="margin:0;font-size:13px">
+                  <.lifecycle_pill stage={lifecycle_stage(@lead)} />
+                  <span :if={lifecycle_stage(@lead) == nil} style="color:var(--muted)">—</span>
+                </dd>
+              </div>
+            </dl>
+          </div>
 
-              <div class="card" id="lead-note" style="padding:14px 18px;margin-top:10px;font-size:12px;color:var(--muted)">
-                Leads are CRM people — this lens is read-only by design. Edit the contact, its company, and its lifecycle stage on the CRM surface ("Open in CRM").
-              </div>
-            </div>
-          <% end %>
-        <% end %>
-      </.app_shell>
+          <div class="card" id="lead-note" style="padding:14px 18px;margin-top:10px;font-size:12px;color:var(--muted)">
+            Leads are CRM people — this lens is read-only by design. Edit the contact, its company, and its lifecycle stage on the CRM surface ("Open in CRM").
+          </div>
+        </div>
+      <% end %>
+    <% end %>
     </div>
     """
   end

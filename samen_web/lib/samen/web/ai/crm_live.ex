@@ -12,7 +12,7 @@ defmodule Samen.Web.AI.CrmLive do
   The CRM resource the surface grounds on is the host-configured `:ai_crm_resource` mount
   label (the `flags_namespace` precedent) — an unset label renders an honest empty state.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
@@ -92,63 +92,64 @@ defmodule Samen.Web.AI.CrmLive do
   defp safe_helper(h) when is_binary(h),
     do: Enum.find(Server.crm_helpers(), :summarize_timeline, &(Atom.to_string(&1) == h))
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <.app_shell>
-      <:sidebar>
-        <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
-          <.ai_sidebar_nav active={:crm} base={ai_base(@samen_mount)} />
-        </.sidebar>
-      </:sidebar>
+    <.sidebar title={name(@samen_mount, @org_id)} subtitle="AI" logo={Mount.label(@samen_mount, :glyph, "AI")}>
+      <.ai_sidebar_nav active={:crm} base={ai_base(@samen_mount)} />
+    </.sidebar>
+    """
+  end
 
-      <.topbar
-        title="AI · CRM"
-        crumbs={[
-          Crumbs.org(@samen_mount, @org_id),
-          Crumbs.section(@samen_mount, @org_id, :ai),
-          "CRM"
-        ]}
-      />
-      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-      <.ai_tabs active={:crm} base={ai_base(@samen_mount)} />
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <.topbar
+      title="AI · CRM"
+      crumbs={[
+        Crumbs.org(@samen_mount, @org_id),
+        Crumbs.section(@samen_mount, @org_id, :ai),
+        "CRM"
+      ]}
+    />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <.ai_tabs active={:crm} base={ai_base(@samen_mount)} />
 
-      <%= cond do %>
-        <% is_nil(@org_id) -> %>
-          <.no_org_card mount={@samen_mount} />
-        <% is_nil(@crm_resource) -> %>
-          <div class="pane" style="padding:16px">
-            <.empty_state
-              title="No CRM resource configured"
-              body="Set the :ai_crm_resource mount label to the CRM object this surface grounds on."
-              icon="◇"
-            />
-          </div>
-        <% true -> %>
-          <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
-            <form phx-submit="run" class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
-              <label style="font-size:13px;font-weight:600">CRM record id</label>
-              <input type="text" name="record_id" id="ai-crm-id" value={@id} placeholder="a record id in this org" />
+    <%= cond do %>
+      <% is_nil(@org_id) -> %>
+        <.no_org_card mount={@samen_mount} />
+      <% is_nil(@crm_resource) -> %>
+        <div class="pane" style="padding:16px">
+          <.empty_state
+            title="No CRM resource configured"
+            body="Set the :ai_crm_resource mount label to the CRM object this surface grounds on."
+            icon="◇"
+          />
+        </div>
+      <% true -> %>
+        <div class="pane" style="display:flex;flex-direction:column;gap:16px;padding:16px">
+          <form phx-submit="run" class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
+            <label style="font-size:13px;font-weight:600">CRM record id</label>
+            <input type="text" name="record_id" id="ai-crm-id" value={@id} placeholder="a record id in this org" />
 
-              <label style="font-size:13px;font-weight:600">Helper</label>
-              <select name="helper" id="ai-crm-helper">
-                <option :for={h <- Server.crm_helpers()} value={h} selected={h == @helper}>{h}</option>
-              </select>
+            <label style="font-size:13px;font-weight:600">Helper</label>
+            <select name="helper" id="ai-crm-helper">
+              <option :for={h <- Server.crm_helpers()} value={h} selected={h == @helper}>{h}</option>
+            </select>
 
-              <label style="font-size:13px;font-weight:600">Free text (classify input / extra instruction)</label>
-              <textarea name="input" id="ai-crm-input" rows="3">{@input}</textarea>
+            <label style="font-size:13px;font-weight:600">Free text (classify input / extra instruction)</label>
+            <textarea name="input" id="ai-crm-input" rows="3">{@input}</textarea>
 
-              <label style="font-size:13px;font-weight:600">Classify labels (optional)</label>
-              <input type="text" name="labels" id="ai-crm-labels" value={@labels} />
+            <label style="font-size:13px;font-weight:600">Classify labels (optional)</label>
+            <input type="text" name="labels" id="ai-crm-labels" value={@labels} />
 
-              <div><.button variant="primary" type="submit">Run</.button></div>
-            </form>
+            <div><.button variant="primary" type="submit">Run</.button></div>
+          </form>
 
-            <.crm_preview_card :if={@preview} preview={@preview} />
-            <.ai_result :if={@result} result={@result} id="ai-crm-result" />
-          </div>
-      <% end %>
-    </.app_shell>
+          <.crm_preview_card :if={@preview} preview={@preview} />
+          <.ai_result :if={@result} result={@result} id="ai-crm-result" />
+        </div>
+    <% end %>
     """
   end
 

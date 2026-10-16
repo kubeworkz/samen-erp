@@ -25,7 +25,7 @@ defmodule Samen.Web.Flags.SettingsLive do
   `Reads.write_scope/2` (same-org, PLANE-PRESERVING role elevation — never built on
   an impersonation mount). No PII on this surface (flags are Tier-0 config rows).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Flags.Live,
@@ -203,145 +203,146 @@ defmodule Samen.Web.Flags.SettingsLive do
 
   # -- render --------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.flags_sidebar mount={@samen_mount} org_id={@org_id} active={:flags} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="flags-settings">
-      <.app_shell>
-        <:sidebar>
-          <.flags_sidebar mount={@samen_mount} org_id={@org_id} active={:flags} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Feature flags" crumbs={crumbs(@samen_mount, @org_id)} />
 
-        <.topbar title="Feature flags" crumbs={crumbs(@samen_mount, @org_id)} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Feature flags org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Feature flags org: {@org_id}</span>
+      <div :if={@flag_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="flag-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@flag_error}
+        </div>
+      </div>
 
-          <div :if={@flag_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="flag-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@flag_error}
-            </div>
+      <div class="wrap">
+        <div id="flags">
+          <div class="gtitle">
+            <h3>Feature flags</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· Tier-0 config rows · admin-gated writes · non-PII targeting by construction</span>
           </div>
-
-          <div class="wrap">
-            <div id="flags">
-              <div class="gtitle">
-                <h3>Feature flags</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· Tier-0 config rows · admin-gated writes · non-PII targeting by construction</span>
-              </div>
-              <.list_view
-                id="flags-list"
-                page={@page}
-                state={@list_state}
-                row_class="flag-row"
-                filter_placeholder="Filter flags…"
-                empty_text="No feature flags yet."
-                empty_icon="⚑"
-                empty_body="Feature flags gate features per org — toggle, ramp by percentage, or target by plan/tier without forking the product."
-              >
-                <:head>
-                  <.sort_header field={:name} label="Flag" sort={@list_state.sort} width="26%" />
-                  <.sort_header field={:stage} label="Stage" sort={@list_state.sort} width="10%" />
-                  <.sort_header field={:enabled} label="Status" sort={@list_state.sort} width="12%" />
-                  <.sort_header field={:rollout_pct} label="Rollout" sort={@list_state.sort} width="10%" />
-                  <th scope="col" style="width:8%">Rules</th>
-                  <th scope="col" style="width:16%">Evaluated for this org</th>
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:18%">
-                    <span class="sr-only">Actions</span>
-                  </th>
-                </:head>
-                <:row :let={flag}>
-                  <td class="flag-name">
-                    <div style="font-weight:600;color:#3a3b45">{flag.name}</div>
-                    <div style="font-size:11px;color:var(--muted)">{flag.description}</div>
-                  </td>
-                  <td class="flag-stage"><.pill variant="info">{flag.stage}</.pill></td>
-                  <td class="flag-status">
-                    <.pill variant={if flag.enabled, do: "ok", else: "mut"}>
-                      {if flag.enabled, do: "enabled", else: "disabled"}
-                    </.pill>
-                  </td>
-                  <td class="flag-rollout" style="font-weight:500">{flag.rollout_pct}%</td>
-                  <td class="flag-rules-count" style="color:var(--muted)">{length(flag.target_rules || [])}</td>
-                  <td class="flag-evaluated">
-                    <.decision_pill decision={Reads.decision(flag, %{org_id: @org_id})} />
-                  </td>
-                  <td :if={writable?(@samen_mount)} class="flag-actions">
-                    <div style="display:flex;gap:6px;align-items:center">
-                      <.button phx-click="toggle_flag" phx-value-id={flag.id}>
-                        {if flag.enabled, do: "Disable", else: "Enable"}
-                      </.button>
-                      <.button phx-click="edit_flag" phx-value-id={flag.id}>Ramp &amp; rules</.button>
-                    </div>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
-
-          <.modal
-            :if={@edit_flag != nil and writable?(@samen_mount)}
-            id="flag-edit-modal"
-            title={"#{@edit_flag.name} — ramp & targeting"}
-            on_cancel="close_edit"
+          <.list_view
+            id="flags-list"
+            page={@page}
+            state={@list_state}
+            row_class="flag-row"
+            filter_placeholder="Filter flags…"
+            empty_text="No feature flags yet."
+            empty_icon="⚑"
+            empty_body="Feature flags gate features per org — toggle, ramp by percentage, or target by plan/tier without forking the product."
           >
-            <.simple_form :let={f} for={@ramp_form} id="ramp-form" phx-submit="save_ramp">
-              <.form_field
-                field={f[:rollout_pct]}
-                label="Rollout percentage (0–100)"
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Save ramp</.button>
-              </:actions>
-            </.simple_form>
-            <p style="margin:6px 0 14px;font-size:11px;color:var(--muted)">
-              Bucketing is deterministic per (flag, org) — raising the ramp only ever ADDS orgs, never reshuffles.
-            </p>
+            <:head>
+              <.sort_header field={:name} label="Flag" sort={@list_state.sort} width="26%" />
+              <.sort_header field={:stage} label="Stage" sort={@list_state.sort} width="10%" />
+              <.sort_header field={:enabled} label="Status" sort={@list_state.sort} width="12%" />
+              <.sort_header field={:rollout_pct} label="Rollout" sort={@list_state.sort} width="10%" />
+              <th scope="col" style="width:8%">Rules</th>
+              <th scope="col" style="width:16%">Evaluated for this org</th>
+              <th :if={writable?(@samen_mount)} scope="col" style="width:18%">
+                <span class="sr-only">Actions</span>
+              </th>
+            </:head>
+            <:row :let={flag}>
+              <td class="flag-name">
+                <div style="font-weight:600;color:#3a3b45">{flag.name}</div>
+                <div style="font-size:11px;color:var(--muted)">{flag.description}</div>
+              </td>
+              <td class="flag-stage"><.pill variant="info">{flag.stage}</.pill></td>
+              <td class="flag-status">
+                <.pill variant={if flag.enabled, do: "ok", else: "mut"}>
+                  {if flag.enabled, do: "enabled", else: "disabled"}
+                </.pill>
+              </td>
+              <td class="flag-rollout" style="font-weight:500">{flag.rollout_pct}%</td>
+              <td class="flag-rules-count" style="color:var(--muted)">{length(flag.target_rules || [])}</td>
+              <td class="flag-evaluated">
+                <.decision_pill decision={Reads.decision(flag, %{org_id: @org_id})} />
+              </td>
+              <td :if={writable?(@samen_mount)} class="flag-actions">
+                <div style="display:flex;gap:6px;align-items:center">
+                  <.button phx-click="toggle_flag" phx-value-id={flag.id}>
+                    {if flag.enabled, do: "Disable", else: "Enable"}
+                  </.button>
+                  <.button phx-click="edit_flag" phx-value-id={flag.id}>Ramp &amp; rules</.button>
+                </div>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
 
-            <div class="gtitle" style="margin-top:4px">
-              <h3>Targeting rules</h3>
-              <span class="n">{length(@edit_flag.target_rules || [])}</span>
-              <span class="lane">· first match wins · non-PII attributes only (org_id, plan, tier, stage, role, region)</span>
-            </div>
+      <.modal
+        :if={@edit_flag != nil and writable?(@samen_mount)}
+        id="flag-edit-modal"
+        title={"#{@edit_flag.name} — ramp & targeting"}
+        on_cancel="close_edit"
+      >
+        <.simple_form :let={f} for={@ramp_form} id="ramp-form" phx-submit="save_ramp">
+          <.form_field
+            field={f[:rollout_pct]}
+            label="Rollout percentage (0–100)"
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+          />
+          <:actions>
+            <.button variant="primary" type="submit">Save ramp</.button>
+          </:actions>
+        </.simple_form>
+        <p style="margin:6px 0 14px;font-size:11px;color:var(--muted)">
+          Bucketing is deterministic per (flag, org) — raising the ramp only ever ADDS orgs, never reshuffles.
+        </p>
 
-            <.rules_table rules={@edit_flag.target_rules || []} writable={writable?(@samen_mount)} />
+        <div class="gtitle" style="margin-top:4px">
+          <h3>Targeting rules</h3>
+          <span class="n">{length(@edit_flag.target_rules || [])}</span>
+          <span class="lane">· first match wins · non-PII attributes only (org_id, plan, tier, stage, role, region)</span>
+        </div>
 
-            <div :if={@rule_error} class="card form-error" id="rule-error" style="padding:10px 14px;margin:8px 0;color:var(--bad, #b91c1c);font-size:12px">
-              {@rule_error}
-            </div>
+        <.rules_table rules={@edit_flag.target_rules || []} writable={writable?(@samen_mount)} />
 
-            <.simple_form :let={f} for={@rule_form} id="rule-form" phx-submit="add_rule">
-              <.form_field field={f[:attribute]} label="Attribute" placeholder="plan" />
-              <.form_field
-                field={f[:op]}
-                label="Operator"
-                type="select"
-                options={[{"equals", "eq"}, {"not equals", "neq"}, {"in", "in"}, {"not in", "not_in"}]}
-              />
-              <.form_field field={f[:values]} label="Values (comma-separated)" placeholder="pro, enterprise" />
-              <.form_field
-                field={f[:then]}
-                label="Then"
-                type="select"
-                options={[{"on", "on"}, {"off", "off"}, {"allow", "allow"}, {"deny", "deny"}]}
-              />
-              <:actions>
-                <.button variant="primary" type="submit">Add rule</.button>
-                <.button type="button" phx-click="close_edit">Done</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+        <div :if={@rule_error} class="card form-error" id="rule-error" style="padding:10px 14px;margin:8px 0;color:var(--bad, #b91c1c);font-size:12px">
+          {@rule_error}
+        </div>
+
+        <.simple_form :let={f} for={@rule_form} id="rule-form" phx-submit="add_rule">
+          <.form_field field={f[:attribute]} label="Attribute" placeholder="plan" />
+          <.form_field
+            field={f[:op]}
+            label="Operator"
+            type="select"
+            options={[{"equals", "eq"}, {"not equals", "neq"}, {"in", "in"}, {"not in", "not_in"}]}
+          />
+          <.form_field field={f[:values]} label="Values (comma-separated)" placeholder="pro, enterprise" />
+          <.form_field
+            field={f[:then]}
+            label="Then"
+            type="select"
+            options={[{"on", "on"}, {"off", "off"}, {"allow", "allow"}, {"deny", "deny"}]}
+          />
+          <:actions>
+            <.button variant="primary" type="submit">Add rule</.button>
+            <.button type="button" phx-click="close_edit">Done</.button>
+          </:actions>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

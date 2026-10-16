@@ -12,7 +12,7 @@ defmodule Samen.Web.Banking.AccountsLive do
   path is real. Write affordances are tenant-plane only (`writable?/1`); OrgScope +
   `RoleAtLeast` enforce in the kernel regardless.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Banking.Live, only: [assign_mount: 2, banking_sidebar: 1, writable?: 1]
@@ -116,103 +116,104 @@ defmodule Samen.Web.Banking.AccountsLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.banking_sidebar mount={@samen_mount} org_id={@org_id} active={:banking_accounts} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="banking-accounts">
-      <.app_shell>
-        <:sidebar>
-          <.banking_sidebar mount={@samen_mount} org_id={@org_id} active={:banking_accounts} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Bank accounts" crumbs={crumbs(@samen_mount, @org_id, "Accounts")}>
+      <:actions>
+        <.button
+          :if={writable?(@samen_mount) and not @no_org}
+          variant="primary"
+          phx-click="new_account"
+          id="new-account"
+        >
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New account
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Bank accounts" crumbs={crumbs(@samen_mount, @org_id, "Accounts")}>
-          <:actions>
-            <.button
-              :if={writable?(@samen_mount) and not @no_org}
-              variant="primary"
-              phx-click="new_account"
-              id="new-account"
-            >
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New account
-            </.button>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Banking org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Banking org: {@org_id}</span>
-
-          <div class="wrap">
-            <div id="bank-accounts">
-              <div class="gtitle">
-                <h3>Bank accounts</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· org-scoped · no PII</span>
-              </div>
-              <.list_view
-                id="bank-accounts-list"
-                page={@page}
-                state={@list_state}
-                row_class="bank-account-row"
-                filter_placeholder="Filter bank accounts…"
-                empty_text="No bank accounts yet."
-                empty_icon="🏦"
-                empty_body="Link each bank or credit-card account to its GL cash account to start importing statements and reconciling."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_account" id="empty-new-account">New account</.button>
-                </:empty_actions>
-                <:head>
-                  <.sort_header field={:name} label="Name" sort={@list_state.sort} width="34%" />
-                  <th scope="col" style="width:16%">Currency</th>
-                  <th scope="col" style="width:22%">Statement balance</th>
-                  <th scope="col" style="width:14%">GL account</th>
-                  <th scope="col" style="width:14%">Status</th>
-                </:head>
-                <:row :let={a}>
-                  <td class="c-name">
-                    <a href={account_path(@samen_mount, @org_id, a.id)} style="font-weight:500;color:#0A5C42">
-                      {a.name}
-                    </a>
-                  </td>
-                  <td style="color:var(--muted)">{a.currency}</td>
-                  <td style="color:var(--muted)">{cents(a.statement_balance_cents)}</td>
-                  <td style="color:var(--muted);font-size:12px">{gl_label(@gl_accounts, a.account_id)}</td>
-                  <td>
-                    <.pill variant={if a.is_active, do: "ok", else: "mut"}>{if a.is_active, do: "active", else: "inactive"}</.pill>
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
+      <div class="wrap">
+        <div id="bank-accounts">
+          <div class="gtitle">
+            <h3>Bank accounts</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· org-scoped · no PII</span>
           </div>
+          <.list_view
+            id="bank-accounts-list"
+            page={@page}
+            state={@list_state}
+            row_class="bank-account-row"
+            filter_placeholder="Filter bank accounts…"
+            empty_text="No bank accounts yet."
+            empty_icon="🏦"
+            empty_body="Link each bank or credit-card account to its GL cash account to start importing statements and reconciling."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_account" id="empty-new-account">New account</.button>
+            </:empty_actions>
+            <:head>
+              <.sort_header field={:name} label="Name" sort={@list_state.sort} width="34%" />
+              <th scope="col" style="width:16%">Currency</th>
+              <th scope="col" style="width:22%">Statement balance</th>
+              <th scope="col" style="width:14%">GL account</th>
+              <th scope="col" style="width:14%">Status</th>
+            </:head>
+            <:row :let={a}>
+              <td class="c-name">
+                <a href={account_path(@samen_mount, @org_id, a.id)} style="font-weight:500;color:#0A5C42">
+                  {a.name}
+                </a>
+              </td>
+              <td style="color:var(--muted)">{a.currency}</td>
+              <td style="color:var(--muted)">{cents(a.statement_balance_cents)}</td>
+              <td style="color:var(--muted);font-size:12px">{gl_label(@gl_accounts, a.account_id)}</td>
+              <td>
+                <.pill variant={if a.is_active, do: "ok", else: "mut"}>{if a.is_active, do: "active", else: "inactive"}</.pill>
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
 
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-account-modal" title="New bank account" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-account-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:name]} label="Name" />
-              <.form_field
-                field={f[:account_id]}
-                label="GL cash account"
-                type="select"
-                prompt="Choose a GL account"
-                options={@gl_accounts}
-              />
-              <.form_field field={f[:currency]} label="Currency" />
-              <:actions>
-                <.button variant="primary" type="submit">Save account</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-account-modal" title="New bank account" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-account-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:name]} label="Name" />
+          <.form_field
+            field={f[:account_id]}
+            label="GL cash account"
+            type="select"
+            prompt="Choose a GL account"
+            options={@gl_accounts}
+          />
+          <.form_field field={f[:currency]} label="Currency" />
+          <:actions>
+            <.button variant="primary" type="submit">Save account</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
+          </:actions>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end

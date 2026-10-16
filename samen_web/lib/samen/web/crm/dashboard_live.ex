@@ -48,7 +48,7 @@ defmodule Samen.Web.CRM.DashboardLive do
   mirroring `Samen.UI.Map`'s `geo-map-capped` idiom (a visible `data-capped="true"` paragraph,
   not a silently-truncated table).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.CRM.Live, only: [assign_mount: 2, crm_sidebar: 1]
@@ -106,23 +106,37 @@ defmodule Samen.Web.CRM.DashboardLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  # -- render ------------------------------------------------------------------
+  #
+  # The shell is NOT written here: `use Samen.Web.Tenant.Live` composes `<.app_shell>` around
+  # these two callbacks — `tenant_sidebar/1` as the shell's `:sidebar` slot and `tenant_page/1`
+  # as everything inside `<main>` — so this page CANNOT render outside the chrome. It was one of
+  # the three surfaces the tenant-chrome audit found rendering outside it, and the wrapper (not a
+  # copied shell) is what makes that regression impossible rather than merely detected.
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_dashboard} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="crm-dashboard">
-      <.app_shell>
-        <:sidebar>
-          <.crm_sidebar mount={@samen_mount} org_id={@org_id} active={:crm_dashboard} return_to={@return_to} />
-        </:sidebar>
+      <.topbar title="Dashboard" crumbs={crumbs(@samen_mount, @org_id, "Dashboard")} />
+      <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.topbar title="Dashboard" crumbs={crumbs(@samen_mount, @org_id, "Dashboard")} />
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+      <%= if @no_org do %>
+        <.no_org_card mount={@samen_mount} />
+      <% else %>
+        <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">CRM org: {@org_id}</span>
-
+        <%!-- The main panel. `.dash-grid` is paddingless by design (it is a grid: the tiles carry
+             their own padding), so this page was the ONE tenant surface whose content sat flush
+             against the shell's edge instead of in a `.wrap`/`.pane` pane like every sibling. --%>
+        <div class="wrap">
           <.dashboard id="crm-dash-grid">
             <:tile title="Companies">
               <.metric label="Companies" value={@dash.stats.companies} />
@@ -190,8 +204,8 @@ defmodule Samen.Web.CRM.DashboardLive do
               </div>
             </:tile>
           </.dashboard>
-        <% end %>
-      </.app_shell>
+        </div>
+      <% end %>
     </div>
     """
   end

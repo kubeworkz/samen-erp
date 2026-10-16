@@ -111,6 +111,12 @@ Features live in samen_core/samen_web; verticals adopt via one router/macro call
 (e.g. `samen_files_routes`) or a scope mount at ≈0 authored LOC. Never re-implement
 framework behavior inside demo/driftwood/pawchart — that fails the leverage guard.
 
+TENANT pages `use Samen.Web.Tenant.Live` (never `use Phoenix.LiveView`): the wrapper injects the
+`render/1` that composes `<.app_shell>` around the page's `tenant_sidebar/1` + `tenant_page/1`, and
+a page-owned `render/1` is a COMPILE ERROR — so a signed-in tenant surface cannot be written
+outside the chrome. Proofs: `samen_web/test/samen/web/tenant_live_wrapper_test.exs`;
+completeness sweep: `samen_web/test/samen/web/tenant_shell_coverage_test.exs`; sabotage 344.
+
 ## Agents / process
 Serialized agents: ONE deliverable per agent call, fan-out concurrency 1. Every phase ends
 with an adversarial gate: sabotages flip named tests and revert byte-exact; suites + every

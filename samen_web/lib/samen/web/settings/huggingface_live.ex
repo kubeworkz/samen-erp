@@ -17,7 +17,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
   - Decrypted only in-memory within short-lived processes
   - GC flushes decrypted key when process terminates
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
@@ -110,172 +110,177 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
     assigns =
       assigns
       |> assign_new(:connect_error, fn -> nil end)
       |> assign_new(:connect_success, fn -> nil end)
       |> assign_new(:validating, fn -> false end)
+    assigns
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} active={:huggingface} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="settings-huggingface">
-      <.app_shell>
-        <:sidebar>
-          <.settings_sidebar mount={@samen_mount} org_id={@org_id} active={:huggingface} />
-        </:sidebar>
+    <.topbar title="HuggingFace Integration" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "HuggingFace"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="HuggingFace Integration" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "HuggingFace"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="huggingface-panel">
+          <%!-- Connection Status Card --%>
+          <div class="card" style="margin-bottom:16px;padding:16px">
+            <h3 style="margin:0 0 12px 0;font-size:16px">🔑 HuggingFace Connection</h3>
+            <p style="color:var(--muted);font-size:13px;margin:0 0 16px 0">
+              Connect your HuggingFace API key to use AI features. Your key is encrypted with AES-256-GCM and never exposed to the frontend.
+            </p>
 
-        <%= if is_nil(@org_id) do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="huggingface-panel">
-              <%!-- Connection Status Card --%>
-              <div class="card" style="margin-bottom:16px;padding:16px">
-                <h3 style="margin:0 0 12px 0;font-size:16px">🔑 HuggingFace Connection</h3>
-                <p style="color:var(--muted);font-size:13px;margin:0 0 16px 0">
-                  Connect your HuggingFace API key to use AI features. Your key is encrypted with AES-256-GCM and never exposed to the frontend.
-                </p>
-
-                <%= if @connect_success do %>
-                  <div id="hf-connect-success" style="background:#DCFCE7;border:1px solid #15803D;padding:12px;border-radius:6px;margin-bottom:12px">
-                    <strong style="color:#15803D">✓ {@connect_success}</strong>
-                    <button type="button" phx-click="dismiss_connect" style="float:right;background:none;border:none;cursor:pointer;font-size:16px">×</button>
-                  </div>
-                <% end %>
-
-                <%= if @connect_error do %>
-                  <div id="hf-connect-error" style="background:#FEE2E2;border:1px solid #B91C1C;padding:12px;border-radius:6px;margin-bottom:12px">
-                    <strong style="color:#B91C1C">✗ {@connect_error}</strong>
-                    <button type="button" phx-click="dismiss_connect" style="float:right;background:none;border:none;cursor:pointer;font-size:16px">×</button>
-                  </div>
-                <% end %>
-
-                <%= if not operator_plane?(@samen_mount) do %>
-                  <form id="hf-connect-form" phx-submit="connect" style="display:flex;gap:8px;align-items:flex-end">
-                    <div style="flex:1">
-                      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">HuggingFace API Key</label>
-                      <input
-                        type="password"
-                        name="api_key[raw_key]"
-                        id="hf-raw-key-input"
-                        placeholder="hf_..."
-                        required
-                        style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:4px;font-family:monospace"
-                      />
-                    </div>
-                    <.button type="submit" variant="primary" id="hf-connect-btn">
-                      Connect
-                    </.button>
-                  </form>
-                  <p style="color:var(--muted);font-size:11px;margin-top:8px">
-                    Your key is validated against HuggingFace before saving. Get your key at
-                    <a href="https://huggingface.co/settings/tokens" target="_blank" style="color:var(--primary)">huggingface.co/settings/tokens</a>
-                  </p>
-                <% else %>
-                  <p id="hf-operator-note" style="color:var(--muted)">
-                    HuggingFace key management is a tenant-plane action.
-                  </p>
-                <% end %>
+            <%= if @connect_success do %>
+              <div id="hf-connect-success" style="background:#DCFCE7;border:1px solid #15803D;padding:12px;border-radius:6px;margin-bottom:12px">
+                <strong style="color:#15803D">✓ {@connect_success}</strong>
+                <button type="button" phx-click="dismiss_connect" style="float:right;background:none;border:none;cursor:pointer;font-size:16px">×</button>
               </div>
+            <% end %>
 
-              <%!-- Usage Dashboard Card --%>
-              <div class="card" style="margin-bottom:16px;padding:16px">
-                <h3 style="margin:0 0 12px 0;font-size:16px">📊 Usage Dashboard</h3>
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-                  <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
-                    <div style="font-size:24px;font-weight:bold;color:#111827">{@usage_stats.total_calls || 0}</div>
-                    <div style="font-size:11px;color:var(--muted)">Total Calls</div>
-                  </div>
-                  <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
-                    <div style="font-size:24px;font-weight:bold;color:#111827">{format_tokens(@usage_stats.total_tokens || 0)}</div>
-                    <div style="font-size:11px;color:var(--muted)">Tokens Used</div>
-                  </div>
-                  <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
-                    <div style="font-size:24px;font-weight:bold;color:#111827">{format_duration(@usage_stats.avg_duration_ms || 0)}</div>
-                    <div style="font-size:11px;color:var(--muted)">Avg Response</div>
-                  </div>
-                  <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
-                    <div style={"font-size:24px;font-weight:bold;color:#{success_rate_color(@usage_stats)}"}>{success_rate_value(@usage_stats)}%</div>
-                    <div style="font-size:11px;color:var(--muted)">Success Rate</div>
-                  </div>
+            <%= if @connect_error do %>
+              <div id="hf-connect-error" style="background:#FEE2E2;border:1px solid #B91C1C;padding:12px;border-radius:6px;margin-bottom:12px">
+                <strong style="color:#B91C1C">✗ {@connect_error}</strong>
+                <button type="button" phx-click="dismiss_connect" style="float:right;background:none;border:none;cursor:pointer;font-size:16px">×</button>
+              </div>
+            <% end %>
+
+            <%= if not operator_plane?(@samen_mount) do %>
+              <form id="hf-connect-form" phx-submit="connect" style="display:flex;gap:8px;align-items:flex-end">
+                <div style="flex:1">
+                  <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px">HuggingFace API Key</label>
+                  <input
+                    type="password"
+                    name="api_key[raw_key]"
+                    id="hf-raw-key-input"
+                    placeholder="hf_..."
+                    required
+                    style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:4px;font-family:monospace"
+                  />
                 </div>
-              </div>
+                <.button type="submit" variant="primary" id="hf-connect-btn">
+                  Connect
+                </.button>
+              </form>
+              <p style="color:var(--muted);font-size:11px;margin-top:8px">
+                Your key is validated against HuggingFace before saving. Get your key at
+                <a href="https://huggingface.co/settings/tokens" target="_blank" style="color:var(--primary)">huggingface.co/settings/tokens</a>
+              </p>
+            <% else %>
+              <p id="hf-operator-note" style="color:var(--muted)">
+                HuggingFace key management is a tenant-plane action.
+              </p>
+            <% end %>
+          </div>
 
-              <%!-- API Keys Table --%>
-              <div class="card" style="padding:16px">
-                <h3 style="margin:0 0 12px 0;font-size:16px">🔐 Connected Keys</h3>
-                <table id="hf-keys-table" class="tbl">
-                  <thead>
-                    <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Key Prefix</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Last Used</th>
-                      <th scope="col">Errors</th>
-                      <th scope="col"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={key <- @api_keys} class="hf-key-row" id={"hf-key-#{key.id}"}>
-                      <td>{key.name}</td>
-                      <td><code>{key.key_prefix}…</code></td>
-                      <td>
-                        <span class={status_class(key.status)}>
-                          {status_label(key.status)}
-                        </span>
-                      </td>
-                      <td>{format_datetime(key.last_used_at)}</td>
-                      <td>
-                        <%= if key.error_count > 0 do %>
-                          <span style="color:#B91C1C">{key.error_count} errors</span>
-                        <% else %>
-                          <span style="color:#15803D">✓</span>
-                        <% end %>
-                      </td>
-                      <td>
-                        <div style="display:flex;gap:4px">
-                          <button
-                            :if={key.status == :active}
-                            type="button"
-                            phx-click="validate_key"
-                            phx-value-id={key.id}
-                            class="btn"
-                            id={"hf-validate-#{key.id}"}
-                            disabled={@validating}
-                          >
-                            Validate
-                          </button>
-                          <button
-                            :if={key.status in [:active, :pending_validation]}
-                            type="button"
-                            phx-click="revoke"
-                            phx-value-id={key.id}
-                            class="btn"
-                            id={"hf-revoke-#{key.id}"}
-                            style="color:#B91C1C"
-                          >
-                            Revoke
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    <tr :if={@api_keys == []}>
-                      <td colspan="6" style="color:var(--muted)">No HuggingFace keys connected yet.</td>
-                    </tr>
-                  </tbody>
-                </table>
+          <%!-- Usage Dashboard Card --%>
+          <div class="card" style="margin-bottom:16px;padding:16px">
+            <h3 style="margin:0 0 12px 0;font-size:16px">📊 Usage Dashboard</h3>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+              <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
+                <div style="font-size:24px;font-weight:bold;color:#111827">{@usage_stats.total_calls || 0}</div>
+                <div style="font-size:11px;color:var(--muted)">Total Calls</div>
+              </div>
+              <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
+                <div style="font-size:24px;font-weight:bold;color:#111827">{format_tokens(@usage_stats.total_tokens || 0)}</div>
+                <div style="font-size:11px;color:var(--muted)">Tokens Used</div>
+              </div>
+              <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
+                <div style="font-size:24px;font-weight:bold;color:#111827">{format_duration(@usage_stats.avg_duration_ms || 0)}</div>
+                <div style="font-size:11px;color:var(--muted)">Avg Response</div>
+              </div>
+              <div style="text-align:center;padding:12px;background:#F3F4F6;border-radius:6px">
+                <div style={"font-size:24px;font-weight:bold;color:#{success_rate_color(@usage_stats)}"}>{success_rate_value(@usage_stats)}%</div>
+                <div style="font-size:11px;color:var(--muted)">Success Rate</div>
               </div>
             </div>
           </div>
-        <% end %>
-      </.app_shell>
+
+          <%!-- API Keys Table --%>
+          <div class="card" style="padding:16px">
+            <h3 style="margin:0 0 12px 0;font-size:16px">🔐 Connected Keys</h3>
+            <table id="hf-keys-table" class="tbl">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Key Prefix</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last Used</th>
+                  <th scope="col">Errors</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={key <- @api_keys} class="hf-key-row" id={"hf-key-#{key.id}"}>
+                  <td>{key.name}</td>
+                  <td><code>{key.key_prefix}…</code></td>
+                  <td>
+                    <span class={status_class(key.status)}>
+                      {status_label(key.status)}
+                    </span>
+                  </td>
+                  <td>{format_datetime(key.last_used_at)}</td>
+                  <td>
+                    <%= if key.error_count > 0 do %>
+                      <span style="color:#B91C1C">{key.error_count} errors</span>
+                    <% else %>
+                      <span style="color:#15803D">✓</span>
+                    <% end %>
+                  </td>
+                  <td>
+                    <div style="display:flex;gap:4px">
+                      <button
+                        :if={key.status == :active}
+                        type="button"
+                        phx-click="validate_key"
+                        phx-value-id={key.id}
+                        class="btn"
+                        id={"hf-validate-#{key.id}"}
+                        disabled={@validating}
+                      >
+                        Validate
+                      </button>
+                      <button
+                        :if={key.status in [:active, :pending_validation]}
+                        type="button"
+                        phx-click="revoke"
+                        phx-value-id={key.id}
+                        class="btn"
+                        id={"hf-revoke-#{key.id}"}
+                        style="color:#B91C1C"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr :if={@api_keys == []}>
+                  <td colspan="6" style="color:var(--muted)">No HuggingFace keys connected yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

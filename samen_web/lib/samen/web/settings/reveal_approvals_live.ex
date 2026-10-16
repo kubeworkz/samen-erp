@@ -41,7 +41,7 @@ defmodule Samen.Web.Settings.RevealApprovalsLive do
   showing it would defeat the control. No vault read happens here, and no `vt_*` token is
   ever placed in the DOM (`pending_for_org/2` projects token/id/metadata fields only).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Settings.Live, only: [settings_sidebar: 1, operator_plane?: 1]
@@ -198,103 +198,108 @@ defmodule Samen.Web.Settings.RevealApprovalsLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
     assigns = assign_new(assigns, :decision_notice, fn -> nil end)
+    assigns
+  end
 
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:reveal_approvals} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="settings-reveal-approvals">
-      <.app_shell>
-        <:sidebar>
-          <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:reveal_approvals} />
-        </:sidebar>
+    <.topbar title="Reveal approvals" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Reveal approvals"]}>
+      <:actions></:actions>
+    </.topbar>
 
-        <.topbar title="Reveal approvals" crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :settings), "Reveal approvals"]}>
-          <:actions></:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
-
-        <%= if is_nil(@org_id) do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <div class="wrap">
-            <div id="reveal-approvals-panel">
-              <div class="gtitle">
-                <h3>Pending reveal requests</h3>
-                <span class="lane">
-                  an operator has asked to unmask a subject's PII in your org — approve to issue a
-                  time-boxed grant, or deny. You see WHO, WHICH subject, WHICH field, and WHY —
-                  never the value itself (that is what you are deciding to unmask).
-                </span>
-              </div>
-
-              <p :if={@decision_notice} id="reveal-approval-notice" style="color:#26307a">{@decision_notice}</p>
-
-              <p :if={operator_plane?(@samen_mount)} id="reveal-approvals-operator-note" style="color:var(--muted)">
-                Approving and denying are tenant-plane actions.
-              </p>
-
-              <p
-                :if={not operator_plane?(@samen_mount) and not @can_approve?}
-                id="reveal-approvals-role-note"
-                style="color:var(--muted)"
-              >
-                Deciding a reveal request requires an admin role — this is a read-only view for your role.
-              </p>
-
-              <table id="reveal-approvals-table" class="tbl">
-                <thead>
-                  <tr>
-                    <th scope="col">Operator</th>
-                    <th scope="col">Subject</th>
-                    <th scope="col">Field</th>
-                    <th scope="col">Reason</th>
-                    <th scope="col">Requested</th>
-                    <th scope="col"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={p <- @pending} class="reveal-approval-row" id={"reveal-approval-#{p.request_id}"}>
-                    <td class="ra-operator">{p.requestor_id}</td>
-                    <td class="ra-subject mono" style="font-size:12px">{p.subject_id}</td>
-                    <td class="ra-field" style="font-size:12px">{field_label(p.resource, p.action)}</td>
-                    <td class="ra-reason" style="font-size:12px">{p.reason}</td>
-                    <td class="ra-requested">{fmt(p.requested_at)}</td>
-                    <td>
-                      <%= if @can_approve? do %>
-                        <button
-                          type="button"
-                          phx-click="approve"
-                          phx-value-request={p.request_id}
-                          class="btn"
-                          id={"approve-btn-#{p.request_id}"}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          phx-click="deny"
-                          phx-value-request={p.request_id}
-                          class="btn"
-                          id={"deny-btn-#{p.request_id}"}
-                        >
-                          Deny
-                        </button>
-                      <% end %>
-                    </td>
-                  </tr>
-                  <tr :if={@pending == []}>
-                    <td colspan="6" id="reveal-approvals-empty" style="color:var(--muted)">
-                      No pending reveal requests for this org.
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+    <%= if is_nil(@org_id) do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <div class="wrap">
+        <div id="reveal-approvals-panel">
+          <div class="gtitle">
+            <h3>Pending reveal requests</h3>
+            <span class="lane">
+              an operator has asked to unmask a subject's PII in your org — approve to issue a
+              time-boxed grant, or deny. You see WHO, WHICH subject, WHICH field, and WHY —
+              never the value itself (that is what you are deciding to unmask).
+            </span>
           </div>
-        <% end %>
-      </.app_shell>
+
+          <p :if={@decision_notice} id="reveal-approval-notice" style="color:#26307a">{@decision_notice}</p>
+
+          <p :if={operator_plane?(@samen_mount)} id="reveal-approvals-operator-note" style="color:var(--muted)">
+            Approving and denying are tenant-plane actions.
+          </p>
+
+          <p
+            :if={not operator_plane?(@samen_mount) and not @can_approve?}
+            id="reveal-approvals-role-note"
+            style="color:var(--muted)"
+          >
+            Deciding a reveal request requires an admin role — this is a read-only view for your role.
+          </p>
+
+          <table id="reveal-approvals-table" class="tbl">
+            <thead>
+              <tr>
+                <th scope="col">Operator</th>
+                <th scope="col">Subject</th>
+                <th scope="col">Field</th>
+                <th scope="col">Reason</th>
+                <th scope="col">Requested</th>
+                <th scope="col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={p <- @pending} class="reveal-approval-row" id={"reveal-approval-#{p.request_id}"}>
+                <td class="ra-operator">{p.requestor_id}</td>
+                <td class="ra-subject mono" style="font-size:12px">{p.subject_id}</td>
+                <td class="ra-field" style="font-size:12px">{field_label(p.resource, p.action)}</td>
+                <td class="ra-reason" style="font-size:12px">{p.reason}</td>
+                <td class="ra-requested">{fmt(p.requested_at)}</td>
+                <td>
+                  <%= if @can_approve? do %>
+                    <button
+                      type="button"
+                      phx-click="approve"
+                      phx-value-request={p.request_id}
+                      class="btn"
+                      id={"approve-btn-#{p.request_id}"}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="deny"
+                      phx-value-request={p.request_id}
+                      class="btn"
+                      id={"deny-btn-#{p.request_id}"}
+                    >
+                      Deny
+                    </button>
+                  <% end %>
+                </td>
+              </tr>
+              <tr :if={@pending == []}>
+                <td colspan="6" id="reveal-approvals-empty" style="color:var(--muted)">
+                  No pending reveal requests for this org.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% end %>
     </div>
     """
   end

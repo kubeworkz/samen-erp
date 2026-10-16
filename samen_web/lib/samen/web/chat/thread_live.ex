@@ -20,7 +20,7 @@ defmodule Samen.Web.Chat.ThreadLive do
   Every rendered PII value is the resolver's ALREADY-RESOLVED field; this LiveView has NO
   unmasking branch and NEVER calls the vault.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Chat.Components
@@ -237,113 +237,114 @@ defmodule Samen.Web.Chat.ThreadLive do
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <div class="side-min">
+      <b>{CurrentOrg.name(@samen_mount, @org_id)}</b>
+      <span>Chat</span>
+    </div>
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="chat-room">
-      <.app_shell>
-        <:sidebar>
-          <div class="side-min">
-            <b>{CurrentOrg.name(@samen_mount, @org_id)}</b>
-            <span>Chat</span>
+    <%= cond do %>
+      <% @impersonation == :out_of_scope -> %>
+        <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
+        <div class="wrap">
+          <div class="card" id="out-of-scope" style="padding:22px 20px">
+            <div style="color:var(--red);font-weight:600" id="not-in-scope">
+              This account is not in your scope.
+            </div>
+            <p style="color:var(--muted);margin:10px 0 0;font-size:13px">
+              Your operator assignment does not cover this tenant, so its conversations are not
+              available to you and no impersonation session can be opened for it.
+            </p>
           </div>
-        </:sidebar>
-
-        <%= cond do %>
-          <% @impersonation == :out_of_scope -> %>
-            <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
-            <div class="wrap">
-              <div class="card" id="out-of-scope" style="padding:22px 20px">
-                <div style="color:var(--red);font-weight:600" id="not-in-scope">
-                  This account is not in your scope.
-                </div>
-                <p style="color:var(--muted);margin:10px 0 0;font-size:13px">
-                  Your operator assignment does not cover this tenant, so its conversations are not
-                  available to you and no impersonation session can be opened for it.
-                </p>
-              </div>
+        </div>
+      <% @impersonation == :denied -> %>
+        <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
+        <div class="wrap">
+          <div class="card" id="impersonation-required" style="padding:22px 20px">
+            <div style="color:var(--red);font-weight:600" id="no-session">
+              Access denied — no active impersonation session for this tenant.
             </div>
-          <% @impersonation == :denied -> %>
-            <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
-            <div class="wrap">
-              <div class="card" id="impersonation-required" style="padding:22px 20px">
-                <div style="color:var(--red);font-weight:600" id="no-session">
-                  Access denied — no active impersonation session for this tenant.
-                </div>
-                <p style="color:var(--muted);margin:10px 0 14px;font-size:13px">
-                  Reading a specific tenant's conversation is a per-tenant drill-in: it requires a
-                  short-TTL, reason-required <b>impersonation session</b>, recorded in the tenant's
-                  audit ledger (who / when / why). Start one below — the conversation still renders masked.
-                </p>
-                <div :if={@open_error} id="open-error" style="color:#B42318;font-size:12px;margin-bottom:8px">
-                  {@open_error}
-                </div>
-                <form phx-submit="open_session" id="open-session-form" style="display:flex;gap:8px;align-items:flex-start">
-                  <input
-                    type="text"
-                    name="reason"
-                    id="session-reason-input"
-                    placeholder="Reason (e.g. ticket #1234: dispatch dispute)"
-                    style="flex:1;padding:8px 10px;border:1px solid #D0D5DD;border-radius:8px;font-size:13px"
-                  />
-                  <button type="submit" id="start-session-btn" style="padding:8px 14px;border-radius:8px;background:#3B4CCA;color:#fff;font-size:13px">
-                    Start session (masked)
-                  </button>
-                </form>
-              </div>
+            <p style="color:var(--muted);margin:10px 0 14px;font-size:13px">
+              Reading a specific tenant's conversation is a per-tenant drill-in: it requires a
+              short-TTL, reason-required <b>impersonation session</b>, recorded in the tenant's
+              audit ledger (who / when / why). Start one below — the conversation still renders masked.
+            </p>
+            <div :if={@open_error} id="open-error" style="color:#B42318;font-size:12px;margin-bottom:8px">
+              {@open_error}
             </div>
-          <% @no_thread -> %>
-            <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
-            <div class="wrap">
-              <div class="card" id="no-thread" style="padding:22px 20px;color:var(--muted)">
-                Conversation not available.
-              </div>
-            </div>
-          <% true -> %>
-            <.topbar
-              title={@thread.subject || "Conversation"}
-              crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :chat), @thread.subject || "Conversation"]}
-            >
-              <:actions>
-                <span class="lane">{plane_note(@samen_mount)} · disclosure: {@thread.disclosure_mode}</span>
-              </:actions>
-            </.topbar>
-
-            <div :if={@session_info} id="session-accountability" class="wrap" style="padding-bottom:0">
-              <div class="card" style="padding:10px 14px;font-size:12px;color:var(--muted)">
-                <b style="color:inherit">Masked impersonation session.</b>
-                operator <span class="mono">{@session_info.operator_id}</span>
-                · reason: <span id="session-reason">{@session_info.reason}</span>
-                · expires <span id="session-expiry">{@session_info.expires_at}</span>
-                — recorded in this tenant's audit ledger.
-              </div>
-            </div>
-
-            <div class="wrap chat-layout">
-            <div class="chat-main">
-              <div id="chat-messages" class="chat-messages">
-                <.chat_message
-                  :for={%{message: m, cards: cards} <- @messages}
-                  message={m}
-                  handle={Map.get(@handles, m.participant_id)}
-                  cards={cards}
-                  mine={m.sender_party == plane_party(@samen_mount)}
-                />
-              </div>
-
-              <form class="chat-composer" phx-submit="send" id="chat-composer">
-                <input type="text" name="body" placeholder="Message… (paste a samen:crm.person:<id> ref to unfurl)" autocomplete="off" />
-                <.button variant="primary" type="submit">Send</.button>
-              </form>
-            </div>
-
-            <aside class="chat-aside">
-              <div class="gtitle"><h3>Participants</h3><span class="n">{length(@participants)}</span></div>
-              <.presence_roster participants={@participants} online_ids={online_ids(@participants)} />
-            </aside>
+            <form phx-submit="open_session" id="open-session-form" style="display:flex;gap:8px;align-items:flex-start">
+              <input
+                type="text"
+                name="reason"
+                id="session-reason-input"
+                placeholder="Reason (e.g. ticket #1234: dispatch dispute)"
+                style="flex:1;padding:8px 10px;border:1px solid #D0D5DD;border-radius:8px;font-size:13px"
+              />
+              <button type="submit" id="start-session-btn" style="padding:8px 14px;border-radius:8px;background:#3B4CCA;color:#fff;font-size:13px">
+                Start session (masked)
+              </button>
+            </form>
           </div>
-        <% end %>
-      </.app_shell>
+        </div>
+      <% @no_thread -> %>
+        <.topbar title="Chat" crumbs={[Crumbs.org(@samen_mount, @org_id), "Chat"]} />
+        <div class="wrap">
+          <div class="card" id="no-thread" style="padding:22px 20px;color:var(--muted)">
+            Conversation not available.
+          </div>
+        </div>
+      <% true -> %>
+        <.topbar
+          title={@thread.subject || "Conversation"}
+          crumbs={[Crumbs.org(@samen_mount, @org_id), Crumbs.section(@samen_mount, @org_id, :chat), @thread.subject || "Conversation"]}
+        >
+          <:actions>
+            <span class="lane">{plane_note(@samen_mount)} · disclosure: {@thread.disclosure_mode}</span>
+          </:actions>
+        </.topbar>
+
+        <div :if={@session_info} id="session-accountability" class="wrap" style="padding-bottom:0">
+          <div class="card" style="padding:10px 14px;font-size:12px;color:var(--muted)">
+            <b style="color:inherit">Masked impersonation session.</b>
+            operator <span class="mono">{@session_info.operator_id}</span>
+            · reason: <span id="session-reason">{@session_info.reason}</span>
+            · expires <span id="session-expiry">{@session_info.expires_at}</span>
+            — recorded in this tenant's audit ledger.
+          </div>
+        </div>
+
+        <div class="wrap chat-layout">
+        <div class="chat-main">
+          <div id="chat-messages" class="chat-messages">
+            <.chat_message
+              :for={%{message: m, cards: cards} <- @messages}
+              message={m}
+              handle={Map.get(@handles, m.participant_id)}
+              cards={cards}
+              mine={m.sender_party == plane_party(@samen_mount)}
+            />
+          </div>
+
+          <form class="chat-composer" phx-submit="send" id="chat-composer">
+            <input type="text" name="body" placeholder="Message… (paste a samen:crm.person:<id> ref to unfurl)" autocomplete="off" />
+            <.button variant="primary" type="submit">Send</.button>
+          </form>
+        </div>
+
+        <aside class="chat-aside">
+          <div class="gtitle"><h3>Participants</h3><span class="n">{length(@participants)}</span></div>
+          <.presence_roster participants={@participants} online_ids={online_ids(@participants)} />
+        </aside>
+      </div>
+    <% end %>
     </div>
     """
   end

@@ -48,13 +48,15 @@ defmodule Samen.Web.Auth.TotpEnrollLive do
   verify_totp/2`, the `/2fa` recovery-code login path — not here (enrollment
   never consumes a recovery code).
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
+  import Samen.Web.Settings.Live, only: [settings_sidebar: 1]
 
   alias Samen.Scopes.Identity.Audit
   alias Samen.Scopes.Identity.Notify
   alias Samen.Web.Auth.Totp
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @impl true
@@ -208,64 +210,95 @@ defmodule Samen.Web.Auth.TotpEnrollLive do
   defp issuer(%Mount{} = mount), do: Mount.label(mount, :totp_issuer, "Samen")
 
   # -- render ------------------------------------------------------------------
+  #
+  # The shell is NOT written here: `use Samen.Web.Tenant.Live` composes `<.app_shell>` around
+  # these two callbacks — `tenant_sidebar/1` as the shell's `:sidebar` slot and `tenant_page/1`
+  # as everything inside `<main>` — so this page CANNOT render outside the chrome. It was one of
+  # the three surfaces the tenant-chrome audit found rendering outside it, and the wrapper (not a
+  # copied shell) is what makes that regression impossible rather than merely detected.
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_assigns(assigns) do
+    assigns
+    |> assign_new(:org_id, fn -> nil end)
+    |> assign_new(:user_id, fn -> nil end)
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
     ~H"""
-    <div id="auth-totp-enroll" class="wrap" style="max-width:480px;margin:60px auto">
-      <div class="card" style="padding:28px 24px">
-        <h2 style="margin:0 0 4px">Two-factor authentication</h2>
+    <.settings_sidebar mount={@samen_mount} org_id={@org_id} user_id={@user_id} active={:security} />
+    """
+  end
 
-        <p :if={@error} id="totp-enroll-error" style="color:#B91C1C;margin:8px 0">{@error}</p>
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
+    ~H"""
+    <div id="auth-totp-enroll">
+      <%!-- The settings CRUMB, never `Crumbs.org/2`: this route is mounted BY
+           `samen_settings_routes/3`, so `/settings` provably exists on every host that can
+           reach this page — while the workspace home crumb (`/crm/dashboard`) is a link to a
+           route a host may never have mounted. A crumb is a link. --%>
+      <.topbar
+        title="Two-factor authentication"
+        crumbs={[Crumbs.section(@samen_mount, @org_id, :settings), "Two-factor authentication"]}
+      />
 
-        <div :if={not @enrolled?} id="totp-enroll-setup">
-          <p style="color:var(--muted)">
-            Scan this in your authenticator app, or enter the secret manually.
-          </p>
-          <p id="totp-enroll-uri" style="word-break:break-all;font-family:monospace;font-size:12px">
-            {@provisioning_uri}
-          </p>
-          <p id="totp-enroll-secret" style="font-family:monospace">{@raw_secret |> Base.encode32(padding: false)}</p>
+      <div class="wrap">
+        <div class="card" style="max-width:480px;margin:0 auto;padding:28px 24px">
+          <h2 style="margin:0 0 4px">Two-factor authentication</h2>
 
-          <.simple_form
-            for={@confirm_form}
-            id="totp-enroll-confirm-form"
-            action={enroll_action(@samen_mount)}
-            method="post"
-            phx-submit="confirm"
-          >
-            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-            <input type="hidden" name="totp_secret" value={Base.encode32(@raw_secret, padding: false)} />
-            <.form_field field={@confirm_form[:code]} label="Enter the current code to confirm" type="text" required />
-            <:actions>
-              <.button type="submit" variant="primary" id="totp-enroll-confirm">Confirm and enable</.button>
-            </:actions>
-          </.simple_form>
-        </div>
+          <p :if={@error} id="totp-enroll-error" style="color:#B91C1C;margin:8px 0">{@error}</p>
 
-        <div :if={@enrolled?} id="totp-enroll-done">
-          <p id="totp-enroll-success">Two-factor authentication is enabled.</p>
-
-          <div :if={@recovery_codes} id="totp-recovery-codes">
+          <div :if={not @enrolled?} id="totp-enroll-setup">
             <p style="color:var(--muted)">
-              Save these recovery codes somewhere safe — each works ONCE, and this is the only
-              time they're shown.
+              Scan this in your authenticator app, or enter the secret manually.
             </p>
-            <ul>
-              <li :for={{code, i} <- Enum.with_index(@recovery_codes)} id={"recovery-code-#{i}"} style="font-family:monospace">
-                {code}
-              </li>
-            </ul>
+            <p id="totp-enroll-uri" style="word-break:break-all;font-family:monospace;font-size:12px">
+              {@provisioning_uri}
+            </p>
+            <p id="totp-enroll-secret" style="font-family:monospace">{@raw_secret |> Base.encode32(padding: false)}</p>
+
+            <.simple_form
+              for={@confirm_form}
+              id="totp-enroll-confirm-form"
+              action={enroll_action(@samen_mount)}
+              method="post"
+              phx-submit="confirm"
+            >
+              <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+              <input type="hidden" name="totp_secret" value={Base.encode32(@raw_secret, padding: false)} />
+              <.form_field field={@confirm_form[:code]} label="Enter the current code to confirm" type="text" required />
+              <:actions>
+                <.button type="submit" variant="primary" id="totp-enroll-confirm">Confirm and enable</.button>
+              </:actions>
+            </.simple_form>
           </div>
 
-          <form action={"#{enroll_action(@samen_mount)}/recovery_codes"} method="post" phx-submit="regenerate_recovery_codes" style="display:inline">
-            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-            <button type="submit" id="totp-regenerate-codes" class="btn">Regenerate recovery codes</button>
-          </form>
-          <form action={"#{enroll_action(@samen_mount)}/disable"} method="post" phx-submit="disable" style="display:inline">
-            <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-            <button type="submit" id="totp-disable" class="btn">Disable two-factor authentication</button>
-          </form>
+          <div :if={@enrolled?} id="totp-enroll-done">
+            <p id="totp-enroll-success">Two-factor authentication is enabled.</p>
+
+            <div :if={@recovery_codes} id="totp-recovery-codes">
+              <p style="color:var(--muted)">
+                Save these recovery codes somewhere safe — each works ONCE, and this is the only
+                time they're shown.
+              </p>
+              <ul>
+                <li :for={{code, i} <- Enum.with_index(@recovery_codes)} id={"recovery-code-#{i}"} style="font-family:monospace">
+                  {code}
+                </li>
+              </ul>
+            </div>
+
+            <form action={"#{enroll_action(@samen_mount)}/recovery_codes"} method="post" phx-submit="regenerate_recovery_codes" style="display:inline">
+              <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+              <button type="submit" id="totp-regenerate-codes" class="btn">Regenerate recovery codes</button>
+            </form>
+            <form action={"#{enroll_action(@samen_mount)}/disable"} method="post" phx-submit="disable" style="display:inline">
+              <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
+              <button type="submit" id="totp-disable" class="btn">Disable two-factor authentication</button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

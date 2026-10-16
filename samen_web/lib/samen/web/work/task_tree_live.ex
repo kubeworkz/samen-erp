@@ -32,7 +32,7 @@ defmodule Samen.Web.Work.TaskTreeLive do
   node field masks and no per-plane masking proof is required for this surface. Reads still ride
   Ash/OrgScope.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Work.Live, only: [assign_mount: 2, work_sidebar: 1]
@@ -119,55 +119,56 @@ defmodule Samen.Web.Work.TaskTreeLive do
 
   defp parse_focus(_), do: nil
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_tree} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="work-tree">
-      <.app_shell>
-        <:sidebar>
-          <.work_sidebar mount={@samen_mount} org_id={@org_id} active={:work_tree} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Tree" crumbs={crumbs(@samen_mount, @org_id, "Tree")} />
 
-        <.topbar title="Tree" crumbs={crumbs(@samen_mount, @org_id, "Tree")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Work org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Work org: {@org_id}</span>
+      <div class="metrics">
+        <.metric label="Tasks in view" value={@total_nodes} sub="hierarchical, depth-bounded">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M5 4v6a2 2 0 002 2h4M5 12v4a2 2 0 002 2h4" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
 
-          <div class="metrics">
-            <.metric label="Tasks in view" value={@total_nodes} sub="hierarchical, depth-bounded">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M5 4v6a2 2 0 002 2h4M5 12v4a2 2 0 002 2h4" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
+      <div class="wrap">
+        <p :if={@focus} class="tree-focus-note">
+          Viewing a sub-tree. <a href={@roots_href} rel="nofollow" class="tree-drill">↑ back to all tasks</a>
+        </p>
 
-          <div class="wrap">
-            <p :if={@focus} class="tree-focus-note">
-              Viewing a sub-tree. <a href={@roots_href} rel="nofollow" class="tree-drill">↑ back to all tasks</a>
-            </p>
-
-            <.tree
-              id="work-tree-view"
-              tree={@tree}
-              label="Task hierarchy"
-              empty_text="No tasks"
-              expand_param="focus"
-              expand_prefix={@expand_prefix}
-            >
-              <:node :let={node}>
-                <span class="mono tree-task-name" id={"tree-task-#{node.id}"}>{node.record.title || "(untitled)"}</span>
-                <.pill variant={status_variant(node.record.status)}>{status_label(node.record.status)}</.pill>
-              </:node>
-            </.tree>
-          </div>
-        <% end %>
-      </.app_shell>
+        <.tree
+          id="work-tree-view"
+          tree={@tree}
+          label="Task hierarchy"
+          empty_text="No tasks"
+          expand_param="focus"
+          expand_prefix={@expand_prefix}
+        >
+          <:node :let={node}>
+            <span class="mono tree-task-name" id={"tree-task-#{node.id}"}>{node.record.title || "(untitled)"}</span>
+            <.pill variant={status_variant(node.record.status)}>{status_label(node.record.status)}</.pill>
+          </:node>
+        </.tree>
+      </div>
+    <% end %>
     </div>
     """
   end

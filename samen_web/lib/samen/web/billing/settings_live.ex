@@ -37,7 +37,7 @@ defmodule Samen.Web.Billing.SettingsLive do
   are plain Ash attribute reads on the existing Billing blueprint, the same shape
   `Reads` already hardcodes for every other Plan/Price/Customer field.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1, writable?: 1]
@@ -383,153 +383,154 @@ defmodule Samen.Web.Billing.SettingsLive do
 
   # -- render ------------------------------------------------------------------
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_settings} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="billing-settings">
-      <.app_shell>
-        <:sidebar>
-          <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_settings} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Settings" crumbs={crumbs(@samen_mount, @org_id, "Settings")} />
 
-        <.topbar title="Settings" crumbs={crumbs(@samen_mount, @org_id, "Settings")} />
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Billing settings org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Billing settings org: {@org_id}</span>
+      <%= if @configured do %>
+        <div class="wrap" id="billing-settings-configured">
+          <div :if={@checkout_error} class="card form-error" id="checkout-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:14px">
+            {@checkout_error}
+          </div>
+          <div :if={@portal_error} class="card form-error" id="portal-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:14px">
+            {@portal_error}
+          </div>
 
-          <%= if @configured do %>
-            <div class="wrap" id="billing-settings-configured">
-              <div :if={@checkout_error} class="card form-error" id="checkout-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:14px">
-                {@checkout_error}
-              </div>
-              <div :if={@portal_error} class="card form-error" id="portal-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:14px">
-                {@portal_error}
-              </div>
+          <div id="plan-picker">
+            <div class="gtitle">
+              <h3>Plans</h3>
+              <span class="lane">· hosted checkout — samen never handles card data</span>
+            </div>
 
-              <div id="plan-picker">
-                <div class="gtitle">
-                  <h3>Plans</h3>
-                  <span class="lane">· hosted checkout — samen never handles card data</span>
+            <.empty_state
+              :if={@plans_with_prices == []}
+              class="plan-picker-empty"
+              icon="◫"
+              title="No plans yet"
+              body="Create a plan on the Plans page before customers can subscribe."
+            />
+
+            <div :if={@plans_with_prices != []} style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px">
+              <div :for={%{plan: plan, prices: prices} <- @plans_with_prices} class="card plan-picker-card" id={"plan-picker-#{plan.id}"} style="padding:16px">
+                <div style="font-weight:600;color:#3a3b45">{plan.label || plan.name}</div>
+                <div style="font-size:12px;color:var(--muted);margin:4px 0 10px">
+                  {plan.description || plan.name}
                 </div>
-
-                <.empty_state
-                  :if={@plans_with_prices == []}
-                  class="plan-picker-empty"
-                  icon="◫"
-                  title="No plans yet"
-                  body="Create a plan on the Plans page before customers can subscribe."
-                />
-
-                <div :if={@plans_with_prices != []} style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px">
-                  <div :for={%{plan: plan, prices: prices} <- @plans_with_prices} class="card plan-picker-card" id={"plan-picker-#{plan.id}"} style="padding:16px">
-                    <div style="font-weight:600;color:#3a3b45">{plan.label || plan.name}</div>
-                    <div style="font-size:12px;color:var(--muted);margin:4px 0 10px">
-                      {plan.description || plan.name}
-                    </div>
-                    <div style="font-weight:600;font-size:18px;color:#3a3b45">
-                      {price_display(prices)}
-                      <span :if={pick_price(prices)} style="font-size:11px;font-weight:400;color:var(--muted)">
-                        / {price_interval_display(prices, plan.interval)}
-                      </span>
-                    </div>
-                    <.button
-                      :if={writable?(@samen_mount) and @billing_admin?}
-                      variant="primary"
-                      phx-click="checkout"
-                      phx-value-plan_id={plan.id}
-                      class="checkout-plan"
-                      id={"checkout-#{plan.id}"}
-                      style="margin-top:12px;width:100%"
-                    >
-                      Subscribe
-                    </.button>
-                    <div
-                      :if={writable?(@samen_mount) and not @billing_admin?}
-                      class="billing-admin-only"
-                      style="margin-top:12px;font-size:12px;color:var(--muted)"
-                    >
-                      Only an admin can subscribe this workspace to a plan.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div id="payment-method" class="card" style="padding:16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-                <div>
-                  <div style="font-weight:600;color:#3a3b45">Payment method</div>
-                  <div style="font-size:12px;color:var(--muted)">
-                    Managed on your billing provider's hosted portal — samen never stores card details.
-                  </div>
+                <div style="font-weight:600;font-size:18px;color:#3a3b45">
+                  {price_display(prices)}
+                  <span :if={pick_price(prices)} style="font-size:11px;font-weight:400;color:var(--muted)">
+                    / {price_interval_display(prices, plan.interval)}
+                  </span>
                 </div>
                 <.button
-                  :if={writable?(@samen_mount) and @billing_admin? and payment_method_available?(@customer)}
-                  phx-click="manage_payment_method"
-                  id="manage-payment-method"
+                  :if={writable?(@samen_mount) and @billing_admin?}
+                  variant="primary"
+                  phx-click="checkout"
+                  phx-value-plan_id={plan.id}
+                  class="checkout-plan"
+                  id={"checkout-#{plan.id}"}
+                  style="margin-top:12px;width:100%"
                 >
-                  Manage payment method
+                  Subscribe
                 </.button>
-                <span :if={writable?(@samen_mount) and @billing_admin? and not payment_method_available?(@customer)} style="font-size:12px;color:var(--muted)">
-                  Available after your first subscription.
-                </span>
-                <span :if={writable?(@samen_mount) and not @billing_admin?} class="billing-admin-only" style="font-size:12px;color:var(--muted)">
-                  Only an admin can manage the payment method.
-                </span>
-              </div>
-
-              <div id="settings-invoice-history">
-                <div class="gtitle">
-                  <h3>Recent invoices</h3>
-                  <span class="n">{length(@recent_invoices.items)}</span>
-                  <a href={"#{billing_path(@return_to)}/invoices?org=#{@org_id}"} class="lane" id="view-all-invoices">View all invoices →</a>
+                <div
+                  :if={writable?(@samen_mount) and not @billing_admin?}
+                  class="billing-admin-only"
+                  style="margin-top:12px;font-size:12px;color:var(--muted)"
+                >
+                  Only an admin can subscribe this workspace to a plan.
                 </div>
-
-                <.empty_state
-                  :if={@recent_invoices.items == []}
-                  class="settings-invoice-empty"
-                  icon="☰"
-                  title="No invoices yet"
-                  body="Invoices raised on this workspace appear here with their status and hosted links."
-                />
-
-                <.data_table :if={@recent_invoices.items != []}>
-                  <:head>
-                    <th style="width:24%">Customer</th>
-                    <th style="width:16%">Amount</th>
-                    <th style="width:14%">Tax</th>
-                    <th style="width:14%">Status</th>
-                    <th style="width:14%">Due date</th>
-                    <th style="width:18%">Links</th>
-                  </:head>
-                  <tr :for={inv <- @recent_invoices.items} class="settings-invoice-row" id={"settings-invoice-#{inv.id}"}>
-                    <td>{render_billing_name(inv.__customer__)}</td>
-                    <td style="font-weight:500;color:#3a3b45">{dollars(inv.amount_due_cents || 0)}</td>
-                    <td style="color:var(--muted);font-size:12px">{tax_display(inv.tax_amount_cents)}</td>
-                    <td><.pill variant={if inv.status == :paid, do: "ok", else: "info"}>{inv.status}</.pill></td>
-                    <td style="color:var(--muted);font-size:12px">{format_date(inv.due_date)}</td>
-                    <td style="font-size:12px">
-                      <a :if={inv.hosted_invoice_url} href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer">View invoice</a>
-                      <span :if={!inv.hosted_invoice_url} style="color:var(--muted)">—</span>
-                    </td>
-                  </tr>
-                </.data_table>
               </div>
             </div>
-          <% else %>
-            <div class="wrap" id="billing-settings-empty">
-              <.empty_state
-                class="billing-not-configured"
-                icon="⚠"
-                title="Billing is not configured"
-                body={not_configured_copy()}
-              />
+          </div>
+
+          <div id="payment-method" class="card" style="padding:16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div>
+              <div style="font-weight:600;color:#3a3b45">Payment method</div>
+              <div style="font-size:12px;color:var(--muted)">
+                Managed on your billing provider's hosted portal — samen never stores card details.
+              </div>
             </div>
-          <% end %>
-        <% end %>
-      </.app_shell>
+            <.button
+              :if={writable?(@samen_mount) and @billing_admin? and payment_method_available?(@customer)}
+              phx-click="manage_payment_method"
+              id="manage-payment-method"
+            >
+              Manage payment method
+            </.button>
+            <span :if={writable?(@samen_mount) and @billing_admin? and not payment_method_available?(@customer)} style="font-size:12px;color:var(--muted)">
+              Available after your first subscription.
+            </span>
+            <span :if={writable?(@samen_mount) and not @billing_admin?} class="billing-admin-only" style="font-size:12px;color:var(--muted)">
+              Only an admin can manage the payment method.
+            </span>
+          </div>
+
+          <div id="settings-invoice-history">
+            <div class="gtitle">
+              <h3>Recent invoices</h3>
+              <span class="n">{length(@recent_invoices.items)}</span>
+              <a href={"#{billing_path(@return_to)}/invoices?org=#{@org_id}"} class="lane" id="view-all-invoices">View all invoices →</a>
+            </div>
+
+            <.empty_state
+              :if={@recent_invoices.items == []}
+              class="settings-invoice-empty"
+              icon="☰"
+              title="No invoices yet"
+              body="Invoices raised on this workspace appear here with their status and hosted links."
+            />
+
+            <.data_table :if={@recent_invoices.items != []}>
+              <:head>
+                <th style="width:24%">Customer</th>
+                <th style="width:16%">Amount</th>
+                <th style="width:14%">Tax</th>
+                <th style="width:14%">Status</th>
+                <th style="width:14%">Due date</th>
+                <th style="width:18%">Links</th>
+              </:head>
+              <tr :for={inv <- @recent_invoices.items} class="settings-invoice-row" id={"settings-invoice-#{inv.id}"}>
+                <td>{render_billing_name(inv.__customer__)}</td>
+                <td style="font-weight:500;color:#3a3b45">{dollars(inv.amount_due_cents || 0)}</td>
+                <td style="color:var(--muted);font-size:12px">{tax_display(inv.tax_amount_cents)}</td>
+                <td><.pill variant={if inv.status == :paid, do: "ok", else: "info"}>{inv.status}</.pill></td>
+                <td style="color:var(--muted);font-size:12px">{format_date(inv.due_date)}</td>
+                <td style="font-size:12px">
+                  <a :if={inv.hosted_invoice_url} href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer">View invoice</a>
+                  <span :if={!inv.hosted_invoice_url} style="color:var(--muted)">—</span>
+                </td>
+              </tr>
+            </.data_table>
+          </div>
+        </div>
+      <% else %>
+        <div class="wrap" id="billing-settings-empty">
+          <.empty_state
+            class="billing-not-configured"
+            icon="⚠"
+            title="Billing is not configured"
+            body={not_configured_copy()}
+          />
+        </div>
+      <% end %>
+    <% end %>
     </div>
     """
   end

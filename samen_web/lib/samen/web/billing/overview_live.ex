@@ -32,7 +32,7 @@ defmodule Samen.Web.Billing.OverviewLive do
   PLANE-PRESERVING role elevation). Customer creates are member-gated and use the
   plain mount scope.
   """
-  use Phoenix.LiveView
+  use Samen.Web.Tenant.Live
 
   import Samen.UI
   import Samen.Web.Billing.Live, only: [assign_mount: 2, billing_sidebar: 1, writable?: 1]
@@ -148,155 +148,156 @@ defmodule Samen.Web.Billing.OverviewLive do
     if Map.has_key?(socket.assigns, :return_to), do: socket, else: assign(socket, return_to: nil)
   end
 
-  @impl true
-  def render(assigns) do
+  @impl Samen.Web.Tenant.Live
+  def tenant_sidebar(assigns) do
+    ~H"""
+    <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_overview} return_to={@return_to} />
+    """
+  end
+
+  @impl Samen.Web.Tenant.Live
+  def tenant_page(assigns) do
     ~H"""
     <div id="billing">
-      <.app_shell>
-        <:sidebar>
-          <.billing_sidebar mount={@samen_mount} org_id={@org_id} active={:billing_overview} return_to={@return_to} />
-        </:sidebar>
+    <.topbar title="Billing" crumbs={crumbs(@samen_mount, @org_id, "Overview")}>
+      <:actions>
+        <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_customer" id="new-customer">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v18M3 12h18" />
+            </svg>
+          </:icon>
+          New customer
+        </.button>
+      </:actions>
+    </.topbar>
 
-        <.topbar title="Billing" crumbs={crumbs(@samen_mount, @org_id, "Overview")}>
-          <:actions>
-            <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_customer" id="new-customer">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 3v18M3 12h18" />
-                </svg>
-              </:icon>
-              New customer
-            </.button>
-          </:actions>
-        </.topbar>
+    <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
 
-        <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />
+    <%= if @no_org do %>
+      <.no_org_card mount={@samen_mount} />
+    <% else %>
+      <span id="org-banner" style="display:none">Billing org: {@org_id}</span>
 
-        <%= if @no_org do %>
-          <.no_org_card mount={@samen_mount} />
-        <% else %>
-          <span id="org-banner" style="display:none">Billing org: {@org_id}</span>
+      <div :if={@delete_error} class="wrap" style="margin-bottom:0">
+        <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
+          {@delete_error}
+        </div>
+      </div>
 
-          <div :if={@delete_error} class="wrap" style="margin-bottom:0">
-            <div class="card form-error" id="delete-error" style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px">
-              {@delete_error}
-            </div>
+      <div class="metrics">
+        <.metric label="MRR" value={dollars((@metrics && @metrics.mrr_cents) || 0)} sub="monthly recurring">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Active subscriptions" value={(@metrics && @metrics.active_subs) || 0}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /><path d="M8 15h4M8 12h8" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Outstanding" value={dollars((@metrics && @metrics.outstanding_cents) || 0)} sub="open invoices">
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M9 14l2 2 4-4" /><rect x="3" y="3" width="18" height="18" rx="2" />
+            </svg>
+          </:icon>
+        </.metric>
+        <.metric label="Collected this month" value={dollars((@metrics && @metrics.collected_cents) || 0)}>
+          <:icon>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" />
+            </svg>
+          </:icon>
+        </.metric>
+      </div>
+
+      <div class="wrap">
+        <div id="subscriptions">
+          <div class="gtitle">
+            <h3>Customers &amp; Subscriptions</h3>
+            <span class="n">{length(@page.items)}</span>
+            <span class="lane">· billing_name / billing_email via PiiResolution · {plane_note(@samen_mount)}</span>
           </div>
-
-          <div class="metrics">
-            <.metric label="MRR" value={dollars((@metrics && @metrics.mrr_cents) || 0)} sub="monthly recurring">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Active subscriptions" value={(@metrics && @metrics.active_subs) || 0}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /><path d="M8 15h4M8 12h8" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Outstanding" value={dollars((@metrics && @metrics.outstanding_cents) || 0)} sub="open invoices">
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <path d="M9 14l2 2 4-4" /><rect x="3" y="3" width="18" height="18" rx="2" />
-                </svg>
-              </:icon>
-            </.metric>
-            <.metric label="Collected this month" value={dollars((@metrics && @metrics.collected_cents) || 0)}>
-              <:icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                  <circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" />
-                </svg>
-              </:icon>
-            </.metric>
-          </div>
-
-          <div class="wrap">
-            <div id="subscriptions">
-              <div class="gtitle">
-                <h3>Customers &amp; Subscriptions</h3>
-                <span class="n">{length(@page.items)}</span>
-                <span class="lane">· billing_name / billing_email via PiiResolution · {plane_note(@samen_mount)}</span>
-              </div>
-              <.list_view
-                id="subscriptions-list"
-                page={@page}
-                state={@list_state}
-                row_class="subscription-row"
-                filter_placeholder="Filter subscriptions…"
-                empty_text="No subscriptions yet."
-                empty_icon="↻"
-                empty_body="Subscriptions appear here once a customer is on a plan."
-              >
-                <:empty_actions :if={writable?(@samen_mount)}>
-                  <.button variant="primary" phx-click="new_customer" id="empty-new-customer">New customer</.button>
-                </:empty_actions>
-                <:head>
-                  <th scope="col" style="width:26%">Customer</th>
-                  <th scope="col" style="width:16%">Plan</th>
-                  <th scope="col" style="width:14%">MRR</th>
-                  <.sort_header field={:status} label="Status" sort={@list_state.sort} width="14%" />
-                  <.sort_header field={:current_period_end} label="Period end" sort={@list_state.sort} width="16%" />
-                  <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
-                </:head>
-                <:row :let={sub}>
-                  <td class="sub-customer">
-                    <div style="display:flex;align-items:center;gap:8px">
-                      <div class="av" style="width:28px;height:28px;border-radius:6px;background:#EDE9FE;color:#5B21B6;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                        {customer_initials(sub.__customer__)}
-                      </div>
-                      <div>
-                        <div class="sub-name" style="font-weight:500;color:#3a3b45">
-                          {render_billing_name(sub.__customer__)}
-                        </div>
-                        <div class="sub-email" style="font-size:11px;color:var(--muted)">
-                          {render_billing_email(sub.__customer__)}
-                        </div>
-                      </div>
+          <.list_view
+            id="subscriptions-list"
+            page={@page}
+            state={@list_state}
+            row_class="subscription-row"
+            filter_placeholder="Filter subscriptions…"
+            empty_text="No subscriptions yet."
+            empty_icon="↻"
+            empty_body="Subscriptions appear here once a customer is on a plan."
+          >
+            <:empty_actions :if={writable?(@samen_mount)}>
+              <.button variant="primary" phx-click="new_customer" id="empty-new-customer">New customer</.button>
+            </:empty_actions>
+            <:head>
+              <th scope="col" style="width:26%">Customer</th>
+              <th scope="col" style="width:16%">Plan</th>
+              <th scope="col" style="width:14%">MRR</th>
+              <.sort_header field={:status} label="Status" sort={@list_state.sort} width="14%" />
+              <.sort_header field={:current_period_end} label="Period end" sort={@list_state.sort} width="16%" />
+              <th :if={writable?(@samen_mount)} scope="col" style="width:10%"><span class="sr-only">Actions</span></th>
+            </:head>
+            <:row :let={sub}>
+              <td class="sub-customer">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="av" style="width:28px;height:28px;border-radius:6px;background:#EDE9FE;color:#5B21B6;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    {customer_initials(sub.__customer__)}
+                  </div>
+                  <div>
+                    <div class="sub-name" style="font-weight:500;color:#3a3b45">
+                      {render_billing_name(sub.__customer__)}
                     </div>
-                  </td>
-                  <td class="sub-plan">
-                    <.pill variant={plan_variant(plan_name(sub.__plan__))}>{plan_label(sub.__plan__)}</.pill>
-                  </td>
-                  <td class="sub-mrr" style="font-weight:500;color:#3a3b45">
-                    {plan_mrr(sub.__plan__)}
-                  </td>
-                  <td class="sub-status">
-                    <.pill variant={sub_status_variant(sub.status)}>{sub.status}</.pill>
-                  </td>
-                  <td class="sub-period" style="color:var(--muted);font-size:12px">
-                    {format_date(sub.current_period_end)}
-                  </td>
-                  <td :if={writable?(@samen_mount)} class="sub-actions">
-                    <.delete_confirm phx-click="delete" phx-value-id={sub.id} />
-                  </td>
-                </:row>
-              </.list_view>
-            </div>
-          </div>
+                    <div class="sub-email" style="font-size:11px;color:var(--muted)">
+                      {render_billing_email(sub.__customer__)}
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td class="sub-plan">
+                <.pill variant={plan_variant(plan_name(sub.__plan__))}>{plan_label(sub.__plan__)}</.pill>
+              </td>
+              <td class="sub-mrr" style="font-weight:500;color:#3a3b45">
+                {plan_mrr(sub.__plan__)}
+              </td>
+              <td class="sub-status">
+                <.pill variant={sub_status_variant(sub.status)}>{sub.status}</.pill>
+              </td>
+              <td class="sub-period" style="color:var(--muted);font-size:12px">
+                {format_date(sub.current_period_end)}
+              </td>
+              <td :if={writable?(@samen_mount)} class="sub-actions">
+                <.delete_confirm phx-click="delete" phx-value-id={sub.id} />
+              </td>
+            </:row>
+          </.list_view>
+        </div>
+      </div>
 
-          <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-customer-modal" title="New customer" on_cancel="cancel_new">
-            <.simple_form :let={f} for={@new_form} id="new-customer-form" phx-change="validate_new" phx-submit="save_new">
-              <.form_field field={f[:billing_name]} label="Billing name (🔒 PII)" />
-              <.form_field field={f[:billing_email]} label="Billing email (🔒 PII)" type="email" />
-              <.form_field
-                field={f[:status]}
-                label="Status"
-                type="select"
-                options={[{"active", "active"}, {"inactive", "inactive"}]}
-              />
-              <.form_field field={f[:currency]} label="Currency" />
-              <:actions>
-                <.button variant="primary" type="submit">Save customer</.button>
-                <.button type="button" phx-click="cancel_new">Cancel</.button>
-              </:actions>
-            </.simple_form>
-          </.modal>
-        <% end %>
-      </.app_shell>
+      <.modal :if={@show_new and @new_form != nil and writable?(@samen_mount)} id="new-customer-modal" title="New customer" on_cancel="cancel_new">
+        <.simple_form :let={f} for={@new_form} id="new-customer-form" phx-change="validate_new" phx-submit="save_new">
+          <.form_field field={f[:billing_name]} label="Billing name (🔒 PII)" />
+          <.form_field field={f[:billing_email]} label="Billing email (🔒 PII)" type="email" />
+          <.form_field
+            field={f[:status]}
+            label="Status"
+            type="select"
+            options={[{"active", "active"}, {"inactive", "inactive"}]}
+          />
+          <.form_field field={f[:currency]} label="Currency" />
+          <:actions>
+            <.button variant="primary" type="submit">Save customer</.button>
+            <.button type="button" phx-click="cancel_new">Cancel</.button>
+          </:actions>
+        </.simple_form>
+      </.modal>
+    <% end %>
     </div>
     """
   end
