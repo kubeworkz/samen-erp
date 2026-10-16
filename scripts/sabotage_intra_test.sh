@@ -78,6 +78,21 @@
 #      refused up front.
 #  13. ZERO RESIDUE — every probe is removed on every exit path.
 #
+# ONE INVARIANT EVERY LAYOUT ASSERTION BELOW SHARES — THE POOL WIDTH IS PINNED.
+# Every assertion about the SLICE PLAN passes `--jobs 8` explicitly, because the width's default is
+# platform-dependent (2 on MSYS/MINGW, one slot per app on a POSIX runner) and `build_plan` CAPS an
+# app's chunk count by the slots available (`k > JOBS && k = JOBS`, sabotage_parallel.sh). So on a
+# POSIX runner a single-app selection defaults to ONE slot, `--intra 2` is then capped to one chunk,
+# and every assertion expecting a `-2` slice goes red — while the exact same harness passes on the
+# MSYS box it was written on (default 2). An unpinned assertion like that is a statement about the
+# RUNNER, not about the driver, and it is what made this gate red on the Linux runners from
+# 2026-10-13 while it stayed green locally. `--jobs 8` is a dry-run width (every call here is
+# `--list`: nothing is applied and no tree is created), so pinning it costs nothing and makes the
+# plan byte-identical on both platforms.
+# Two deliberate exceptions: section 3 asks for `--intra 1`, where the chunk count is 1 whatever the
+# width is; and section 5 drives the connection BUDGET, which is precisely the thing that LOWERS an
+# unpinned width — it stubs `psql`, so the number it lowers against is fixed instead.
+#
 # Usage: scripts/sabotage_intra_test.sh
 # Exit:  0 if every assertion passes; non-zero + FAIL lines otherwise.
 # Cost:  ~4 minutes here, dominated by the two driver calls that list the WHOLE selection (each
@@ -388,7 +403,7 @@ diff --git a/$PROBE_SRC_REL b/$PROBE_SRC_REL
 EOF
 done
 
-hazard_out="$(bash "$DRIVER" --range 900-901 --intra 2 --list 2>&1)"; status=$?
+hazard_out="$(bash "$DRIVER" --jobs 8 --range 900-901 --intra 2 --list 2>&1)"; status=$?
 if [[ $status -ne 0 ]]; then
   ok "the driver REFUSED to launch a plan whose two slices would share a fixed-name scratch DB (exit $status)"
 else
@@ -407,7 +422,7 @@ else
   grep -E 'slices:' <<<"$hazard_out" | head -3
   bad "the refusal does not name the slices that would have contended"
 fi
-ack_out="$(bash "$DRIVER" --range 900-901 --intra 2 --allow-shared-scratch --list 2>&1)"; status=$?
+ack_out="$(bash "$DRIVER" --jobs 8 --range 900-901 --intra 2 --allow-shared-scratch --list 2>&1)"; status=$?
 if [[ $status -eq 0 ]] && grep -q 'ACKNOWLEDGED (--allow-shared-scratch)' <<<"$ack_out"; then
   ok "with --allow-shared-scratch the run proceeds AND the hazard stays visible in the output"
 else
@@ -433,7 +448,7 @@ echo "== 8. a caller --range is FOLDED into the chunk ranges, never forwarded ov
 # same-app slices replaying one patch each, all counts matching, no coverage hole to catch it.
 # (Seen live on 2026-10-12 before the fold: both slices replayed patch 197 in a --range 197-198
 # run.) The plan prints each slice's exact arguments, so this is observable without running any.
-fold_out="$(bash "$DRIVER" --range 197-198 --intra 2 --list 2>&1)"
+fold_out="$(bash "$DRIVER" --jobs 8 --range 197-198 --intra 2 --list 2>&1)"
 cmds="$(printf '%s\n' "$fold_out" | sed -n 's/^        cmd: //p')"
 if [[ -z "$cmds" ]]; then
   echo "$fold_out" | tail -5
@@ -800,8 +815,10 @@ seed_cache() { # seed_cache <root> <stem> [<patches-replayed>] — fabricate a u
   [[ -n "$n" ]] && printf '%s\n' "$n" > "$root/$stem/replayed-patches"
   return 0
 }
-# `plan <root>` — the seed-plan lines of a run whose only candidate roots live under <root>.
-plan() { SAMEN_SABOTAGE_PARALLEL_ROOT="$1" bash "$DRIVER" --range 197-198 --intra 2 --list 2>&1; }
+# `plan <root>` — the seed-plan lines of a run whose only candidate roots live under <root>. The
+# width is pinned (see the header): the seed plan is about the NEW SLICES, and whether this app is
+# cut at all is the width's decision, not the seeding's.
+plan() { SAMEN_SABOTAGE_PARALLEL_ROOT="$1" bash "$DRIVER" --jobs 8 --range 197-198 --intra 2 --list 2>&1; }
 seed_cache "$SCRATCH" samen_core
 seed_out="$(plan "$SCRATCH")"
 if grep -qE '^  SEED PLAN: 1 new slice\(s\) start from a sibling slice' <<<"$seed_out" \
@@ -867,7 +884,7 @@ else
 fi
 
 mkdir -p "$SCRATCH/samen_core/lock"
-busy_out="$(SAMEN_SABOTAGE_PARALLEL_ROOT="$SCRATCH" bash "$DRIVER" --range 197-198 --intra 2 --list 2>&1)"
+busy_out="$(SAMEN_SABOTAGE_PARALLEL_ROOT="$SCRATCH" bash "$DRIVER" --jobs 8 --range 197-198 --intra 2 --list 2>&1)"
 if grep -q 'nothing to seed' <<<"$busy_out"; then
   ok "a sibling that is IN USE (its per-slice lock exists) is never copied out from under a writer"
 else
@@ -876,7 +893,7 @@ else
 fi
 rmdir "$SCRATCH/samen_core/lock"
 
-noseed_out="$(SAMEN_SABOTAGE_PARALLEL_ROOT="$SCRATCH" bash "$DRIVER" --range 197-198 --intra 2 --no-seed --list 2>&1)"
+noseed_out="$(SAMEN_SABOTAGE_PARALLEL_ROOT="$SCRATCH" bash "$DRIVER" --jobs 8 --range 197-198 --intra 2 --no-seed --list 2>&1)"
 if grep -q 'SEED PLAN: disabled (--no-seed)' <<<"$noseed_out"; then
   ok "--no-seed reports itself as disabled (each new slice compiles from scratch)"
 else
@@ -899,8 +916,11 @@ fi
 #     the seeding's whole purpose.
 COLDROOT="$WORK/coldroot"; mkdir -p "$COLDROOT"
 # coldplan <root> [<VAR=VAL>...] — the plan for a fully cold fleet, with the adaptive knobs set
-# EXPLICITLY so every assertion is about the driver and not about this host's default --jobs.
-coldplan() { local root="$1"; shift; env "$@" SAMEN_SABOTAGE_PARALLEL_ROOT="$root" bash "$DRIVER" --range 197-198 --intra 2 --list 2>&1; }
+# EXPLICITLY and the width PINNED, so every assertion is about the driver and not about this host's
+# default --jobs. (Pinning cannot disturb the COLD_* assertions: COLD_LIMIT's own default is 2,
+# independent of the width — only the CEILING follows JOBS, and every case here either accepts it or
+# names it in the env.)
+coldplan() { local root="$1"; shift; env "$@" SAMEN_SABOTAGE_PARALLEL_ROOT="$root" bash "$DRIVER" --jobs 8 --range 197-198 --intra 2 --list 2>&1; }
 cold_out="$(coldplan "$COLDROOT")"
 if grep -qE '^  COLD-COMPILE BUDGET: 2 slice\(s\) start with NO build cache' <<<"$cold_out" \
    && grep -qE 'the width STARTS at [0-9]+ and|the adaptive width is PINNED' <<<"$cold_out"; then
