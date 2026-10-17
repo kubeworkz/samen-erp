@@ -517,6 +517,34 @@ defmodule Samen.Web.Operator.Reads do
   end
 
   @doc """
+  The account Org's `id` for a `tenant_org_id` (Org.slug) — the ONE direction a per-tenant
+  drill-in needs to link BACK to its account page.
+
+  Drill-in URLs carry `tenant_org_id` (the value the impersonation session, `aud_event.subject_id`
+  and the analytics ledger use), while `/operator/accounts/:id` keys on the Org ROW's `id`. Those
+  are different columns of the same row, so a `← Account` link cannot be built from the drill-in
+  id; this bounded lookup (`limit(1)`, the same trusted non-PII grouping read as
+  `account_orgs/2`, operator-namespace filter) supplies the other one. `nil` on an unknown org or
+  any read error — the caller then renders no link rather than a dead one.
+  """
+  def account_id_for_tenant(mount, operator_org_id, tenant_org_id)
+      when is_binary(operator_org_id) and is_binary(tenant_org_id) do
+    Mount.resource(mount, Org)
+    |> Ash.Query.ensure_selected([:id])
+    |> Ash.Query.filter(org_id == ^operator_org_id and slug == ^tenant_org_id)
+    |> Ash.Query.limit(1)
+    |> Ash.read!(authorize?: false)
+    |> case do
+      [%{id: id}] when is_binary(id) -> id
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  def account_id_for_tenant(_mount, _operator_org_id, _tenant_org_id), do: nil
+
+  @doc """
   Assemble ONE account's drill-down (WS-B / B4, AC-G17-4): the scored account row
   (`%HealthScore.HealthBreakdown{}` on `__health__`), its `mov` movement timeline,
   its desk tickets, and its invoices — the linked evidence behind each factor.

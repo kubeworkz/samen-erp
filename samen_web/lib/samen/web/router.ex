@@ -298,6 +298,13 @@ defmodule Samen.Web.Router do
         # link. Inherited at 0 vertical LOC. (Resolve route declared first — see above.)
         live("#{path}/activity/resolve", Samen.Web.Operator.FleetResolveLive, :activity)
         live("#{path}/activity/:org_id", Samen.Web.Operator.ActivityLive)
+        # Session replay — WHICH surfaces a tenant session opened, in order, played back with a
+        # server-state playhead (support: "what were they looking at when it broke?"). Same
+        # T150-gated per-tenant drill-in shape as Activity/Deliverability (a session review is
+        # at least as sensitive as an audit read), reached from the account drill-down's
+        # "Replay →" link. Inherited at 0 vertical LOC. Token-blind by construction: the ledger
+        # stores bounded surface tokens + registered events, never a keystroke, URL or form value.
+        live("#{path}/replay/:org_id", Samen.Web.Operator.ReplayLive)
 
         if include_aggregate do
           live("#{path}/aggregate", Samen.Web.Operator.AggregateLive)

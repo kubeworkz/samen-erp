@@ -76,17 +76,25 @@ defmodule Samen.Web.Operator.AccountDetailLive do
           crumbs={["Operator plane", "Accounts", (@detail && @detail.account.name) || "—"]}
         >
           <:actions>
+            <%!-- TWO identifiers, never one: `/operator/accounts/:id` keys on the account Org's
+                  `id`, while every per-tenant DRILL-IN keys on its `tenant_org_id` (Org.slug) —
+                  the same value the impersonation session, `aud_event.subject_id` and the
+                  analytics ledger's `org_id` carry (Reads: "the `pae` `org_id` IS the
+                  tenant_org_id"). Linking a drill-in with the Org id opens a page that
+                  resolves a different org and shows nothing, so the links below use the
+                  account ROW's tenant_org_id and render only once a row was read. --%>
+            <% drill_in_id = @detail && @detail.account.tenant_org_id %>
             <a
-              :if={@account_id}
-              href={"/operator/deliverability/#{@account_id}"}
+              :if={drill_in_id}
+              href={"/operator/deliverability/#{drill_in_id}"}
               id="account-deliverability-link"
               style="font-size:12px;color:#3B4CCA;margin-right:14px"
             >
               Deliverability →
             </a>
             <a
-              :if={@account_id}
-              href={"/operator/automation/#{@account_id}"}
+              :if={drill_in_id}
+              href={"/operator/automation/#{drill_in_id}"}
               id="account-automation-health-link"
               style="font-size:12px;color:#3B4CCA;margin-right:14px"
             >
@@ -95,20 +103,31 @@ defmodule Samen.Web.Operator.AccountDetailLive do
             <%!-- ADR-047 A5: the agent oversight drill-in (per-definition health + the
                   durable per-{org, definition} kill), the automation sibling. --%>
             <a
-              :if={@account_id}
-              href={"/operator/agents/#{@account_id}"}
+              :if={drill_in_id}
+              href={"/operator/agents/#{drill_in_id}"}
               id="account-agent-health-link"
               style="font-size:12px;color:#3B4CCA;margin-right:14px"
             >
               Agent health →
             </a>
             <a
-              :if={@account_id}
-              href={"/operator/activity/#{@account_id}"}
+              :if={drill_in_id}
+              href={"/operator/activity/#{drill_in_id}"}
               id="account-activity-link"
               style="font-size:12px;color:#3B4CCA;margin-right:14px"
             >
               Activity →
+            </a>
+            <%!-- Support drill-in: play back WHICH surfaces this tenant's session opened, in
+                  order ("what were they looking at when it broke?"). Same T150-gated per-tenant
+                  shape as Deliverability/Automation/Activity above. --%>
+            <a
+              :if={drill_in_id}
+              href={"/operator/replay/#{drill_in_id}"}
+              id="account-replay-link"
+              style="font-size:12px;color:#3B4CCA;margin-right:14px"
+            >
+              Replay →
             </a>
             <a href="/operator/accounts" id="back-to-accounts" style="font-size:12px;color:#3B4CCA">← Accounts</a>
           </:actions>

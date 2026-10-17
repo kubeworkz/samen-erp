@@ -93,6 +93,7 @@ Default prefix is `/operator` (`:path` opt). `A` = `:operator_admin`, `S` = `:op
 | `/operator/automation/:org_id` | `AutomationHealthLive` | any + **session** | kill / re-arm |
 | `/operator/agents/:org_id` | `AgentHealthLive` | any + **session** | kill / re-arm |
 | `/operator/activity/:org_id` | `ActivityLive` | any + **session** | — |
+| `/operator/replay/:org_id` | `ReplayLive` | any + **session** | — (the page's one submit IS the session open, on its deny state) |
 | `/operator/{deliverability,automation,activity}/resolve` | `FleetResolveLive` | any (redirects) | — |
 | `/operator/fleet` | `FleetLive` | **`roles[:fleet] != nil`** | — |
 | `/operator/fleet/directives` | `FleetDirectivesLive` | `roles[:fleet]` | publish: `roles[:fleet] == A` |
@@ -145,7 +146,7 @@ Notes that matter in practice:
   from the behaviour. Notes render ONLY where the control is withheld (a positive control in each
   test proves the note is absent for a role that holds the capability).
 - **The per-tenant drill-ins need a session, not just a role.** `deliverability`, `automation`,
-  `agents`, `activity` all go through `Samen.Web.Operator.Impersonation.gate_socket/3`, which
+  `agents`, `activity`, `replay` all go through `Samen.Web.Operator.Impersonation.gate_socket/3`, which
   composes **T146 role AND T84a org-scope AND a real, reason-required `Samen.Impersonation`
   session**. `:operator_readonly` therefore cannot drill in (it cannot impersonate); the deny
   state renders the open-session affordance — and, for a role that may never open one, the
@@ -153,6 +154,13 @@ Notes that matter in practice:
   the operator is not left with a form whose every submit `open/4` refuses. `desk/:id` is
   deliberately *not* session-gated: it is the operator org's own desk on the tenant plane, not a
   tenant drill-in.
+- **`replay/:org_id` is a step list, not a screen recording.** It plays back the `nav.visited` /
+  product-event ledger a tenant session wrote — WHICH surface, when, and which registered events
+  fired in between. The recorder stores only a bounded surface token derived from the LiveView
+  module (never a URL, path param, id, keystroke or form value), so there is no vault-routed field
+  on the surface and nothing to mask. The page says so in its own `#replay-scope-note`. Full
+  design, the player's server-state playhead, and its failure modes:
+  [`session-replay.md`](session-replay.md).
 - **The analytics "ask" box** mints a `Samen.OperatorPlane.Actor` from the resolved
   `:samen_operator_role`; with no resolved role it fails closed to a non-operator actor the kernel
   refuses — never back to a synthetic tag.

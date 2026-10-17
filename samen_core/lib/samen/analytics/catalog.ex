@@ -19,6 +19,10 @@ defmodule Samen.Analytics.Catalog do
     * `record.created`       — a governed resource row was created (the kit create path).
     * `search.used`          — a search query ran.
     * `flag.assignment`      — a feature-flag variant was assigned (the §3.4 seam).
+    * `nav.visited`          — a signed-in tenant opened a surface (the session-replay
+                               recorder, `Samen.Analytics.Replay`). Its ONE prop is a
+                               BOUNDED surface token (`"broker"`, `"crm_dashboard"`) derived
+                               from the LiveView module — never a URL, a path param or an id.
 
   ## Prop-key schema (the structural validation `track/1` enforces)
 
@@ -38,7 +42,13 @@ defmodule Samen.Analytics.Catalog do
     "first_run.completed" => MapSet.new([]),
     "record.created" => MapSet.new(["resource", "entity_kind"]),
     "search.used" => MapSet.new(["surface", "result_count"]),
-    "flag.assignment" => MapSet.new(["flag_name", "variant"])
+    "flag.assignment" => MapSet.new(["flag_name", "variant"]),
+    # Session replay (`Samen.Analytics.Replay`). A page view is NOT freeform: the only
+    # permitted prop is `surface`, a token matched against `~r/\A[a-z][a-z0-9_]{0,63}\z/`
+    # and derived from the LiveView module name. No path, no query string, no id ever
+    # rides here — so a replayed step can never carry a tenant's data, only WHICH screen
+    # they were on.
+    "nav.visited" => MapSet.new(["surface"])
   }
 
   @names @catalog |> Map.keys() |> MapSet.new()

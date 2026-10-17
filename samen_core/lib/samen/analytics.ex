@@ -75,7 +75,10 @@ defmodule Samen.Analytics do
     "first_run.completed" => :onboarding,
     "record.created" => :record,
     "search.used" => :search,
-    "flag.assignment" => :experiment
+    "flag.assignment" => :experiment,
+    # Session replay (`Samen.Analytics.Replay.record_visit/1`) — a page VIEW, ordered by
+    # `occurred_at` into the tenant's replay timeline. Same bounded ledger, no new store.
+    "nav.visited" => :session
   }
 
   @doc """

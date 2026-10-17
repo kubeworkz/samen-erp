@@ -1,0 +1,29 @@
+# SABOTAGE: THE SESSION-REPLAY RECORDER LOSES ITS EXACTLY-ONCE GUARD — `Samen.Web.Replay`
+# records the mount unconditionally, dropping the `Phoenix.LiveView.connected?/1` conjunct from
+# its `with`. A LiveView mounts TWICE (the HTTP dead render, then the connected mount over the
+# websocket), so every tenant page view now writes TWO `nav.visited` steps instead of one: the
+# operator's Replay screen shows each visit doubled, and an operator reading a session's step
+# count is told the tenant did twice what they did.
+#
+# Aimed at the RECORDER, not at the screen: `Samen.Analytics.Replay`'s bounded-surface refusal,
+# the reads' sessionization, the T150 drill-in gate and the render are all untouched — the
+# timeline still shows the RIGHT surfaces for the RIGHT org. What breaks is the COUNT of them,
+# which is what the recorder's own proof exists to catch.
+#
+# No warning is introduced (the guard is simply gone, not silenced) and the replay runs
+# `mix test`, so nothing is confined or skipped.
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_replay_test.exs
+# MUST_FAIL: records ONE bounded step per CONNECTED visit
+--- a/samen_web/lib/samen/web/replay.ex
++++ b/samen_web/lib/samen/web/replay.ex
+@@ -47,8 +47,7 @@
+   def record_visit(socket, org_id \\ nil)
+ 
+   def record_visit(%Phoenix.LiveView.Socket{} = socket, org_id) do
+-    with true <- Phoenix.LiveView.connected?(socket),
+-         org_id when is_binary(org_id) <- org_id || socket.assigns[:samen_tenant_org_id],
++    with org_id when is_binary(org_id) <- org_id || socket.assigns[:samen_tenant_org_id],
+          view when is_atom(view) and not is_nil(view) <- socket.view do
+       _ =
+         Capture.record_visit(

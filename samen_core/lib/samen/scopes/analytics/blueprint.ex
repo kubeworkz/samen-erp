@@ -84,7 +84,12 @@ defmodule Samen.Scopes.Analytics.Blueprint do
 
           # The event name — an enum from the bounded Samen.Analytics.Catalog. NOT
           # freeform: track/1 refuses an unregistered name before this resource is
-          # touched, and the DB-level constraint mirrors the catalog as a second gate.
+          # touched, and this constraint mirrors the catalog as a second gate.
+          #
+          # `nav.visited` is the session-replay capture (`Samen.Analytics.Replay`): a signed-in
+          # tenant opening a surface. Adding it here is the SAME governance act as adding it to
+          # the catalog — the two must move together, which is exactly what
+          # `analytics_replay_refusal_test.exs`'s catalog-mirror assertion pins.
           attribute(:event_name, :atom,
             public?: true,
             allow_nil?: false,
@@ -94,7 +99,8 @@ defmodule Samen.Scopes.Analytics.Blueprint do
                 :"first_run.completed",
                 :"record.created",
                 :"search.used",
-                :"flag.assignment"
+                :"flag.assignment",
+                :"nav.visited"
               ]
             ]
           )

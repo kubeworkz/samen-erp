@@ -81,8 +81,16 @@ defmodule Samen.Web.TenantAuthz do
         {:cont, unconstrained(socket, mount, session)}
 
       # The explicitly DISARMED dev/dogfood posture — the sanctioned ADR-031 `?org=` convenience.
+      #
+      # Session replay (`Samen.Web.Replay`) records here too: the org this mount resolved to
+      # names the replay timeline even though the gate grants nothing from it (`?org=` stays a
+      # selector, not an identity). Discipline §3 property 3 — recording observes, it never
+      # widens what the mount may read.
       not CurrentOrg.tenant_gate_armed?(mount) ->
-        {:cont, unconstrained(socket, mount, session)}
+        {:cont,
+         socket
+         |> unconstrained(mount, session)
+         |> Samen.Web.Replay.record_visit(CurrentOrg.declared_org(mount, params, session))}
 
       # ARMED + no authenticated principal → render NOTHING. This is the halt that closes the
       # `handle_params`-on-dead-render bypass.
@@ -98,7 +106,11 @@ defmodule Samen.Web.TenantAuthz do
          # so the tenant `write_scope` helpers (`Samen.Web.TenantRole`) can derive the REAL
          # `Identity.Membership` role on an armed host instead of self-elevating `:member` to
          # `:admin` (S1a).
-         |> assign(:samen_tenant_principal, CurrentOrg.principal_id(mount, session))}
+         |> assign(:samen_tenant_principal, CurrentOrg.principal_id(mount, session))
+         # Session replay: ONE recorded step per visit, on the CONNECTED mount only (the dead
+         # render mounts too — recording both would double every visit). The org + principal
+         # this hook just pinned are exactly what the step carries; nothing is re-resolved.
+         |> Samen.Web.Replay.record_visit()}
     end
   end
 

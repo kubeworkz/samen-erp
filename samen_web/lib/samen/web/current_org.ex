@@ -410,6 +410,21 @@ defmodule Samen.Web.CurrentOrg do
 
   def resolve_actor(_mount, _credential_id, _org_id), do: nil
 
+  @doc """
+  The org this mount DECLARES — the `?org=` selector, else the session's current org, else the
+  mount's `:default_org_id` label. Deliberately NOT `resolve/3`: it never falls back to the
+  directory's first listable org, so it costs no query and grants nothing.
+
+  It exists for the session-replay recorder (`Samen.Web.Replay`), which runs on EVERY tenant
+  mount — including the disarmed dev/dogfood leg — and must name a timeline's org without
+  turning every page mount in dev into a directory scan. Recording observes; it never resolves
+  an identity, so a `?org=` here is only ever the label of the step it wrote.
+  """
+  @spec declared_org(Mount.t() | nil, map(), map()) :: String.t() | nil
+  def declared_org(mount, params, session) do
+    param_org(params) || session_org(session) || default_label(mount)
+  end
+
   defp param_org(params) when is_map(params), do: present(Map.get(params, "org"))
   defp param_org(_), do: nil
 

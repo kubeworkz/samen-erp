@@ -218,6 +218,29 @@ defmodule Samen.Web.OperatorAccountDetailRenderTest do
     assert fresh =~ "in dunning"
   end
 
+  # -- The TWO account identifiers: /accounts/:id vs the drill-in's tenant_org_id -------
+
+  test "every per-tenant drill-in link carries tenant_org_id — the key the impersonation session, aud_event and the analytics ledger share — not the account Org id",
+       %{seed: seed, account: account} do
+    tenant = account.tenant_org_id
+    account_org_id = account.account_org.id
+
+    # The seed makes the two genuinely different columns, so this assertion cannot be
+    # satisfied by an id that happens to be equal on both sides.
+    assert is_binary(tenant) and tenant != account_org_id
+
+    html = detail_html(seed, account)
+
+    for surface <- [:deliverability, :automation, :agents, :activity, :replay] do
+      assert html =~ ~s(href="/operator/#{surface}/#{tenant}"),
+             "#{surface} drill-in must key on tenant_org_id (#{tenant})"
+
+      refute html =~ ~s(href="/operator/#{surface}/#{account_org_id}"),
+             "#{surface} drill-in must NOT key on the account Org id (#{account_org_id}) — " <>
+               "that page resolves a different org and shows nothing"
+    end
+  end
+
   # -- AC-G17-5: masking — the odd operator-plane mount fails MASKED ---------------
 
   test "on a hand-crafted plane: :operator mount the PII evidence renders •••• and no vt_ token leaks; the score (not a PII surface) still renders",

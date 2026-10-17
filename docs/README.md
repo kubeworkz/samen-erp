@@ -27,6 +27,7 @@ process record — useful for archaeology, not required reading.
 | [gate-failures.md](guides/gate-failures.md) | Error message → which verifier fired → what it means → the fix, for every `samen.verify.*` task plus the drift check. |
 | [byo-esp.md](guides/byo-esp.md) | Wiring real outbound email delivery through the fail-honest `Samen.Delivery.Adapter` boundary — Samen ships no first-party ESP integration. |
 | [operator-plane-access.md](guides/operator-plane-access.md) | Every `/operator/*` surface (incl. the fleet cockpit and webhook DLQ replay) mapped to the role it needs, the two gates each route passes, and how to sign in locally in dev vs `prod`. |
+| [session-replay.md](guides/session-replay.md) | The operator Replay screen (`/operator/replay/:org_id`): what a replay IS (surface tokens + registered events, never keystrokes/URLs/PII), how a host wires it, the four honest silence states, and where each proof lives. |
 
 ## Concepts (`docs/concepts/`)
 
