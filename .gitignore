@@ -12,6 +12,9 @@ gate2_scratch/
 # committed. A real deploy uses AWS KMS (OPERATOR TODO). The test suite uses a
 # per-run tmp keystore (test_helper), so this only exists after `MIX_ENV=dev`.
 driftwood/priv/dev_keystore/
+# WS-Masked-Replay P0: the dev-only phoenix_replay probe's compressed recordings. Raw
+# assigns/form values by design — a throwaway dev artifact, never committed.
+driftwood/priv/replay_recordings/
 .gstack/
 
 # dev-only key material — never committed (public-release purge 2026-07-18)

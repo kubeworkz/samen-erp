@@ -27,6 +27,11 @@ defmodule Driftwood.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  # WS-Masked-Replay P0 — `dev_only/` holds the phoenix_replay probe (dashboard router). It is
+  # compiled ONLY in dev, so no test/prod build can reference a `PhoenixReplay` module. It sits
+  # OUTSIDE `lib/` on purpose: `elixirc_paths` compiles a path recursively, so a dev-only
+  # subdirectory of `lib/` would still be compiled by the `:test`/`:prod` `"lib"` entry.
+  defp elixirc_paths(:dev), do: ["lib", "dev_only"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
@@ -48,7 +53,14 @@ defmodule Driftwood.MixProject do
       {:jason, "~> 1.4"},
       {:stream_data, "== 1.3.0"},
       {:simple_sat, "~> 0.1"},
-      {:ash_json_api, "~> 1.7"}
+      {:ash_json_api, "~> 1.7"},
+      # WS-Masked-Replay P0 (docs/ws-masked-replay/build-plan.md) — an ENGINEER-ONLY session
+      # replay for this dev host, fetched/compiled in `:dev` ALONE so a prod release does not
+      # contain it and `:test` cannot reference it. It records raw LiveView assigns, which on a
+      # tenant plane are plane-resolved PLAINTEXT (and form values before any vault write), so
+      # it must never be pointed at a real tenant org — the product mechanism is the masked
+      # first-party `Samen.Replay` in the same workstream, not this dependency.
+      {:phoenix_replay, "~> 0.6", only: :dev}
     ]
   end
 

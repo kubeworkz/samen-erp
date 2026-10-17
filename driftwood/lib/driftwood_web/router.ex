@@ -28,6 +28,27 @@ defmodule DriftwoodWeb.Router do
   import Phoenix.LiveView.Router
   import Samen.Web.Router
 
+  # WS-Masked-Replay P0 (docs/ws-masked-replay/build-plan.md) — the ENGINEER-ONLY
+  # `phoenix_replay` probe. It is ON only where `config :driftwood, :dev_replay_dashboard` is
+  # true at COMPILE time (dev.exs only), so a `:test`/`:prod` route table has no replay route
+  # and a prod build does not even fetch the dependency (`only: :dev` in mix.exs).
+  @dev_replay Application.compile_env(:driftwood, :dev_replay_dashboard, false)
+
+  # The broker's tenant hooks, plus the dev-only recorder. Kept as one compile-time literal
+  # because `live_session/3` takes a literal `:on_mount` list; `PhoenixReplay.Recorder` is just
+  # an atom here, so `:test`/`:prod` compiles without the dependency present.
+  @tenant_mount_hooks [{Samen.Web.TenantAuthz, :require_tenant}] ++
+                        if(@dev_replay, do: [PhoenixReplay.Recorder], else: [])
+
+  # The OPERATOR hooks for the impersonation console, same dev-only recorder. That console is
+  # the one driftwood-local surface with a real `phx-submit`; `/broker` is a read-only board, and
+  # `PhoenixReplay` DISCARDS sessions without interaction (`TailSampling.decision/3` needs a
+  # handled event or a second `handle_params`). A dev probe attached to `/broker` alone renders
+  # an always-empty dashboard, so the console is the second target — over seeded dev data, with
+  # its masked (never plaintext) operator assigns.
+  @operator_mount_hooks [{Samen.Web.Operator.Authz, :require_operator}] ++
+                          if(@dev_replay, do: [PhoenixReplay.Recorder], else: [])
+
   # ADR-013 §4.4 — the current-org data-on-the-mount labels shared by every tenant/shared mount:
   #   :default_org_id — the sensible dev default (Blue Ridge Logistics), so a page with no ?org
   #     renders a populated org (resolution step 3), never a dead-end;
@@ -135,6 +156,12 @@ defmodule DriftwoodWeb.Router do
   # "explicitly versioned, URL-namespaced, e.g. /api/v1").
   forward("/api/v1", DriftwoodWeb.Api.Endpoint)
 
+  # WS-Masked-Replay P0 — the dev-only dashboard, mounted as the router's LAST route (see the
+  # file's final `if @dev_replay` block). It has to come after every real route so `forward "/"`
+  # only ever catches an otherwise-unmatched path, and it forwards `"/"` — not `"/dev/replay"` —
+  # because the dashboard's router carries the prefix itself (it generates its own links from
+  # `scoped_path/2`; a stripped prefix makes every session link 404).
+
   scope "/", DriftwoodWeb do
     pipe_through(:browser)
 
@@ -165,10 +192,11 @@ defmodule DriftwoodWeb.Router do
     # org through `Samen.Web.CurrentOrg` like every framework tenant LiveView, rather than
     # fabricating a `plane: :tenant` actor from `?org=` and discarding the session.
     live_session :driftwood_broker,
-      on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+      on_mount: @tenant_mount_hooks,
       session: %{"samen_mount" => @broker_mount} do
       live("/broker", BrokerLive)
     end
+
     # NOTE (T146): `/operator/impersonate` was moved OUT of this bare `:browser` scope into the
     # operator-authz scope below — it is an OPERATOR surface and must be role-gated, not merely
     # authenticated. Mounting it here (authentication only) was the verifier-found bypass.
@@ -241,6 +269,7 @@ defmodule DriftwoodWeb.Router do
     # renders a populated org, not a dead-end) + `org_directory` (the switcher list + the
     # resolved tenant-name header, over `Driftwood.Directory.orgs/0`).
     samen_module_routes(:crm, Driftwood.Crm, repo: Driftwood.Repo, labels: @current_org_labels)
+
     samen_module_routes(:billing, Driftwood.Billing, repo: Driftwood.Repo, labels: @current_org_labels)
     samen_module_routes(:support, Driftwood.Support, repo: Driftwood.Repo, labels: @current_org_labels)
 
@@ -490,7 +519,7 @@ defmodule DriftwoodWeb.Router do
     # `on_mount` + the `@impersonate_mount`'s `:operator_authority` label close that live-nav
     # vector; a tenant is refused on the socket mount exactly as on HTTP.
     live_session :driftwood_operator_impersonate,
-      on_mount: [{Samen.Web.Operator.Authz, :require_operator}],
+      on_mount: @operator_mount_hooks,
       session: %{"samen_mount" => @impersonate_mount} do
       live("/operator/impersonate", OperatorImpersonationLive)
     end
@@ -521,5 +550,18 @@ defmodule DriftwoodWeb.Router do
         object_cards: %{"freight.driver" => DriftwoodWeb.Chat.DriverCard}
       }
     )
+  end
+
+  # WS-Masked-Replay P0 — the dev-only dashboard, LAST by necessity (a `forward "/"` catch-all
+  # must not shadow a real route). `DriftwoodWeb.DevReplayRouter` is compiled in `:dev` alone
+  # (`elixirc_paths/1`) and this branch is compile-time-false elsewhere, so neither the route
+  # nor a `PhoenixReplay` module reference survives into test/prod. The `:browser` pipeline is
+  # already run by every route above; the forward only ever receives what none of them matched.
+  if @dev_replay do
+    scope "/" do
+      pipe_through(:browser)
+
+      forward("/", DriftwoodWeb.DevReplayRouter)
+    end
   end
 end

@@ -161,3 +161,53 @@ Replay the sabotage (the named test MUST fail, then revert byte-exact):
 * **No recording on a Class B (no-JS) client.** A dead render is not a session.
 * **An operator's own acting-as visit records as that org's step**, with the operator's principal
   as the actor handle — support access shows up in the tenant's timeline, which is the point.
+
+---
+
+## 6 · Engineer-only tool: `phoenix_replay` (dev, dev-only)
+
+The framework's Replay (§1–§5) is a **token-only timeline**: it never stores what a screen said.
+For framework work there is a second, much higher-fidelity tool: the third-party
+[`phoenix_replay`](https://hex.pm/packages/phoenix_replay) package, which records LiveView assigns
+and events and re-renders the recorded view with them (design + build plan:
+`docs/ws-masked-replay/`). It is an **engineer's tool, in dev, over seeded data** — not a product
+surface.
+
+**Where it lives.** `driftwood` only (the vertical with a real UI and dev seeds):
+
+| Concern | Where |
+|---|---|
+| The dependency | `driftwood/mix.exs` — `{:phoenix_replay, "~> 0.6", only: :dev}` |
+| The dashboard router (compiled in `:dev` alone) | `driftwood/dev_only/driftwood_web/dev_replay_router.ex` |
+| The mount + the recorder hook | `driftwood/lib/driftwood_web/router.ex` (`@dev_replay`, `@tenant_mount_hooks`) |
+| Storage + retention | `driftwood/config/dev.exs` → `priv/replay_recordings/` (gitignored, 48 h / 200 files) |
+| The absence proofs | `driftwood/test/replay_dev_only_test.exs` |
+
+**How to use it.** `cd driftwood && mix phx.server`, note the port it prints (`Access … at
+http://localhost:<port>`, a free port), then open `http://localhost:<port>/dev/replay` — **use
+`localhost`, not `127.0.0.1`**: the endpoint's `check_origin` refuses the `127.0.0.1` websocket, so
+the page is a dead render that silently records nothing.
+
+Walk the **operator impersonation console** (`/operator/impersonate?org=…`), type a reason and
+start a session: it is the one driftwood-local surface with a real `phx-submit`. `/broker` alone
+records nothing on purpose — the package discards sessions with no interaction
+(`TailSampling.decision/3` needs a handled event or a second `handle_params`), and the freight
+board's panel links are plain anchors. A recording appears under "Live now" and is saved when the
+node exits (`priv/replay_recordings/`).
+
+A note on the first open: the package's codec tries a `:safe` decode first, and a recording names
+modules the fresh dev node may not have loaded — so on the very first recording it loads every
+available module, which measured **~90 s** here. The dev-replay router pre-loads this host's own
+apps (`DriftwoodWeb.DevReplayWarmup`) to avoid that sweep: first open is now **0.75 s**. If a
+new host adds the dashboard, copy that plug or expect the one-time cost.
+
+**Why it can never be a deployed surface.** Its recordings are **raw** — mount assigns (which on a
+foundry tenant plane are already PII-resolved *plaintext*), `handle_params` params, and (with the
+browser recorder) form values typed before any vault write. That is precisely the store §1–§5
+exists to avoid. So the probe is excluded three ways: the dependency is `only: :dev`, the
+dashboard module is compiled from `dev_only/` (outside `lib/`), and the route sits in a
+compile-time-false branch elsewhere. A `:prod` build does not fetch the dependency at all.
+
+**Never point it at a real tenant org in a deployed environment.** The product mechanism in this
+workstream is the masked first-party `Samen.Replay` (record by reference, resolve on the viewer's
+plane), not this package — see `docs/ws-masked-replay/design.md` §1.
