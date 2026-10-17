@@ -80,6 +80,7 @@ defmodule Samenerp.Seeds do
   def seed! do
     # Ensure the app and its repos are started
     Application.ensure_all_started(:samenerp)
+    ensure_aud_partitions()
 
     if operator_org_seeded?() do
       {:ok, :already_seeded}
@@ -100,12 +101,25 @@ defmodule Samenerp.Seeds do
   def seed!(opts) do
     # Ensure the app and its repos are started
     Application.ensure_all_started(:samenerp)
+    ensure_aud_partitions()
 
     if operator_org_seeded?() do
       {:ok, :already_seeded}
     else
       {:ok, seed_operator_org_and_admin(opts)}
     end
+  end
+
+  # A fresh DEV checkout is migrated into the launch month only, and the daily
+  # `Samen.AuditEvent.PartitionManager` cron that rolls partitions forward in production
+  # does not run under `mix samenerp.seed`. Install the rolling window (previous + current
+  # + next 2 months) so the FIRST audit write after seeding — opening an operator
+  # impersonation session for the drill-ins, a reveal, an erasure — lands instead of
+  # raising `23514 no partition of relation aud_event`. Runs before the `already_seeded`
+  # short-circuit (this is dev infrastructure, not seed data), is idempotent, and only
+  # ever creates, so existing audit rows survive.
+  defp ensure_aud_partitions do
+    Samen.AuditEvent.PartitionManager.ensure_rolling_partitions(Samenerp.Repo)
   end
 
   @doc """

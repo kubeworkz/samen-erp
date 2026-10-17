@@ -1,0 +1,30 @@
+# SABOTAGE: THE DEV SEED'S ROLLING `aud_event` WINDOW LOSES THE CURRENT MONTH —
+# `PartitionManager.ensure_rolling_partitions/2` walks `1..months_ahead` instead of
+# `0..months_ahead`. The seed still prints "Seeded …" and every seeded row still writes,
+# so nothing looks wrong; but the window it installs now starts NEXT month. A fresh
+# checkout migrated past the launch month has no partition for today, and the FIRST audit
+# write after seeding — opening an impersonation session for a drill-in, a reveal, an
+# erasure — fails with `23514 no partition of relation aud_event`, exactly the
+# fresh-checkout breakage the seed call exists to prevent.
+#
+# Aimed at the WINDOW, not at the writer: `ensure_partition/2` still creates what it is
+# given, the create is still idempotent and create-only (no detach/drop), and the daily
+# cron's `perform/1` still rolls forward from `0` — only the seed's own path is wrong.
+#
+# No warning is introduced (the walk simply starts one month later) and the replay runs
+# `mix test`, so nothing is confined or skipped.
+# APP: samen_core
+# TEST_FILES: test/aud_event_test.exs
+# MUST_FAIL: installs the previous+current+next window a dev seed needs
+# MUST_FAIL: never reaches BEHIND
+--- a/samen_core/lib/samen/audit_event/partition_manager.ex
++++ b/samen_core/lib/samen/audit_event/partition_manager.ex
+@@ -266,7 +266,7 @@
+ 
+     back = if months_back > 0, do: Enum.map(1..months_back, &shift_month(anchor, -&1)), else: []
+ 
+-    (back ++ Enum.map(0..months_ahead, &shift_month(anchor, &1)))
++    (back ++ Enum.map(1..months_ahead, &shift_month(anchor, &1)))
+     |> Enum.map(&first_of_month/1)
+     |> Enum.uniq()
+     |> Enum.map(&ensure_partition(repo, &1))

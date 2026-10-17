@@ -353,6 +353,91 @@ defmodule Samen.AuditEventTest do
       Repo.query("DROP TABLE IF EXISTS #{prev_name}")
     end
 
+    test "ensure_rolling_partitions/2 installs the previous+current+next window a dev seed needs" do
+      # A seeded DEV database is migrated into the launch month only, so a checkout on a later
+      # wall clock has NO partition to hold today's audit rows and the first write after a seed
+      # (opening an impersonation session, a reveal, an erasure) raises 23514. The dev seeds call
+      # this before writing anything; it must cover backdated rows too (seed imports history).
+      anchor = ~D[2099-05-20]
+      months = [~D[2099-04-01], ~D[2099-05-01], ~D[2099-06-01], ~D[2099-07-01]]
+      names = Enum.map(months, &PartitionManager.partition_name/1)
+
+      Enum.each(names, fn n ->
+        Repo.query("ALTER TABLE aud_event DETACH PARTITION #{n}")
+        Repo.query("DROP TABLE IF EXISTS #{n}")
+      end)
+
+      refute aud_partition_exists?(hd(names)), "test starts from the fresh-checkout state"
+
+      results = PartitionManager.ensure_rolling_partitions(Repo, today: anchor)
+      assert Enum.all?(results, &match?({:ok, _}, &1))
+
+      assert Enum.map(results, fn {:ok, n} -> n end) == names,
+             "one partition per DISTINCT month: previous, current, next, next+1"
+
+      Enum.each(names, &assert(aud_partition_exists?(&1)))
+
+      # The write that used to fail now lands — both today's and a backdated row.
+      assert {:ok, _} =
+               AuditEvent.insert(Repo, %{
+                 event_type: "system",
+                 subject_id: "seed-today",
+                 occurred_at: ~U[2099-05-20 09:00:00Z]
+               })
+
+      assert {:ok, row} =
+               AuditEvent.insert(Repo, %{
+                 event_type: "system",
+                 subject_id: "seed-backdated",
+                 occurred_at: ~U[2099-04-10 09:00:00Z]
+               })
+
+      # Idempotent re-seed: no-op, and it never drops/rewrites an existing row.
+      assert Enum.all?(
+               PartitionManager.ensure_rolling_partitions(Repo, today: anchor),
+               &match?({:ok, _}, &1)
+             )
+
+      %{rows: [[count]]} =
+        Repo.query!(
+          "SELECT COUNT(*) FROM #{PartitionManager.partition_name(~D[2099-04-01])} WHERE aud_id = $1",
+          [Ecto.UUID.dump!(row.id)]
+        )
+
+      assert count == 1
+
+      Enum.each(names, fn n ->
+        Repo.query("ALTER TABLE aud_event DETACH PARTITION #{n}")
+        Repo.query("DROP TABLE IF EXISTS #{n}")
+      end)
+    end
+
+    test "ensure_rolling_partitions/2 never reaches BEHIND :months_back (no unbounded backfill)" do
+      # `months_back: 0` keeps the dev seed from creating arbitrary history partitions.
+      anchor = ~D[2099-02-10]
+
+      created_names =
+        [~D[2099-01-01], ~D[2099-02-01], ~D[2099-03-01], ~D[2099-04-01]]
+        |> Enum.map(&PartitionManager.partition_name/1)
+
+      [prev_name, current_name | _] = created_names
+
+      Enum.each(created_names, fn n ->
+        Repo.query("ALTER TABLE aud_event DETACH PARTITION #{n}")
+        Repo.query("DROP TABLE IF EXISTS #{n}")
+      end)
+
+      results = PartitionManager.ensure_rolling_partitions(Repo, today: anchor, months_back: 0)
+      assert Enum.all?(results, &match?({:ok, _}, &1))
+      assert aud_partition_exists?(current_name)
+      refute aud_partition_exists?(prev_name), "months_back: 0 must not create the previous month"
+
+      Enum.each(created_names, fn n ->
+        Repo.query("ALTER TABLE aud_event DETACH PARTITION #{n}")
+        Repo.query("DROP TABLE IF EXISTS #{n}")
+      end)
+    end
+
     test "ensure_upcoming_partitions walks CALENDAR months (no skipped month on a day-31 anchor)" do
       # `Date.add(anchor, offset * 31)` from Aug 31 lands on Oct 2 — September would be
       # silently skipped and its partition never created. The calendar walk must hit it.

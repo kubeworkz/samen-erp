@@ -234,6 +234,44 @@ defmodule Samen.AuditEvent.PartitionManager do
     end)
   end
 
+  @doc """
+  Ensure the rolling partitions a **seeded dev database** needs: the `:months_back`
+  PRECEDING months (default 1), the current month, and the `:months_ahead` following
+  months (default 2).
+
+  Why this exists: the `aud_event` migration creates only the FIXED launch-month
+  partition, and the daily `PartitionManager` cron that rolls partitions forward in
+  production does not run under `mix <app>.seed`. A checkout migrated after the launch
+  month therefore has no partition to hold today's audit rows, and the first audit
+  write — opening an impersonation session, a reveal, an erasure — raises
+  `23514 no partition of relation aud_event`. Seeding installs the window the cron
+  would have kept, so a fresh dev checkout is replay- and drill-in-ready on day one.
+
+  Forward AND backward safe, exactly like the cron path: it only ever CREATES
+  (`CREATE TABLE IF NOT EXISTS … PARTITION OF`) and never detaches or drops, so a
+  re-seed is a no-op and any existing row survives.
+
+  Options:
+    * `:months_back` — preceding months to cover (default 1; 0 disables).
+    * `:months_ahead` — following months to cover (default 2).
+    * `:today` — the anchor `Date` (default `Date.utc_today/0`; the test seam).
+
+  Returns the `ensure_partition/2` results (one per distinct month).
+  """
+  @spec ensure_rolling_partitions(module(), keyword()) :: [{:ok, String.t()} | {:error, term()}]
+  def ensure_rolling_partitions(repo, opts \\ []) do
+    months_back = Keyword.get(opts, :months_back, 1)
+    months_ahead = Keyword.get(opts, :months_ahead, 2)
+    anchor = Keyword.get(opts, :today) || Date.utc_today()
+
+    back = if months_back > 0, do: Enum.map(1..months_back, &shift_month(anchor, -&1)), else: []
+
+    (back ++ Enum.map(0..months_ahead, &shift_month(anchor, &1)))
+    |> Enum.map(&first_of_month/1)
+    |> Enum.uniq()
+    |> Enum.map(&ensure_partition(repo, &1))
+  end
+
   # Calendar-exact month arithmetic — `Date.add(d, 30|31)` walks can SKIP a short
   # month (anchor on the 31st hops Jan 31 -> Mar 3), which would leave the skipped
   # month's partition uncreated. Clamping day 29/30/31 to the target month's last

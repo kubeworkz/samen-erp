@@ -74,6 +74,14 @@ defmodule PawChart.Seeds do
   Returns the org id.
   """
   def run(org_id \\ @clinic_org_id) do
+    # Run BEFORE the `seeded?` short-circuit: the rolling `aud_event` window is dev
+    # infrastructure, not seed data. A fresh DEV checkout is migrated into the launch month
+    # only (the daily partition cron does not run under `mix pawchart.seed`), so without this
+    # the first audit write — opening an impersonation session for the operator drill-ins, a
+    # reveal, an erasure — raises `23514 no partition of relation aud_event`. Idempotent, and
+    # it only ever creates, so existing audit rows survive.
+    Samen.AuditEvent.PartitionManager.ensure_rolling_partitions(PawChart.Repo)
+
     if seeded?(org_id) do
       IO.puts("PawChart seeds already present for org #{org_id} — skipping.")
       org_id

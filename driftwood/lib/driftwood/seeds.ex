@@ -265,8 +265,23 @@ defmodule Driftwood.Seeds do
 
   Safe to re-run: the freight fleet + inherited rows are each guarded per-org by a marker, so a
   re-run of `mix driftwood.seed` is idempotent.
+
+  It also installs the rolling `aud_event` partition window (previous + current + next 2
+  months) before writing anything — a fresh checkout is migrated into the launch month only,
+  and the daily partition cron does not run here, so without it the first audit write after
+  seeding (opening an impersonation session for a drill-in, a reveal, an erasure) would raise
+  `23514 no partition of relation aud_event`.
   """
   def dev_seed do
+    # A fresh DEV checkout is migrated into the launch month only, and the daily
+    # `Samen.AuditEvent.PartitionManager` cron that rolls partitions forward in production
+    # does not run under `mix driftwood.seed`. Install the rolling window (previous + current
+    # + next 2 months) so the FIRST audit write after seeding — opening an operator
+    # impersonation session for the Replay / Activity drill-ins, a reveal, an erasure —
+    # lands instead of raising `23514 no partition of relation aud_event`. Idempotent, and it
+    # only ever creates, so re-seeding keeps every existing audit row.
+    Samen.AuditEvent.PartitionManager.ensure_rolling_partitions(Driftwood.Repo)
+
     for %{org_id: org_id} = spec <- @brokerages do
       unless fleet_seeded?(org_id) do
         Driftwood.DogfoodScenario.build(

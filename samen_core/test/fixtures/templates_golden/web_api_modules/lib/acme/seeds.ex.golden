@@ -24,6 +24,14 @@ defmodule Acme.Seeds do
   """
   @spec run() :: String.t()
   def run do
+    # A fresh DEV checkout is migrated into the launch month only, and the daily
+    # `Samen.AuditEvent.PartitionManager` cron that rolls partitions forward in production
+    # does not run under `mix acme.seed`. Install the rolling window (previous +
+    # current + next 2 months) so the FIRST audit write after seeding — opening an operator
+    # impersonation session, a reveal, an erasure — lands instead of raising
+    # `23514 no partition of relation aud_event`. Idempotent; it only ever creates.
+    Samen.AuditEvent.PartitionManager.ensure_rolling_partitions(Acme.Repo)
+
     for {name, segment, secret} <- records() do
       Samen.Factory.create!(
         Record,

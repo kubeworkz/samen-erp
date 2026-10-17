@@ -15,7 +15,10 @@ defmodule Mix.Tasks.Driftwood.Seed do
   OWN branded book (carriers / shippers / contacts / emails / loads), so drilling into Summit shows
   Summit's data — not a Blue-Ridge clone. Then it rebuilds the cross-tenant aggregate and stands up
   the operator accounts / platform billing (2 past-due for dunning) / desk / leads. Idempotent
-  (guarded by per-org markers), so re-running is safe.
+  (guarded by per-org markers), so re-running is safe. It also ensures the rolling `aud_event`
+  partition window (previous + current + next 2 months) first, so a fresh checkout can open an
+  operator impersonation session — the first post-seed audit write — without a
+  `23514 no partition of relation aud_event`.
 
   Usage:
 
