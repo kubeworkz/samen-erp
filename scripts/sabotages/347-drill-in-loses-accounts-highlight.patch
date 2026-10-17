@@ -1,0 +1,28 @@
+# SABOTAGE: THE PLACE-KEEPING MAPPING IS NEUTERED — `Samen.Web.Operator.Live.nav_active/1`
+# returns the drill-in's OWN atom instead of `:accounts`, so every per-tenant drill-in
+# (`/operator/replay/:org_id`, `/operator/deliverability/:org_id`, `/operator/automation/:org_id`,
+# `/operator/agents/:org_id`, `/operator/activity/:org_id`) renders a sidebar in which NOTHING is
+# highlighted. The operator is still on the right page with working links — but the chrome says
+# "you are nowhere", so after a drill-in they no longer know WHICH top-level surface they came
+# from (Accounts is the only way in: these five have no top-level index).
+#
+# Aimed at the MAPPING, not at reachability: routes, the T150 drill-in gate, the pages' own
+# `active: :replay | :deliverability | …` and the nav's link set are all untouched. What breaks is
+# the sidebar's answer to "where am I?", which is what the two proofs below exist to catch.
+#
+# No warning is introduced (the module attribute stays used by the remaining guard clause) and the
+# replay runs `mix test`, so nothing is confined or skipped.
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_sidebar_link_invariant_test.exs test/samen/web/operator_replay_test.exs
+# MUST_FAIL: every per-tenant drill-in lights the ACCOUNTS nav item
+--- a/samen_web/lib/samen/web/operator/live.ex
++++ b/samen_web/lib/samen/web/operator/live.ex
+@@ -50,7 +50,7 @@
+   # which then injects that attrs' default-assigns wrapper around it.
+   @per_tenant_drill_ins [:deliverability, :automation, :agents, :activity, :replay]
+ 
+-  defp nav_active(active) when active in @per_tenant_drill_ins, do: :accounts
++  defp nav_active(active) when active in @per_tenant_drill_ins, do: active
+   defp nav_active(active), do: active
+ 
+   attr :mount, Mount, default: nil

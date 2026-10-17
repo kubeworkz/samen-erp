@@ -33,6 +33,26 @@ defmodule Samen.Web.Operator.Live do
   def writable?(%Mount{plane: %{kind: :operator}}), do: false
   def writable?(_), do: true
 
+  # The PER-TENANT DRILL-IN surfaces: each is keyed on an `:org_id` route param and has NO
+  # top-level index (see the T149 P1 note inside the nav group), so the ONLY way in is
+  # Accounts → a specific tenant. A drill-in therefore lights ACCOUNTS in the sidebar: an
+  # operator three clicks into one must still see WHERE IN THE PLANE they are, instead of a
+  # bar with nothing highlighted (which reads as "you are nowhere", the same lost-place
+  # failure as a mislink, just quieter).
+  #
+  # The page still passes its OWN atom (`active: :replay`), so the call site keeps saying which
+  # surface it is; this mapping is the ONE place that knows the way in is Accounts. Keep it
+  # here rather than in each page: five pages each hand-mapping to `:accounts` would lose that
+  # self-description and could drift apart.
+  #
+  # NOTE: defined ABOVE `operator_sidebar/1`'s `attr` declarations on purpose — a `def` sitting
+  # between an `attr` block and its component is taken as the COMPONENT by `Phoenix.Component`,
+  # which then injects that attrs' default-assigns wrapper around it.
+  @per_tenant_drill_ins [:deliverability, :automation, :agents, :activity, :replay]
+
+  defp nav_active(active) when active in @per_tenant_drill_ins, do: :accounts
+  defp nav_active(active), do: active
+
   attr :mount, Mount, default: nil
   attr :active, :atom, default: nil
 
@@ -59,6 +79,10 @@ defmodule Samen.Web.Operator.Live do
   (a bare-tenant href fails the test).
   """
   def operator_sidebar(assigns) do
+    # `Map.get/2` (not `assigns.active`): `render_component/2` in tests hands the component a
+    # bare map WITHOUT the `attr` defaults filled in, so the key can be absent entirely.
+    assigns = assign(assigns, :nav_active, nav_active(Map.get(assigns, :active)))
+
     ~H"""
     <.sidebar
       title={label(@mount, :operator_workspace, "Operator")}
@@ -77,37 +101,37 @@ defmodule Samen.Web.Operator.Live do
       </:search>
 
       <.nav_group label="Operator plane">
-        <.nav_item label="Accounts" href="/operator/accounts" active={@active == :accounts}>
+        <.nav_item label="Accounts" href="/operator/accounts" active={@nav_active == :accounts}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /></svg>
           </:icon>
         </.nav_item>
-        <.nav_item label="Platform billing" href="/operator/billing" active={@active == :billing}>
+        <.nav_item label="Platform billing" href="/operator/billing" active={@nav_active == :billing}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
           </:icon>
         </.nav_item>
-        <.nav_item label="Revenue" href="/operator/revenue" active={@active == :revenue}>
+        <.nav_item label="Revenue" href="/operator/revenue" active={@nav_active == :revenue}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>
           </:icon>
         </.nav_item>
-        <.nav_item label="Analytics" href="/operator/analytics" active={@active == :analytics}>
+        <.nav_item label="Analytics" href="/operator/analytics" active={@nav_active == :analytics}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>
           </:icon>
         </.nav_item>
-        <.nav_item label="Desk" href="/operator/desk" active={@active == :desk}>
+        <.nav_item label="Desk" href="/operator/desk" active={@nav_active == :desk}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
           </:icon>
         </.nav_item>
-        <.nav_item label="Flags" href="/operator/flags" active={@active == :flags}>
+        <.nav_item label="Flags" href="/operator/flags" active={@nav_active == :flags}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V4" /><path d="M4 4h12l-2 4 2 4H4" /></svg>
           </:icon>
         </.nav_item>
-        <.nav_item label="Webhook DLQ" href="/operator/webhooks" active={@active == :webhooks}>
+        <.nav_item label="Webhook DLQ" href="/operator/webhooks" active={@nav_active == :webhooks}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v6m0 0 3-3m-3 3L9 5" /><path d="M5 12a7 7 0 0 0 7 7 7 7 0 0 0 7-7" /></svg>
           </:icon>
@@ -118,7 +142,7 @@ defmodule Samen.Web.Operator.Live do
           top-level index). Rendered ONLY on a `fleet_cockpit: true` mount (§6.3's `roles[:fleet]`
           gate runs inside `FleetLive` itself; this nav item is chrome, not the gate).
         --%>
-        <.nav_item :if={Mount.label(@mount, :fleet_cockpit, false)} label="Fleet" href="/operator/fleet" active={@active == :fleet}>
+        <.nav_item :if={Mount.label(@mount, :fleet_cockpit, false)} label="Fleet" href="/operator/fleet" active={@nav_active == :fleet}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
           </:icon>
@@ -134,8 +158,11 @@ defmodule Samen.Web.Operator.Live do
           mislink the moduledoc above already removed). `operator_sidebar_link_invariant_test.exs`
           proves no bare-tenant/off-plane href remains; there is no `active: :deliverability |
           :automation | :activity` case here because no top-level surface exists to be active.
+          Instead each of them (plus `:agents` and `:replay`) lights ACCOUNTS via
+          `nav_active/1` above — the bar keeps the operator's place without inventing a
+          top-level item that would mislink back to the same Accounts page.
         --%>
-        <.nav_item label="Portfolio" href="/operator/aggregate" active={@active == :aggregate}>
+        <.nav_item label="Portfolio" href="/operator/aggregate" active={@nav_active == :aggregate}>
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9m6 10V5m6 14v-7" /></svg>
           </:icon>

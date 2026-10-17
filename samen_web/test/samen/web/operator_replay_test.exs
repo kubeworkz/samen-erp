@@ -357,6 +357,12 @@ defmodule Samen.Web.OperatorReplayTest do
     assert html =~ "Opened Broker"
     assert html =~ "replay-scope-note"
     assert html =~ "Does not"
+
+    # Place keeping through the REAL page: Replay passes `active: :replay`, and because it is a
+    # per-tenant drill-in (no top-level index) the sidebar must show the operator they are still
+    # inside Accounts, not a bar with nothing lit.
+    assert html =~ ~r/href="\/operator\/accounts"\s+class="on"/
+    refute html =~ ~r/href="\/operator\/desk"\s+class="on"/
   end
 
   test "no org resolved renders the honest empty state" do
@@ -618,6 +624,55 @@ defmodule Samen.Web.OperatorReplayTest do
 
     assert html =~ ~s(href="/operator/accounts/#{account_org_id}")
     refute html =~ ~s(href="/operator/accounts/#{tenant}")
+  end
+
+  # The crumb is the ONLY place the operator reads "which tenant am I looking at?" — a raw
+  # `tenant_org_id` UUID answers a question nobody asked. The account row is already resolved
+  # for the back-link, so its non-PII `Org.name` is free to render.
+  test "the breadcrumb NAMES the tenant and links Accounts, instead of showing a raw drill-in id" do
+    seed = Samen.WebTest.Operator.Seeds.seed_all(tenants: 1)
+    account = hd(seed.accounts)
+    tenant = account.tenant_org_id
+    name = account.account_org.name
+
+    assert name == "Blue Ridge Logistics 1"
+
+    insert_step!(tenant, actor: "actor-a", at: NaiveDateTime.utc_now())
+
+    operator_id = Ash.UUID.generate()
+    open_impersonation!(operator_id, tenant)
+
+    socket =
+      %Phoenix.LiveView.Socket{}
+      |> Phoenix.Component.assign(:samen_mount, build_operator_mount(seed.operator_org_id))
+      |> with_operator_identity(operator_id)
+
+    html = socket |> ReplayLive.load(tenant, nil) |> then(&render_html(ReplayLive, &1.assigns))
+    crumb = crumbs(html)
+
+    assert crumb =~ "Accounts"
+    assert crumb =~ ~s(href="/operator/accounts")
+    assert crumb =~ name
+    assert crumb =~ "Replay"
+    refute crumb =~ tenant
+  end
+
+  test "with NO account row behind the drill-in, the crumb falls back to the raw id (never a guessed name)" do
+    org_id = Ash.UUID.generate()
+    html = org_id |> operator_socket() |> ReplayLive.load(org_id, nil) |> then(&render_html(ReplayLive, &1.assigns))
+
+    crumb = crumbs(html)
+    assert crumb =~ org_id
+    assert crumb =~ "Replay"
+  end
+
+  # The topbar's `.crumb` block: the bar is rendered before every other page content, and its
+  # inner markup is only spans/links, so the first `</div>` closes it.
+  defp crumbs(html) do
+    case Regex.run(~r/class="crumb">(.*?)<\/div>/s, html) do
+      [_, crumb] -> crumb
+      nil -> ""
+    end
   end
 
   test "the replay drill-in rides the SHIPPED impersonation gate (no replay-local reimplementation)" do

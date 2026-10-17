@@ -517,32 +517,49 @@ defmodule Samen.Web.Operator.Reads do
   end
 
   @doc """
-  The account Org's `id` for a `tenant_org_id` (Org.slug) — the ONE direction a per-tenant
-  drill-in needs to link BACK to its account page.
+  The account Org ROW behind a `tenant_org_id` (Org.slug) — the ONE direction a per-tenant
+  drill-in needs to link BACK to (and NAME) its account page.
 
   Drill-in URLs carry `tenant_org_id` (the value the impersonation session, `aud_event.subject_id`
   and the analytics ledger use), while `/operator/accounts/:id` keys on the Org ROW's `id`. Those
-  are different columns of the same row, so a `← Account` link cannot be built from the drill-in
-  id; this bounded lookup (`limit(1)`, the same trusted non-PII grouping read as
-  `account_orgs/2`, operator-namespace filter) supplies the other one. `nil` on an unknown org or
-  any read error — the caller then renders no link rather than a dead one.
+  are different columns of the same row, so a `← Account` link and a breadcrumb naming the tenant
+  cannot be built from the drill-in id; this bounded lookup (`limit(1)`, the same trusted
+  non-PII grouping read as `account_orgs/2`, operator-namespace filter) supplies both.
+
+  Returns `%{id: id, name: name}` or `nil` (unknown org, or any read error) — the caller then
+  renders no link and falls back to the raw drill-in id rather than a dead or invented label.
+
+  MASKING: `name` is the account `Org`'s own name — `Org` carries NO PII (name/slug/plan only,
+  ADR-010 §8.3), the same non-PII field the account drill-down's breadcrumb already renders. The
+  PII-bearing joins (Users/Customers/Messages) are NOT read here.
   """
-  def account_id_for_tenant(mount, operator_org_id, tenant_org_id)
+  def account_for_tenant(mount, operator_org_id, tenant_org_id)
       when is_binary(operator_org_id) and is_binary(tenant_org_id) do
     Mount.resource(mount, Org)
-    |> Ash.Query.ensure_selected([:id])
+    |> Ash.Query.ensure_selected([:id, :name])
     |> Ash.Query.filter(org_id == ^operator_org_id and slug == ^tenant_org_id)
     |> Ash.Query.limit(1)
     |> Ash.read!(authorize?: false)
     |> case do
-      [%{id: id}] when is_binary(id) -> id
+      [%{id: id} = org] when is_binary(id) -> %{id: id, name: org.name}
       _ -> nil
     end
   rescue
     _ -> nil
   end
 
-  def account_id_for_tenant(_mount, _operator_org_id, _tenant_org_id), do: nil
+  def account_for_tenant(_mount, _operator_org_id, _tenant_org_id), do: nil
+
+  @doc """
+  The account Org's `id` for a `tenant_org_id` — the link-only view of `account_for_tenant/3`,
+  kept for callers that need nothing but the ID. Delegates, so there is ONE lookup shape.
+  """
+  def account_id_for_tenant(mount, operator_org_id, tenant_org_id) do
+    case account_for_tenant(mount, operator_org_id, tenant_org_id) do
+      %{id: id} -> id
+      nil -> nil
+    end
+  end
 
   @doc """
   Assemble ONE account's drill-down (WS-B / B4, AC-G17-4): the scored account row

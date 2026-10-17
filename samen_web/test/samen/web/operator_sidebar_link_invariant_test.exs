@@ -16,6 +16,12 @@ defmodule Samen.Web.OperatorSidebarLinkInvariantTest do
 
   Sabotage-refutable: re-add ANY bare tenant-plane `href` to `operator_sidebar/1` (e.g. the old
   `<.nav_item label="Notifications" href="/notifications">`) and this test FAILS.
+
+  The second invariant here is PLACE KEEPING: the per-tenant DRILL-INS (Deliverability /
+  Automation health / Agent health / Activity / Replay) have no top-level index — the only way
+  in is Accounts → a specific tenant — so each must light ACCOUNTS. A sidebar with nothing
+  highlighted reads as "you are nowhere"; the operator has lost their place just as surely as
+  a mislink would have taken them somewhere wrong.
   """
   use ExUnit.Case, async: true
 
@@ -97,5 +103,44 @@ defmodule Samen.Web.OperatorSidebarLinkInvariantTest do
 
       assert ok, "unexpected operator-chrome href (possible plane leak): #{href}"
     end
+  end
+
+  # ===========================================================================
+  # Place keeping — a per-tenant drill-in lights ACCOUNTS
+  # ===========================================================================
+
+  # The five surfaces keyed on an `:org_id` param with NO top-level index route. Each page
+  # passes its own atom (`active: :replay`, …); the sidebar resolves it to Accounts.
+  @drill_ins [:deliverability, :automation, :agents, :activity, :replay]
+
+  # `nav_item/1` renders `<a href="…" class="on">` when active and OMITS `class` otherwise, so
+  # an exact `class="on"` match addresses ONLY the highlighted nav item (the footer switcher's
+  # selected entry is `class="ws-switcher-item on"`, a different value).
+  defp highlighted(html) do
+    Regex.scan(~r/href="([^"]*)"\s+class="on"/, html) |> Enum.map(fn [_, href] -> href end)
+  end
+
+  defp sidebar(active) do
+    render_component(&Samen.Web.Operator.Live.operator_sidebar/1,
+      mount: operator_mount(),
+      active: active
+    )
+  end
+
+  test "every per-tenant drill-in lights the ACCOUNTS nav item, and only it" do
+    for active <- @drill_ins do
+      assert highlighted(sidebar(active)) == ["/operator/accounts"],
+             "#{inspect(active)} is keyed on an org_id with no top-level index, so it must show " <>
+               "Accounts highlighted; got #{inspect(highlighted(sidebar(active)))} — the operator " <>
+               "has lost their place in the plane"
+    end
+  end
+
+  test "a TOP-LEVEL surface still lights its own item — the drill-in rule is not a blanket" do
+    # Anti-tautology: if the mapping swallowed EVERY atom (or the assertion just looked for
+    # "some item is on"), the test above would still pass while the nav became useless.
+    assert highlighted(sidebar(:desk)) == ["/operator/desk"]
+    assert highlighted(sidebar(:accounts)) == ["/operator/accounts"]
+    assert highlighted(sidebar(nil)) == []
   end
 end

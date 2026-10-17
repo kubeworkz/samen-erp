@@ -188,6 +188,17 @@ defmodule Samen.Web.Operator.ReplayLive do
   def load(socket, org_id, window_hours, opts \\ []) do
     mount = socket.assigns[:samen_mount]
 
+    # ONE lookup serves BOTH the "← Account" back-link and the breadcrumb's tenant name, and it
+    # is assigned up front so every branch below (deny / out-of-scope / active / the test seam)
+    # renders the same crumb — a deny state must still say WHICH tenant you asked for.
+    account = account_for(socket, org_id)
+
+    socket =
+      assign(socket,
+        account_link_id: account && account.id,
+        tenant_name: account && account.name
+      )
+
     case Keyword.fetch(opts, :replay) do
       {:ok, override} ->
         select_session(socket, override, org_id, window_hours, opts)
@@ -202,7 +213,6 @@ defmodule Samen.Web.Operator.ReplayLive do
               replay: nil,
               impersonation: :none,
               open_error: nil,
-              account_link_id: account_link(socket, org_id),
               steps: [],
               playhead: 0,
               playing: false,
@@ -235,7 +245,6 @@ defmodule Samen.Web.Operator.ReplayLive do
       replay: nil,
       impersonation: posture,
       open_error: nil,
-      account_link_id: account_link(socket, org_id),
       steps: [],
       playhead: 0,
       playing: false,
@@ -263,7 +272,6 @@ defmodule Samen.Web.Operator.ReplayLive do
       replay: replay,
       impersonation: :active,
       open_error: nil,
-      account_link_id: account_link(socket, org_id),
       selected_ref: selected && selected.ref,
       steps: steps,
       playhead: playhead,
@@ -274,15 +282,15 @@ defmodule Samen.Web.Operator.ReplayLive do
 
   # The account page keys on the account Org ROW's id, while this page (like every per-tenant
   # drill-in) keys on `tenant_org_id`. That lookup is the ONLY reason this page reads beyond the
-  # ledger, it is `limit(1)`, and it grants nothing — `nil` renders no back-link rather than a
-  # dead one.
-  defp account_link(socket, org_id) do
+  # ledger, it is `limit(1)`, and it grants nothing — `nil` renders no back-link (and a raw
+  # drill-in id in the crumb) rather than a dead link or an invented tenant name.
+  defp account_for(socket, org_id) do
     mount = socket.assigns[:samen_mount]
 
     with %Samen.Web.Mount{} <- mount,
          operator_org_id when is_binary(operator_org_id) <- Operator.org_id(mount),
          true <- is_binary(org_id) do
-      Samen.Web.Operator.Reads.account_id_for_tenant(mount, operator_org_id, org_id)
+      Samen.Web.Operator.Reads.account_for_tenant(mount, operator_org_id, org_id)
     else
       _ -> nil
     end
@@ -299,7 +307,19 @@ defmodule Samen.Web.Operator.ReplayLive do
           <.operator_sidebar mount={@samen_mount} active={:replay} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Replay" crumbs={["Operator plane", "Replay", @org_id || "—"]}>
+        <%!-- "Operator plane" stays the leading crumb (the plane marker every operator page
+              carries); the way here was Accounts, so that crumb is a real link, and the tenant
+              is NAMED (Org.name, non-PII) instead of a raw UUID. Falls back to the drill-in id
+              when no account row resolves — never to a guessed name. --%>
+        <.topbar
+          title="Replay"
+          crumbs={[
+            "Operator plane",
+            {"Accounts", "/operator/accounts"},
+            @tenant_name || @org_id || "—",
+            "Replay"
+          ]}
+        >
           <:actions>
             <a :if={@account_link_id} href={"/operator/accounts/#{@account_link_id}"} id="back-to-account" style="font-size:12px;color:#3B4CCA;margin-right:14px">← Account</a>
             <a href="/operator/accounts" id="back-to-accounts" style="font-size:12px;color:#3B4CCA">← Accounts</a>

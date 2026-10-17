@@ -1,0 +1,26 @@
+# SABOTAGE: THE REPLAY CRUMB GOES BACK TO THE RAW DRILL-IN ID — `ReplayLive`'s breadcrumb drops
+# the tenant NAME and renders `@org_id` alone, so `/operator/replay/:org_id` shows
+# "Operator plane / Accounts / 0f0...-... / Replay". The operator is told the answer to
+# "which tenant am I looking at?" as a UUID: the account row is still resolved (the "← Account"
+# back-link still works), only the human-readable label is thrown away.
+#
+# Aimed at the LABEL, not at the lookup: `Reads.account_for_tenant/3` (bounded, limit(1),
+# operator-namespace filtered) is untouched, the fallback path for an unknown account still
+# renders the id, the Accounts crumb is still a link, and the T150 drill-in gate is untouched.
+#
+# No warning is introduced (the `:tenant_name` assign is simply never read) and the replay runs
+# `mix test`, so nothing is confined or skipped.
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_replay_test.exs
+# MUST_FAIL: the breadcrumb NAMES the tenant
+--- a/samen_web/lib/samen/web/operator/replay_live.ex
++++ b/samen_web/lib/samen/web/operator/replay_live.ex
+@@ -316,7 +316,7 @@
+           crumbs={[
+             "Operator plane",
+             {"Accounts", "/operator/accounts"},
+-            @tenant_name || @org_id || "—",
++            @org_id || "—",
+             "Replay"
+           ]}
+         >
