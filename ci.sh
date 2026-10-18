@@ -183,7 +183,7 @@ echo "==> Running AI runtime eval + mask-leak red-team tier (ADR-043 D8 / §10 �
 echo "==> AI eval tier: PASSED"
 fi
 
-if ! skip_tier verifiers "the whole-tree verifiers (agent_coverage · tool_actor_identity · tool_surface · analytics_producer)"; then
+if ! skip_tier verifiers "the whole-tree verifiers (agent_coverage · tool_actor_identity · tool_surface · replay_schema · analytics_producer)"; then
 # --- agent-coverage verifier (ADR-047 A7 / §9#6) --------------------------------------
 # The agent loop A1-A6 built is made SELF-DEFENDING here. `mix samen.verify.agent_coverage`
 # runs from samen_core but scans the WHOLE umbrella tree (the anti-bypass probe technique),
@@ -242,6 +242,30 @@ echo "==> Running tool-surface verifier (T183b, UXD-11/UXD-12 — Samen.AI.ToolS
   mix samen.verify.tool_surface
 )
 echo "==> tool-surface verifier: PASSED"
+
+# --- replay-schema verifier (ADR-052 §3 R6 / Lane B P1) --------------------------------
+# Masked session replay is the one feature whose STORAGE is the whole risk: the value a frame
+# would record is exactly the value the vault exists to keep out of Postgres. ADR-052 answers
+# that with an ALLOWLIST — a frame may contain only the closed capture vocabulary
+# (Samen.Replay.Values) under a declared per-kind key policy (Samen.Replay.FrameSchema) — and
+# `mix samen.verify.replay_schema` is the check that the allowlist is still an allowlist. Its
+# load-bearing half is BEHAVIOURAL: it drives the real `validate/1` with tampered frames (a
+# plaintext string, a bare `vt_` token, an unknown kind, a key outside a closed set, an
+# oversized payload), every keep-listed key with a PII-shaped value, and probes
+# `Values.sanitize/2` for fail-honesty — so a refusal that stopped firing flips the gate even
+# when the declarations still look right (that is exactly what sabotage 350 does). The
+# declaration half additionally refuses a frame kind with no key policy, an empty closed key
+# set, a carrier-shaped kind/key/keep-list entry, and a `max_payload_bytes` above its hard
+# ceiling. Module-introspecting (not tree-scoped), so it is NOT in Samen.Verifier.Registry's
+# `samen.verify.fleet` walk. Fail-closed (:erlang.halt(1)); P2 (capture) is what starts passing
+# real frames through `validate/1`, this gate is the contract it must satisfy.
+echo ""
+echo "==> Running replay-schema verifier (ADR-052 §3 R6 — masked-replay allowlist + live refusals)"
+(
+  cd "$REPO_ROOT/samen_core"
+  mix samen.verify.replay_schema
+)
+echo "==> replay-schema verifier: PASSED"
 
 # --- analytics-producer verifier (ADR-021 / mount-ledger Amendment 3) ------------------
 # The SILENT-EMPTY-FUNNEL gate, run TREE-SCOPED over the whole checkout: any app whose

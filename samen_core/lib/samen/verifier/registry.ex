@@ -43,10 +43,11 @@ defmodule Samen.Verifier.Registry do
       reading the live schema/catalog. There is no tree to point them at; pointing them at a
       *different* tree would scan the wrong DB, which is a worse lie than not running them.
     * **Module-introspecting tiers** — `same_org_fk`, `pii_classify`, `tool_surface`,
-      `tool_actor_identity`, `metric_labels`, `oban_queues`, `api_contract`, `ai_prompt_masking`
-      — decide by introspecting loaded Ash domains / resource modules / a committed snapshot.
-      Their "tree" is the compiled app, not a directory of files, so `--root` would change
-      nothing about what they check.
+      `tool_actor_identity`, `replay_schema`, `metric_labels`, `oban_queues`, `api_contract`,
+      `ai_prompt_masking` — decide by introspecting loaded Ash domains / resource modules / a
+      committed snapshot (`replay_schema` additionally DRIVES the loaded
+      `Samen.Replay.FrameSchema.validate/1` with tampered frames). Their "tree" is the compiled
+      app, not a directory of files, so `--root` would change nothing about what they check.
     * `ai_prompt_masking` reads source, but only the compile-time path of the modules it has
       already discovered by introspection — there is no configurable walk to point at a tree.
 

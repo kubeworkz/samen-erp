@@ -605,6 +605,75 @@ shipped `samen_core/test/ai/tool_surface_test.exs` suite).
 `surfaces/0` set to the four named surfaces; move an `effect: :write` action off the
 `:ci_eval` surface (or make the action genuinely read-only).
 
+### `mix samen.verify.replay_schema`
+
+**Errors** (`samen_core/lib/samen/replay/frame_schema.ex` — the schema's own `violations/1`; the
+task in `samen_core/lib/mix/tasks/samen.verify.replay_schema.ex` only formats and halts):
+
+```text
+replay schema: declares only N frame kind(s)
+replay schema: a declared frame kind has NO payload key policy ([:ghost_kind])
+replay schema: a payload key policy names a kind that is not declared ([:ghost])
+replay schema: a frame kind declares an EMPTY payload key set (an empty closed set admits nothing and hides a mistake)
+replay schema: a closed payload key set contains a key that is not a bounded key
+replay schema: a declared kind or envelope key is `vt_`-prefixed, PII-shaped, or over the key bound
+replay schema: the keep-list has fewer than 2 entries
+replay schema: a keep-list entry is not a bounded key
+replay schema: max_payload_bytes (N) exceeds hard_payload_ceiling (M)
+replay schema: the bounded-type vocabulary contains a forbidden text carrier ([:string])
+replay schema: a capture term is missing from the bounded-type vocabulary
+replay schema: a closed redacted/placeholder kind is carrier-shaped
+replay schema: a frame payload carrying a plaintext string is NOT refused (the vocabulary's allowlist is not being applied)
+replay schema: a frame payload carrying a BARE `vt_` vault token is NOT refused (a token may only travel inside a `%Samen.Masked{}`)
+replay schema: an UNKNOWN frame kind is NOT refused
+replay schema: a key outside a CLOSED payload key set is NOT refused
+replay schema: an OVERSIZED frame payload is NOT refused
+replay schema: a keep-listed key ACCEPTS a PII-shaped value (the keep-list is a smuggling path)
+replay schema: the vocabulary ACCEPTS a plaintext string — the probes above would be vacuous
+replay schema: Samen.Replay.Values.sanitize/2 returned an acceptable-looking value for a PII-bearing probe instead of refusing (ADR-014: never `{:ok, _}` for work not done)
+```
+
+**Meaning:** Lane B P1 of masked session replay (ADR-052 §2.2/§2.4/§3 R6) — a replay frame is the
+one artifact whose *storage* is the whole risk, because the value it would record is exactly the
+value the vault exists to keep out of Postgres. ADR-052 answers that with an **allowlist**, and
+this tier is the check that the allowlist is still an allowlist. It runs in two halves, and the
+second is the load-bearing one:
+
+1. **declaration** — `Samen.Replay.FrameSchema.snapshot/0` must declare at least five frame kinds
+   (`:mount` `:params` `:render` `:event` `:info`), a payload key policy for every kind and no
+   policy for an undeclared one, a non-empty bounded key set wherever the set is closed, a
+   keep-list whose entries are bounded keys, and `max_payload_bytes/0` positive and within
+   `hard_payload_ceiling/0` (a frame may not be unbounded by declaration). No kind, envelope key,
+   bounded type or keep-list entry may be `vt_`-prefixed, PII-shaped or over the key bound, and no
+   forbidden text carrier (`:string` `:binary` `:text` …) may appear in the vocabulary;
+2. **behaviour** — the REAL `Samen.Replay.FrameSchema.validate/1` is driven with tampered frames (a
+   plaintext string, a bare `vt_` token, an unknown kind, a key outside a closed set, an oversized
+   payload), every keep-listed key with a PII-shaped value, and `Samen.Replay.Values.sanitize/2` is
+   probed for fail-honesty. **Every one of those must still be refused.** A gate that only read the
+   declarations could not notice a refusal that quietly stopped firing — that is precisely the
+   sabotage twin's shape.
+
+Anti-vacuity is explicit: a plaintext string must be rejected by the vocabulary itself (the
+"probes above would be vacuous" check), the `sanitize/2` probe raises at P1 and would have to return
+a vocabulary-shaped value to pass once P2 implements the walk, and every declaration rule is
+refutable by feeding `violations/1` a tampered snapshot (`samen_core/test/replay_frame_schema_test.exs`).
+Module-introspecting, not tree-scoped, so it is deliberately absent from
+`Samen.Verifier.Registry`'s `mix samen.verify.fleet` roster. Wired into the ROOT `ci.sh`
+`verifiers` tier beside `mix samen.verify.tool_surface`; the subprocess exit-code red path lives in
+`samen_core/test/verify_replay_schema_test.exs` (a frame kind injected with no key policy via
+`SAMEN_REPLAY_SCHEMA_INJECT_KIND_WITHOUT_POLICY`).
+
+**Fix:** give the frame kind a payload key policy in `@payload_keys` (a closed list of bounded keys,
+or `:bounded_keys` for the assign-shaped kinds); restore a shrunk closed set or keep-list instead of
+deleting the entry that tripped it; keep `max_payload_bytes/0` at or under
+`hard_payload_ceiling/0`; move a `vt_`/PII-shaped value into a `%Samen.Masked{}`/`%Ref{}` rather than
+widening a key; and if a **behavioural** check fired, put the refusal back in `validate/1` — the
+schema still *looking* closed while nothing is refused is the failure, not the fix.
+
+Adversarial twin: `scripts/sabotages/350-replay-schema-raw-string-refusal-dropped.patch` (the
+binary branch of `validate/1` accepts every string, so the schema's declaration checks stay green
+while a plaintext value is admitted) — it names the test that must flip.
+
 ### `mix samen.verify.fleet_wire`
 
 **Errors** (`samen_core/lib/mix/tasks/samen.verify.fleet_wire.ex`):

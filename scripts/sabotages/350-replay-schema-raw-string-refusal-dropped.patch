@@ -1,0 +1,41 @@
+# SABOTAGE: MASKED SESSION REPLAY LOSES ITS RAW-STRING REFUSAL — `Samen.Replay.FrameSchema`
+# (ADR-052 §3 R6, Lane B P1). `validate/1`'s binary branch no longer consults the capture
+# vocabulary for any key outside the keep-list, so a bare plaintext string — a driver's name, a
+# note, a status line: exactly the values the vault exists to keep out of Postgres — is admitted
+# into a recorded frame. The frame still validates, still encodes, and P2's capture would store it.
+#
+# Aimed at the VALIDATE layer, not at the declarations: `@payload_keys`, the keep-list, the byte
+# cap, `Values.bounded_types/0` and every "declarations still look closed" check are untouched,
+# and the behavioural keep-list probes still refuse a PII-shaped value on a keep-listed key. The
+# sabotage is precisely the decay this gate exists to catch — the schema LOOKING closed while
+# nothing is refused — so it must be caught by the BEHAVIOURAL half of
+# `FrameSchema.violations/1` (the plaintext-string probe), not by any snapshot comparison. That
+# flips both the in-process `violations/1` assertions and the subprocess exit-code green path
+# (`mix samen.verify.replay_schema` must start exiting 1 on the real schema).
+#
+# No warning is introduced (the keep-list helper stays referenced, `key` stays used) and the
+# replay runs `mix test`, so nothing is confined or skipped.
+# APP: samen_core
+# TEST_FILES: test/replay_frame_schema_test.exs test/verify_replay_schema_test.exs
+# MUST_FAIL: the real schema is clean
+diff --git a/samen_core/lib/samen/replay/frame_schema.ex b/samen_core/lib/samen/replay/frame_schema.ex
+--- a/samen_core/lib/samen/replay/frame_schema.ex
++++ b/samen_core/lib/samen/replay/frame_schema.ex
+@@ -198,9 +198,14 @@
+   # A bare binary: id/token-shaped values pass the vocabulary directly; a *text* binary needs its
+   # key on the keep-list, and is still refused on a `vt_` token or a PII shape.
+   defp check_value(key, value) when is_binary(value) do
+-    case Values.classify(value) do
+-      :ok -> :ok
+-      {:refused, why, _path} -> check_keep_listed(key, value, why)
++    # SABOTAGE (Lane B P1 / ADR-052 §3 R6): a bare string on any NON-keep-listed key is
++    # admitted unconditionally. The keep-list machinery still runs for its own keys, so this
++    # patch introduces no warning and no keep-list test flips — but the vocabulary's raw-string
++    # refusal, the one check that keeps a name out of a frame, is gone.
++    if key in @keep_list do
++      check_keep_listed(key, value, :raw_string)
++    else
++      :ok
+     end
+   end
+ 

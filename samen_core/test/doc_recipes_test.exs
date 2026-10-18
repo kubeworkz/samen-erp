@@ -287,6 +287,16 @@ defmodule Samen.Gen.DocRecipesTest do
     {"samen_core/lib/samen/cdc/never_read_current.ex", "(doc line 635)"},
     {"samen_core/lib/mix/tasks/samen.verify.never_read_current.ex",
      "Nothing to lint — never-read-current is vacuously satisfied (tier default off)"},
+    # replay_schema (Lane B P1, ADR-052 §3 R6) — the declaration diagnosis and the BEHAVIOURAL
+    # refusals, because a gate that only reads declarations cannot notice a refusal that stopped
+    # firing (which is exactly what sabotage 350 does).
+    {"samen_core/lib/samen/replay/frame_schema.ex",
+     "a declared frame kind has NO payload key policy"},
+    {"samen_core/lib/samen/replay/frame_schema.ex", "exceeds hard_payload_ceiling"},
+    {"samen_core/lib/samen/replay/frame_schema.ex",
+     "an OVERSIZED frame payload is NOT refused"},
+    {"samen_core/lib/samen/replay/frame_schema.ex",
+     "a keep-listed key ACCEPTS a PII-shaped value"},
     # the TREE-SCOPED AGGREGATE (`mix samen.verify.fleet`) — its summary line and the two
     # fail-closed halves the index quotes: an unevaluable member's `runner_error` and the
     # roster's own definition.
