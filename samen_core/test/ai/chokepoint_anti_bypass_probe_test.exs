@@ -42,6 +42,18 @@ defmodule Samen.AI.ChokepointAntiBypassProbeTest do
   """
   use ExUnit.Case, async: true
 
+  # HOST-LOAD IMMUNITY (full-suite flake, RP-AI-1 hardening). Every test here walks the WHOLE
+  # tree — ~3k `.ex`/`.eex` files across 11 `lib/` roots plus the generator templates — and
+  # PARSES each one with `Code.string_to_quoted/1` (the scan's entire cost: ~0.9ms/file). On an
+  # IDLE host the rogue-file proof takes ~4.5s (measured: `--trace`, 2026-10-18); under the full
+  # ~4.1k-test `samen_core` suite — every scheduler busy — the SAME correct scan has been
+  # observed to blow past ExUnit's 60s default and fail as an `ExUnit.TimeoutError`. A loaded
+  # host must not be able to turn a correct probe red, so the module gets a 5-minute ceiling
+  # (66x the measured idle cost). This changes NOTHING about what the probe asserts: the AST
+  # detectors, the allowed-file list and the rogue-file red proof below are untouched. It pairs
+  # with `maskedpayload_candidate?/1`, which is what keeps the scan cheap in the first place.
+  @moduletag timeout: 300_000
+
   @repo_root Path.expand("../../..", __DIR__)
 
   @app_lib_globs ~w(
@@ -204,11 +216,26 @@ defmodule Samen.AI.ChokepointAntiBypassProbeTest do
     |> Enum.reject(&(&1 in @allowed_files))
   end
 
+  # SOUND per-file prefilter: every form the AST scan can flag NAMES the struct in source —
+  # a field-bearing `%MaskedPayload{...}` / `%Samen.AI.MaskedPayload{...}` literal, an
+  # `alias ... .MaskedPayload` + `%MaskedPayload{...}`, or a `struct/struct!/apply(Kernel,
+  # :struct, ...)` / `%{__struct__: ...}` whose first argument is that alias. So a source with
+  # no `MaskedPayload` substring has no statically-detectable construction (only the residual
+  # the moduledoc already documents — runtime-computed module names / eval'd code — escapes,
+  # and it escapes the AST scan too) and need not be parsed at all. This cannot hide a
+  # violation `offenders_in_source/2` would have found; it only skips files where its own
+  # `maskedpayload_alias?/1` matcher has nothing to match. The `.eex` text fallback keys on the
+  # same token, so templates are covered by the same prefilter.
+  defp maskedpayload_candidate?(content), do: String.contains?(content, "MaskedPayload")
+
   defp all_offenders(paths) do
+    repo = Samen.SourceGlob.normalize(@repo_root)
+
     for path <- paths,
         File.regular?(path),
-        offender <-
-          offenders_in_source(File.read!(path), Path.relative_to(path, Samen.SourceGlob.normalize(@repo_root))) do
+        content = File.read!(path),
+        maskedpayload_candidate?(content),
+        offender <- offenders_in_source(content, Path.relative_to(path, repo)) do
       offender
     end
   end

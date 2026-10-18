@@ -1,0 +1,32 @@
+# SABOTAGE: T30 (ADR-038 §4.3/§4.1, RP-FI-1's sibling guard) — the delivery anti-bypass probe.
+# Adds a PRIVATE helper to `Samen.Web.Notifications.Live` (a samen_web lib module, a DIFFERENT
+# app from samen_core) that calls `adapter.deliver(message, config)` DIRECTLY, skipping
+# `Samen.Delivery.Chokepoint.send/2`. This is the exact shape the probe exists to refuse — a
+# production (`lib/`) send path reaching a `Samen.Delivery.Provider` without the chokepoint —
+# and it is planted in a file that appears on NO exclusion/allowlist, so a green result would
+# prove the full-tree scan is blind.
+#
+# The proof runs `mix test` on the probe itself, so the injected call is never compiled (the
+# samen_core suite does not build samen_web); only the source TEXT the scan walks changes.
+# Aimed at the probe, not at Chokepoint: chokepoint.ex, the conformance-harness exclusion and
+# the Lifecycle/Webhook receiver carve-outs are all untouched — the probe must trip on the NEW
+# violation alone, which is what makes its "zero offenders" assertion refutable.
+# APP: samen_core
+# TEST_FILES: test/delivery/chokepoint_anti_bypass_probe_test.exs
+# MUST_FAIL: zero direct adapter.deliver(...) calls anywhere under any app's lib/
+diff --git a/samen_web/lib/samen/web/notifications/live.ex b/samen_web/lib/samen/web/notifications/live.ex
+--- a/samen_web/lib/samen/web/notifications/live.ex
++++ b/samen_web/lib/samen/web/notifications/live.ex
+@@ -23,8 +23,12 @@ defmodule Samen.Web.Notifications.Live do
+   ever touched by mark-read).
+   """
+   def writable?(%Mount{plane: %{kind: :operator}}), do: false
+   def writable?(_), do: true
+ 
++  # SABOTAGE (T30 anti-bypass gate): a production lib module dispatching straight to an
++  # adapter, skipping Samen.Delivery.Chokepoint.send/2 — the exact bypass the probe forbids.
++  defp __t30_bypass_send__(adapter, message, config), do: adapter.deliver(message, config)
++
+   attr :mount, Mount, required: true
+   attr :org_id, :string, default: nil
+   attr :active, :atom, default: :notifications

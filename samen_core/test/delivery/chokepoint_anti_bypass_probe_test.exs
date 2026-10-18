@@ -59,6 +59,19 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
   """
   use ExUnit.Case, async: true
 
+  # HOST-LOAD IMMUNITY (full-suite flake, T30 hardening). Every test here walks the WHOLE
+  # tree — ~3k `.ex`/`.eex` files across 10 `lib/` roots plus the generator templates. On an
+  # IDLE host that scan costs ~4.4s (measured: `--trace`, 2026-10-18); under the full ~4.1k-test
+  # `samen_core` suite — every scheduler busy, DB pools saturated — the SAME correct scan has
+  # been observed to blow past ExUnit's 60s default and fail as an `ExUnit.TimeoutError`. A
+  # loaded host must not be able to turn a correct probe red, so the module gets a 5-minute
+  # ceiling (68x the measured single-scan idle cost). This changes NOTHING about what the probe
+  # asserts:
+  # the scan, the exclusion list and the rogue-file red proof below are untouched. It pairs
+  # with the sound per-file prefilter in `offending_deliver_calls/1`, which is what keeps the
+  # scan cheap instead of merely allowing it to take longer.
+  @moduletag timeout: 300_000
+
   # samen_core/test/delivery/<this file> -> ../../.. = repo root.
   @repo_root Path.expand("../../..", __DIR__)
 
@@ -126,10 +139,20 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
     |> Enum.reject(&(&1 in @excluded_files))
   end
 
+  # SOUND per-file prefilter before the per-line sweep. `@deliver_call_re` can only match
+  # text that CONTAINS the literal `.deliver(` (its own pattern is `...\.deliver\(`), so a file
+  # whose bytes lack that substring has zero possible matches. Skipping such files avoids
+  # splitting every one of ~3k sources into lines and regexing each line — the actual cost of
+  # the walk — and can never hide a violation the regex would have reported. (Every sabotage
+  # and rogue-file proof below spells a real `X.deliver(...)` call, so they all still flip.)
+  defp deliver_call_candidates?(content), do: String.contains?(content, ".deliver(")
+
   defp offending_deliver_calls(paths) do
     for path <- paths,
         File.regular?(path),
-        {line, idx} <- path |> File.read!() |> String.split("\n") |> Enum.with_index(1),
+        content = File.read!(path),
+        deliver_call_candidates?(content),
+        {line, idx} <- content |> String.split("\n") |> Enum.with_index(1),
         [_, receiver] <- [Regex.run(@deliver_call_re, line) || [nil, nil]],
         not is_nil(receiver),
         receiver not in @known_non_adapter_receivers do
