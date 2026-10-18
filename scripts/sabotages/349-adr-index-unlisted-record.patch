@@ -1,0 +1,33 @@
+# SABOTAGE: AN ADR SHIPS WITH NO INDEX ROW — a record is landed in `docs/adr/` that
+# `docs/adr/README.md` does not list. This is not a contrived shape: it is EXACTLY the state
+# ADR-049 sat in from 2026-09-12 (shipped, accepted, and invisible to every reader who reaches
+# the ADRs through the index) and nothing caught it — not the doc-command extractor, which reads
+# a fixed allowlist of guides and never opens `docs/adr/`, and not the index's own
+# "NN ADRs total" line, which counts FILES rather than rows and so stayed correct throughout.
+#
+# Aimed at the INDEX, not at the record: the file is a well-formed ADR with a real number, and
+# `ADR-052-masked-session-replay.md` is untouched. What breaks is the index's completeness, which
+# is what `test/adr_index_test.exs` exists to assert — and what its sibling red-path block proves
+# each individual check can still report. Pairing the file-count change with the stated total is
+# deliberate: it also re-proves that check 4 is live rather than a tautology over a hardcoded 53.
+#
+# Nothing is confined or skipped (the replay runs `mix test` on the anchored file), no warning is
+# introduced, and the revert DELETES the created file — the harness's own ABSENT handling proves
+# that half of the residue check rather than skipping it.
+# APP: samen_core
+# TEST_FILES: test/adr_index_test.exs
+# MUST_FAIL: every ADR file is listed in the ADR index
+diff --git a/docs/adr/ADR-053-unindexed-probe-record.md b/docs/adr/ADR-053-unindexed-probe-record.md
+new file mode 100644
+index 00000000..4d770a5a
+--- /dev/null
++++ b/docs/adr/ADR-053-unindexed-probe-record.md
+@@ -0,0 +1,8 @@
++# ADR-053 — Probe record, deliberately unlisted (sabotage fixture)
++
++- **Status:** ACCEPTED (2026-10-17) — this file exists ONLY while sabotage 349 is applied.
++
++This record is landed by the sabotage patch and carries **no row** in `docs/adr/README.md`, which
++is exactly the class the ADR-index gate exists to catch: ADR-049 shipped unlisted on 2026-09-12
++and nothing noticed for five weeks, because the index's own `NN ADRs total` line counts FILES
++rather than rows.

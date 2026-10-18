@@ -2,7 +2,9 @@
 
 **Sizing rule (operator standing order):** SMALL serialized units — **one deliverable per `agent()` call**, each banking in ~10–20 min, each independently committable and gate-able. Fan-out concurrency 1. Model routing per unit (`sonnet` = mechanical port/tests; `opus` = the sanitizer, the resolver, the renderer, and every adversarial gate).
 
-**Gate discipline:** every phase ends with an adversarial gate (findings fixed in-phase). All suites + the relevant `ci.sh` green before/after each phase; `./ci.sh` before a milestone. Sabotage patches numbered from **349** (348 is shipped) and replayed with `scripts/sabotage.sh --range 349-<n>`.
+**Gate discipline:** every phase ends with an adversarial gate (findings fixed in-phase). All suites + the relevant `ci.sh` green before/after each phase; `./ci.sh` before a milestone. Sabotage patches numbered from **350** (**349** is shipped — the ADR-index gate,
+`samen_core/test/adr_index_test.exs`, claimed it while this plan was in review) and replayed with
+`scripts/sabotage.sh --range 350-<n>`.
 
 **Design inputs:** `docs/ws-masked-replay/design.md`, ADR-021 (analytics capture), ADR-015 (CDC default-deny), ADR-038 §5.5 (masking proofs). Read-only inspiration: `phoenix_replay` v0.6.2 and the upstream ADR-052 record — neither is a dependency of Lane B.
 
@@ -42,7 +44,7 @@ Fix: `driftwood/dev_only/driftwood_web/dev_replay_warmup.ex`, a one-plug pipelin
 | 1.1 | `samen_core/lib/samen/replay/values.ex` — `Ref`, `Redacted`, `Placeholder` structs; the closed bounded-type vocabulary; `sanitize/2` stub raising `:not_implemented` (fail-honest, ADR-014). |
 | 1.2 | `samen_core/lib/samen/replay/frame_schema.ex` — declared frame kinds, per-kind allowed keys, max payload bytes, and `validate/1` returning `{:ok, frame} | {:error, reason}`. Rejects raw strings, unknown kinds, and anything carrying a `vt_`-prefixed value. |
 | 1.3 | `samen_core/lib/mix/tasks/samen.verify.replay_schema.ex` — walks the schema and every capture call site; fails on a raw-string field, an unregistered kind, or a keep-list entry that is not a bounded key. Mirrors `samen.verify.sink_schema`. |
-| 1.4 | Tests: schema accepts each vocabulary term; refuses a raw string, a `vt_*`, an unknown kind, an oversized payload; verifier flips when the schema is neutered (sabotage 349). |
+| 1.4 | Tests: schema accepts each vocabulary term; refuses a raw string, a `vt_*`, an unknown kind, an oversized payload; verifier flips when the schema is neutered (sabotage 350). |
 
 **Gate P1:** `cd samen_core && mix test` green with `--warnings-as-errors`; `mix samen.verify.replay_schema` passes and its sabotage twin flips. No `samen_web` change yet.
 
@@ -59,7 +61,7 @@ Fix: `driftwood/dev_only/driftwood_web/dev_replay_warmup.ex`, a one-plug pipelin
 | 2.7 | `Samen.Observability.child_specs(app, replay: opts)` — one supervisor (buffer owner + monitor + handler); child list unchanged without the option. |
 | 2.8 | Flag + caps config (`samen.replay`: sample rate, max frames, max bytes, max sessions/node, retention days), seeded nowhere by default (unknown ⇒ off); retention spec registered with `Samen.Retention`. |
 
-Tests: flag-on mount writes exactly one session; flag-off writes zero rows **and** leaves no telemetry handler attached; a halted event is still recorded; caps truncate with `truncated?: true`; sanitizer byte-scan proves a `pii_*` plaintext appears nowhere in the table; freeform → shape; keep-list smuggling refused. Sabotages 350–357.
+Tests: flag-on mount writes exactly one session; flag-off writes zero rows **and** leaves no telemetry handler attached; a halted event is still recorded; caps truncate with `truncated?: true`; sanitizer byte-scan proves a `pii_*` plaintext appears nowhere in the table; freeform → shape; keep-list smuggling refused. Sabotages 351–358.
 
 **Gate P2:** `samen_core` + `samen_web` suites green; the byte-scan test and the flag-detach test both flip under their sabotages; `MIX_ENV=prod` compile has capture children absent unless configured.
 
@@ -75,7 +77,7 @@ Tests: flag-on mount writes exactly one session; flag-off writes zero rows **and
 | 3.6 | `player_live.ex` + `index_live.ex` + `live.ex` chrome, mounted beside the existing `/operator/replay/:org_id` page; the timeline row links to the detail when the org is opted in. |
 | 3.7 | Masking three proofs via `Samen.MaskingCase` (`resolve_on_plane/4`, `assert_plane_clear!/2`, `assert_plane_masked!/2`, `assert_leak_detected!/2`), plus a shred game-day test: shred the subject ⇒ every `Ref` to them renders `:shredded`, with zero replay rows rewritten. |
 
-Sabotages 358–368 (R7–R12).
+Sabotages 359–369 (R7–R12).
 
 **Gate P3:** `samen_web` suite green; all three masking proofs and their twin flip; `./ci-fast.sh` green.
 
@@ -84,10 +86,10 @@ Sabotages 358–368 (R7–R12).
 1. Opt in **one** host in dev (driftwood broker), seed the flag there; assert the tenant plane writes frames and the operator plane writes none.
 2. Retention sweep wired into the host scheduler; test prunes a session past TTL and leaves one inside it.
 3. `docs/guides/session-replay.md` rewritten: the two lanes, what is and is not recorded, how to opt an org in, how to read a replay, the shred behaviour, and the "step list vs recording" distinction the page must always state.
-4. `README`/ADR index updated; the decision record (`ADR-052-masked-session-replay.md`) written from what shipped, not from this plan.
+4. `README`/ADR index updated. **The decision record (`docs/adr/ADR-052-masked-session-replay.md`) was filed 2026-10-17, ahead of the build** (`PROPOSED`, §8 D1–D5 open) — so P4 **appends as-built notes** to it (the `§2.x.1 as built — and where it deviates` shape) instead of writing it from what shipped.
 5. Round-2 whole-workstream re-gate.
 
-**Final gate:** `./ci.sh` → `ROOT CI: ALL PASSED`; `scripts/sabotage.sh --range 349-<last>` all flip and restore byte-exact (run backgrounded or in chunks — the full harness exceeds the 600 s single-call ceiling).
+**Final gate:** `./ci.sh` → `ROOT CI: ALL PASSED`; `scripts/sabotage.sh --range 350-<last>` all flip and restore byte-exact (run backgrounded or in chunks — the full harness exceeds the 600 s single-call ceiling).
 
 ---
 

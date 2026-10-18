@@ -1,6 +1,6 @@
 # WS-Masked-Replay — design
 
-**Status:** proposed (2026-10-17). No code yet. Decision record would be `docs/adr/ADR-052-masked-session-replay.md` (our next free ADR number; deliberately the same number + subject as the upstream record this design re-derives — see §9).
+**Status:** proposed (2026-10-17). No Lane B code yet (Lane A's P0 dev probe is built — see `build-plan.md`). Decision record: [`docs/adr/ADR-052-masked-session-replay.md`](../adr/ADR-052-masked-session-replay.md) — filed 2026-10-17, **PROPOSED**, §8 D1–D5 open (our next free ADR number; deliberately the same number + subject as the upstream record this design re-derives — see §9 there).
 
 **Design inputs read:** `phoenix_replay` v0.6.2 (Hex, MIT, by Danila Poyarkov) — its docs and the 0.6 announcement; the upstream `ckluis/samen` record `docs/adr/ADR-052-observability-wiring-and-masked-replay.md` (read-only inspiration, not in this tree); our own `Samen.Analytics.Replay`, `Samen.Web.Replay`, `Samen.Web.Operator.{ReplayLive,ReplayReads}`.
 
