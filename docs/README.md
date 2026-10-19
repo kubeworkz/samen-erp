@@ -37,9 +37,10 @@ process record — useful for archaeology, not required reading.
 
 ## ADRs (`docs/adr/`)
 
-33 accepted architecture decisions, indexed in [adr/README.md](adr/README.md) — grouped by
+54 architecture decision records, indexed in [adr/README.md](adr/README.md) — grouped by
 concern (vault/crypto-shred, scope packaging, the operator plane, then per-workstream:
-WS-A/B/D/E, launch). Read the ADR itself before touching anything it governs.
+WS-A/B/D/E, ERP, masked replay, block pages, launch). Read the ADR itself before touching
+anything it governs.
 
 ## Runbooks (`docs/runbooks/`)
 
@@ -84,7 +85,8 @@ per-feature and per-workstream gates):
 Each workstream folder has a `design.md` (the spec, ADR-grounded) and a `build-plan.md` (the
 serialized, session-sized execution plan). WS-A = "Product Reality" (ADR-014/015/016), WS-B =
 "Operator Cockpit v1" (ADR-017–021), WS-D = "Builder Joy" (ADR-022–024), WS-E = "Table Stakes
-UX" (ADR-026–030).
+UX" (ADR-026–030). Newer pairs that are **proposed, not built**: [WS-Masked-Replay](ws-masked-replay/design.md)
+(ADR-052) and [WS-Notes](ws-notes/design.md) (ADR-053 — block pages in the Docs scope).
 
 ## Host adoption ledger
 

@@ -127,8 +127,8 @@ defmodule Samen.AbbrevRegistryTest do
       # the samenerp Support/Settings/Automation mounts (c9d5272).
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
-      # Host namespaces (per-host maps): demo 21, driftwood 23, pawchart 40,
-      # samen_core 86, samen_web 70, samenerp 90 (the WS-ERP E8 host proof —
+      # Host namespaces (per-host maps): demo 23, driftwood 25, pawchart 42,
+      # samen_core 88, samen_web 72, samenerp 94 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst, the
       # Phase-2 Chat mount cth/chp/cmg/cds, the Phase-5 CMS mount scg/sct/scb/
       # scd/scn/scf + spv/stv/sbv, the Phase-6 Calendar mount `evt`, and the
@@ -136,10 +136,16 @@ defmodule Samen.AbbrevRegistryTest do
       # reserved with `mix samen.abbrev.reserve --host samenerp` — plus the
       # ADR-021 analytics mount `sae` — `Samenerp.Analytics.ProductEvent`,
       # reserved with `mix samen.abbrev.reserve --host samenerp --abbrev sae`)
-      # = 330 host entries across six hosts.
+      # +14 in WS-Notes Phase 1 (ADR-053 §2 D2/§3): `DocBlock`/`DocLink` reserved in
+      # all five existing Docs hosts (demo `ddb`/`ddl`, driftwood `fdb`/`fdl`,
+      # pawchart `pdb`/`pdl`, samen_core `sdb`/`sdl`, samen_web `wdb`/`wdl`) plus the
+      # target host's first Docs mount (`edd`/`edn` + `edb`/`edl` — four rows, since
+      # samenerp never carried Doc/Note) — every row written by
+      # `mix samen.abbrev.reserve`, never by hand.
+      # = 344 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 90
-      assert map_size(hosts["samen_core"]) == 86
+      assert map_size(hosts["samenerp"]) == 94
+      assert map_size(hosts["samen_core"]) == 88
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -171,6 +177,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # T45 F3 (Docs scope): the demo host's Doc/Note abbrevs, allocator-proposed.
                  "ddd" => "Demo.DocsScope.Doc",
                  "ddn" => "Demo.DocsScope.Note",
+                 # WS-Notes Phase 1 (ADR-053 §2 D2/§3): the demo host's block-model
+                 # abbrevs — DocBlock/DocLink, reserved with the sanctioned allocator
+                 # (`mix samen.abbrev.reserve --host demo --abbrev ddb`).
+                 "ddb" => "Demo.DocsScope.DocBlock",
+                 "ddl" => "Demo.DocsScope.DocLink",
                  # T46 F4 (Tags scope): the demo host's Tag/Tagging abbrevs, allocator-proposed.
                  "dtt" => "Demo.Tags.Tag",
                  "tdt" => "Demo.Tags.Tagging",
@@ -216,6 +227,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # (allocator-reserved, explicit, same f-prefix convention as `fap`/`fce`).
                  "fdd" => "Driftwood.Docs.Doc",
                  "fdn" => "Driftwood.Docs.Note",
+                 # WS-Notes Phase 1 (ADR-053): Driftwood's DocBlock/DocLink abbrevs,
+                 # reserved with the sanctioned allocator (--host driftwood).
+                 "fdb" => "Driftwood.Docs.DocBlock",
+                 "fdl" => "Driftwood.Docs.DocLink",
                  # T46 F4 (Tags scope): `dtt`/`tdt` collided with demo's own proposed
                  # abbrevs (the same host-name-blind proposer class as `dce`/`fdd`
                  # above), so Driftwood's Tag/Tagging mount took fresh `ftt`/`tft`
@@ -267,6 +282,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # T45 F3 (Docs scope): the pawchart host's Doc/Note abbrevs, allocator-proposed.
                  "pdd" => "PawChart.Docs.Doc",
                  "pdn" => "PawChart.Docs.Note",
+                 # WS-Notes Phase 1 (ADR-053): PawChart's DocBlock/DocLink abbrevs,
+                 # reserved with the sanctioned allocator (--host pawchart).
+                 "pdb" => "PawChart.Docs.DocBlock",
+                 "pdl" => "PawChart.Docs.DocLink",
                  # T46 F4 (Tags scope): the pawchart host's Tag/Tagging abbrevs, allocator-proposed.
                  "ptt" => "PawChart.Tags.Tag",
                  "tpt" => "PawChart.Tags.Tagging",
@@ -390,6 +409,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # T45 F3 (Docs scope): the in-tree Docs scope fixture pilot.
                  "sdd" => "SamenCore.Support.DocsFixture.Doc",
                  "sdn" => "SamenCore.Support.DocsFixture.Note",
+                 # WS-Notes Phase 1 (ADR-053): the in-tree fixture's block-model
+                 # abbrevs (the `docs_scope_test.exs` c9 block CRUD/org-scope suite),
+                 # reserved with the sanctioned allocator (--host samen_core).
+                 "sdb" => "SamenCore.Support.DocsFixture.DocBlock",
+                 "sdl" => "SamenCore.Support.DocsFixture.DocLink",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -499,6 +523,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # test fixture).
                  "wdd" => "Samen.WebTest.Docs.Doc",
                  "wdn" => "Samen.WebTest.Docs.Note",
+                 # WS-Notes Phase 1 (ADR-053): the samen_web test host's block-model
+                 # abbrevs, reserved with the sanctioned allocator (--host samen_web).
+                 "wdb" => "Samen.WebTest.Docs.DocBlock",
+                 "wdl" => "Samen.WebTest.Docs.DocLink",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -721,7 +749,14 @@ defmodule Samen.AbbrevRegistryTest do
                # product-event ledger (`sae_product_event`), reserved through the
                # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp
                # --abbrev sae --owner Samenerp.Analytics.ProductEvent`).
-               "sae" => "Samenerp.Analytics.ProductEvent"
+               "sae" => "Samenerp.Analytics.ProductEvent",
+               # WS-Notes Phase 1 (ADR-053): this host's FIRST Docs mount — Doc/Note
+               # plus the block model, all four reserved through the sanctioned
+               # allocator (`mix samen.abbrev.reserve --host samenerp`).
+               "edd" => "Samenerp.Docs.Doc",
+               "edn" => "Samenerp.Docs.Note",
+               "edb" => "Samenerp.Docs.DocBlock",
+               "edl" => "Samenerp.Docs.DocLink"
              }
              }
 
@@ -825,7 +860,11 @@ defmodule Samen.AbbrevRegistryTest do
       # (+1 ADR-021 analytics mount: samenerp `sae` (Samenerp.Analytics.ProductEvent),
       # reserved with `mix samen.abbrev.reserve --host samenerp --abbrev sae`
       # = 405 + 330 = 735 flat.)
-      assert map_size(Reg.load()) == 735
+      # (+14 WS-Notes Phase 1 (ADR-053): the block-model abbrevs — DocBlock/DocLink in
+      # the five existing Docs hosts + the samenerp host's first Docs mount
+      # (Doc/Note/DocBlock/DocLink), reserved with `mix samen.abbrev.reserve`
+      # = 405 + 344 = 749 flat.)
+      assert map_size(Reg.load()) == 749
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

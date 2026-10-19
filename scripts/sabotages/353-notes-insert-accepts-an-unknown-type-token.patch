@@ -1,0 +1,36 @@
+# SABOTAGE: WS-NOTES R11 — AN UNKNOWN BLOCK TYPE TOKEN IS ACCEPTED
+# (ADR-053 §6 R11; WS-Notes Phase 2 unit 2.2 / gate P2). `Samen.Web.Notes.Writes.validate_shape/4`
+# no longer refuses a type that is not in `BlockShape.types()`: the unknown token is coerced into
+# a paragraph and the row is created. That is precisely the decay R11 names — the block type
+# vocabulary stops being CLOSED, so a client can write a token no renderer, no palette entry and
+# no metadata rule knows about, and `insert_block/4` reports success for it.
+#
+# Aimed at the shape's HEAD, not at the shape itself: `Samen.Scopes.Docs.BlockShape.validate/1`
+# still refuses an unknown type and every metadata/`checked` rule, and the string-token
+# normalisation is untouched — so the "refuses checked on a paragraph / foreign metadata on a
+# callout" assertions stay green and only the unknown-token row flips. `raw_type` stays
+# referenced, so no unused-variable warning is introduced and the failure is behavioural.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_reads_writes_test.exs
+# MUST_FAIL: refuses an unknown type token, atom or string
+diff --git a/samen_web/lib/samen/web/notes/writes.ex b/samen_web/lib/samen/web/notes/writes.ex
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -678,12 +678,16 @@
+   defp validate_shape(type, raw_type, metadata, checked) do
+     cond do
+       not is_atom(type) or type not in BlockShape.types() ->
+-        {:error, {:unknown_type, raw_type}}
++        # SABOTAGE (R11): an unknown type token is COERCED into a paragraph instead of
++        # refused, so the closed vocabulary is no longer the write boundary. `raw_type` stays
++        # referenced, so no unused-variable warning is introduced.
++        _ = raw_type
++        :ok
+ 
+       true ->
+         case BlockShape.validate(%{type: type, metadata: metadata, checked: checked}) do
+           :ok -> :ok
+           {:error, reason} -> {:error, {:invalid_shape, reason}}
+         end
+     end
+   end

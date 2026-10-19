@@ -417,7 +417,9 @@
       "cvp": "Demo.CmsScope.Post.Version",
       "daa": "Demo.Approvals.Approval",
       "dce": "Demo.CalendarScope.Event",
+      "ddb": "Demo.DocsScope.DocBlock",
       "ddd": "Demo.DocsScope.Doc",
+      "ddl": "Demo.DocsScope.DocLink",
       "ddn": "Demo.DocsScope.Note",
       "dil": "Demo.Identity.LoginFailure",
       "dll": "Demo.LocationsScope.Location",
@@ -450,7 +452,9 @@
       "dwt": "Driftwood.Work.Task",
       "fap": "Driftwood.Approvals.Approval",
       "fce": "Driftwood.Calendar.Event",
+      "fdb": "Driftwood.Docs.DocBlock",
       "fdd": "Driftwood.Docs.Doc",
+      "fdl": "Driftwood.Docs.DocLink",
       "fdn": "Driftwood.Docs.Note",
       "fll": "Driftwood.Locations.Location",
       "fmv": "Driftwood.Marketing.ConsentEvent",
@@ -497,7 +501,9 @@
       "pmi": "PawChart.Operator.Invoice",
       "pot": "PawChart.Operator.AuthToken",
       "pll": "PawChart.Locations.Location",
-      "pms": "PawChart.Operator.Subscription"
+      "pms": "PawChart.Operator.Subscription",
+      "pdb": "PawChart.Docs.DocBlock",
+      "pdl": "PawChart.Docs.DocLink"
     },
     "samen_core": {
       "sdd": "SamenCore.Support.DocsFixture.Doc",
@@ -505,6 +511,7 @@
       "sjl": "SamenCore.Support.FinanceFixture.JournalLine",
       "sas": "Samen.AI.SupportReplyDraft",
       "oea": "SamenCore.Support.OrgAnalyticsFixture.Metric",
+      "sdb": "SamenCore.Support.DocsFixture.DocBlock",
       "ssv": "SamenCore.Support.SalesOpsFixture.Vendor",
       "sit": "SamenCore.Support.InventoryFixture.Item",
       "emb": "SamenCore.Support.EmbeddingsDomain.Article",
@@ -583,6 +590,7 @@
       "sls": "SamenCore.Support.SalesOpsFixture.Lead",
       "sat": "SamenCore.Support.AutomationFixture.Target",
       "sje": "SamenCore.Support.FinanceFixture.JournalEntry",
+      "sdl": "SamenCore.Support.DocsFixture.DocLink",
       "atn": "Samen.AI.Agent.Turn",
       "sfe": "SamenCore.Support.FleetFixture.EnrollmentToken",
       "sol": "SamenCore.Support.InventoryFixture.SoLine"
@@ -606,6 +614,7 @@
       "wmm": "Samen.WebTest.Mailbox.MailMessage",
       "wwt": "Samen.WebTest.Work.Task",
       "inw": "Samen.WebTest.Erp.Warehouse",
+      "wdb": "Samen.WebTest.Docs.DocBlock",
       "whv": "Samen.WebTest.Hr.EmploymentEvent",
       "tro": "Samen.WebTest.Erp.TransferOrder",
       "pcv": "Samen.WebTest.Cms.Page.Version",
@@ -635,6 +644,7 @@
       "wce": "Samen.WebTest.Calendar.Event",
       "war": "Samen.WebTest.Automation.Run",
       "wfc": "Samen.WebTest.Fleet.Credential",
+      "wdl": "Samen.WebTest.Docs.DocLink",
       "woe": "Samen.WebTest.Outreach.Enrollment",
       "fpa": "Samen.WebTest.Erp.PostingAccount",
       "igr": "Samen.WebTest.Erp.GoodsReceipt",
@@ -660,6 +670,7 @@
       "ipg": "Samen.WebTest.Erp.ProductionLog"
     },
     "samenerp": {
+      "edn": "Samenerp.Docs.Note",
       "ebm": "Samenerp.Erp.Bom",
       "epv": "Samenerp.Operator.SubscriptionEvent",
       "eff": "Samenerp.Primitives.FeatureFlag",
@@ -684,6 +695,7 @@
       "enl": "Samenerp.Erp.StockLedger",
       "scf": "Samenerp.Cms.SeoMeta",
       "evt": "Samenerp.Calendar.Event",
+      "edl": "Samenerp.Docs.DocLink",
       "ers": "Samenerp.Billing.Subscription",
       "efa": "Samenerp.Fleet.App",
       "epi": "Samenerp.Operator.Invoice",
@@ -719,6 +731,7 @@
       "sct": "Samenerp.Cms.Post",
       "efc": "Samenerp.Fleet.Credential",
       "eoi": "Samenerp.Operator.UserIdentity",
+      "edb": "Samenerp.Docs.DocBlock",
       "wsp": "Samenerp.Work.Project",
       "spv": "Samenerp.Cms.Page.Version",
       "rne": "Samenerp.Vertical.Record",
@@ -749,6 +762,7 @@
       "scb": "Samenerp.Cms.Block",
       "eru": "Samenerp.Billing.Usage",
       "ewh": "Samenerp.Primitives.Webhook",
+      "edd": "Samenerp.Docs.Doc",
       "eql": "Samenerp.Operator.Sla"
     }
   }

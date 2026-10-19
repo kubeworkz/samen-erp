@@ -75,6 +75,8 @@ defmodule Samen.Gen.Templates do
   @deploy_runbook File.read!(Path.join(@templates_dir, "deploy_runbook.eex"))
   @external_resource Path.join(@templates_dir, "dev_exs_web.eex")
   @dev_exs_web File.read!(Path.join(@templates_dir, "dev_exs_web.eex"))
+  @external_resource Path.join(@templates_dir, "docs_ex.eex")
+  @docs_ex File.read!(Path.join(@templates_dir, "docs_ex.eex"))
   @external_resource Path.join(@templates_dir, "dockerfile.eex")
   @dockerfile File.read!(Path.join(@templates_dir, "dockerfile.eex"))
   @external_resource Path.join(@templates_dir, "endpoint_ex.eex")
@@ -103,6 +105,8 @@ defmodule Samen.Gen.Templates do
   @m_migration_meta File.read!(Path.join(@templates_dir, "m_migration_meta.eex"))
   @external_resource Path.join(@templates_dir, "m_mount_operator_scopes.eex")
   @m_mount_operator_scopes File.read!(Path.join(@templates_dir, "m_mount_operator_scopes.eex"))
+  @external_resource Path.join(@templates_dir, "m_mount_docs_scope.eex")
+  @m_mount_docs_scope File.read!(Path.join(@templates_dir, "m_mount_docs_scope.eex"))
   @external_resource Path.join(@templates_dir, "m_mount_primitives_scope.eex")
   @m_mount_primitives_scope File.read!(Path.join(@templates_dir, "m_mount_primitives_scope.eex"))
   @external_resource Path.join(@templates_dir, "m_reveal.eex")
@@ -256,6 +260,12 @@ defmodule Samen.Gen.Templates do
        m_mount_primitives_scope()},
       {"priv/repo/migrations/20260714210000_mount_operator_scopes.exs",
        m_mount_operator_scopes()},
+      # WS-Notes / ADR-053 §3 — the Docs scope: the internal-document substrate
+      # (Doc + Note + the DocBlock/DocLink block model), prefix-derived abbrevs, its
+      # own catalog-in-tx mount. No routes/nav ride with it (the pages SURFACE is
+      # ADR-053 Phase 3), so it is a data-layer mount like the two above.
+      {"lib/<%= otp_app %>/docs.ex", docs_ex()},
+      {"priv/repo/migrations/20260714220000_mount_docs_scope.exs", m_mount_docs_scope()},
       # The 5-file `*_web/` tree (the pawchart shape, ADR-022).
       {"lib/<%= otp_app %>_web/endpoint.ex", endpoint_ex()},
       {"lib/<%= otp_app %>_web/router.ex", router_ex()},
@@ -555,6 +565,14 @@ defmodule Samen.Gen.Templates do
   # ------------------------------------------------------------------ operator namespace
   defp operator_ex, do: @operator_ex
 
+  # ------------------------------------------------------------------ docs scope (WS-Notes)
+  # ADR-053 §3 — the Docs domain (Doc + Note + the DocBlock/DocLink block model). This module
+  # is the `use Samen.Scopes.Docs` that expands the four resources; its one mount migration
+  # rides `web_new` beside the Primitives/Operator mounts, and the emitted `ash_domains`
+  # lists register it (a domain the verifiers cannot see would report its vault columns as
+  # de-vaulted — see the `vault_declared_parity` finding in ADR-053 §3.1 item 5).
+  defp docs_ex, do: @docs_ex
+
   # ------------------------------------------------------------------ web tree
   defp endpoint_ex, do: @endpoint_ex
 
@@ -613,6 +631,9 @@ defmodule Samen.Gen.Templates do
 
   # ------------------------------------------------------------ operator migration
   defp m_mount_operator_scopes, do: @m_mount_operator_scopes
+
+  # ------------------------------------------------------------ docs migration (WS-Notes)
+  defp m_mount_docs_scope, do: @m_mount_docs_scope
 
   # ------------------------------------------------------------------ misc (web)
   defp gitignore_web do

@@ -124,6 +124,12 @@ config :samen_core, :vault_declared_parity_allow_list, [
   # non-vacuous. The fixture domain is NOT in :ash_domains — allow-list the pair.
   {"sdd_doc", "pii_sdd_secure_body"},
   {"sdn_note", "pii_sdn_secure_body"},
+  # WS-Notes Phase 1 (ADR-053 §2 D2, the SAME docs_fixture domain): DocBlock's
+  # per-block vaulted half `text_secure` is vault-routed (column
+  # pii_sdb_text_secure, `vault: :pii_block_text`) so the block-level masking
+  # three-proof is non-vacuous. The fixture domain is NOT in :ash_domains —
+  # allow-list the pair (same posture as sdd*/sdn* directly above).
+  {"sdb_doc_block", "pii_sdb_text_secure"},
   # WS-ERP E7 (test/support/hr_fixture.ex): Employee.dob is vault-routed
   # (column pii_hem_dob) so the per-plane masking three-proof is non-vacuous
   # against real HR rows (the composite name/email/phone routes keep the bare

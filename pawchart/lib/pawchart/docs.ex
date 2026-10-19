@@ -4,7 +4,7 @@ defmodule PawChart.Docs do
   vertical (ADR-004; F3, T45), exactly as `PawChart.Calendar` mounts the
   Calendar scope.
 
-  One `use Samen.Scopes.Docs` expands into two host-owned resources:
+  One `use Samen.Scopes.Docs` expands into four host-owned resources:
 
     * `PawChart.Docs.Doc` — for a vet clinic SaaS this is a care-plan runbook
       or clinic policy doc; 🔒 vaulted `secure_body` (`vault: :pii_doc_body`)
@@ -13,6 +13,9 @@ defmodule PawChart.Docs do
       object-ref anchor. Archivable (ADR-040 §5.9).
     * `PawChart.Docs.Note` — a short annotation, same posture (`vault:
       :pii_note_body`).
+    * `PawChart.Docs.DocBlock` / `PawChart.Docs.DocLink` — WS-Notes' typed block
+      rows and resolved `[[Title]]` edges (`text_secure` is 🔒
+      `vault: :pii_block_text`).
 
   ## Why this mounts cleanly (the additive proof)
 
@@ -29,5 +32,5 @@ defmodule PawChart.Docs do
     otp_app: :pawchart,
     repo: PawChart.Repo,
     namespace: PawChart.Docs,
-    abbrevs: %{doc: "pdd", note: "pdn"}
+    abbrevs: %{doc: "pdd", note: "pdn", doc_block: "pdb", doc_link: "pdl"}
 end

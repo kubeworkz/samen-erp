@@ -1941,6 +1941,96 @@
     {
       "fields": [
         {
+          "column_name": "ddb_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "ddb_checked",
+          "logical_name": "checked",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ddb_doc_id",
+          "logical_name": "doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddb_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddb_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ddb_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ddb_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddb_parent_block_id",
+          "logical_name": "parent_block_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddb_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ddb_revision",
+          "logical_name": "revision",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ddb_text",
+          "logical_name": "text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ddb_type",
+          "logical_name": "type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ddb_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_ddb_text_secure",
+          "logical_name": "text_secure",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Demo.DocsScope.DocBlock",
+      "table_name": "ddb_doc_block"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ddd_archived_at",
           "logical_name": "archived_at",
           "pii": false,
@@ -1957,6 +2047,12 @@
           "logical_name": "custom",
           "pii": false,
           "type": "Map"
+        },
+        {
+          "column_name": "ddd_icon",
+          "logical_name": "icon",
+          "pii": false,
+          "type": "String"
         },
         {
           "column_name": "ddd_id",
@@ -1981,6 +2077,24 @@
           "logical_name": "owner_id",
           "pii": false,
           "type": "UUID"
+        },
+        {
+          "column_name": "ddd_parent_doc_id",
+          "logical_name": "parent_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddd_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ddd_revision",
+          "logical_name": "revision",
+          "pii": false,
+          "type": "Integer"
         },
         {
           "column_name": "ddd_subject_id",
@@ -2015,6 +2129,54 @@
       ],
       "resource": "Demo.DocsScope.Doc",
       "table_name": "ddd_doc"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ddl_anchor_text",
+          "logical_name": "anchor_text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ddl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ddl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddl_source_doc_id",
+          "logical_name": "source_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddl_target_doc_id",
+          "logical_name": "target_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ddl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Demo.DocsScope.DocLink",
+      "table_name": "ddl_doc_link"
     },
     {
       "fields": [

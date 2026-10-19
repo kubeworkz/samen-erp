@@ -1851,6 +1851,318 @@
     {
       "fields": [
         {
+          "column_name": "edb_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "edb_checked",
+          "logical_name": "checked",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "edb_doc_id",
+          "logical_name": "doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edb_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edb_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "edb_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "edb_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edb_parent_block_id",
+          "logical_name": "parent_block_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edb_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edb_revision",
+          "logical_name": "revision",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edb_text",
+          "logical_name": "text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edb_type",
+          "logical_name": "type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "edb_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_edb_text_secure",
+          "logical_name": "text_secure",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Docs.DocBlock",
+      "table_name": "edb_doc_block"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "edd_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "edd_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edd_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "edd_icon",
+          "logical_name": "icon",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "edd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edd_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edd_parent_doc_id",
+          "logical_name": "parent_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edd_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edd_revision",
+          "logical_name": "revision",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edd_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edd_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edd_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_edd_secure_body",
+          "logical_name": "secure_body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Docs.Doc",
+      "table_name": "edd_doc"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "edl_anchor_text",
+          "logical_name": "anchor_text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "edl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edl_source_doc_id",
+          "logical_name": "source_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edl_target_doc_id",
+          "logical_name": "target_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Docs.DocLink",
+      "table_name": "edl_doc_link"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "edn_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "edn_body",
+          "logical_name": "body",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edn_custom",
+          "logical_name": "custom",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "edn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "edn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edn_owner_id",
+          "logical_name": "owner_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edn_subject_id",
+          "logical_name": "subject_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edn_subject_key",
+          "logical_name": "subject_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_edn_secure_body",
+          "logical_name": "secure_body",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Docs.Note",
+      "table_name": "edn_note"
+    },
+    {
+      "fields": [
+        {
           "column_name": "eff_archived_at",
           "logical_name": "archived_at",
           "pii": false,

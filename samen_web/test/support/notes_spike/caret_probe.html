@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WS-Notes P0 — caret probe</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+      textarea { width: 100%; font: inherit; padding: .4rem .5rem; }
+      code { background: #f5f5f4; padding: 0 .2rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Caret probe (WS-Notes P0)</h1>
+
+    <p>
+      Measures the ONE property a server cannot see: if a focused <code>&lt;textarea&gt;</code> has its
+      <code>value</code> re-written with the <em>same</em> string — the worst case of LiveView echoing
+      a debounced change back — does the caret stay where the user put it? The second half of the probe
+      writes a <em>different</em> string on purpose: that is the positive control, and it must move the
+      caret to the end. Without the control, "the caret did not move" would be unfalsifiable.
+    </p>
+
+    <textarea id="t" aria-label="caret probe">First line.</textarea>
+
+    <p><small>Driven by the agent through the preview console; see <code>docs/ws-notes/p0-findings.md</code>.</small></p>
+  </body>
+</html>

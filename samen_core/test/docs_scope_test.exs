@@ -37,7 +37,7 @@ defmodule Samen.DocsScopeTest do
     only: [resolve_on_plane: 4, assert_plane_masked!: 2, assert_leak_detected!: 2, mask: 0]
 
   alias Samen.Archival
-  alias SamenCore.Support.DocsFixture.{Doc, Note}
+  alias SamenCore.Support.DocsFixture.{Doc, DocBlock, DocLink, Note}
 
   @repo SamenCore.TestRepo
 
@@ -95,6 +95,30 @@ defmodule Samen.DocsScopeTest do
 
   defp doc_ids(scope), do: Doc |> Ash.read!(scope: scope) |> Enum.map(& &1.id) |> MapSet.new()
   defp note_ids(scope), do: Note |> Ash.read!(scope: scope) |> Enum.map(& &1.id) |> MapSet.new()
+
+  defp new_block(scope, org, doc, attrs \\ %{}) do
+    DocBlock
+    |> Ash.Changeset.for_create(
+      :create,
+      Map.merge(%{org_id: org, doc_id: doc.id, type: :paragraph, text: "hello"}, attrs),
+      scope: scope
+    )
+    |> Ash.create!()
+  end
+
+  # A block/link write that Ash REFUSES (a changeset that carries errors, or an
+  # `Ash.Error.Invalid` raised while building it) — the shape both red paths below
+  # assert against.
+  defp refused_changeset(fun) do
+    try do
+      case fun.() do
+        {:error, _reason} = error -> error
+        other -> flunk("expected the write to be REFUSED, but it succeeded: #{inspect(other)}")
+      end
+    rescue
+      e in [Ash.Error.Invalid, ArgumentError] -> {:error, e}
+    end
+  end
 
   defp archived_docs(scope), do: Doc |> Ash.Query.for_read(:archived) |> Ash.read!(scope: scope)
   defp archived_notes(scope), do: Note |> Ash.Query.for_read(:archived) |> Ash.read!(scope: scope)
@@ -390,6 +414,239 @@ defmodule Samen.DocsScopeTest do
            "(the caller's declared-classification route)", %{org: org, scope: scope} do
       d = new_doc(scope, org, %{secure_body: @secret_body})
       assert d.id
+    end
+  end
+
+  # ── c9: the block model (WS-Notes Phase 1, ADR-053 §2 D2 / §3) ──────────────
+
+  describe "c9 — DocBlock + DocLink + the Doc page columns (ADR-053 Phase 1)" do
+    test "the Doc page columns round-trip (parent_doc_id/icon/position/revision)",
+         %{org: org, scope: scope} do
+      parent = new_doc(scope, org, %{title: "Root"})
+
+      child =
+        new_doc(scope, org, %{title: "Child", parent_doc_id: parent.id, icon: "📄", position: 2048})
+
+      assert child.parent_doc_id == parent.id
+      assert child.icon == "📄"
+      assert child.position == 2048
+      # The optimistic-concurrency counter starts at 1 (the write seam CASes it).
+      assert child.revision == 1
+    end
+
+    test "R4 (org half): a Doc's parent must be same-org (RED); a same-org parent is accepted (CONTROL)",
+         %{org: org, scope: scope} do
+      org_b = Ash.UUID.generate()
+      foreign = new_doc(tenant_scope(org_b), org_b, %{title: "B root"})
+      mine = new_doc(scope, org, %{title: "Mine"})
+
+      assert refused_changeset(fn ->
+               Doc
+               |> Ash.Changeset.for_create(
+                 :create,
+                 %{org_id: org, title: "graft", parent_doc_id: foreign.id},
+                 scope: scope
+               )
+               |> Ash.create!()
+             end)
+
+      # CONTROL — the identical shape with a same-org parent is accepted.
+      ok =
+        Doc
+        |> Ash.Changeset.for_create(
+          :create,
+          %{org_id: org, title: "graft ok", parent_doc_id: mine.id},
+          scope: scope
+        )
+        |> Ash.create!()
+
+      assert ok.parent_doc_id == mine.id
+    end
+
+    test "block CRUD: create/read/update/destroy(=archive) a DocBlock, ordered by position",
+         %{org: org, scope: scope} do
+      d = new_doc(scope, org, %{title: "Page"})
+      b = new_block(scope, org, d, %{type: :heading_1, text: "Title"})
+
+      assert b.doc_id == d.id
+      assert b.type == :heading_1
+      assert b.text == "Title"
+      assert b.position == 0
+      assert b.revision == 1
+
+      second = new_block(scope, org, d, %{type: :code, text: "x = 1", metadata: %{"language" => "elixir"}, position: 1024})
+
+      ordered =
+        DocBlock
+        |> Ash.Query.filter(doc_id == ^d.id)
+        |> Ash.Query.sort(position: :asc)
+        |> Ash.read!(scope: scope)
+
+      assert Enum.map(ordered, & &1.id) == [b.id, second.id]
+
+      updated =
+        b |> Ash.Changeset.for_update(:update, %{text: "Title v2", revision: 2}, scope: scope) |> Ash.update!()
+
+      assert updated.text == "Title v2"
+      assert updated.revision == 2
+
+      {:ok, _archived} = Archival.archive(b, scope: scope)
+
+      visible = DocBlock |> Ash.Query.filter(doc_id == ^d.id) |> Ash.read!(scope: scope) |> Enum.map(& &1.id)
+      refute b.id in visible
+      assert second.id in visible
+    end
+
+    test "R2: a block's doc must be same-org (RED); a same-org doc is accepted (CONTROL)",
+         %{org: org, scope: scope} do
+      org_b = Ash.UUID.generate()
+      foreign_doc = new_doc(tenant_scope(org_b), org_b, %{title: "B"})
+      mine = new_doc(scope, org, %{title: "Mine"})
+
+      assert refused_changeset(fn -> new_block(scope, org, foreign_doc) end)
+      assert %DocBlock{} = new_block(scope, org, mine)
+    end
+
+    test "R3: `doc_id` cannot be re-pointed on update", %{org: org, scope: scope} do
+      d = new_doc(scope, org, %{title: "A"})
+      other = new_doc(scope, org, %{title: "B"})
+      b = new_block(scope, org, d)
+
+      assert refused_changeset(fn ->
+               b |> Ash.Changeset.for_update(:update, %{doc_id: other.id}, scope: scope) |> Ash.update!()
+             end)
+
+      [fresh] = DocBlock |> Ash.Query.filter(id == ^b.id) |> Ash.read!(scope: scope)
+      assert fresh.doc_id == d.id
+    end
+
+    test "an actor never reads another org's blocks (RED); reads its own (CONTROL)",
+         %{org: org, scope: scope} do
+      org_b = Ash.UUID.generate()
+      scope_b = tenant_scope(org_b)
+      mine = new_block(scope, org, new_doc(scope, org, %{title: "A"}))
+      _theirs = new_block(scope_b, org_b, new_doc(scope_b, org_b, %{title: "B"}))
+
+      seen = DocBlock |> Ash.read!(scope: scope) |> Enum.map(& &1.id)
+      assert seen == [mine.id]
+    end
+
+    test "the closed shape is enforced ON THE WRITE PATH (R11's substrate half)",
+         %{org: org, scope: scope} do
+      d = new_doc(scope, org, %{title: "Page"})
+
+      # GREEN controls first — the shapes the table exists for.
+      assert %DocBlock{} = new_block(scope, org, d, %{type: :paragraph})
+      assert %DocBlock{} = new_block(scope, org, d, %{type: :to_do, checked: true})
+      assert %DocBlock{} = new_block(scope, org, d, %{type: :code, metadata: %{"language" => "elixir"}})
+      assert %DocBlock{} = new_block(scope, org, d, %{type: :callout, metadata: %{"icon" => "💡"}})
+      assert %DocBlock{} = new_block(scope, org, d, %{type: :page_link, metadata: %{"target_doc_id" => Ash.UUID.generate()}})
+
+      # RED — attributes the type does not name are REFUSED, not dropped.
+      assert refused_changeset(fn -> new_block(scope, org, d, %{type: :paragraph, checked: true}) end)
+      assert refused_changeset(fn ->
+               new_block(scope, org, d, %{type: :callout, metadata: %{"language" => "elixir"}})
+             end)
+      assert refused_changeset(fn ->
+               new_block(scope, org, d, %{type: :code, metadata: %{"language" => "elixir", "rows" => "3"}})
+             end)
+      assert refused_changeset(fn -> new_block(scope, org, d, %{type: :to_do, checked: "yes"}) end)
+      # RED — an undefined type is refused by the bounded enum.
+      assert refused_changeset(fn -> new_block(scope, org, d, %{type: :database}) end)
+    end
+
+    test "a block's plain `text` is FreeTextScan-guarded (RED); the vaulted `text_secure` accepts it",
+         %{org: org, scope: scope} do
+      d = new_doc(scope, org, %{title: "Page"})
+
+      assert refused_changeset(fn -> new_block(scope, org, d, %{text: @secret_body}) end)
+
+      b = new_block(scope, org, d, %{text: "ordinary prose", text_secure: @secret_body})
+      assert b.text == "ordinary prose"
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, b.id, [:text_secure], [@secret_body])
+    end
+
+    test "block text_secure masks per plane (INV-1), same three-proof as Doc.secure_body",
+         %{org: org, scope: scope} do
+      d = new_doc(scope, org, %{title: "Page"})
+      b = new_block(scope, org, d, %{text_secure: @secret_body})
+
+      loaded =
+        DocBlock
+        |> Ash.Query.filter(id == ^b.id)
+        |> Ash.Query.ensure_selected([:text_secure])
+        |> Ash.read_one!(scope: scope)
+
+      tenant_val = resolve_on_plane(loaded, DocBlock, :tenant, repo: @repo).text_secure
+      refute match?(%Samen.Masked{}, tenant_val)
+      assert tenant_val == @secret_body
+
+      operator_val = resolve_on_plane(loaded, DocBlock, :operator, repo: @repo, grant: DenyAll).text_secure
+      assert_plane_masked!(operator_val, nil)
+      refute to_string(operator_val) =~ @secret_body
+      refute to_string(operator_val) =~ "vt_"
+
+      # ANTI-TAUTOLOGY: the same row flips clear ⇄ masked with the plane alone.
+      assert to_string(resolve_on_plane(loaded, DocBlock, :operator, repo: @repo, grant: DenyAll).text_secure) == mask()
+    end
+
+    test "DocLink: a resolved edge is created same-org; a cross-org target is REFUSED (R13)",
+         %{org: org, scope: scope} do
+      org_b = Ash.UUID.generate()
+      source = new_doc(scope, org, %{title: "Source"})
+      target = new_doc(scope, org, %{title: "Target"})
+      foreign = new_doc(tenant_scope(org_b), org_b, %{title: "Foreign"})
+
+      link =
+        DocLink
+        |> Ash.Changeset.for_create(
+          :create,
+          %{org_id: org, source_doc_id: source.id, target_doc_id: target.id, anchor_text: "Target"},
+          scope: scope
+        )
+        |> Ash.create!()
+
+      assert link.target_doc_id == target.id
+
+      assert refused_changeset(fn ->
+               DocLink
+               |> Ash.Changeset.for_create(
+                 :create,
+                 %{org_id: org, source_doc_id: source.id, target_doc_id: foreign.id, anchor_text: "Foreign"},
+                 scope: scope
+               )
+               |> Ash.create!()
+             end)
+
+      # Re-resolution refreshes the typed title; the endpoints never move.
+      refreshed = link |> Ash.Changeset.for_update(:update, %{anchor_text: "Target (renamed)"}, scope: scope) |> Ash.update!()
+      assert refreshed.anchor_text == "Target (renamed)"
+      assert refreshed.target_doc_id == target.id
+
+      assert refused_changeset(fn ->
+               refreshed
+               |> Ash.Changeset.for_update(:update, %{target_doc_id: foreign.id}, scope: scope)
+               |> Ash.update!()
+             end)
+
+      # A DocLink is a pure edge row — it has NO archive state at all.
+      refute Enum.any?(Ash.Resource.Info.attributes(DocLink), &(&1.name == :archived_at))
+    end
+
+    test "the block model's tables are catalogued in-tx (catalog_parity green)",
+         %{org: org, scope: scope} do
+      _ = new_block(scope, org, new_doc(scope, org, %{title: "Page"}))
+
+      violations =
+        Mix.Tasks.Samen.Verify.CatalogParity.check(@repo)
+        |> Enum.filter(&(&1 =~ "sdb_doc_block" or &1 =~ "sdl_doc_link"))
+
+      assert violations == [],
+             "expected no catalog_parity violations for the block-model tables, got: " <>
+               inspect(violations)
+
+      assert AshPostgres.DataLayer.Info.table(DocBlock) == "sdb_doc_block"
+      assert AshPostgres.DataLayer.Info.table(DocLink) == "sdl_doc_link"
     end
   end
 end

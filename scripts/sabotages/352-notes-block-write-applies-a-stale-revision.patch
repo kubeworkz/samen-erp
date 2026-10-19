@@ -1,0 +1,33 @@
+# SABOTAGE: WS-NOTES R9 — A STALE BLOCK WRITE IS APPLIED LAST-WRITE-WINS
+# (ADR-053 §6 R9; WS-Notes Phase 2 unit 2.2 / gate P2). `Samen.Web.Notes.Writes.cas_update/4`
+# no longer compare-and-sets on the revision the writer saw: the filter admits every revision
+# AT OR ABOVE it, so a client holding revision 1 when the row is already at 2 matches the
+# UPDATE, overwrites the other writer's text, and gets `{:ok, _}` back instead of
+# `{:error, :stale}`. Both consequences the design forbids follow: the edit is silently lost
+# AND the conflict banner has nothing to show.
+#
+# Aimed at the CAS, not at the rest of the write path: the transaction boundary, the
+# `StaleRecord` -> `:stale` classification in `stale_error?/1`, the block revision bump, and
+# every ordering/rebalance clause are untouched. `expected` stays referenced (no unused-variable
+# warning) and the masked/unknown-type paths do not change, so only the two R9 tests flip:
+# the plain stale write AND the stale split (which must roll the whole transaction back).
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_reads_writes_test.exs
+# MUST_FAIL: REFUSES a stale revision and leaves the row unchanged
+# MUST_FAIL: a stale revision refuses the split
+diff --git a/samen_web/lib/samen/web/notes/writes.ex b/samen_web/lib/samen/web/notes/writes.ex
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -506,8 +506,11 @@
+   defp cas_update(block, scope, attrs, expected) do
+     block
+     |> Ash.Changeset.for_update(:update, attrs, scope: scope)
+-    |> Ash.Changeset.filter({:revision, [eq: expected]})
++    # SABOTAGE (R9): the compare-and-set now admits every revision AT OR ABOVE the one the
++    # writer saw — a stale write matches the UPDATE and is applied last-write-wins. `expected`
++    # stays referenced, so no warning is introduced.
++    |> Ash.Changeset.filter({:revision, [greater_than: expected - 1]})
+     |> update()
+     |> case do
+       {:ok, updated} -> {:ok, updated}
+       {:error, error} -> if stale_error?(error), do: {:error, :stale}, else: {:error, error}

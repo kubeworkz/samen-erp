@@ -5187,6 +5187,96 @@
     {
       "fields": [
         {
+          "column_name": "fdb_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "fdb_checked",
+          "logical_name": "checked",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "fdb_doc_id",
+          "logical_name": "doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdb_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdb_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fdb_metadata",
+          "logical_name": "metadata",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "fdb_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdb_parent_block_id",
+          "logical_name": "parent_block_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdb_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fdb_revision",
+          "logical_name": "revision",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fdb_text",
+          "logical_name": "text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdb_type",
+          "logical_name": "type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "fdb_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pii_fdb_text_secure",
+          "logical_name": "text_secure",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Driftwood.Docs.DocBlock",
+      "table_name": "fdb_doc_block"
+    },
+    {
+      "fields": [
+        {
           "column_name": "fdd_archived_at",
           "logical_name": "archived_at",
           "pii": false,
@@ -5203,6 +5293,12 @@
           "logical_name": "custom",
           "pii": false,
           "type": "Map"
+        },
+        {
+          "column_name": "fdd_icon",
+          "logical_name": "icon",
+          "pii": false,
+          "type": "String"
         },
         {
           "column_name": "fdd_id",
@@ -5227,6 +5323,24 @@
           "logical_name": "owner_id",
           "pii": false,
           "type": "UUID"
+        },
+        {
+          "column_name": "fdd_parent_doc_id",
+          "logical_name": "parent_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdd_position",
+          "logical_name": "position",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "fdd_revision",
+          "logical_name": "revision",
+          "pii": false,
+          "type": "Integer"
         },
         {
           "column_name": "fdd_subject_id",
@@ -5261,6 +5375,54 @@
       ],
       "resource": "Driftwood.Docs.Doc",
       "table_name": "fdd_doc"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "fdl_anchor_text",
+          "logical_name": "anchor_text",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "fdl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "fdl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdl_source_doc_id",
+          "logical_name": "source_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdl_target_doc_id",
+          "logical_name": "target_doc_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "fdl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Driftwood.Docs.DocLink",
+      "table_name": "fdl_doc_link"
     },
     {
       "fields": [

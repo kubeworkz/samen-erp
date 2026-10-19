@@ -3,8 +3,9 @@ defmodule Demo.DocsScope do
   The Demo host's Docs domain — mounted from the `samen_core` Docs scope
   blueprint (ADR-004; F3, T45), mirroring `Demo.CalendarScope`.
 
-  One `use Samen.Scopes.Docs` expands into two host-owned resources
-  (`Demo.DocsScope.Doc` + `Demo.DocsScope.Note`), a normal `use Samen.Resource`
+  One `use Samen.Scopes.Docs` expands into four host-owned resources
+  (`Demo.DocsScope.Doc` + `Demo.DocsScope.Note`, plus WS-Notes' `DocBlock` and
+  `DocLink` — ADR-053 Phase 1), a normal `use Samen.Resource`
   in the DEMO's `otp_app`/`repo`, so:
 
     * their columns are catalogued in the DEMO's `tam_table`/`fld_field` (the
@@ -26,5 +27,5 @@ defmodule Demo.DocsScope do
     otp_app: :demo,
     repo: Demo.Repo,
     namespace: Demo.DocsScope,
-    abbrevs: %{doc: "ddd", note: "ddn"}
+    abbrevs: %{doc: "ddd", note: "ddn", doc_block: "ddb", doc_link: "ddl"}
 end

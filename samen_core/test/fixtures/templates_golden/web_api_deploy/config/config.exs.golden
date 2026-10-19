@@ -11,18 +11,26 @@ config :acme,
     Acme.Vertical,
     Acme.Aggregate,
     Acme.Primitives,
-    Acme.Operator
+    Acme.Operator,
+    # WS-Notes / ADR-053 §3 — the Docs scope (Doc/Note + the DocBlock/DocLink block
+    # model). Registered in BOTH lists for the same reason every domain above is: a
+    # domain absent from `:ash_domains` is invisible to the verifiers, so its 🔒
+    # `pii_*_secure_body`/`pii_*_text_secure` columns would read as DE-VAULTED (a
+    # vault column with no declared route) and the app's own gate would fail.
+    Acme.Docs
   ]
 
 # The samen_core verifiers discover domains from :samen_core :ash_domains. Register
 # this app's domains so the gate scans the mounted Billing scope + the vertical
-# resource + the token-blind aggregate + the Primitives mount + the operator plane.
+# resource + the token-blind aggregate + the Primitives mount + the operator plane
+# + the Docs scope (ADR-053).
 config :samen_core, :ash_domains, [
   Acme.Billing,
   Acme.Vertical,
   Acme.Aggregate,
   Acme.Primitives,
-  Acme.Operator
+  Acme.Operator,
+  Acme.Docs
 ]
 
 config :ash, disable_async?: true

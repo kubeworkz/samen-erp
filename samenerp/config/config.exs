@@ -32,7 +32,10 @@ config :samenerp,
     # rebuilt from. Mounted because this app had the analytics READERS (the P17
     # `/analytics` surface + the operator plane) without a producer: see the mount note
     # in lib/samenerp/analytics.ex and migration 20261013120000.
-    Samenerp.Analytics
+    Samenerp.Analytics,
+    # WS-Notes / ADR-053 Phase 1 — the Docs scope's first mount in this host
+    # (Doc + Note + the new DocBlock/DocLink), migration 20261018120000.
+    Samenerp.Docs
     # NOTE (ADR-050, 2026-10-11) — `Samenerp.Fleet` (migration 20261011120000) is
     # deliberately registered in NEITHER `ash_domains` list, and that is load-bearing
     # rather than cosmetic. `mix samen.verify.aggregate_privacy` discovers its fleet
@@ -74,7 +77,8 @@ config :samen_core, :ash_domains, [
   Samenerp.Primitives,
   Samenerp.Operator,
   Samen.AI.Domain,
-  Samenerp.Analytics
+  Samenerp.Analytics,
+  Samenerp.Docs
   # `Samenerp.Fleet` is deliberately absent here too — see the note on the app's own
   # `ash_domains` list above (the samen_core discovery list would sweep the registry
   # through the same tenant-plane verifiers).

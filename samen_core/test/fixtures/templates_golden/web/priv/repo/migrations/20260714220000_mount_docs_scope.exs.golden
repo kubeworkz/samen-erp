@@ -1,0 +1,138 @@
+defmodule Acme.Repo.Migrations.MountDocsScope do
+  @moduledoc """
+  WS-Notes Phase 1 / ADR-053 — mounts the Docs scope into this app for the FIRST
+  time (Doc + Note + the new block model), and catalogs all four resources in the
+  SAME migration transaction (ADR-004 catalog-in-tx). Mirrors this app's own
+  `MountPrimitivesScope`.
+
+    * `add_doc` — Doc: `title`, `body` (plain, `FreeTextScan`-guarded) /
+      🔒 `pii_add_secure_body` (`vault: :pii_doc_body`), the generic
+      `(subject_key, subject_id)` object-ref anchor, plus the ADR-053 page-tree
+      columns `add_parent_doc_id` (same-org — R4's org half),
+      `add_icon`, `add_position` (integer ordinal among siblings,
+      ADR-053 §8 O2) and `add_revision` (optimistic concurrency).
+      Archivable (ADR-040 §5.9).
+    * `adn_note` — Note: same posture (`vault: :pii_note_body`), same
+      anchor. Archivable.
+    * `adb_doc_block` — one typed BLOCK row per page: `adb_type`
+      is a bounded enum whose `adb_metadata`/`adb_checked` are
+      validated against it by `Samen.Scopes.Docs.BlockShape` on every governed
+      write (the enum constraint alone cannot express "`language` only on `code`");
+      `adb_position` is scoped to `adb_parent_block_id`; and
+      🔒 `pii_adb_text_secure` is the vaulted half of the per-block
+      `text`/`text_secure` pair (`vault: :pii_block_text`) — block-level masking
+      granularity, at the column level where the PII verifiers already look.
+      Archivable.
+    * `adl_doc_link` — one RESOLVED `[[Title]]` edge; both endpoints
+      same-org (`Samen.Policy.SameOrgFk`, R13); unique per
+      `(source_doc_id, target_doc_id)`. Not archivable — a pure edge row.
+
+  ## Abbrevs
+
+  `add`/`adn`/`adb`/`adl` are prefix-derived
+  and reserved through `mix samen.abbrev.reserve` under host `acme`
+  (ADR-023) — never hand-edited into `priv/abbrev_registry.json`.
+
+  ## Down
+
+  `down/0` drops all four tables and their catalog rows (fresh mount — the
+  bootstrap form of `catalog_sync_down/1`).
+  """
+  # An ADDITIVE (expand) migration: `down/0` is a clean round trip, so the tree
+  # down-check exercises it in this app's gate (`mix samen.verify.migrations`).
+  use Samen.Migration, phase: :expand
+
+  @resources [
+    Acme.Docs.Doc,
+    Acme.Docs.Note,
+    Acme.Docs.DocBlock,
+    Acme.Docs.DocLink
+  ]
+
+  def up do
+    create table(:add_doc, primary_key: false) do
+      add(:add_title, :text, null: false)
+      add(:add_body, :text)
+      add(:add_subject_key, :text)
+      add(:add_subject_id, :uuid)
+      add(:add_custom, :map)
+      add(:add_owner_id, :uuid)
+      add(:add_icon, :text)
+      add(:add_position, :bigint, null: false, default: 0)
+      add(:add_revision, :bigint, null: false, default: 1)
+      add(:add_parent_doc_id, :uuid)
+      add(:pii_add_secure_body, :text)
+      add(:add_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:add_org_id, :uuid, null: false)
+      add(:add_inserted_at, :utc_datetime, null: false)
+      add(:add_updated_at, :utc_datetime, null: false)
+      add(:add_archived_at, :utc_datetime_usec)
+    end
+
+    create(index(:add_doc, [:add_org_id]))
+    create(index(:add_doc, [:add_subject_key, :add_subject_id]))
+    create(index(:add_doc, [:add_parent_doc_id]))
+
+    create table(:adn_note, primary_key: false) do
+      add(:adn_body, :text)
+      add(:adn_subject_key, :text)
+      add(:adn_subject_id, :uuid)
+      add(:adn_custom, :map)
+      add(:adn_owner_id, :uuid)
+      add(:pii_adn_secure_body, :text)
+      add(:adn_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:adn_org_id, :uuid, null: false)
+      add(:adn_inserted_at, :utc_datetime, null: false)
+      add(:adn_updated_at, :utc_datetime, null: false)
+      add(:adn_archived_at, :utc_datetime_usec)
+    end
+
+    create(index(:adn_note, [:adn_org_id]))
+    create(index(:adn_note, [:adn_subject_key, :adn_subject_id]))
+
+    create table(:adb_doc_block, primary_key: false) do
+      add(:adb_parent_block_id, :uuid)
+      add(:adb_position, :bigint, null: false, default: 0)
+      add(:adb_type, :text, null: false)
+      add(:adb_text, :text)
+      add(:adb_checked, :boolean)
+      add(:adb_metadata, :map, default: %{})
+      add(:adb_revision, :bigint, null: false, default: 1)
+      add(:adb_doc_id, :uuid, null: false)
+      add(:pii_adb_text_secure, :text)
+      add(:adb_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:adb_org_id, :uuid, null: false)
+      add(:adb_inserted_at, :utc_datetime, null: false)
+      add(:adb_updated_at, :utc_datetime, null: false)
+      add(:adb_archived_at, :utc_datetime_usec)
+    end
+
+    create(index(:adb_doc_block, [:adb_org_id]))
+    create(index(:adb_doc_block, [:adb_doc_id, :adb_position]))
+    create(index(:adb_doc_block, [:adb_parent_block_id]))
+
+    create table(:adl_doc_link, primary_key: false) do
+      add(:adl_anchor_text, :text, null: false)
+      add(:adl_source_doc_id, :uuid, null: false)
+      add(:adl_target_doc_id, :uuid, null: false)
+      add(:adl_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
+      add(:adl_org_id, :uuid, null: false)
+      add(:adl_inserted_at, :utc_datetime, null: false)
+      add(:adl_updated_at, :utc_datetime, null: false)
+    end
+
+    create(index(:adl_doc_link, [:adl_target_doc_id]))
+    create(unique_index(:adl_doc_link, [:adl_source_doc_id, :adl_target_doc_id]))
+
+    catalog_sync(@resources)
+  end
+
+  def down do
+    catalog_sync_down(@resources)
+
+    drop(table(:adl_doc_link))
+    drop(table(:adb_doc_block))
+    drop(table(:adn_note))
+    drop(table(:add_doc))
+  end
+end

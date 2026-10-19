@@ -1,0 +1,55 @@
+defmodule <%= module %>.Docs do
+  @moduledoc """
+  <%= module %>'s Docs domain — the samen_core Docs scope blueprint (ADR-004; F3)
+  mounted AS-IS, exactly as samenerp (`Samenerp.Docs`), driftwood
+  (`Driftwood.Docs`) and pawchart (`PawChart.Docs`) mount it, plus the WS-Notes
+  block model (ADR-053 §3, M1).
+
+  One `use` expands into the FOUR host-owned resources — the internal-document
+  substrate this app inherits at ≈0 authored LOC:
+
+    * `<%= module %>.Docs.Doc` — a titled page (`<%= d_doc %>`): `title`, `body`
+      (plain, `Samen.Pii.FreeTextScan`-guarded) / 🔒 `secure_body`
+      (`vault: :pii_doc_body`), the generic `(subject_key, subject_id)` object-ref
+      anchor, and the ADR-053 page-tree columns `parent_doc_id` (same-org —
+      `Samen.Policy.SameOrgFk`), `icon`, `position` and `revision`. Archivable.
+    * `<%= module %>.Docs.Note` — the untitled annotation (`<%= d_note %>`), same
+      anchor, same pair (`vault: :pii_note_body`). Archivable.
+    * `<%= module %>.Docs.DocBlock` — one typed BLOCK row of a page
+      (`<%= d_block %>`): `type` is a bounded enum whose `metadata`/`checked` are
+      validated against it by `Samen.Scopes.Docs.BlockShape` on the governed write
+      path, `position` is an integer ordinal scoped to its parent, and
+      🔒 `text_secure` (`vault: :pii_block_text`) is the vaulted half of the
+      per-block `text`/`text_secure` pair — masking granularity at the COLUMN
+      level, where `pii_classify`/`no_plaintext_pii`/`pii_reads` already look.
+      Archivable.
+    * `<%= module %>.Docs.DocLink` — one RESOLVED `[[Title]]` edge
+      (`<%= d_link %>`); both endpoints same-org, so a backlink is an indexed
+      reverse query and a title in another org never resolves. Not archivable — a
+      pure edge row.
+
+  ## Abbrevs
+
+  `<%= d_doc %>`/`<%= d_note %>`/`<%= d_block %>`/`<%= d_link %>` are prefix-derived
+  and reserved in the GLOBAL registry (samen_core/priv/abbrev_registry.json) by
+  `mix samen.gen.app` when it emits this app — never hand-edited (ADR-023).
+
+  ## What is deliberately NOT here
+
+  No routes, no LiveView and no nav label: the pages SURFACE is WS-Notes Phase 3.
+  This mount is the model half — rows, classification and the masking seam — so a
+  host that mounts it gains the substrate and its verifier posture without a UI.
+  """
+  use Ash.Domain, validate_config_inclusion?: false
+
+  use Samen.Scopes.Docs,
+    otp_app: :<%= otp_app %>,
+    repo: <%= module %>.Repo,
+    namespace: <%= module %>.Docs,
+    abbrevs: %{
+      doc: "<%= d_doc %>",
+      note: "<%= d_note %>",
+      doc_block: "<%= d_block %>",
+      doc_link: "<%= d_link %>"
+    }
+end

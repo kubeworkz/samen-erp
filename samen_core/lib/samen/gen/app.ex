@@ -88,6 +88,10 @@ defmodule Samen.Gen.App do
     port: 4050,
     primitives_abbrevs: nil,
     operator_abbrevs: nil,
+    # WS-Notes / ADR-053 §3 — the Docs scope's four prefix-derived abbrevs (Doc, Note,
+    # the block model's DocBlock/DocLink). Derived only with the web layer (the mount
+    # rides `web_new`, exactly like Primitives/Operator above).
+    docs_abbrevs: nil,
     # WS-D D3 (ADR-022): the public JSON:API layer — default ON with the web layer.
     api?: true,
     # WS-D D10 (ADR-024): the fail-honest deploy layer — default OFF, opt-in via
@@ -304,6 +308,23 @@ defmodule Samen.Gen.App do
         }
       end
 
+    # Docs scope abbrevs (WS-Notes / ADR-053 §2 D1/D2) — the SHIPPED per-scope convention
+    # every host proves: `<scope-initial>d` + the per-resource letter, i.e. `<p1>dd` Doc,
+    # `<p1>dn` Note, `<p1>db` DocBlock, `<p1>dl` DocLink (demo `ddd`/`ddn`/`ddb`/`ddl`,
+    # driftwood `fdd`/`fdn`/`fdb`/`fdl`, samenerp `edd`/`edn`/`edb`/`edl`). Prefix-derived,
+    # NEVER `Samen.Scopes.Docs`'s literal blueprint defaults: those are permanently owned
+    # by `hosts.demo` in the committed registry, so a generated app falling back to them
+    # would collide on its first run. Fails closed against ANY collision in `validate!/1`.
+    docs_abbrevs =
+      if web? do
+        %{
+          doc: p1 <> "dd",
+          note: p1 <> "dn",
+          doc_block: p1 <> "db",
+          doc_link: p1 <> "dl"
+        }
+      end
+
     %__MODULE__{
       module: module,
       otp_app: otp_app,
@@ -324,7 +345,8 @@ defmodule Samen.Gen.App do
       modules: modules,
       port: port,
       primitives_abbrevs: primitives_abbrevs,
-      operator_abbrevs: operator_abbrevs
+      operator_abbrevs: operator_abbrevs,
+      docs_abbrevs: docs_abbrevs
     }
   end
 
@@ -362,8 +384,8 @@ defmodule Samen.Gen.App do
   @doc """
   All abbrevs the generated app reserves, as `{abbrev, owner_module_string}` pairs
   (billing scope + aggregate + authored resource; with `web?` also the Primitives mount
-  + the operator namespace — WS-D D2). Load-bearing for both reservation and
-  collision validation.
+  + the operator namespace + the WS-Notes Docs scope — WS-D D2 / ADR-053 §3).
+  Load-bearing for both reservation and collision validation.
   """
   def reserved_pairs(%__MODULE__{} = s) do
     billing =
@@ -380,7 +402,7 @@ defmodule Samen.Gen.App do
         ]
 
     if s.web? do
-      base ++ primitives_pairs(s) ++ operator_pairs(s)
+      base ++ primitives_pairs(s) ++ operator_pairs(s) ++ docs_pairs(s)
     else
       base
     end
@@ -397,6 +419,21 @@ defmodule Samen.Gen.App do
       {Map.fetch!(s.operator_abbrevs, key), "#{s.module}.Operator.#{operator_module(key)}"}
     end)
   end
+
+  # WS-Notes / ADR-053 §3 — the Docs scope's four resources, owned by `<App>.Docs.<Resource>`
+  # so the registry rows name where they came from (the Primitives/Operator shape above).
+  defp docs_pairs(%__MODULE__{} = s) do
+    Enum.map(docs_resource_order(), fn key ->
+      {Map.fetch!(s.docs_abbrevs, key), "#{s.module}.Docs.#{docs_module(key)}"}
+    end)
+  end
+
+  defp docs_resource_order, do: [:doc, :note, :doc_block, :doc_link]
+
+  defp docs_module(:doc), do: "Doc"
+  defp docs_module(:note), do: "Note"
+  defp docs_module(:doc_block), do: "DocBlock"
+  defp docs_module(:doc_link), do: "DocLink"
 
   @doc """
   Fail-closed validation. Raises on: bad module name, non-2-letter prefix, non-3-letter
@@ -726,6 +763,7 @@ defmodule Samen.Gen.App do
   defp web_bindings(%__MODULE__{} = s) do
     pa = s.primitives_abbrevs
     oa = s.operator_abbrevs
+    da = s.docs_abbrevs
 
     %{
       "samen_web_path" => samen_web_rel_path(s),
@@ -773,6 +811,13 @@ defmodule Samen.Gen.App do
       "o_macro" => oa.macro,
       "o_csat" => oa.csat,
       "o_csat_token" => oa.csat_survey_token,
+      # WS-Notes / ADR-053 §3 — the Docs scope's four abbrevs (`<%= d_doc %>`-style keys in
+      # docs_ex.eex / m_mount_docs_scope.eex). The scope-initial `d` is in the KEY so the
+      # Docs family can never be confused with a primitives/operator token.
+      "d_doc" => da.doc,
+      "d_note" => da.note,
+      "d_block" => da.doc_block,
+      "d_link" => da.doc_link,
       # WS-E `--modules` seams. Each is "" for a default (no-`--modules`) app, so the
       # rendered router/landing are byte-for-byte unchanged; they carry content only when a
       # surface is selected. Values are computed with `s.module` interpolated DIRECTLY (never

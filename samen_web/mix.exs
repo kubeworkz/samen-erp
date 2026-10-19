@@ -53,6 +53,11 @@ defmodule SamenWeb.MixProject do
       {:phoenix, "~> 1.8.9"},
       {:phoenix_live_view, "~> 1.2.9"},
       {:phoenix_html, "~> 4.1"},
+      # `Phoenix.LiveViewTest`'s DOM (element selectors, `live_isolated/3` static tokens) needs
+      # this at TEST time only; phoenix_live_view declares it optional, so mixing it in is what
+      # actually makes a CONNECTED-socket LiveView test runnable (WS-Notes P0,
+      # `test/samen/web/notes_spike_mechanics_test.exs`).
+      {:lazy_html, ">= 0.1.0", only: :test},
       # AshPhoenix.Form — the A2 form-primitive contract (ADR-016 §2): `simple_form/1`
       # is `AshPhoenix.Form`-backed (create/edit + inline validation errors).
       {:ash_phoenix, "~> 2.3"},

@@ -70,6 +70,12 @@ defmodule Samen.Gen.AppTest do
     "lib/<%= otp_app %>/operator.ex",
     "priv/repo/migrations/20260714200000_mount_primitives_scope.exs",
     "priv/repo/migrations/20260714210000_mount_operator_scopes.exs",
+    # WS-Notes / ADR-053 §3 — the Docs scope (Doc/Note + the DocBlock/DocLink block model)
+    # and its catalog-in-tx mount. A DATA-layer mount: it rides the web set with no routes
+    # and no nav label (the pages surface is ADR-053 Phase 3), so a generated app inherits
+    # the substrate and its verifier posture without a UI.
+    "lib/<%= otp_app %>/docs.ex",
+    "priv/repo/migrations/20260714220000_mount_docs_scope.exs",
     "lib/<%= otp_app %>_web/endpoint.ex",
     "lib/<%= otp_app %>_web/router.ex",
     "lib/<%= otp_app %>_web/layouts.ex",
@@ -157,7 +163,7 @@ defmodule Samen.Gen.AppTest do
       assert {"wgz", "Widgetco.Approvals.Approval"} in pairs
     end
 
-    test "web (default) reserved_pairs adds the 6 Primitives + 28 operator abbrevs (46)" do
+    test "web (default) reserved_pairs adds the 6 Primitives + 28 operator + 4 Docs abbrevs (50)" do
       pairs = Gen.reserved_pairs(spec())
       abbrevs = Enum.map(pairs, &elem(&1, 0))
 
@@ -165,9 +171,9 @@ defmodule Samen.Gen.AppTest do
       # (Identity 11 [incl. ADR-035's Credential/AuthToken/Session/UserIdentity and
       # ADR-038 §6.4's LoginFailure, T109] + Billing 9 + Support 8 [T79/I6 added
       # `csat_survey_token`, the CSAT request→response loop's single-use survey
-      # link]) = 46.
-      assert length(pairs) == 46
-      assert length(Enum.uniq(abbrevs)) == 46
+      # link]) + 4 Docs (WS-Notes / ADR-053 §2 D1/D2: Doc/Note/DocBlock/DocLink) = 50.
+      assert length(pairs) == 50
+      assert length(Enum.uniq(abbrevs)) == 50
 
       # Primitives — <p1> + the blueprint suffix (the samen_web test-host convention).
       assert {"wnt", "Widgetco.Primitives.Notification"} in pairs
@@ -195,6 +201,24 @@ defmodule Samen.Gen.AppTest do
       assert {"wqs", "Widgetco.Operator.Csat"} in pairs
       # T79 (spec §I6) — the CSAT request→response loop's single-use survey link.
       assert {"wqt", "Widgetco.Operator.CsatSurveyToken"} in pairs
+
+      # Docs (WS-Notes / ADR-053 §2 D1/D2) — <p1> + the scope initial `d` + the
+      # per-resource letter, the convention every shipped host proves (demo
+      # ddd/ddn/ddb/ddl, driftwood fdd/fdn/fdb/fdl, samenerp edd/edn/edb/edl).
+      # Prefix-derived, NEVER the blueprint's literal defaults (permanently owned by
+      # `hosts.demo` in the committed registry).
+      assert {"wdd", "Widgetco.Docs.Doc"} in pairs
+      assert {"wdn", "Widgetco.Docs.Note"} in pairs
+      assert {"wdb", "Widgetco.Docs.DocBlock"} in pairs
+      assert {"wdl", "Widgetco.Docs.DocLink"} in pairs
+    end
+
+    test "headless reserved_pairs excludes the Docs family (the mount is web-only)" do
+      abbrevs = Gen.reserved_pairs(spec(web: false)) |> Enum.map(&elem(&1, 0))
+
+      refute "wdd" in abbrevs
+      refute "wdb" in abbrevs
+      assert Enum.all?(abbrevs, &(not String.starts_with?(&1, "wd")))
     end
 
     test "web derivation fails closed on an internal collision (prefix ending in o/p/q)" do

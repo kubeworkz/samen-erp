@@ -291,8 +291,13 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +1 ADR-021 analytics mount (`sae` — Samenerp.Analytics.ProductEvent,
       # `mix samen.abbrev.reserve --host samenerp --abbrev sae`),
       # allocator-reserved: 33_998 bytes, 735 flat.
-      assert byte_size(committed) == 33998
-      assert map_size(R.load()) == 735
+      # +14 WS-Notes Phase 1 (ADR-053) — the block-model abbrevs, every one written by
+      # `mix samen.abbrev.reserve` (DocBlock/DocLink in demo/driftwood/pawchart/
+      # samen_core/samen_web, plus the samenerp host's first Docs mount:
+      # Doc/Note/DocBlock/DocLink),
+      # allocator-reserved: 34_575 bytes, 749 flat.
+      assert byte_size(committed) == 34575
+      assert map_size(R.load()) == 749
     end
   end
 
