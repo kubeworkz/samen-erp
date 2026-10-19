@@ -451,6 +451,20 @@ run_gen_probe "priv/gen_agent_probe.exs" \
 fi
 
 if ! skip_tier harness "the sabotage-harness regressions (selection + intra-app selection)"; then
+# --- gen-probe SCRATCH OWNERSHIP regression --------------------------------------------
+# `run_gen_probe` (scripts/gen_probe_guard.sh) creates each run's scratch dir and sweeps
+# exactly that path. It used to glob `_gen_*_scratch*`, so one probe could delete a
+# CONCURRENT probe's app mid-run — observed three times on the post probe, and it reads as a
+# failure of whatever that probe was testing rather than of the guard. This pins the new
+# contract: the dir is handed to the probe as SAMEN_GEN_PROBE_SCRATCH, exactly that dir is
+# removed, and a planted sibling (the old glob's shape) survives byte-intact. Its negative
+# control (raw `mix run`, no guard) must fail closed, so the assertions cannot pass by
+# accident. No DB, applies no patch; a few seconds.
+echo ""
+echo "==> Running gen-probe scratch ownership regression (the guard sweeps only its own run's dir)"
+bash "$REPO_ROOT/scripts/gen_probe_scratch_isolation_test.sh"
+echo "==> gen-probe scratch isolation regression: PASSED"
+
 # --- Sabotage-harness SELECTION regression (ADR-047 A4 fold (a)) ----------------------
 # `scripts/sabotage.sh --changed [<ref>]` is the VERIFIER PRIMITIVE ("replay the sabotages
 # relevant to my diff"). It used to derive its touched set from `git diff --name-only`,

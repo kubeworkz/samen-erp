@@ -21,9 +21,19 @@
 # snapshot in a trap covering SIGINT/SIGTERM/ERR/EXIT — so whether the probe exits
 # cleanly, crashes, or is killed outright (by an operator, a tool timeout killing the
 # whole ci.sh process tree, or an orphaned-tree scenario), the registry always comes back
-# byte-exact, the trap fires exactly once (idempotency guard), and any `_gen_*_scratch*`
-# residue (legacy fixed-name dirs or the mktemp'd unique-per-run dirs the probes now
-# create) is swept. Restore is ASSERTED SHA-256-equal to the pre-probe snapshot, not
+# byte-exact, the trap fires exactly once (idempotency guard), and the run's OWN scratch
+# dir is removed.
+#
+# SCRATCH OWNERSHIP: the guard creates that dir itself (`mktemp -d` under the repo root,
+# before invoking the probe) and hands it down as SAMEN_GEN_PROBE_SCRATCH, so cleanup
+# removes EXACTLY the directory this run created. It deliberately does NOT glob
+# `_gen_*_scratch*`: the probes share one repo root, so a blanket sweep deletes a
+# CONCURRENT probe's app mid-run — which really happened, three times, to the post probe
+# (its scratch app vanished and the run failed for no reason of its own). A probe run
+# standalone (`mix run priv/gen_*_probe.exs`, no guard) still creates its own mktemp'd dir
+# and removes it itself, so this wrapper is never the only cleanup path.
+#
+# Restore is ASSERTED SHA-256-equal to the pre-probe snapshot, not
 # merely attempted — a mismatch halts loudly (exit 2) rather than silently leaving
 # corruption, matching CLAUDE.md's HANDS-OFF invariant.
 #
@@ -50,6 +60,7 @@ GEN_PROBE_REGISTRY="$REPO_ROOT/samen_core/priv/abbrev_registry.json"
 GEN_PROBE_SNAP=""
 GEN_PROBE_PRISTINE_SHA=""
 GEN_PROBE_LABEL=""
+GEN_PROBE_SCRATCH="" # this run's OWN scratch dir (created by run_gen_probe, never a glob)
 GEN_PROBE_RESTORED=1 # 1 = nothing pending (guards double-fire + spurious no-op calls)
 
 gen_probe_restore() {
@@ -99,11 +110,20 @@ gen_probe_restore() {
   post_sha="$(gen_probe_sha256 "$GEN_PROBE_REGISTRY")"
   rm -f "$GEN_PROBE_SNAP"
 
-  # Sweep scratch residue: legacy fixed-name dirs AND mktemp'd unique-per-run dirs
-  # (T107 switched gen_*_probe.exs to `mktemp -d _gen_*_scratch.XXXXXX`).
-  rm -rf "$REPO_ROOT"/_gen_flagship_scratch "$REPO_ROOT"/_gen_flagship_scratch.* \
-    "$REPO_ROOT"/_gen_post_scratch "$REPO_ROOT"/_gen_post_scratch.* \
-    "$REPO_ROOT"/_gen_deploy_scratch "$REPO_ROOT"/_gen_deploy_scratch.*
+  # Remove ONLY the scratch dir this run created (handed to the probe as
+  # SAMEN_GEN_PROBE_SCRATCH). Never glob the probes' scratch dirs here: all probes share
+  # this repo root, so `rm -rf _gen_*_scratch*` deletes a concurrent probe's app mid-run.
+  # A failed removal is cosmetic residue, so it warns (and retries once) rather than
+  # halting — it cannot mask a registry or gate result.
+  if [[ -n "$GEN_PROBE_SCRATCH" ]]; then
+    if ! rm -rf "$GEN_PROBE_SCRATCH" 2>/dev/null; then
+      sleep 1
+      rm -rf "$GEN_PROBE_SCRATCH" 2>/dev/null ||
+        echo "==> WARN: ${GEN_PROBE_LABEL:-gen_app probe} could not remove its own scratch dir" \
+          "$GEN_PROBE_SCRATCH (cosmetic residue, left for the operator to delete)." >&2
+    fi
+    GEN_PROBE_SCRATCH=""
+  fi
 
   if [[ "$post_sha" != "$GEN_PROBE_PRISTINE_SHA" ]]; then
     echo "==> FATAL: ${GEN_PROBE_LABEL:-gen_app probe} could not restore $GEN_PROBE_REGISTRY" \
@@ -114,17 +134,19 @@ gen_probe_restore() {
 }
 
 # run_gen_probe <probe-relative-path> <label>
-# Snapshots the registry, installs the interrupt trap, runs `mix run <probe>` from
-# samen_core, restores + verifies on every path, then reports PASSED/FAILED like the
-# other ci.sh steps.
+# Snapshots the registry, creates THIS run's scratch dir, installs the interrupt trap,
+# runs `mix run <probe>` from samen_core, restores + verifies on every path, then reports
+# PASSED/FAILED like the other ci.sh steps.
 run_gen_probe() {
   local probe_rel="$1"
   local label="$2"
+  local scratch
 
   GEN_PROBE_SNAP="$(mktemp "${TMPDIR:-/tmp}/samen_ci_registry_snapshot.XXXXXX")"
   cp "$GEN_PROBE_REGISTRY" "$GEN_PROBE_SNAP"
   GEN_PROBE_PRISTINE_SHA="$(gen_probe_sha256 "$GEN_PROBE_REGISTRY")"
   GEN_PROBE_LABEL="$label"
+  GEN_PROBE_SCRATCH=""
   GEN_PROBE_RESTORED=0
 
   # GEN_PROBE_GUARD_DISABLE_TRAP=1 skips installing the interrupt trap while keeping
@@ -135,10 +157,22 @@ run_gen_probe() {
     trap gen_probe_restore SIGINT SIGTERM ERR EXIT
   fi
 
+  # Fail honestly rather than run the probe without an owned scratch dir: an unwritable
+  # repo root would otherwise surface much later as an opaque failure inside the probe.
+  if ! scratch="$(mktemp -d "$REPO_ROOT/_gen_probe_scratch.XXXXXX")"; then
+    echo "==> FATAL: $label could not create its scratch dir under $REPO_ROOT" >&2
+    gen_probe_restore
+    trap - SIGINT SIGTERM ERR EXIT
+    echo "==> $label: FAILED (no scratch dir)"
+    return 1
+  fi
+  GEN_PROBE_SCRATCH="$scratch"
+
   echo ""
   echo "==> Running $label"
   local code=0
-  (cd "$REPO_ROOT/samen_core" && mix run "$probe_rel") || code=$?
+  (cd "$REPO_ROOT/samen_core" &&
+    SAMEN_GEN_PROBE_SCRATCH="$GEN_PROBE_SCRATCH" mix run "$probe_rel") || code=$?
 
   gen_probe_restore
   trap - SIGINT SIGTERM ERR EXIT

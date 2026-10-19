@@ -89,12 +89,23 @@ http_port = 4880 + rem(System.unique_integer([:positive]), 90)
 samen_core_root = Gen.default_target() |> Path.join("samen_core")
 scratch_root = Path.expand(Path.join(samen_core_root, ".."))
 
-# T107: real `mktemp -d` — atomic, collision-immune, unique per run (was a fixed
-# `_gen_post_scratch` name; two concurrent/orphaned runs of this probe could clash).
-{scratch_parent_out, 0} =
-  System.cmd("mktemp", ["-d", Path.join(scratch_root, "_gen_post_scratch.XXXXXX")])
+# T107 scratch ownership: under the ci.sh guard (`run_gen_probe`) the GUARD creates this
+# run's scratch dir (`mktemp -d`) and hands it down as SAMEN_GEN_PROBE_SCRATCH, so its exit
+# sweep removes EXACTLY this run's dir and can never delete a concurrent probe's app
+# mid-run (a blanket `_gen_*_scratch*` sweep did, three times). A standalone
+# `mix run priv/gen_post_probe.exs` (no guard) still creates its own unique dir here.
+scratch_parent =
+  case System.get_env("SAMEN_GEN_PROBE_SCRATCH") do
+    nil ->
+      {out, 0} =
+        System.cmd("mktemp", ["-d", Path.join(scratch_root, "_gen_post_scratch.XXXXXX")])
 
-scratch_parent = String.trim(scratch_parent_out)
+      String.trim(out)
+
+    dir ->
+      File.mkdir_p!(dir)
+      Path.expand(dir)
+  end
 
 # --- REGISTRY SAFETY: snapshot the committed registry FIRST ----------------------------
 registry_path =

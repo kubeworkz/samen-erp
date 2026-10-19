@@ -105,6 +105,10 @@ Enforced by `ci.sh`'s `run_gen_probe` wrapper around the three `samen_core/priv/
 invocations: it snapshots the registry to a `mktemp`'d file before each probe and restores +
 SHA-256-verifies it in a trap covering SIGINT/SIGTERM/ERR/EXIT, independent of whether the
 probe itself gets to run its own cleanup (SIGINT is not trappable inside the BEAM at all).
+Each run also OWNS its scratch dir: the wrapper creates it (`mktemp -d`), passes it down as
+`SAMEN_GEN_PROBE_SCRATCH`, and removes exactly that path — never a `_gen_*_scratch*` glob,
+which deletes a CONCURRENT probe's app mid-run (pinned by
+`scripts/gen_probe_scratch_isolation_test.sh`, part of every gate tier).
 
 ## Framework-first, ≈0-LOC vertical mounts
 Features live in samen_core/samen_web; verticals adopt via one router/macro call
