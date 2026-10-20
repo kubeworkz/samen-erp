@@ -70,6 +70,7 @@ defmodule Samen.Web.TenantShellCoverageTest do
     :notifications,
     :flags,
     :files,
+    :notes,
     :csv,
     :search,
     :settings,

@@ -24,6 +24,8 @@ defmodule Samen.Web.NavPathRoundtripTest do
   # map (samenerp's `@current_org_labels`; see docs/samenerp-mount-ledger.md).
   @phase_paths %{
     files_path: "/files",
+    # WS-Notes Phase 3 — the Pages route prefix the notes macro sets on its own mount.
+    pages_path: "/pages",
     chat_path: "/chat",
     search_path: "/search",
     analytics_path: "/analytics",

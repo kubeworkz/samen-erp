@@ -44,6 +44,7 @@ defmodule Samen.Web.Crumbs do
     chat: "Chat",
     inbox: "Inbox",
     files: "Files",
+    pages: "Pages",
     ai: "AI",
     companies: "Companies",
     contacts: "Contacts"
@@ -86,6 +87,9 @@ defmodule Samen.Web.Crumbs do
   defp section_path(:chat, mount), do: Mount.label(mount, :chat_path, "/chat")
   defp section_path(:inbox, _mount), do: "/notifications"
   defp section_path(:files, _mount), do: "/files"
+  # WS-Notes Phase 3 — the `:pages_path` label `samen_notes_routes/3` sets itself (so a host that
+  # mounts the surface at `/docs/pages` gets a crumb that follows it, not a dead `/pages`).
+  defp section_path(:pages, mount), do: Mount.label(mount, :pages_path, "/pages")
   defp section_path(:ai, mount), do: Mount.label(mount, :ai_path, "/ai")
   defp section_path(:companies, mount), do: "#{Mount.label(mount, :crm_path, "/crm")}/companies"
   defp section_path(:contacts, mount), do: "#{Mount.label(mount, :crm_path, "/crm")}/contacts"

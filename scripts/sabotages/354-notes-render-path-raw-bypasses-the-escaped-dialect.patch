@@ -1,0 +1,25 @@
+# SABOTAGE: WS-NOTES R12 — A `raw/1` APPEARS IN THE NOTES RENDER PATH
+# (ADR-053 §6 R12; WS-Notes Phase 3 gate P3). `PageLive`'s legacy-body branch stops going through
+# the constrained inline renderer and hands the stored column straight to `Phoenix.HTML.raw/1`.
+# Stored text is now MARKUP: an author-typed `<script>` is emitted as a live element, and the
+# dialect is bypassed entirely. This is the one rendering shortcut ADR-053 §2 D3 forbids — the
+# block editor stores text, so the page must never interpret it as HTML.
+#
+# Aimed at the render path only: `Samen.Web.Notes.Inline` (the tokeniser and its constructed HEEx),
+# `Reads` (the plane-correct resolution), the write seam and every masking assertion are untouched,
+# so exactly one test flips — the legacy-body proof that asserts stored text stays escaped text.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_surface_test.exs
+# MUST_FAIL: a legacy body renders read-only through the inline renderer and can never become markup
+diff --git a/samen_web/lib/samen/web/notes/page_live.ex b/samen_web/lib/samen/web/notes/page_live.ex
+--- a/samen_web/lib/samen/web/notes/page_live.ex
++++ b/samen_web/lib/samen/web/notes/page_live.ex
+@@ -358,7 +358,3 @@
+               <div class="note-legacy-body" id="note-legacy-body">
+-                <%= if is_binary(@page.legacy.text) do %>
+-                  {Samen.Web.Notes.Inline.render(@page.legacy.text)}
+-                <% else %>
+-                  {@page.legacy.text}
+-                <% end %>
++                <%= Phoenix.HTML.raw(@page.legacy.text) %>
+               </div>

@@ -1110,3 +1110,141 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   font-size: 14px;
   line-height: 1.5;
 }
+
+/* ---------------------------------------------------------------------------
+ * WS-Notes — the Pages surface (ADR-053 §4; WS-Notes Phase 3).
+ *
+ * The block editor is server-rendered: a native <textarea> per block, no
+ * contenteditable, no client editor. These classes style that structure and
+ * nothing else — the kit components own the markup, this sheet owns the look.
+ * A `.note-block[data-secure="true"]` block is a vault-routed one; the marker is
+ * presentational only (the value is ALREADY mask-resolved server-side and this
+ * sheet never reveals anything).
+ * ------------------------------------------------------------------------- */
+.note-new-page { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+.note-new-page input {
+  flex: 1 1 auto; min-width: 0; padding: 9px 11px; font: inherit; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line2); border-radius: 8px;
+}
+.note-new-page input:focus { outline: 2px solid #0F766E; border-color: transparent; }
+
+.notes-tree { display: flex; flex-direction: column; gap: 2px; }
+.note-tree-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  border-radius: 8px; text-decoration: none; color: var(--ink);
+}
+.note-tree-row:hover { background: var(--card); border-color: var(--line); }
+.note-tree-icon { width: 18px; text-align: center; color: var(--muted); }
+.note-tree-title { font-weight: 550; }
+.note-tree-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+
+.note-editor { display: flex; flex-direction: column; gap: 2px; }
+.note-block {
+  display: flex; align-items: flex-start; gap: 6px; padding: 2px 4px;
+  border-radius: 8px;
+}
+.note-block:hover, .note-block:focus-within { background: var(--card); border-color: var(--line); }
+.note-block-gutter {
+  flex: 0 0 28px; padding-top: 7px; font: 11px/1.4 ui-monospace, monospace;
+  color: var(--muted); text-align: right; user-select: none;
+}
+.note-block-body { flex: 1 1 auto; min-width: 0; }
+.note-block-body textarea {
+  display: block; width: 100%; resize: none; overflow: hidden;
+  padding: 6px 8px; font: inherit; line-height: 1.55; color: var(--ink);
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+}
+.note-block-body textarea:focus { outline: 2px solid #0F766E; border-color: transparent; background: #fff; }
+.note-block-text { padding: 6px 8px; line-height: 1.55; }
+.note-block[data-type="heading_1"] .note-block-text,
+.note-block[data-type="heading_1"] textarea { font-size: 22px; font-weight: 700; }
+.note-block[data-type="heading_2"] .note-block-text,
+.note-block[data-type="heading_2"] textarea { font-size: 18px; font-weight: 650; }
+.note-block[data-type="heading_3"] .note-block-text,
+.note-block[data-type="heading_3"] textarea { font-size: 16px; font-weight: 600; }
+.note-block[data-type="quote"] .note-block-text,
+.note-block[data-type="quote"] textarea {
+  border-left: 3px solid var(--line2); padding-left: 10px; color: var(--muted);
+}
+.note-block[data-type="code"] .note-block-text,
+.note-block[data-type="code"] textarea { font: 13px/1.5 ui-monospace, monospace; background: #F7F7F9; }
+.note-block[data-type="callout"] .note-block-text,
+.note-block[data-type="callout"] textarea { background: #F0FDFA; border: 1px solid #CCFBF1; }
+.note-block[data-secure="true"] .note-block-gutter::after { content: " 🔒"; }
+.note-block-meta { padding: 0 8px 4px; font-size: 11px; color: var(--muted); }
+.note-block-controls { flex: 0 0 auto; display: flex; gap: 2px; padding-top: 4px; opacity: .55; }
+.note-block:hover .note-block-controls, .note-block:focus-within .note-block-controls { opacity: 1; }
+.note-control {
+  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px;
+  padding: 2px 4px; border-radius: 5px; cursor: pointer;
+}
+.note-control:hover { background: var(--line); color: var(--ink); }
+
+.note-palette {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; margin: 8px 0;
+  background: var(--card); border: 1px solid var(--line2); border-radius: 10px;
+}
+.note-palette-item {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
+  font: inherit; font-size: 12.5px; color: var(--ink); background: transparent;
+  border: 1px solid var(--line2); border-radius: 7px; cursor: pointer;
+}
+.note-palette-item:hover { background: #F0FDFA; border-color: #99F6E4; }
+.note-palette-glyph { width: 16px; text-align: center; color: var(--muted); font: 11px/1 ui-monospace, monospace; }
+.note-palette-close {
+  margin-left: auto; border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+
+.note-conflict {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 10px 12px; margin: 8px 0; font-size: 13px;
+  color: #7C2D12; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 9px;
+}
+.note-conflict button {
+  font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
+  color: #7C2D12; background: #fff; border: 1px solid #FED7AA; border-radius: 6px;
+}
+.note-error {
+  padding: 10px 12px; margin: 8px 0; font-size: 13px;
+  color: #7F1D1D; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 9px;
+}
+
+.note-empty { padding: 18px 16px; margin: 10px 0; border: 1px dashed var(--line2); border-radius: 10px; }
+.note-empty-title { margin: 0 0 4px; font-weight: 600; }
+.note-empty-body { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.note-empty button {
+  font: inherit; font-size: 13px; padding: 6px 10px; cursor: pointer;
+  color: #0F766E; background: #F0FDFA; border: 1px solid #CCFBF1; border-radius: 7px;
+}
+
+.note-legacy { margin: 12px 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.note-legacy-note { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.note-legacy-body { line-height: 1.6; }
+.note-editor-actions { margin: 10px 0 0 34px; }
+.inline-page-link { color: #0F766E; font-weight: 550; }
+.inline-mention { color: #4338CA; font-weight: 550; }
+
+/* WS-Notes Phase 4 — search results, backlinks, unresolved links. */
+.note-search { display: flex; gap: 8px; margin: 12px 0 4px; }
+.note-search input {
+  flex: 1 1 auto; min-width: 0; font: inherit; font-size: 14px; padding: 8px 10px;
+  color: var(--ink); background: #fff; border: 1px solid var(--line2); border-radius: 8px;
+}
+.note-search-note { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.note-search-results { display: grid; gap: 6px; margin: 8px 0 0; }
+.note-search-hit {
+  display: grid; gap: 2px; padding: 9px 11px; text-decoration: none; color: inherit;
+  background: var(--card); border: 1px solid var(--line); border-radius: 9px;
+}
+.note-search-hit:hover { border-color: var(--line2); }
+.note-search-hit-title { font-weight: 600; font-size: 13.5px; }
+.note-search-hit-snippet { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.note-links { margin: 16px 0; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.note-links-title { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+.note-backlink { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; padding: 4px 0; text-decoration: none; color: inherit; }
+.note-backlink-title { font-weight: 550; color: #0F766E; }
+.note-backlink-anchor { font-size: 12.5px; color: var(--muted); }
+.note-link-stale { font-size: 11.5px; color: #92400E; background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 6px; padding: 1px 6px; }
+.note-unresolved-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.note-unresolved-title { font-weight: 550; }

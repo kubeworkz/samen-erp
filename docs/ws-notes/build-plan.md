@@ -7,8 +7,8 @@ inline renderer, the ordering/revision writes, and every adversarial gate).
 
 **Gate discipline:** every phase ends with an adversarial gate (findings fixed in-phase). All suites
 + the relevant host `ci.sh` green before/after each phase; `./ci.sh` before the milestone. Sabotage
-patches numbered from **352** (**351** is the highest shipped — the delivery chokepoint probe) and
-replayed with `scripts/sabotage.sh --range 352-<n>`.
+patches numbered from **352** (**351** was the highest shipped before this workstream; **358** is
+the highest after P5) and replayed with `scripts/sabotage.sh --range 352-<n>`.
 
 **Design inputs:** [`design.md`](design.md), [`ADR-053`](../adr/ADR-053-block-pages.md). Binding
 substrate: ADR-004 (blueprints), ADR-023 (abbrev allocator), ADR-036/INV-1 (vault pair), ADR-038 §5.5
@@ -134,40 +134,166 @@ deviations, recorded rather than silently taken:
 
 | Unit | Deliverable |
 |---|---|
-| 3.1 | `samen_notes_routes/3` in `Samen.Web.Router` + `__routes__(:notes, path)` → `/pages`, `/pages/:id`; `{Samen.Web.TenantAuthz, :require_tenant}` on the `live_session` (the default leg, no exception). |
-| 3.2 | `Samen.Web.Notes.IndexLive` + `PageLive` — both `use Samen.Web.Tenant.Live` (page-owned `render/1` is a compile error); tree, breadcrumb, block list, slash palette, move controls. |
-| 3.3 | `Samen.UI.NoteBlock` components in the kit (block row, palette, conflict banner, empty state), styled in `samen_ui.css` — no new CSS framework. |
-| 3.4 | `pages_path` in `Mount.@label_keys` + `Samen.UI.Nav.nav_paths/2`'s tenant module list; `label_keys_completeness_test` and the nav dead-link guard updated in the same pass. |
-| 3.5 | The `NoteBlock` hook in `app.js` registered on `window.SamenHooks` — the §4.1 contract table verbatim; no DOM writes beyond its own `rows`. |
-| 3.6 | `tenant_shell_coverage_test` picks up both pages automatically; add any `Page`-specific coverage row it demands. |
+| 3.1 | **DONE (2026-10-19)** — `samen_notes_routes/3` in `Samen.Web.Router` + `__routes__(:notes, path)` → `/pages`, `/pages/:id`; `{Samen.Web.TenantAuthz, :require_tenant}` on the `live_session` (the default leg, no exception). The macro threads `:pages_path` itself, so mounting it IS the nav/dead-link bookkeeping. |
+| 3.2 | **DONE (2026-10-19)** — `Samen.Web.Notes.IndexLive` + `PageLive` — both `use Samen.Web.Tenant.Live` (page-owned `render/1` is a compile error); tree, breadcrumb, block list, slash palette, move controls. |
+| 3.3 | **DONE (2026-10-19)** — `Samen.UI.NoteBlock` components in the kit (block row, palette, conflict banner, empty state), styled in `samen_ui.css` — no new CSS framework. `NoteBlock.types/0` delegates to `BlockShape.types/0`, so the palette cannot drift from the model's closed vocabulary. |
+| 3.4 | **DONE (2026-10-19)** — `pages_path` in `Mount.@label_keys` + `Samen.UI.Nav`'s tenant module list (inside the existing Documents group); `label_keys_completeness_test` and the nav dead-link guard updated in the same pass. |
+| 3.5 | **DONE (2026-10-19)** — The `NoteBlock` hook in `app.js` registered on `window.SamenHooks` — the §4.1 contract table verbatim; no DOM writes beyond its own `rows`. |
+| 3.6 | **DONE (2026-10-19)** — `tenant_shell_coverage_test` picks up both pages automatically; no `Page`-specific row was demanded. |
 
 **Gate P3:** `samen_web` suite green; both pages render through the wrapper; a keyboard-only pass
 (insert → type → split → indent → move → archive) is scripted as a test, not a manual note;
 sabotage 354 (R12 `raw/1` introduced in the render path) flips.
 
+**As built (2026-10-19) — units 3.1–3.6. Gate P3 GREEN for that scope.** Tests:
+`notes_surface_test.exs` (10) and `notes_keyboard_test.exs` (3) drive the REAL router + endpoint
+(`SecurityEndpoint`), plus `nav_path_roundtrip_test`, `tenant_shell_coverage_test`,
+`label_keys_completeness_test`, `crumbs_test` and the nav-links verifier (35 tests across the last
+five files). **354 flips** (`a legacy body … can never become markup`) and restores byte-exact; 321
+re-anchors and still flips. Findings and deviations, recorded rather than silently taken:
+
+1. **The keyboard pass is driven through the socket, not a browser.** The `phx-hook` body is
+   shipped, but `samen_web` still has no webserver adapter (P0 finding 3), so the test delivers the
+   hook's events with `render_hook` on the element that carries it. The browser-only half — that a
+   real keydown reaches `pushEvent` — remains the P0 finding's unmeasured line; the contract the
+   hook must satisfy (an id plus an offset or direction token, never block text) is what the test
+   pins.
+2. **The hook registers AFTER the `LiveSocket` is constructed.** That is safe (and was checked
+   against the vendored LV 1.2.12 source): `this.hooks = opts.hooks` is a REFERENCE, no copy, so a
+   property added later is visible. Reordering it earlier would have been cosmetic.
+3. **The Documents nav group gained a Pages item, which shifted sabotage 321's anchor AND widened
+   the group its defect deletes.** The re-anchor keeps the defect (the whole Documents group goes,
+   Files AND Pages become nav islands) and the MUST_FAIL target identical; the context was widened
+   to the Marketing group above because the original 3-line leading context also occurs right
+   before the surviving Workspace group, which made the deletion-only hunk reverse-apply cleanly
+   and the residue preflight (correctly) call the tree dirty. A narrower anchor cannot distinguish
+   "not applied" from "applied" for a pure deletion; the widened one can.
+4. **The editor's only write on `phx-change` is the block text**; structural intents are separate
+   events carrying bounded tokens, so a crafted `insert_block` can name only a type the model
+   already validates (R11), and every text write carries the revision the client saw (R9).
+5. **`PageLive` shows the legacy body only when `Reads` says the page has zero blocks.** That is
+   the one place the inline dialect runs in the editor, which is why 354 aims there: a `raw/1`
+   shortcut in the block renderer would have been masked by the textarea branch.
+
 ## Phase 4 — search and backlinks (~1 day)
 
 | Unit | Deliverable |
 |---|---|
-| 4.1 | Register `Doc` + `DocBlock` in the host `SearchIndex` over `title`/`text` only; a test asserts `text_secure` registration is **refused** by `SearchIndexGuard` (R14). |
-| 4.2 | Block-level search results (page link + snippet from `text`); archived docs excluded (R15). |
-| 4.3 | `DocLink` resolution on write (org-scoped), backlink list on the target page, unresolved `[[Title]]` affordance, re-resolution on save, stale-title hint. |
+| 4.1 | **DONE (2026-10-19)** — `Samen.Web.Notes.Search.register_index/2` registers `Doc.title` + `DocBlock.text` in the host `SearchIndex` over `title`/`text` only; a test asserts `text_secure` registration is **refused** by `SearchIndexGuard` (R14), with the plain columns as the positive control. |
+| 4.2 | **DONE (2026-10-19)** — block-level search results (page link + snippet from `text`) via `Notes.Search.search/4`; a vaulted block is dropped even if a plain column is also set; archived docs excluded through the explicit live-page JOIN (R15). The index surface renders the hits and states the vault trade-off. |
+| 4.3 | **DONE (2026-10-19)** — `DocLink` resolution on write (org-scoped `Links.resolve_all/3`), backlink list on the target page, unresolved `[[Title]]` affordance (create-on-click), re-resolution on save, stale-title hint. The reconcile is a set operation inside the writing transaction. |
 
 **Gate P4:** search finds a block by its text and does **not** find a vaulted block; a cross-org
 title does not resolve (R13 flips under sabotage 355); archived pages vanish from tree, search and
 backlinks (sabotage 356).
 
+**As built (2026-10-19) — units 4.1–4.3. Gate P4 GREEN for that scope.**
+`notes_search_links_test.exs` (13) covers guarded registration, block + title hits, vaulted-block
+exclusion, org isolation, archived-page exclusion from all three views, cross-org resolution,
+stale-then-re-resolve, and the unresolved-affordance click through the REAL router; the existing
+Notes suites (102 tests) stay green. **355 and 356 both flip and restore byte-exact.** Findings and
+deviations, recorded rather than silently taken:
+
+1. **The registry lives in the host's PRIMITIVES namespace, not the Docs one.** `samen_notes_routes`
+   receives the Docs namespace, which has no `SearchIndex` resource, so search resolves the module
+   from a `:search_index` mount-label seam (threaded by the macro and whitelisted in `Mount`). An
+   absent seam is fail-closed (`[]`, registration refuses) — never a guessed module. This is the
+   same seam shape as `identity_namespace`; it rides the signed session as a compiled module atom.
+2. **Registration writes with `authorize?: false`.** `SearchIndex`'s create policy is
+   `RoleAtLeast :admin`, but registration is HOST SETUP (the same posture as the hosts'
+   `mk_search_index/1` seed helpers), not a member's page action. The check that carries the
+   security guarantee is `SearchIndexGuard.assert_no_pii_column/2`, which runs BEFORE the write for
+   both fields.
+3. **`vector_column` is the convention name (`<abbrev>_search_vector`), not a required physical
+   column.** `Samen.Search` builds the tsvector at QUERY time over the registered non-PII fields;
+   Docs adds no migration for its own GIN/trigger (the File precedent remains the index-backed
+   one). Recorded here so it is not mistaken for a populated column.
+4. **A page's blocks are NOT archived with the page.** The kernel engine therefore returns a block
+   whose DOC is archived; search adds an explicit live-page JOIN (`live_docs/3`, an org-scoped,
+   archive-filtered `Doc` read) and drops any hit whose page is absent. That join is the R15 leg
+   sabotage 356 targets — the tree and backlink legs rely on AshArchival's read preparation and are
+   asserted separately in the same test.
+5. **Only the PLAIN `text` creates link edges and search snippets.** `text_secure` never enters the
+   index (guard) and `Links.page_titles/3` parses only `text`. A vaulted block must not leak through
+   a non-PII `DocLink` row visible on the target page; that is a deliberate narrowing beyond the
+   plan's "title/text only", and the tests pin it.
+6. **Link reconciliation is a SET operation inside the write transaction:** every text/structure
+   write calls `Writes.sync_links/3`, which resolves all page titles, keeps existing rows (refreshing
+   `anchor_text`), destroys stale ones and creates missing ones. A rename therefore leaves a stale
+   hint until the source is saved, and that save drops the link if the typed title no longer resolves
+   — the documented M1 behaviour, not a background re-index.
+7. **The index surface is `IndexLive`'s `?q=` mode**, not a second LiveView: it uses the same route,
+   the same one read seam (`Notes.Search`), and renders an honest empty state plus the explicit
+   "vaulted blocks are not searchable" note. Block hits deep-link to `#note-block-<id>`.
+
 ## Phase 5 — presence, conflict UX, and the masking proofs (~1 day)
 
 | Unit | Deliverable |
 |---|---|
-| 5.1 | `Samen.Web.Notes.PubSub` — `notes:page:<id>` topic, id-only envelopes, subscribe-on-mount, unsubscribe-on-terminate. |
-| 5.2 | `PageLive`'s `handle_info` re-reads the named block through `Reads` (plane-correct), skips `editing_block_id`, and shows the conflict banner on a stale write. |
-| 5.3 | The three `Samen.MaskingCase` proofs: green (tenant + operator-with-grant clear), red (operator-without-grant `••••`, DOM-asserted, no `vt_*`), sabotage twin (plane flip clears / a modeled leak is detected). Plus the byte-scan assertion that no `text_secure` plaintext appears in the PubSub envelope or the export. |
+| 5.1 | **DONE (2026-10-19)** — `Samen.Web.Notes.PubSub` — `notes:page:<id>` topic, id-only envelopes, subscribe-on-mount, unsubscribe-on-terminate. |
+| 5.2 | **DONE (2026-10-19)** — `PageLive`'s `handle_info` re-reads the named block through `Reads` (plane-correct), skips `editing_block_id`, and shows the conflict banner on a stale write (the banner itself shipped with P3). The skip DEFERS: the id is recorded and re-read on blur. |
+| 5.3 | **DONE (2026-10-19)** — The three `Samen.MaskingCase` proofs: green (tenant + operator-with-grant clear), red (operator-without-grant `••••`, DOM-asserted, no `vt_*`), sabotage twin (plane flip clears / a modeled leak is detected). Plus the byte-scan assertion that no `text_secure` plaintext (and no `vt_*` token) appears in the PubSub envelope. The **export** half stays OPEN with unit 2.4 (`Notes.Export` is not built). |
 
 **Gate P5:** the masking trio and its refutability twin green; a broadcast into a focused block does
 not change its rendered value (sabotage 357); the envelope byte-scan test fails when the envelope
 starts carrying text (sabotage 358).
+
+**As built (2026-10-19) — units 5.1–5.3. Gate P5 GREEN for that scope.**
+`notes_realtime_masking_test.exs` (11) drives the REAL router + endpoint (`SecurityEndpoint`): two
+live sockets on one page, a focus/typing/blur sequence, a split's two block envelopes + one
+structure envelope, the closed envelope key set, and the four-plane masking proofs. `samen_web`
+green; **357 and 358 both flip and restore byte-exact** (`scripts/sabotage.sh --range 357-358`).
+Findings and deviations, recorded rather than silently taken:
+
+1. **The wave required a MODEL addition: `Doc` and `DocBlock` declare reveal actions.**
+   `Samen.Api.PiiResolution.operator_granted?/6` refuses to operator-reveal a resource with no
+   declared `reveal` action ("a resource with no declared reveal action can never be
+   operator-revealed"), so the trio's GREEN half — operator-WITH-grant reads the vaulted paragraph
+   clear — was **impossible by construction** for the Docs scope as shipped. Landed in
+   `Docs.Blueprint`: `reveal(:reveal_secure_body)` on `Doc`, `reveal(:reveal_text_secure)` on
+   `DocBlock`, each with the Primitive notifications/webhook reveal action shape (an
+   actor-carrying request answered by `Samen.Reveal.grant_checker/0`, returning a STATUS — never
+   the plaintext) and its `authorize_if(always())` policy. No migration (an action is not a
+   column). Without this, 5.3's first row could only have been written as a deviation.
+2. **The skip DEFERS rather than drops.** `handle_info({:block_changed, …})` for the focused block
+   stores `deferred_block_id`; `blur_block` re-reads that block. The test asserts both halves (the
+   focused value is unchanged after the remote write, and blur applies it), so a "skip forever"
+   implementation would fail the second assertion. 357 flips the first by re-reading immediately.
+3. **`block_text` broadcasts only the block envelope; structural writes broadcast both.** A text
+   edit does not bump `Doc.revision` (P2's decision), so it must not send a structure signal — a
+   structure reload would defeat the `editing_block_id` skip wholesale. Split/merge/insert/move/
+   indent/toggle/archive publish the changed block(s) AND `{:page_structure_changed, doc_id,
+   revision}`; the writer's own view takes one extra reload from its own structure broadcast
+   (idempotent read; no write loop, since a reload never writes).
+4. **The envelope's key set is the assertion, not the prose.** R8 is "ids and revisions only"; the
+   test asserts `Map.keys(payload) |> Enum.sort() == [:block_id, :revision]` (and
+   `[:doc_id, :revision]` for the structure envelope) plus `:erlang.term_to_binary/1` scans for the
+   plaintext and for `vt_`. The plaintext scan is vacuously safe *by construction* (`%Samen.Masked{}`
+   carries no plaintext), which is exactly why the token scan is there too: a vaulted block's struct
+   holds a `%Masked{}` with a `vt_*` token, and sabotage 358 ships it on the wire.
+5. **The realtime path re-pointed P3's stale-write test at the focused client.** Once a broadcast
+   patches every NON-focused block, a socket sitting in the same block can no longer be made stale
+   by an external write — the write patches it and the DOM's `block_revision` moves with it (the
+   `LiveViewTest` form API then refuses to submit the old value at all). So the test now plays the
+   client that is genuinely stale: it FOCUSES the block first, the remote write is deferred (R10),
+   the DOM keeps the old revision, and the submit is refused with the banner. The rewrite is
+   stronger than what it replaced, not weaker: it fails if the deferral is dropped (sabotage 357)
+   *and* if the CAS is dropped (352, through the write seam's own test).
+6. **A test that leaves a broadcast queued at teardown poisons a NEIGHBOUR test's connection.**
+   Every notes write now fans out to subscribed sockets, so a test that writes and then ends still
+   has a `handle_info` re-read in the socket's mailbox; the process outlives the test body, the
+   sandbox owner exits mid-query, and Postgrex disconnects the shared protocol — surfacing as an
+   unrelated test's `connection is closed` failure (observed once in a full `samen_web` run). The
+   discipline is one synchronous `render/1` after the last write (or `drain/1` in the realtime
+   test); it is written down because the failure it prevents does not name the test that caused it.
+7. **The test host threads `:pubsub` explicitly.** `Samen.WebTest.SecurityRouter` names
+   `Samen.WebTest.PubSub` on the notes mount's `:pubsub` label (the host-fact seam chat and
+   notifications already ride; `test_helper.exs` starts that server once for the VM). A host that
+   mounts `samen_notes_routes/3` without the label gets `Driftwood.PubSub` — the documented
+   framework default — and the P6 mount note must say so.
+8. **A failed broadcast never loses data and never raises.** `subscribe/broadcast/unsubscribe` are
+   best-effort (`:ok | {:error, term}`, rescued), so a dead-rendered socket or a seed without a
+   running PubSub still renders and still writes; the write is committed before the broadcast.
 
 ## Phase 6 — hosts, docs, and the milestone gate (~1 day)
 

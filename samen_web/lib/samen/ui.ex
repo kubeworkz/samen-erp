@@ -66,6 +66,8 @@ defmodule Samen.UI do
     * `Samen.UI.Feedback` — `empty_state/1`, `skeleton/1`, `progress/1`, `pill/1`,
       `metric/1`, `lifecycle_pill/1`, `lifecycle_stages/0`
     * `Samen.UI.Object`   — `object_card/1`, `timeline/1`, `mask_bar/1`, `token_blind_bar/1`
+    * `Samen.UI.NoteBlock` — `note_block_row/1`, `note_palette/1`, `note_conflict_banner/1`,
+      `note_empty_state/1` (the WS-Notes block editor's kit)
     * `Samen.UI.Helpers`  — `stylesheet_path/0`, `humanize_resource/1`, `palette_label/1`,
       `social_links/1`, `social_networks/0`
 
@@ -203,6 +205,12 @@ defmodule Samen.UI do
   defdelegate timeline(assigns), to: Samen.UI.Object
   defdelegate mask_bar(assigns), to: Samen.UI.Object
   defdelegate token_blind_bar(assigns), to: Samen.UI.Object
+
+  # NoteBlock (WS-Notes' block-editor kit — row, palette, conflict banner, empty state)
+  defdelegate note_block_row(assigns), to: Samen.UI.NoteBlock
+  defdelegate note_palette(assigns), to: Samen.UI.NoteBlock
+  defdelegate note_conflict_banner(assigns), to: Samen.UI.NoteBlock
+  defdelegate note_empty_state(assigns), to: Samen.UI.NoteBlock
 
   # Helpers
   defdelegate stylesheet_path(), to: Samen.UI.Helpers

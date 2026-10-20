@@ -146,6 +146,13 @@ defmodule Samen.Scopes.Docs.Blueprint do
         pii do
           vault(:pii_doc_body)
           pii_attribute(:secure_body, :string, vault: :pii_doc_body)
+          # ADR-038 §5.5 / ADR-053 §2 D5 — the GRANTED-operator half of the masking trio.
+          # `Samen.Api.PiiResolution` will not reveal a resource that declares NO reveal
+          # action (`operator_granted?/6`: "a resource with no declared reveal action can
+          # never be operator-revealed"), so this marker is what makes "operator WITH a grant
+          # reads the page's vaulted body clear" true at all. The action only CONSULTS the
+          # grant; no plaintext leaves the vault through it.
+          reveal(:reveal_secure_body)
         end
 
         changes do
@@ -158,6 +165,30 @@ defmodule Samen.Scopes.Docs.Blueprint do
 
         actions do
           defaults([:read, :destroy, create: :*, update: :*])
+
+          # The declared reveal action (see the `pii` block) — the same shape as the Primitive
+          # notifications/webhook reveals: an explicit, actor-carrying request that the host's
+          # grant checker answers. It is never a "return the plaintext" endpoint.
+          action :reveal_secure_body, :map do
+            argument(:actor_id, :string, allow_nil?: false)
+            argument(:subject_id, :string, allow_nil?: false)
+
+            run(fn input, _ctx ->
+              ctx = %Samen.Reveal.Context{
+                actor: input.arguments.actor_id,
+                subject_id: input.arguments.subject_id,
+                resource: __MODULE__,
+                action: :reveal_secure_body,
+                label: :secure_body
+              }
+
+              if Samen.Reveal.grant_checker().granted?(ctx) do
+                {:ok, %{status: "granted", subject_id: input.arguments.subject_id}}
+              else
+                {:error, :denied}
+              end
+            end)
+          end
         end
 
         policies do
@@ -168,6 +199,12 @@ defmodule Samen.Scopes.Docs.Blueprint do
           policy action_type([:create, :update, :destroy]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+
+          # The grant is the gate (the action consults `Samen.Reveal.grant_checker/0`); this
+          # policy mirrors the shipped Primitive reveals.
+          policy action(:reveal_secure_body) do
             authorize_if(always())
           end
         end
@@ -338,6 +375,12 @@ defmodule Samen.Scopes.Docs.Blueprint do
         pii do
           vault(:pii_block_text)
           pii_attribute(:text_secure, :string, vault: :pii_block_text)
+          # The GRANTED-operator half of the masking trio (ADR-038 §5.5; ADR-053 §2 D5).
+          # Without a declared reveal action, `Samen.Api.PiiResolution` can NEVER reveal this
+          # column — a grant would have no route — so a three-plane proof (tenant clear /
+          # operator-without-grant `••••` / operator-WITH-grant clear) would be impossible by
+          # construction. The action consults the grant only; it returns a status, not text.
+          reveal(:reveal_text_secure)
         end
 
         changes do
@@ -390,6 +433,30 @@ defmodule Samen.Scopes.Docs.Blueprint do
           destroy :destroy do
             require_atomic?(false)
           end
+
+          # The declared reveal action (see the `pii` block): the GRANTED-operator route to a
+          # vaulted paragraph. Same shape as the Primitive reveals — grant consulted here, the
+          # decrypt itself stays in `Samen.Api.PiiResolution`.
+          action :reveal_text_secure, :map do
+            argument(:actor_id, :string, allow_nil?: false)
+            argument(:subject_id, :string, allow_nil?: false)
+
+            run(fn input, _ctx ->
+              ctx = %Samen.Reveal.Context{
+                actor: input.arguments.actor_id,
+                subject_id: input.arguments.subject_id,
+                resource: __MODULE__,
+                action: :reveal_text_secure,
+                label: :text_secure
+              }
+
+              if Samen.Reveal.grant_checker().granted?(ctx) do
+                {:ok, %{status: "granted", subject_id: input.arguments.subject_id}}
+              else
+                {:error, :denied}
+              end
+            end)
+          end
         end
 
         policies do
@@ -400,6 +467,10 @@ defmodule Samen.Scopes.Docs.Blueprint do
           policy action_type([:create, :update, :destroy]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+
+          policy action(:reveal_text_secure) do
             authorize_if(always())
           end
         end

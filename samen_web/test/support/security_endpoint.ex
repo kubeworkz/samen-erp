@@ -103,6 +103,20 @@ defmodule Samen.WebTest.SecurityRouter do
       labels: Map.put(@labels, :identity_namespace, Samen.WebTest.Operator)
     )
 
+    # WS-Notes Phase 3 (ADR-053 §8 O4) — the Pages surface. Mounted through the REAL macro so the
+    # keyboard pass in `notes_keyboard_test.exs` drives the router's session round-trip, the
+    # tenant on_mount gate and the `?org=` binding on the actual route (never a hand-built mount).
+    #
+    # WS-Notes Phase 5 — the `:pubsub` label is the HOST's realtime bus (a host fact, the same
+    # seam chat and notifications ride). Pointed at the test VM's PubSub so the editor's
+    # subscribe/re-read path is driven for real: id-only envelopes, per-plane re-read, and the
+    # `editing_block_id` skip (R8/R10).
+    samen_notes_routes(:notes, Samen.WebTest.Docs,
+      repo: Samen.WebTest.Repo,
+      labels: Map.put(@labels, :pubsub, Samen.WebTest.PubSub),
+      search_index: Samen.WebTest.Primitives.SearchIndex
+    )
+
     # P17 (ADR-045 §3, P17-carry-2) — the TENANT own-org analytics surface. It was mounted by
     # NO router this LiveView-DRIVING harness covers, so the on_mount tenant gate + CurrentOrg
     # org-authority pinning on `/analytics` were only ever verified by-construction (the read

@@ -54,9 +54,11 @@ defmodule Samen.Web.Notes.Writes do
 
   alias Samen.Scopes.Docs.BlockShape
   alias Samen.Web.Mount
-  alias Samen.Web.Notes.Offset
+  alias Samen.Web.Notes.{Links, Offset}
 
   @gap 1024
+  # The per-source link set is bounded like every other fan-out in this module.
+  @link_limit 200
   @list_types [:bulleted_list_item, :numbered_list_item, :to_do]
 
   @block_select [
@@ -112,7 +114,10 @@ defmodule Samen.Web.Notes.Writes do
                insert_position(mount, scope, doc_id, parent, siblings, after_id, before_id),
              {:ok, block} <-
                create_block(mount, scope, doc_id, parent, position, type, metadata, checked, attrs) do
-          with {:ok, _doc} <- bump_doc!(mount, scope, doc), do: {:ok, block}
+          with {:ok, _doc} <- bump_doc!(mount, scope, doc),
+               {:ok, _links} <- sync_links(mount, scope, doc_id) do
+            {:ok, block}
+          end
         end
       end)
     end
@@ -145,12 +150,42 @@ defmodule Samen.Web.Notes.Writes do
            attrs = text_attrs(text, secure?) |> Map.put(:revision, revision + 1) do
         # A text edit is NOT a structural change: it does not bump the page revision (the
         # id-only `{:block_changed, id, revision}` envelope carries the block's own).
-        cas_update(block, scope, attrs, revision)
+        with {:ok, updated} <- cas_update(block, scope, attrs, revision),
+             {:ok, _links} <- sync_links(mount, scope, block.doc_id) do
+          {:ok, updated}
+        end
       end
     end)
   end
 
   def update_text(_mount, _scope, _block_id, _text, _opts), do: {:error, :not_a_string}
+
+  @doc """
+  Set (or flip) a `to_do` block's `checked` flag and bump its `revision`.
+
+  `checked` is a model column of ONE type, so a non-`to_do` block is refused
+  (`{:error, :not_checkable}`) rather than quietly carrying a flag its shape does not allow — the
+  same discipline `BlockShape` applies to `metadata` keys. Options: `:checked` (explicit value;
+  omit to flip) and `:revision` (CAS, R9).
+  """
+  @spec toggle_checked(Mount.t(), Samen.Scope.t(), term(), keyword()) ::
+          {:ok, struct()} | {:error, term()}
+  def toggle_checked(mount, scope, block_id, opts \\ []) do
+    expected = Keyword.get(opts, :revision)
+    requested = Keyword.get(opts, :checked)
+
+    in_tx(mount, fn ->
+      with {:ok, block} <- fetch_block(mount, scope, block_id),
+           :to_do <- block.type,
+           revision = expected || block.revision,
+           checked = if(is_boolean(requested), do: requested, else: !block.checked) do
+        cas_update(block, scope, %{checked: checked, revision: revision + 1}, revision)
+      else
+        type when is_atom(type) -> {:error, :not_checkable}
+        other -> other
+      end
+    end)
+  end
 
   # ── split / merge ──────────────────────────────────────────────────────────
 
@@ -196,7 +231,8 @@ defmodule Samen.Web.Notes.Writes do
                  if(split_type(block.type) == :to_do, do: false, else: nil),
                  text_attrs(right, secure?)
                ),
-             {:ok, _doc} <- bump_doc!(mount, scope, doc) do
+             {:ok, _doc} <- bump_doc!(mount, scope, doc),
+             {:ok, _links} <- sync_links(mount, scope, block.doc_id) do
           {:ok, %{left: updated, right: new_block}}
         end
       end
@@ -239,7 +275,8 @@ defmodule Samen.Web.Notes.Writes do
 
               with {:ok, survivor} <- cas_update(previous, scope, merged_attrs, previous.revision),
                    {:ok, _removed} <- destroy_block(block, scope),
-                   {:ok, _doc} <- bump_doc!(mount, scope, doc) do
+                   {:ok, _doc} <- bump_doc!(mount, scope, doc),
+                   {:ok, _links} <- sync_links(mount, scope, block.doc_id) do
                 {:ok, %{block: survivor, removed: block.id}}
               end
             end
@@ -328,7 +365,8 @@ defmodule Samen.Web.Notes.Writes do
              block
              |> Ash.Changeset.for_destroy(:archive, %{}, scope: scope)
              |> destroy(),
-           {:ok, _doc} <- bump_doc!(mount, scope, doc) do
+           {:ok, _doc} <- bump_doc!(mount, scope, doc),
+           {:ok, _links} <- sync_links(mount, scope, doc.id) do
         {:ok, archived}
       end
     end)
@@ -344,10 +382,148 @@ defmodule Samen.Web.Notes.Writes do
              block
              |> Ash.Changeset.for_update(:restore, %{}, scope: scope)
              |> update(),
-           {:ok, _doc} <- bump_doc!(mount, scope, doc) do
+           {:ok, _doc} <- bump_doc!(mount, scope, doc),
+           {:ok, _links} <- sync_links(mount, scope, doc.id) do
         {:ok, restored}
       end
     end)
+  end
+
+  # ── pages ──────────────────────────────────────────────────────────────────
+
+  @doc """
+  Create a page (`Doc`) in the acting org — the index surface's "New page" (Phase 3 unit 3.2).
+
+  The title is trimmed and a blank one becomes `"Untitled"`; the page is created through the
+  SAME governed `:create` action the scope ships (`OrgScope` + `RoleAtLeast :member`, ADR-053 §8
+  O6), so there is no second write path to a `Doc`. A new page has ZERO blocks, which is what
+  makes `Reads`' legacy-body fallback irrelevant for it: an empty page renders the editor's empty
+  state, not an empty legacy body.
+
+  Optional `:icon` (the bounded token the model accepts). Returns `{:ok, doc}`.
+  """
+  @spec create_page(Mount.t(), Samen.Scope.t(), map()) :: {:ok, struct()} | {:error, term()}
+  def create_page(mount, scope, attrs \\ %{}) do
+    title =
+      case Map.get(attrs, :title) do
+        title when is_binary(title) ->
+          case String.trim(title) do
+            "" -> "Untitled"
+            trimmed -> trimmed
+          end
+
+        _ ->
+          "Untitled"
+      end
+
+    attrs = Map.new(attrs)
+
+    create_attrs =
+      %{org_id: org_id(scope), title: title}
+      |> then(fn base ->
+        case Map.get(attrs, :icon) do
+          nil -> base
+          icon -> Map.put(base, :icon, icon)
+        end
+      end)
+
+    doc_resource(mount)
+    |> Ash.Changeset.for_create(:create, create_attrs, scope: scope)
+    |> Ash.create()
+  end
+
+  @doc """
+  Re-resolve this page's link graph (WS-Notes Phase 4 unit 4.3) — called inside the SAME
+  transaction as every text/structure write, so a save can never leave the `DocLink` rows
+  describing text the page no longer has.
+
+  The reconcile is a SET operation:
+
+    * every `[[Title]]` in the page's PLAIN `text` is resolved org-scoped (`Links.resolve_all/3`)
+      — an unresolved title creates nothing (the "create page" affordance persists no link);
+    * a resolved title with an existing `(source, target)` row keeps it and refreshes
+      `anchor_text` if the author's typed title changed;
+    * a row whose target is no longer referenced (or no longer resolves, e.g. the target was
+      renamed or archived) is DESTROYED.
+
+  Only `text` is parsed: a vaulted block never creates a link edge (an edge is a visible,
+  non-PII row on the target page). Return shapes: `{:ok, links}` / `{:error, term}`; an error
+  rolls the caller's transaction back rather than leaving half a link graph.
+  """
+  @spec sync_links(Mount.t(), Samen.Scope.t(), term()) :: {:ok, [struct()]} | {:error, term()}
+  def sync_links(mount, scope, doc_id) do
+    titles = Links.page_titles(mount, scope, doc_id)
+    resolved = Links.resolve_all(mount, scope, titles)
+    wanted = Map.new(resolved, fn {title, doc} -> {doc.id, title} end)
+
+    with {:ok, keep} <- reconcile_links(read_links(mount, scope, doc_id), wanted, scope) do
+      create_missing_links(mount, scope, doc_id, wanted, keep)
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  # ── links ─────────────────────────────────────────────────────────────────
+
+  defp read_links(mount, scope, doc_id) do
+    mount
+    |> link_resource()
+    |> Ash.Query.ensure_selected([:id, :source_doc_id, :target_doc_id, :anchor_text])
+    |> Ash.Query.filter(source_doc_id == ^doc_id)
+    |> Ash.Query.limit(@link_limit)
+    |> Ash.read!(scope: scope)
+  end
+
+  defp reconcile_links(existing, wanted, scope) do
+    Enum.reduce_while(existing, {:ok, MapSet.new()}, fn link, {:ok, keep} ->
+      case Map.fetch(wanted, link.target_doc_id) do
+        :error ->
+          case destroy_link(link, scope) do
+            {:ok, _} -> {:cont, {:ok, keep}}
+            {:error, error} -> {:halt, {:error, error}}
+          end
+
+        {:ok, title} ->
+          if link.anchor_text == title do
+            {:cont, {:ok, MapSet.put(keep, link.target_doc_id)}}
+          else
+            case link
+                 |> Ash.Changeset.for_update(:update, %{anchor_text: title}, scope: scope)
+                 |> update() do
+              {:ok, _} -> {:cont, {:ok, MapSet.put(keep, link.target_doc_id)}}
+              {:error, error} -> {:halt, {:error, error}}
+            end
+          end
+      end
+    end)
+  end
+
+  defp create_missing_links(mount, scope, doc_id, wanted, keep) do
+    wanted
+    |> Enum.reject(fn {target_id, _title} -> MapSet.member?(keep, target_id) end)
+    |> Enum.sort_by(fn {_target_id, title} -> title end)
+    |> Enum.reduce_while({:ok, []}, fn {target_id, title}, {:ok, acc} ->
+      attrs = %{
+        org_id: org_id(scope),
+        source_doc_id: doc_id,
+        target_doc_id: target_id,
+        anchor_text: title
+      }
+
+      case mount
+           |> link_resource()
+           |> Ash.Changeset.for_create(:create, attrs, scope: scope)
+           |> create() do
+        {:ok, link} -> {:cont, {:ok, [link | acc]}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp destroy_link(link, scope) do
+    link
+    |> Ash.Changeset.for_destroy(:destroy, %{}, scope: scope)
+    |> destroy()
   end
 
   # ── positions ──────────────────────────────────────────────────────────────
@@ -718,6 +894,7 @@ defmodule Samen.Web.Notes.Writes do
   # `:Doc`/`:DocBlock` atoms — not the aliased modules (which would concatenate twice).
   defp block_resource(mount), do: Mount.resource(mount, :DocBlock)
   defp doc_resource(mount), do: Mount.resource(mount, :Doc)
+  defp link_resource(mount), do: Mount.resource(mount, :DocLink)
 
   defp org_id(%Samen.Scope{actor: actor}), do: actor_org(actor)
   defp org_id(actor) when is_map(actor), do: actor_org(actor)

@@ -1,0 +1,42 @@
+# SABOTAGE: WS-NOTES R15 — AN ARCHIVED PAGE'S BLOCKS STAY IN SEARCH RESULTS
+# (ADR-053 §6 R15; WS-Notes Phase 4 unit 4.2 / gate P4). `Samen.Web.Notes.Search.block_hits/5`
+# no longer requires the matched block's page to be LIVE: a page that has been archived is absent
+# from the org-scoped, archive-filtered `live_docs/3` read, and the current code DROPS such a hit.
+# This patch keeps it with a synthesized "Untitled" title instead, so the archived page's block
+# text (and its snippet) reappears in search — the search leg of R15, the leg whose filter is an
+# explicit liveness JOIN rather than a base filter.
+#
+# Aimed at the search join only: the tree (`Reads.index/2`) and the backlink source read
+# (`Reads.backlinks/3`) keep their own archive filters, and every registration/vaulted-block
+# clause is untouched. The test asserts all three views, so exactly the archived-page assertion
+# fails here — the other two still hold, which is what makes the sabotage a probe of THIS leg.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_search_links_test.exs
+# MUST_FAIL: archived pages leave the tree, search and backlinks (R15)
+--- a/samen_web/lib/samen/web/notes/search.ex
++++ b/samen_web/lib/samen/web/notes/search.ex
+@@ -151,19 +151,19 @@
+       # R14/R5: a block with a vaulted half is never content the author published to search,
+       # even if a plain column also carries a value.
+       |> Enum.reject(&(not is_nil(Map.get(&1.record, :text_secure))))
+ 
+     live = live_docs(mount, scope, Enum.map(blocks, & &1.record.doc_id))
+ 
+-    for block <- blocks,
+-        doc = Map.get(live, block.record.doc_id),
+-        not is_nil(doc) do
++    for block <- blocks do
++      doc = Map.get(live, block.record.doc_id)
++
+       %Hit{
+         kind: :block,
+-        doc_id: doc.id,
+-        doc_title: doc.title || "Untitled",
++        doc_id: block.record.doc_id,
++        doc_title: (doc && doc.title) || "Untitled",
+         block_id: block.id,
+         snippet: snippet(Map.get(block.record, :text), term),
+         rank: to_rank(block.rank)
+       }
+     end
+   end

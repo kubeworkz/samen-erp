@@ -1,0 +1,25 @@
+# SABOTAGE: WS-NOTES R10 — A BROADCAST PATCHES THE BLOCK THE USER IS TYPING INTO
+# (ADR-053 §2 D4 / §6 R10; WS-Notes Phase 5 unit 5.2 / gate P5). The `editing_block_id` clause in
+# `PageLive.handle_info({:block_changed, …})` still MATCHES, but instead of DEFERRING the re-read
+# (recording `deferred_block_id` and applying it on blur) it re-reads immediately: the remote
+# value replaces the text in the focused `<textarea>`, so two people on one page overwrite each
+# other mid-sentence and the caret the browser owns is moved under the typist.
+#
+# Aimed at the skip only: the subscribe-on-mount, the plane-correct re-read (`Reads.block/3`), the
+# blur path, every envelope and every write clause are untouched, so the focused-block assertion
+# flips while the NON-focused block still updates (the second test keeps passing, which is what
+# proves the failure is the skip and not a dead realtime path).
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_realtime_masking_test.exs
+# MUST_FAIL: a broadcast never patches the focused block; blur applies it (R10)
+--- a/samen_web/lib/samen/web/notes/page_live.ex
++++ b/samen_web/lib/samen/web/notes/page_live.ex
+@@ -367,7 +367,7 @@
+       # THE GUARD (R10): the control the user is typing into is never patched from a broadcast —
+       # the browser owns that value and its caret. Defer it until the control blurs.
+       editing?(socket, block_id) ->
+-        {:noreply, assign(socket, deferred_block_id: to_string(block_id))}
++        {:noreply, refresh_block(socket, block_id)}
+ 
+       true ->
+         {:noreply, refresh_block(socket, block_id)}

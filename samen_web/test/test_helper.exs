@@ -47,6 +47,15 @@ case Oban.start_link(Application.fetch_env!(:samen_core, Oban)) do
   {:error, {:already_started, _pid}} -> :ok
 end
 
+# WS-Notes Phase 5 — the realtime path needs a REAL PubSub server. The test router's notes mount
+# names this one on its `:pubsub` label (a host fact, exactly like Driftwood.PubSub in the
+# reference vertical), so a two-socket re-render test delivers for real instead of rescuing a
+# "server not running" broadcast. Started once for the VM, like the Repo and Oban above.
+case Phoenix.PubSub.Supervisor.start_link(name: Samen.WebTest.PubSub) do
+  {:ok, _pid} -> :ok
+  {:error, {:already_started, _pid}} -> :ok
+end
+
 # B-SEC (S5) — the LiveView-driving tenant-authz red-path suite needs a real endpoint.
 # `server: false`, so this starts the endpoint's supervision tree (config, pubsub-less)
 # without binding a port.

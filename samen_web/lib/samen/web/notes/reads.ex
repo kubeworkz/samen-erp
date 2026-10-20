@@ -58,6 +58,15 @@ defmodule Samen.Web.Notes.Reads do
   # an unbounded result set into a render.
   @block_limit 2_000
 
+  # The INDEX fan-out (WS-Notes Phase 3): the pages list is a bounded first screen, not a
+  # paginated list. A tree of 200 pages is a workspace; a thousand is a search problem, which is
+  # Phase 4's job. A DoS / row-transfer bound, like `@block_limit`.
+  @index_limit 200
+
+  # The backlink fan-out (WS-Notes Phase 4). A bounded reverse query, not pagination: a page
+  # linked from more than this is a hub, and the UI shows the first screen.
+  @backlink_limit 200
+
   @doc_select [:id, :title, :body, :secure_body, :icon, :parent_doc_id, :position, :revision]
   @block_select [
     :id,
@@ -139,6 +148,104 @@ defmodule Samen.Web.Notes.Reads do
     end
   end
 
+  @doc """
+  List the org's pages for the INDEX surface (WS-Notes Phase 3 unit 3.2) — bounded, newest first,
+  titles only.
+
+  This is the same seam as `page/3`, so the index cannot start reading `Doc` by another route: a
+  page in another org is simply absent (R1), and an empty org returns `[]` (an honest empty
+  state) rather than raising.
+
+  Returns `{:ok, [%{id: id, title: title, icon: icon, parent_doc_id: parent, position: position,
+  revision: revision, updated_at: updated_at}]}`. `title`/`icon` are non-PII by construction
+  (only `body`/`secure_body` are vault-routed), so nothing here is resolved — a title is safe to
+  show on every plane, which is exactly what makes a page list possible on the operator plane at
+  all.
+  """
+  @spec index(Mount.t(), Samen.Scope.t()) :: {:ok, [map()]}
+  def index(mount, scope) do
+    rows =
+      doc_resource(mount)
+      |> Ash.Query.ensure_selected([:id, :title, :icon, :parent_doc_id, :position, :revision, :updated_at])
+      |> Ash.Query.sort(updated_at: :desc)
+      |> Ash.Query.limit(@index_limit)
+      |> Ash.read!(scope: scope)
+
+    {:ok, Enum.map(rows, &project_doc/1)}
+  end
+
+  @doc """
+  The pages that LINK to `doc_id` (WS-Notes Phase 4 unit 4.3) — the reverse of the org-scoped
+  `DocLink` rows.
+
+  Returns `[%{source_id: id, source_title: title, anchor_text: typed, stale?: boolean}]`, sorted
+  by source title. Both halves are scoped/filtered reads:
+
+    * the LINK rows come from `DocLink`, whose both endpoints are same-org (`SameOrgFk`, R13);
+    * the SOURCE page is re-read through `Doc` on the same scope, so an archived source page drops
+      out of the list (R15) instead of rendering a link to a page the tree no longer shows.
+
+  `stale?` is true when the text the author typed no longer equals the TARGET's current title —
+  the "link may point at an older title" hint. Nothing is rewritten here; the next save of the
+  source page re-resolves it (ADR-053 §5).
+  """
+  @spec backlinks(Mount.t(), Samen.Scope.t(), term()) :: [map()]
+  def backlinks(mount, scope, doc_id) do
+    case fetch_doc(mount, scope, doc_id) do
+      {:ok, target} ->
+        links =
+          mount
+          |> link_resource()
+          |> Ash.Query.ensure_selected([:source_doc_id, :target_doc_id, :anchor_text])
+          |> Ash.Query.filter(target_doc_id == ^doc_id)
+          |> Ash.Query.limit(@backlink_limit)
+          |> Ash.read!(scope: scope)
+
+        sources = live_docs(mount, scope, Enum.map(links, & &1.source_doc_id))
+
+        links
+        |> Enum.flat_map(fn link ->
+          case Map.get(sources, link.source_doc_id) do
+            nil ->
+              []
+
+            source ->
+              [
+                %{
+                  source_id: source.id,
+                  source_title: source.title || "Untitled",
+                  anchor_text: link.anchor_text,
+                  stale?: link.anchor_text != target.title
+                }
+              ]
+          end
+        end)
+        |> Enum.sort_by(&String.downcase(&1.source_title))
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  @doc """
+  The `[[Title]]` references on this page that do NOT resolve to a live, same-org page
+  (WS-Notes Phase 4 unit 4.3) — the "create this page" affordance.
+
+  Only the PLAIN `text` column is parsed (a vaulted block never contributes link intent), and
+  resolution is `Samen.Web.Notes.Links.resolve_all/3`, which is org-scoped (R13) and excludes
+  archived pages. Nothing is persisted for an unresolved title.
+  """
+  @spec unresolved(Mount.t(), Samen.Scope.t(), term()) :: [String.t()]
+  def unresolved(mount, scope, doc_id) do
+    titles = Samen.Web.Notes.Links.page_titles(mount, scope, doc_id)
+    resolved = Samen.Web.Notes.Links.resolve_all(mount, scope, titles)
+    Enum.reject(titles, &Map.has_key?(resolved, &1))
+  rescue
+    _ -> []
+  end
+
   # ── internals ──────────────────────────────────────────────────────────────
 
   defp fetch_doc(mount, scope, doc_id) do
@@ -179,8 +286,39 @@ defmodule Samen.Web.Notes.Reads do
   # `:Doc`/`:DocBlock` atoms — not the aliased modules (which would concatenate twice).
   defp doc_resource(mount), do: Mount.resource(mount, :Doc)
   defp block_resource(mount), do: Mount.resource(mount, :DocBlock)
+  defp link_resource(mount), do: Mount.resource(mount, :DocLink)
+
+  # The LIVE pages behind a set of ids — org-scoped AND archive-filtered, so an archived page is
+  # absent from the map (the backlink half of R15).
+  defp live_docs(_mount, _scope, []), do: %{}
+
+  defp live_docs(mount, scope, doc_ids) do
+    ids = doc_ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    mount
+    |> doc_resource()
+    |> Ash.Query.ensure_selected([:id, :title])
+    |> Ash.Query.filter(id in ^ids)
+    |> Ash.Query.limit(length(ids))
+    |> Ash.read!(scope: scope)
+    |> Map.new(&{&1.id, &1})
+  rescue
+    _ -> %{}
+  end
 
   # ── projection ─────────────────────────────────────────────────────────────
+
+  defp project_doc(doc) do
+    %{
+      id: doc.id,
+      title: doc.title,
+      icon: Map.get(doc, :icon),
+      parent_doc_id: Map.get(doc, :parent_doc_id),
+      position: Map.get(doc, :position),
+      revision: Map.get(doc, :revision),
+      updated_at: Map.get(doc, :updated_at)
+    }
+  end
 
   defp project(block) do
     secure? = not is_nil(Map.get(block, :text_secure))

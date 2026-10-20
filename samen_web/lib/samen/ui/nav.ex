@@ -191,6 +191,15 @@ defmodule Samen.UI.Nav do
     guard; `nil` hides the Documents group).
     """
 
+  attr :pages_path, :string,
+    default: nil,
+    doc: """
+    The Pages (block-page editor) route prefix (WS-Notes Phase 3, ADR-053 §8 O4) — non-nil ONLY
+    on a host whose router calls `samen_notes_routes(:notes, …)`; the macro sets `:pages_path`
+    ITSELF (like `samen_ai_routes`), so mounting the surface is the whole opt-in (X1 dead-link
+    guard; `nil` hides the Pages item).
+    """
+
   attr :chat_path, :string,
     default: nil,
     doc: """
@@ -447,8 +456,20 @@ defmodule Samen.UI.Nav do
       </.nav_item>
     </.nav_group>
 
-    <.nav_group :if={@files_path} label="Documents">
-      <.nav_item label="Files" href={"#{@files_path}?org=#{@org_id}"} active={@active == :files}>
+    <.nav_group :if={@files_path || @pages_path} label="Documents">
+      <.nav_item
+        :if={@pages_path}
+        label="Pages"
+        href={"#{@pages_path}?org=#{@org_id}"}
+        active={@active == :pages}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M6 3h9l4 4v14H6z" /><path d="M14 3v5h5" /><path d="M9 13h7M9 17h7" />
+          </svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item :if={@files_path} label="Files" href={"#{@files_path}?org=#{@org_id}"} active={@active == :files}>
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h8l4 4v16H6z" /><path d="M14 2v4h4" /></svg>
         </:icon>
@@ -593,6 +614,7 @@ defmodule Samen.UI.Nav do
   defp tenant_module_paths(mount) do
     [
       files_path: Mount.label(mount, :files_path, nil),
+      pages_path: Mount.label(mount, :pages_path, nil),
       automation_path: Mount.label(mount, :automation_path, nil),
       chat_path: Mount.label(mount, :chat_path, nil),
       search_path: Mount.label(mount, :search_path, nil),

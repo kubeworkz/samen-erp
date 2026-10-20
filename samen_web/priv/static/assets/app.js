@@ -40,3 +40,75 @@
     if (form) { e.preventDefault(); form.submit(); }
   });
 })();
+
+  // (f) The `NoteBlock` hook (WS-Notes Phase 3; ADR-053 §4.1) — INTENT ONLY. It never reads a
+  //     stored value, never touches `innerHTML`, and never resolves anything: the server has
+  //     already plane-resolved every value it rendered. Structural changes are server events
+  //     carrying a block id and (when the caret matters) its offset; the caret exists nowhere
+  //     but in this element. The ONE DOM write is auto-grow, and only to its own `rows`.
+  window.SamenHooks.NoteBlock = {
+    mounted: function () {
+      var hook = this;
+      this.onKeyDown = function (e) { hook.keydown(e); };
+      this.el.addEventListener("keydown", this.onKeyDown);
+      this.grow();
+    },
+    updated: function () { this.grow(); },
+    destroyed: function () {
+      if (this.onKeyDown) this.el.removeEventListener("keydown", this.onKeyDown);
+    },
+    // The server's "focus this block after a split/merge/insert" request. Every block's hook
+    // receives it; only the named one acts, and it only moves focus within its own element.
+    handleEvent: function (event, payload) {
+      if (event !== "focus_block" || !payload || String(payload.id) !== this.el.dataset.blockId) return;
+      this.el.focus();
+      var end = this.el.value.length;
+      try { this.el.setSelectionRange(end, end); } catch (e) { /* not selectable: ignore */ }
+    },
+    keydown: function (e) {
+      var el = this.el;
+      var id = el.dataset.blockId;
+      var type = el.dataset.type;
+      var start = el.selectionStart;
+      var end = el.selectionEnd;
+      var isList = type === "bulleted_list_item" || type === "numbered_list_item" || type === "to_do";
+
+      // Enter → split at the caret. Shift+Enter is a newline inside the block (the browser's).
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        this.pushEvent("split_block", { id: id, offset: start });
+        return;
+      }
+      // Backspace at offset 0 → merge into the previous sibling.
+      if (e.key === "Backspace" && start === 0 && end === 0) {
+        e.preventDefault();
+        this.pushEvent("merge_block", { id: id });
+        return;
+      }
+      // Tab / Shift+Tab → indent/outdent, LIST types only: everywhere else Tab must keep its
+      // meaning (focus navigation), so the hook stays out of the way.
+      if (e.key === "Tab") {
+        if (!isList) return;
+        e.preventDefault();
+        this.pushEvent("indent_block", { id: id, direction: e.shiftKey ? "out" : "in" });
+        return;
+      }
+      // Alt+↑ / Alt+↓ → move within the page.
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        this.pushEvent("move_block", { id: id, direction: e.key === "ArrowUp" ? "up" : "down" });
+        return;
+      }
+      // "/" in an empty block → the server-rendered type palette.
+      if (e.key === "/" && start === 0 && end === 0 && el.value === "") {
+        e.preventDefault();
+        this.pushEvent("open_palette", { id: id });
+      }
+    },
+    grow: function () {
+      var el = this.el;
+      el.rows = 1;
+      var rows = Math.ceil(el.scrollHeight / 22);
+      el.rows = Math.max(1, Math.min(rows, 24));
+    }
+  };

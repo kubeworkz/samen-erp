@@ -6,7 +6,7 @@
   every reference says which section it means. Filed ahead of the build on
   the ADR-052 precedent, so the invariants bind the first line of code rather than the last.
 - **Date:** 2026-10-18 (decisions ratified the same day)
-- **Build status:** **P0 + P1 + P2 BUILT (2026-10-18/19); P3–P6 not started.** Landed: the mechanics
+- **Build status:** **P0–P5 BUILT (2026-10-18/19); P6 not started.** Landed: the mechanics
   spike (P0, 8/8 green, [findings](../ws-notes/p0-findings.md)); the MODEL (P1) — `define_doc_block/6`,
   `define_doc_link/6`, `Doc.parent_doc_id`/`icon`/`position`/`revision`,
   `Samen.Scopes.Docs.BlockShape`, allocator-reserved abbrevs, and the additive migration in all six
@@ -16,11 +16,21 @@
   `Samen.Web.Notes.Reads` (`page/3`, `block/3`), `Samen.Web.Notes.Writes` (ordered insert/update_text/
   split/merge/move/indent/archive/restore, revision CAS, `{:error, :stale}`), `Samen.Web.Notes.Inline`
   (the constrained dialect to constructed HEEx, no `raw/1`) and `Samen.Web.Notes.Offset`. P2 unit 2.4
-  (`Export`) is NOT built, so 2.5's export-masking row stays open with it; see §3.1 and
-  [the build plan](../ws-notes/build-plan.md) for every deviation. NOT landed: the pages surface +
-  the `NoteBlock` hook (P3), search/backlinks (P4), presence and the masking trio (P5). No
-  `samen_notes_routes`, no LiveView. Sabotages **352** (stale revision CAS, R9) and **353** (unknown
-  type token, R11) ship with P2 and flip byte-exact; **354** (R12 `raw/1`) is reserved for P3.
+  (`Export`) is NOT built, so 2.5's export-masking row stays open with it. Then the SURFACE (P3) —
+  `samen_notes_routes/3` + `IndexLive`/`PageLive` behind `Samen.Web.Tenant.Live`, the `NoteBlock`
+  kit and `app.js` hook; SEARCH + BACKLINKS (P4) — `Samen.Web.Notes.Search` over the host
+  `SearchIndex` (`:search_index` mount seam) and org-scoped `DocLink` resolution; and PRESENCE +
+  THE MASKING PROOFS (P5) — `Samen.Web.Notes.PubSub` (per-page topic, **id-only** envelopes), the
+  `editing_block_id` re-read skip (deferred to blur), and the `Samen.MaskingCase` trio. **P5 added
+  one MODEL piece `§1` owed:** `Doc`/`DocBlock` now declare reveal actions
+  (`reveal_secure_body`/`reveal_text_secure`), because `Samen.Api.PiiResolution` refuses to
+  operator-reveal a resource with no declared reveal action — so §6's R5 green half (operator
+  WITH a grant reads clear) had no mechanism until P5 added one. See §3.1 and
+  [the build plan](../ws-notes/build-plan.md) for every deviation. NOT landed: the host mounts +
+  the opt-in materialize task (P6). Sabotages **352** (stale revision CAS, R9), **353** (unknown
+  type token, R11), **354** (R12 `raw/1` in the render path), **355** (R13 cross-org resolution),
+  **356** (R15 search liveness JOIN), **357** (R10 focused-block skip) and **358** (R8 envelope
+  carries text) all flip and restore byte-exact.
 - **Task:** give a Samen host a Notion-shaped note surface — nested pages, typed blocks, a slash
   menu, search across them, and `[[page]]` backlinks — on the substrate that already exists, without
   inventing a second content store and without importing a client-side editor engine the repo has
@@ -269,6 +279,35 @@ The model above landed as `define_doc/5`'s four additive `Doc` columns plus two 
 6. **The `icon` token is a bounded string, not an enum.** `max_length: 8` holds one emoji sequence
    plus a short ASCII token; a closed emoji set as an Ash enum would couple the model to a Unicode
    release. `BlockShape` never sees it (it shapes `metadata`, not `Doc` columns).
+
+### 3.2 As built — Phase 5: the realtime envelope, and the reveal actions §2 D5 assumed
+
+**The wire.** `Samen.Web.Notes.PubSub` is one topic per page (`samen:notes:page:<id>`) carrying a
+closed set of id-only envelopes — `{:block_changed, %{block_id, revision}}` and
+`{:page_structure_changed, %{doc_id, revision}}` — exactly §2 D4's shape. The editor subscribes on
+connect, unsubscribes on terminate, and every subscriber re-reads the named row through
+`Samen.Web.Notes.Reads` with its own scope, so the text resolves on the RECEIVING viewer's plane.
+R8 is asserted two ways rather than described: the envelope's `Map.keys/1` set, and a byte scan of
+`:erlang.term_to_binary/1` for the plaintext and for `vt_`. Sabotage **358** adds the text to the
+builder and both assertions fail; that is the proof the scan is not decorative.
+
+**The skip.** A broadcast never patches the `<textarea>` the user has focused (§2 D4's
+`editing_block_id`). The incoming id is DEFERRED (`deferred_block_id`) and re-read when that
+control blurs, so a remote change is applied late rather than dropped. Sabotage **357** re-reads
+immediately and the focused value changes under the typist. One consequence is worth naming: with
+R8/R10 working, the control being typed into is the only place a stale `revision` can still exist —
+every other block is patched as the broadcast lands — so R9's conflict banner is realistically
+triggered by exactly that deferred tab, which is how the P3 stale-write proof is now driven.
+
+**The reveal actions (a model addition this phase could not avoid).** §2 D5 and §6 R5 state the
+operator posture as "`••••` WITHOUT a grant", which implies "clear WITH one". `Doc` and `DocBlock`
+shipped no `reveal` action, and `Samen.Api.PiiResolution.operator_granted?/6` refuses to reveal a
+resource that declares none — so the granted half was unreachable by construction. Both resources
+therefore declare one (`reveal_secure_body`, `reveal_text_secure`) in the Primitive
+notifications/webhook shape: an actor-carrying action that CONSULTS `Samen.Reveal.grant_checker/0`
+and returns a status map, never plaintext (the decrypt stays inside `PiiResolution`, behind the
+same `opts[:repo]` seam as every other governed read). No migration: an action is not a column.
+This is a model change, not a UI one, and it is recorded here rather than buried in the build plan.
 
 ## 4. Editor mechanics (M1)
 

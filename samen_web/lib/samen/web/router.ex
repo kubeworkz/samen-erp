@@ -873,6 +873,84 @@ defmodule Samen.Web.Router do
   end
 
   @doc """
+  Mount the tenant PLANE "Pages" surface — the block-page index and editor (WS-Notes Phase 3;
+  ADR-053 §8 O4) — in ONE line.
+
+  `namespace` is the host's mounted DOCS namespace (the domain that `use`d
+  `Samen.Scopes.Docs`, e.g. `Samenerp.Docs`), because the pages are `Doc`/`DocBlock` rows of
+  that scope — there is no second content store behind them.
+
+      import Samen.Web.Router
+
+      samen_notes_routes :notes, Samenerp.Docs, repo: Samenerp.Repo, path: "/pages"
+
+  The macro mounts:
+
+    * `GET /<path>`      → `Samen.Web.Notes.IndexLive`  (the page list + "New page")
+    * `GET /<path>/:id`  → `Samen.Web.Notes.PageLive`   (the block editor)
+
+  and threads the `:pages_path` mount label so a host that mounts this surface gets the
+  Documents → Pages nav item with no further bookkeeping (X1: the label's PRESENCE is the
+  dead-link guard — a host that never mounts it never emits the link).
+
+  Options: as `samen_files_routes/3` (`:repo` required; `:domain`, `:plane`,
+  `:operator_id`/`:target_org_id`, `:path` (default `/pages`), `:labels`, `:session_name`),
+  plus `:search_index` — the host's `SearchIndex` registry module (WS-Notes Phase 4). The Docs
+  namespace has no registry of its own (a host mounts Primitives beside Docs), so block search
+  reads it from this seam; absent ⇒ search is fail-closed (`[]`), never a guessed module.
+  A `:plane` override mounts the same two LiveViews on the operator plane, where every block's
+  `text_secure` renders `••••` through `Samen.Api.PiiResolution` (never a `vt_*` token, never
+  plaintext); writes there are refused by the kernel policy, not by the page.
+  """
+  defmacro samen_notes_routes(kind, namespace, opts \\ []) do
+    kind = Macro.expand(kind, __CALLER__)
+    path = Keyword.get(opts, :path, "/pages")
+    session_name = Keyword.get(opts, :session_name, session_name(:notes, path))
+
+    quote bind_quoted: [
+            kind: kind,
+            namespace: namespace,
+            opts: opts,
+            path: path,
+            session_name: session_name
+          ] do
+      _ = kind
+
+      base_labels = Map.put(Keyword.get(opts, :labels, %{}), :pages_path, path)
+
+      labels =
+        case Keyword.get(opts, :search_index) do
+          nil -> base_labels
+          search_index -> Map.put(base_labels, :search_index, search_index)
+        end
+
+      mount =
+        Samen.Web.Mount.new(
+          :notes,
+          namespace,
+          Keyword.fetch!(opts, :repo),
+          domain: Keyword.get(opts, :domain, namespace),
+          plane: Samen.Web.Router.__plane__(opts),
+          labels: labels
+        )
+
+      # B-SEC / S1 — the TENANT authz gate. Every tenant `live_session` carries
+      # `{Samen.Web.TenantAuthz, :require_tenant}`: the on_mount `:halt` is the ONLY
+      # thing that preempts `handle_params/3` on the initial DEAD RENDER (LV 1.2.9,
+      # `deps/phoenix_live_view/.../static.ex:155,320-355`), and the hook PINS the org
+      # authority so a client `?org=` can only SELECT among the authenticated
+      # principal's authorized orgs (`Samen.Web.CurrentOrg.reresolve/2`).
+      live_session session_name,
+        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        for {sub_path, module} <- Samen.Web.Router.__routes__(:notes, path) do
+          live(sub_path, module)
+        end
+      end
+    end
+  end
+
+  @doc """
   Mount the framework CSV surface (WS-E E3.4; ADR-028) — the import LiveView and the
   export download route — in ONE line, on either plane.
 
@@ -2227,6 +2305,16 @@ defmodule Samen.Web.Router do
 
   # WS-E E5 (ADR-029) — the self-serve settings route table: profile (the index),
   # API keys, and the read-only security view. Three surfaces, one macro mount.
+  # WS-Notes Phase 3 (ADR-053 §8 O4) — the tenant "Pages" route table: the page INDEX and one
+  # page EDITOR. Declaration order matters only in that the static list path and its dynamic
+  # `:id` sibling never shadow each other (Phoenix dispatches by segment count).
+  def __routes__(:notes, path) do
+    [
+      {"#{path}", Samen.Web.Notes.IndexLive},
+      {"#{path}/:id", Samen.Web.Notes.PageLive}
+    ]
+  end
+
   def __routes__(:settings, path) do
     [
       {"#{path}", Samen.Web.Settings.ProfileLive},
@@ -2290,6 +2378,7 @@ defmodule Samen.Web.Router do
   defp default_path(:chat), do: "/chat"
   defp default_path(:notifications), do: "/notifications"
   defp default_path(:flags), do: "/flags"
+  defp default_path(:notes), do: "/pages"
   defp default_path(:search), do: "/search"
   defp default_path(:settings), do: "/settings"
   defp default_path(:automation), do: "/automation"

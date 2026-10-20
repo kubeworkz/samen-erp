@@ -1,0 +1,36 @@
+# SABOTAGE: WS-NOTES R13 — A BACKLINK TITLE RESOLVES ACROSS ORGS
+# (ADR-053 §6 R13; WS-Notes Phase 4 unit 4.3 / gate P4). `Samen.Web.Notes.Links.resolve/3`
+# stops reading through the acting scope and reads with `authorize?: false`: the candidate
+# `Doc` is now ANY org's live page with that title, so org A's `[[Foreign Secret]]` resolves to
+# org B's page and a `DocLink` edge is attempted toward a page the reader can never open. The
+# second defence (`SameOrgFk` on both link endpoints) still refuses the INSERT, which is why the
+# sabotage aims at RESOLUTION: the invariant the gate names is "a cross-org title does not
+# resolve", and that is the boundary this patch removes.
+#
+# Aimed at the lookup only: the tokeniser, the set-reconcile in `Writes.sync_links/3`, the
+# archive filtering and every search clause are untouched, so exactly the R13 test flips (the
+# positive control — org B resolving its OWN title — still passes, proving the failure is the
+# scope, not the fixture).
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_search_links_test.exs
+# MUST_FAIL: a cross-org title does NOT resolve (R13) — and the positive control does
+--- a/samen_web/lib/samen/web/notes/links.ex
++++ b/samen_web/lib/samen/web/notes/links.ex
+@@ -64,13 +64,16 @@
+       mount
+       |> doc_resource()
+       |> Ash.Query.ensure_selected([:id, :title])
+       |> Ash.Query.filter(title == ^title)
+       |> Ash.Query.limit(1)
+ 
+-    case Ash.read(query, scope: scope) do
++    # SABOTAGE (R13): the lookup is unscoped — any org's page with this title resolves.
++    _ = scope
++
++    case Ash.read(query, authorize?: false) do
+       {:ok, [doc | _]} -> {:ok, doc}
+       _ -> :unresolved
+     end
+   end
+ 
+   def resolve(_mount, _scope, _title), do: :unresolved

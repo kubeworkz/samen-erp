@@ -51,6 +51,7 @@ defmodule Samen.Web.Mount do
             | :notifications
             | :flags
             | :files
+            | :notes
             | :csv
             | :search
             | :settings
@@ -142,6 +143,7 @@ defmodule Samen.Web.Mount do
   defp scope_kind("notifications"), do: :notifications
   defp scope_kind("flags"), do: :flags
   defp scope_kind("files"), do: :files
+  defp scope_kind("notes"), do: :notes
   defp scope_kind("csv"), do: :csv
   defp scope_kind("search"), do: :search
   defp scope_kind("settings"), do: :settings
@@ -231,6 +233,13 @@ defmodule Samen.Web.Mount do
   #     groups (Files · Search · own-org analytics · `.ics`). Same class as `chat_path`/`ai_path`
   #     above: read off a mount by a framework sidebar, so they MUST round-trip through a cold
   #     `from_session/1` (`nav_path_roundtrip_test.exs` covers the tenant-plane set).
+  #   * `pages_path` (WS-Notes Phase 3) — the `/pages` prefix `samen_notes_routes/3` sets on its
+  #     OWN mount (a host mounting the macro needs no label bookkeeping), read by the Documents
+  #     nav group and by `Crumbs.section(:pages)` so the Pages item is a live link, not a guess.
+  #   * `search_index` (WS-Notes Phase 4) — the host's `SearchIndex` registry MODULE, threaded by
+  #     `samen_notes_routes(..., search_index: …)`. The Docs namespace has no registry of its own
+  #     (the host mounts Primitives beside Docs), so search resolves it from this seam; absent ⇒
+  #     block search is fail-closed (empty), never a guessed module.
   #   * `signup_path`/`verify_path`/`reset_path`/`invite_path`/`totp_path` (luminary A4) — the
   #     five ADR-035 identity-spine path labels `samen_auth_routes/1` merges alongside
   #     `login_path` (already whitelisted); `totp_issuer` (`auth/totp_enroll_live.ex`) and
@@ -277,7 +286,8 @@ defmodule Samen.Web.Mount do
     signup_path verify_path resend_path reset_path invite_path totp_path totp_issuer
     work_path work_logo_style
     banking_path banking_logo_style erp_namespace
-    files_path search_path analytics_path ics_path
+    files_path pages_path search_path analytics_path ics_path
+    search_index
     docs_base
     __principal__
   )a

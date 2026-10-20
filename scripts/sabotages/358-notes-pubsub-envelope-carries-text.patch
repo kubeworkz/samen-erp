@@ -1,0 +1,25 @@
+# SABOTAGE: WS-NOTES R8 — THE PUBSUB ENVELOPE STARTS CARRYING THE BLOCK TEXT
+# (ADR-053 §2 D4 / §6 R8; WS-Notes Phase 5 unit 5.1 / gate P5). `block_envelope/1` adds a
+# `:text` key carrying the value it was handed — the "skip the re-read, ship the text along"
+# optimisation. For a plain block that is the paragraph itself; for a VAULTED block the struct
+# carries the vault column, so what transits the topic is either a `vt_*` token or a
+# `%Samen.Masked{}` that still holds one — the exact thing R8/R5 forbid on the wire.
+#
+# Aimed at the builder only: the topic, both broadcast functions, the subscribe/unsubscribe
+# pair and EVERY subscriber re-read (`Reads.block/3`, plane-resolved) are untouched, so the leak
+# is the envelope itself and the key-set + byte-scan assertions are what catch it.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_realtime_masking_test.exs
+# MUST_FAIL: the block envelope is id-only: no text, no vt_ token, a closed key set (R8)
+--- a/samen_web/lib/samen/web/notes/pub_sub.ex
++++ b/samen_web/lib/samen/web/notes/pub_sub.ex
+@@ -82,7 +82,8 @@
+     {:block_changed,
+      %{
+        block_id: id_of(block, :id),
+-       revision: Map.get(block, :revision)
++       revision: Map.get(block, :revision),
++       text: Map.get(block, :text_secure) || Map.get(block, :text)
+      }}
+   end
+ 
