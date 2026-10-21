@@ -1,0 +1,31 @@
+# SABOTAGE: the HOST half of Pages search — `Samenerp.Seeds.seed_notes_pages!/1` registers the
+# block-search index after it seeds the demo page. Mounting the surface is not making it
+# searchable: `Samen.Web.Notes.Search` is fail-closed, so with no registry rows `/pages?q=` renders
+# the honest empty state and every other test in the host still passes. This patch deletes the ONE
+# registration call and nothing else, so the only thing that can fail is the test that asserts a
+# seeded page is actually found by its plain block text.
+#
+# What it refutes is the claim that registration is wired on the seed path at all (the alternative
+# reading of the old code — "the mount is in the router, so search must work" — is exactly the
+# confusion this pins). The registry rows themselves are still written by the direct
+# `Seeds.ensure_notes_search_index!/1` test, which is why the sabotage targets the SEED call rather
+# than the registration function: dropping the function would fail two tests and tell us less.
+#
+# NOT TOUCHED, deliberately: the guard (`Samen.Scopes.Primitives.SearchIndexGuard`), the vaulted
+# block seed, and `search/4` — this removes a REGISTRATION, not the PII refusal or the engine.
+#
+# No warning is introduced: `ensure_notes_search_index!/1` stays used by `seed!/0,1`, so nothing is
+# left unused and no warning needs confining.
+# APP: samenerp
+# TEST_FILES: test/notes_search_test.exs
+# MUST_FAIL: a seeded page is found by its PLAIN block text through the real /pages?q=
+--- a/samenerp/lib/samenerp/seeds.ex
++++ b/samenerp/lib/samenerp/seeds.ex
+@@ -154,6 +154,5 @@
+         })
+     end
+ 
+-    :ok = ensure_notes_search_index!(org_id)
+ 
+     doc.id
+   end

@@ -295,7 +295,7 @@ echo "==> analytics-producer verifier: PASSED"
 # observed 2026-10-20 when the PawChart and SamenERP anti-tautology probes died exactly there
 # under this gate. The defect is INVISIBLE in a green run, which is why nothing else in CI
 # would notice it coming back. Static (source only — no DB, no boot), fail-closed on an
-# unwalkable or empty tree, sabotage-refutable at scripts/sabotages/359-*.
+# unwalkable or empty tree, sabotage-refutable at scripts/sabotages/367-*.
 echo ""
 echo "==> Running db-boot verifier (tolerant boot — emitted harnesses + priv probes route through Samen.TestDb)"
 (

@@ -1,0 +1,39 @@
+# SABOTAGE: the SELF-SERVE creation path's provisioning call. `POST /signup` is how a tenant org
+# appears without an operator in the loop; `Samen.Web.Auth.AccountController.register/2` runs the
+# per-org seam right after the A1 transaction commits, so the account's very first `/pages` visit
+# is already searchable. This patch deletes that ONE call (and the alias it used, so the defect is
+# not disguised as an unused-alias compile failure).
+#
+# What it refutes is the claim that signup itself provisions — as distinct from patch 369, which
+# proves the host CONFIG is what arms the seam. Here the config and the seam are intact; the
+# self-serve path simply never calls them, and the org it creates answers `/pages?q=` with the
+# fail-closed empty set. The registration, the redirect, the verify-email dispatch and every
+# other signup assertion still pass, so only the test that asks the NEW org for its own block sees
+# it.
+#
+# NOT TOUCHED, deliberately: the atomic A1 transaction, the rate limit, the delivery dispatch, the
+# operator-plane call site, and the seed backfill (which would repair the org on the NEXT boot —
+# which is exactly why this must fail a test rather than merely delay).
+#
+# No warning is introduced: `org` is still read by `dispatch_verify_email(credential.id, org.id, …)`.
+# APP: samenerp
+# TEST_FILES: test/notes_org_provisioning_test.exs
+# MUST_FAIL: a brand-new org's /pages?q= answers for its OWN block (a fresh tenant is searchable)
+--- a/samen_web/lib/samen/web/auth/account_controller.ex
++++ b/samen_web/lib/samen/web/auth/account_controller.ex
+@@ -65,7 +65,6 @@
+   alias Samen.Identity.Register
+   alias Samen.Identity.Reset
+   alias Samen.Web.Mount
+-  alias Samen.Web.OrgProvisioning
+   alias Samen.Web.RateLimit
+ 
+   # -- A1 registration --------------------------------------------------------
+@@ -107,7 +106,6 @@
+             # never lands on a fail-closed surface it was never registered for. NON-FATAL by
+             # contract: the account is committed, so a hook failure is logged + returned by the
+             # seam (`Samen.Web.OrgProvisioning`) rather than unwound into "signup failed".
+-            OrgProvisioning.run(mount, org.id)
+             redirect(conn, to: "#{path}?registered=1")
+ 
+           {:ok, %{status: :duplicate}} ->

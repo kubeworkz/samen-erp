@@ -1,0 +1,42 @@
+# SABOTAGE: the OPERATOR-PLANE creation path's provisioning call. An operator-created account IS
+# a tenant org, so `Samen.Web.Operator.AccountsLive`'s `save_new` runs the same per-org seam the
+# self-serve signup does (`Samen.Web.OrgProvisioning.run/2`). This patch drops that call (and the
+# alias it used, so no unused-alias warning dresses the defect up as a compile failure).
+#
+# What it refutes is the claim that BOTH live creation paths are wired. The platform's own
+# "New account" write is how a sales-assisted tenant gets created; leaving it unprovisioned gives
+# exactly the bug the unit exists to remove, on the path a demo would take. The account still
+# persists, the list still refreshes, and the render tests still pass — only a test that watches
+# the seam fire for the org this write created can see it.
+#
+# NOT TOUCHED, deliberately: the seam, the signup controller call site, and the org-create action
+# itself (the write is unchanged — provisioning never gates the account).
+#
+# No warning is introduced: `{:ok, org}` becomes `{:ok, _org}` because the only consumer of `org`
+# was the deleted call.
+# APP: samen_web
+# TEST_FILES: test/samen/web/org_provisioning_test.exs
+# MUST_FAIL: the operator New-account write provisions the tenant org it just created
+--- a/samen_web/lib/samen/web/operator/accounts_live.ex
++++ b/samen_web/lib/samen/web/operator/accounts_live.ex
+@@ -37,7 +37,6 @@
+   alias Samen.Web.Mount
+   alias Samen.Web.Operator
+   alias Samen.Web.Operator.Reads
+-  alias Samen.Web.OrgProvisioning
+ 
+   use Samen.Web.ListLive,
+     resource: Org,
+@@ -114,11 +113,10 @@
+   # adds no policy of its own.
+   def handle_event("save_new", %{"form" => params}, socket) do
+     case AshPhoenix.Form.submit(socket.assigns.new_form, params: with_org(params, socket)) do
+-      {:ok, org} ->
++      {:ok, _org} ->
+         # WS-Notes Phase 6 — an operator-created account IS a tenant org, so it goes through the
+         # SAME per-org provisioning seam the self-serve signup does (`Samen.Web.OrgProvisioning`:
+         # this host's Pages search registry). Non-fatal and loud, never a rolled-back account.
+-        OrgProvisioning.run(socket.assigns.samen_mount, org.id)
+         {:noreply, socket |> assign(show_new: false) |> load()}
+ 
+       {:error, form} ->

@@ -65,6 +65,7 @@ defmodule Samen.Web.Auth.AccountController do
   alias Samen.Identity.Register
   alias Samen.Identity.Reset
   alias Samen.Web.Mount
+  alias Samen.Web.OrgProvisioning
   alias Samen.Web.RateLimit
 
   # -- A1 registration --------------------------------------------------------
@@ -101,6 +102,12 @@ defmodule Samen.Web.Auth.AccountController do
           {:ok, %{status: :registered, credential: credential, raw_verify_token: token, org: org}} ->
             # A2 — dispatch the verification email through the delivery chokepoint
             dispatch_verify_email(credential.id, org.id, token)
+            # WS-Notes Phase 6 — the org exists NOW; a host's per-org setup (this host's Pages
+            # search registry) runs here, on the creation path itself, so a self-serve tenant
+            # never lands on a fail-closed surface it was never registered for. NON-FATAL by
+            # contract: the account is committed, so a hook failure is logged + returned by the
+            # seam (`Samen.Web.OrgProvisioning`) rather than unwound into "signup failed".
+            OrgProvisioning.run(mount, org.id)
             redirect(conn, to: "#{path}?registered=1")
 
           {:ok, %{status: :duplicate}} ->
@@ -158,7 +165,9 @@ defmodule Samen.Web.Auth.AccountController do
             :ok
 
           {:error, reason} ->
-            Logger.warning("[AccountController] verify resend dispatch failed: #{inspect(reason)}")
+            Logger.warning(
+              "[AccountController] verify resend dispatch failed: #{inspect(reason)}"
+            )
         end
 
         redirect(conn, to: "#{path}?sent=1")
@@ -225,7 +234,8 @@ defmodule Samen.Web.Auth.AccountController do
     end
   end
 
-  def reset(conn, %{"token" => token}), do: redirect(conn, to: "#{reset_path(conn)}/#{token}?error=1")
+  def reset(conn, %{"token" => token}),
+    do: redirect(conn, to: "#{reset_path(conn)}/#{token}?error=1")
 
   # -- A5 invitation accept ---------------------------------------------------
 
@@ -254,7 +264,8 @@ defmodule Samen.Web.Auth.AccountController do
     end
   end
 
-  def accept_invite(conn, %{"token" => token}), do: redirect(conn, to: "#{invite_path(conn)}/#{token}?error=1")
+  def accept_invite(conn, %{"token" => token}),
+    do: redirect(conn, to: "#{invite_path(conn)}/#{token}?error=1")
 
   # The RESPONSE stays deliberately generic (`?error=1`, no account-existence oracle) — but a
   # silent generic failure is UNDIAGNOSABLE: `Register.register/2`'s `{:error, reason}` covers a
@@ -348,7 +359,11 @@ defmodule Samen.Web.Auth.AccountController do
   end
 
   defp build_base_url do
-    scheme = if Application.get_env(:samenerp, SamenerpWeb.Endpoint)[:url][:scheme] == "https", do: "https", else: "http"
+    scheme =
+      if Application.get_env(:samenerp, SamenerpWeb.Endpoint)[:url][:scheme] == "https",
+        do: "https",
+        else: "http"
+
     host = Application.get_env(:samenerp, SamenerpWeb.Endpoint)[:url][:host] || "localhost"
     "#{scheme}://#{host}"
   end
@@ -377,7 +392,9 @@ defmodule Samen.Web.Auth.AccountController do
   defp reset_path(conn), do: conn.private[:samen_reset_path] || "/reset"
   defp invite_path(conn), do: conn.private[:samen_invite_path] || "/invite"
 
-  defp remote_ip(%Plug.Conn{remote_ip: ip}) when is_tuple(ip), do: ip |> :inet.ntoa() |> to_string()
+  defp remote_ip(%Plug.Conn{remote_ip: ip}) when is_tuple(ip),
+    do: ip |> :inet.ntoa() |> to_string()
+
   defp remote_ip(_), do: "unknown"
 
   defp trim(v) when is_binary(v), do: String.trim(v)

@@ -10,11 +10,10 @@
 # MUST_FAIL: the app's own sidebar reaches every phase module the router mounts
 --- a/samenerp/lib/samenerp_web/router.ex
 +++ b/samenerp/lib/samenerp_web/router.ex
-@@ -91,7 +91,6 @@
-     # match the mount macro below it (`samen_files_routes(:files, …)` etc.); they are TENANT
+@@ -95,6 +95,5 @@
      # paths, and `nav_paths/1` only resolves them on a tenant-plane mount, so they can never
      # leak into operator chrome.
 -    files_path: "/files",
-     chat_path: "/chat",
-     search_path: "/search",
-     analytics_path: "/analytics",
+     # WS-Notes Phase 6 — the Pages surface (ADR-053 §8 O4). The SAME presence-is-the-guard
+     # posture as every path in this map: `Samen.UI.Nav.nav_paths/1` resolves `:pages_path`
+     # off EVERY tenant mount (the sidebar is inherited chrome), so the Documents → Pages item

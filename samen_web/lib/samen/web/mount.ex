@@ -58,7 +58,7 @@ defmodule Samen.Web.Mount do
             | :auth
             | :automation
             | :ai
-            |            :analytics
+            | :analytics
             | :erp
             | :kb
             | :csat,
@@ -94,6 +94,30 @@ defmodule Samen.Web.Mount do
   @doc "Get a UI label with a neutral default (`labels` is optional per-host branding)."
   def label(%__MODULE__{labels: nil}, _key, default), do: default
   def label(%__MODULE__{labels: labels}, key, default), do: Map.get(labels, key, default)
+
+  @doc """
+  The host `otp_app` this mount belongs to — the explicit `:otp_app` label when a host sets
+  one, else the mount repo's own config (`repo.config()[:otp_app]`). `nil` when neither
+  resolves (a mount built over something that is not a real `Ecto.Repo`).
+
+  This is a HOST FACT a framework seam reads (an app-env seam such as
+  `Samen.Web.OrgProvisioning`'s `:org_provisioning`, or `Samen.Fleet.Resolution`'s per-product
+  config), so it lives on the mount itself rather than inside any one surface's context —
+  `Samen.Web.Operator.otp_app/1` delegates here and keeps its shipped call sites unchanged.
+  """
+  @spec otp_app(t() | term()) :: atom() | nil
+  def otp_app(%__MODULE__{} = mount), do: label(mount, :otp_app, nil) || repo_otp_app(mount)
+  def otp_app(_), do: nil
+
+  defp repo_otp_app(%__MODULE__{repo: repo}) when is_atom(repo) do
+    if Code.ensure_loaded?(repo) and function_exported?(repo, :config, 0) do
+      repo.config()[:otp_app]
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp repo_otp_app(_), do: nil
 
   @doc """
   Serialize to a session-safe map. Module atoms are stored as strings and rebuilt with

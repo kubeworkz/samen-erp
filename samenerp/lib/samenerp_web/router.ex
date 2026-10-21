@@ -7,6 +7,9 @@ defmodule SamenerpWeb.Router do
 
     * `samen_module_routes(:billing, ...)` — the authored scope's inherited pages
       (overview / invoices / plans),
+    * `samen_notes_routes(:notes, ...)` — the WS-Notes block-page index + editor over
+      this host's Docs mount (ADR-053 Phase 6; the macro sets the `:pages_path` label
+      itself, so the Documents → Pages nav item comes with the mount),
     * `samen_notifications_routes(...)` — the framework notifications inbox
       (+ /notifications/settings) over the Primitives mount,
     * `samen_operator_routes(...)` — the ADR-010 operator workspace (accounts ·
@@ -92,6 +95,14 @@ defmodule SamenerpWeb.Router do
     # paths, and `nav_paths/1` only resolves them on a tenant-plane mount, so they can never
     # leak into operator chrome.
     files_path: "/files",
+    # WS-Notes Phase 6 — the Pages surface (ADR-053 §8 O4). The SAME presence-is-the-guard
+    # posture as every path in this map: `Samen.UI.Nav.nav_paths/1` resolves `:pages_path`
+    # off EVERY tenant mount (the sidebar is inherited chrome), so the Documents → Pages item
+    # appears on pages OTHER than /pages exactly because this line exists. `samen_notes_routes/3`
+    # also sets the label on its OWN mount; this shared copy is what carries it everywhere else.
+    # It MUST match the mount's `path:` below — `mix samen.verify.nav_links` fails a label that
+    # outruns the router.
+    pages_path: "/pages",
     chat_path: "/chat",
     search_path: "/search",
     analytics_path: "/analytics",
@@ -285,6 +296,26 @@ defmodule SamenerpWeb.Router do
     #     Same one-line adoption driftwood ships.
     samen_files_routes(:files, Samenerp.Primitives,
       repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
+
+    # 1h-2. WS-Notes Phase 6 — the tenant PAGES surface (ADR-053 §8 O4): the block-page
+    #       index (`/pages`) and the page editor (`/pages/:id`) over this host's Docs
+    #       mount (`Samenerp.Docs`, migration 20261018120000). The macro sets `:pages_path`
+    #       ITSELF (like `samen_ai_routes`), so mounting the surface is the whole opt-in:
+    #       the Documents group's Pages item renders exactly because this line exists (X1
+    #       dead-link guard — `mix samen.verify.nav_links` fails a label that outruns the
+    #       router, and a host that never mounts it never emits the link).
+    #
+    #       `:search_index` names this host's Primitives registry (`esh_search_index`): the
+    #       Docs namespace has no SearchIndex of its own, so `Samen.Web.Notes.Search` reads
+    #       it from this seam and fails CLOSED to `[]` without it — never a guessed module,
+    #       never an unbounded scan. Registration is host setup
+    #       (`Notes.Search.register_index/2`); its guard refuses a vaulted column, so
+    #       `pii_edb_text_secure` can never enter the tsvector.
+    samen_notes_routes(:notes, Samenerp.Docs,
+      repo: Samenerp.Repo,
+      search_index: Samenerp.Primitives.SearchIndex,
       labels: @current_org_labels
     )
 

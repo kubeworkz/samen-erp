@@ -20,6 +20,8 @@ defmodule Samenerp.Seeds do
 
   require Ash.Query
 
+  alias Samen.Web.{Mount, Plane}
+  alias Samen.Web.Notes.{Reads, Search, Writes}
   alias Samenerp.Operator, as: Op
 
   # The well-known operator org id (fixed so config resolution works).
@@ -64,6 +66,152 @@ defmodule Samenerp.Seeds do
     @operator_org_id
   end
 
+  # -- WS-Notes Phase 6 — the Pages demo data and its search registration ---------
+  #
+  # The Pages surface is mounted over `Samenerp.Docs` (router: `samen_notes_routes/3`), but a
+  # mounted surface with no registered index answers every `?q=` with the honest empty state —
+  # search is fail-closed by design (`Samen.Web.Notes.Search`), so "wired" is not "searchable".
+  # These two functions are the host half: the registry rows AND one seeded page whose plain
+  # blocks are findable, so a dev checkout demonstrates the feature (and the vaulting
+  # trade-off the UI states) instead of an empty box.
+
+  @notes_page_title "Welcome to Pages"
+
+  @doc """
+  The `Samen.Web.Mount` the Pages surface runs on in THIS host — the same namespace, repo and
+  labels the router's `samen_notes_routes(:notes, Samenerp.Docs, …)` mounts.
+
+  Host setup (seeds, tasks, tests) needs a mount to reach the governed reads/writes and the
+  search registry; the router does not expose its compiled mount, so this is the one place that
+  mirrors it. Keep it in step with `lib/samenerp_web/router.ex` — `mix samen.verify.nav_links`
+  already fails a `:pages_path` label that outruns the route, and `test/notes_search_test.exs`
+  proves the `:search_index` seam is this host's real registry.
+  """
+  def notes_mount do
+    Mount.new(:notes, Samenerp.Docs, Samenerp.Repo,
+      plane: Plane.tenant(),
+      labels: %{pages_path: "/pages", search_index: Samenerp.Primitives.SearchIndex}
+    )
+  end
+
+  @doc "The scope the Pages seam resolves for `org_id` on the tenant plane."
+  def notes_scope(org_id), do: Mount.scope(notes_mount(), to_string(org_id))
+
+  @doc """
+  Register `Doc.title` + `DocBlock.text` in this host's `SearchIndex` for `org_id` (default: the
+  seeded operator tenant). Idempotent — `Samen.Web.Notes.Search.register_index/2` leaves an
+  existing row alone — and GUARD-FIRST: `SearchIndexGuard` structurally refuses a vaulted
+  column, so `pii_edb_text_secure` can never enter the tsvector even by a future typo here.
+
+  This is the host's ONE registration entry point, and it has three callers on purpose: the
+  `:org_provisioning` hook (every NEW org, `config/config.exs`), `seed_notes_pages!/1` (the dev
+  demo page), and `backfill_notes_search_index!/0` (every existing tenant org, from `seed!/0,1`
+  on each boot).\"""
+
+  Raises when the registry cannot be written (an unregistered seam must never read as success).
+  """
+  @spec ensure_notes_search_index!(String.t()) :: :ok
+  def ensure_notes_search_index!(org_id \\ @operator_org_id) do
+    case Search.register_index(notes_mount(), notes_scope(org_id)) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        raise "could not register the Pages search index for #{org_id}: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Register the Pages search index for EVERY tenant org on this host — the BACKFILL half of the
+  org-creation hook (`config :samenerp, :org_provisioning`).
+
+  New orgs are provisioned at creation (`Samen.Web.OrgProvisioning`, called by the signup
+  controller and the operator plane's New-account write). Orgs that predate that wiring would
+  otherwise answer `/pages?q=` with the fail-closed empty state forever, so `seed!/0,1` — which
+  the release entrypoint calls on EVERY boot — sweeps the host's tenant directory
+  (`Samenerp.Directory.orgs/0`, operator seat + operator-plan debris excluded) plus the operator
+  org. Idempotent per org, and it raises on the first org it cannot register: an unregistered
+  seam must never read as success.
+  """
+  @spec backfill_notes_search_index!() :: :ok
+  def backfill_notes_search_index! do
+    [@operator_org_id | Enum.map(Samenerp.Directory.orgs(), &elem(&1, 0))]
+    |> Enum.uniq()
+    |> Enum.each(&ensure_notes_search_index!/1)
+  end
+
+  @doc """
+  Seed the Pages demo page for `org_id` (default: the seeded operator tenant) and register the
+  block-search index. Idempotent: a page with this title is reused and its blocks are only
+  inserted when it has none, so re-running never duplicates content.
+
+  Three blocks, deliberately: two PLAIN paragraphs that search can find, and one VAULTED (🔒)
+  block whose text is stored as a `vt_*` token and therefore never enters the index —
+  `test/notes_search_test.exs` pins both halves (a plain hit, and silence for the vaulted text).
+
+  Returns the page id.
+  """
+  @spec seed_notes_pages!(String.t()) :: String.t()
+  def seed_notes_pages!(org_id \\ @operator_org_id) do
+    mount = notes_mount()
+    scope = notes_scope(org_id)
+
+    doc = find_or_create_notes_page(mount, scope, org_id)
+
+    if notes_blocks(mount, scope, doc.id) == [] do
+      {:ok, _} =
+        Writes.insert_block(mount, scope, doc.id, %{
+          type: :paragraph,
+          text: "Pages are a tree of typed blocks — split, merge, move and indent them"
+        })
+
+      {:ok, _} =
+        Writes.insert_block(mount, scope, doc.id, %{
+          type: :bulleted_list_item,
+          text: "Search finds plain text blocks like this one, and page titles"
+        })
+
+      {:ok, _} =
+        Writes.insert_block(mount, scope, doc.id, %{
+          type: :paragraph,
+          text_secure: "Demo vaulted block — its text never enters the search index"
+        })
+    end
+
+    :ok = ensure_notes_search_index!(org_id)
+
+    doc.id
+  end
+
+  defp find_or_create_notes_page(mount, scope, org_id) do
+    case find_notes_page(org_id) do
+      nil ->
+        {:ok, doc} = Writes.create_page(mount, scope, %{title: @notes_page_title})
+        doc
+
+      doc ->
+        doc
+    end
+  end
+
+  defp find_notes_page(org_id) do
+    Samenerp.Docs.Doc
+    |> Ash.Query.filter(org_id == ^to_string(org_id) and title == ^@notes_page_title)
+    |> Ash.Query.limit(1)
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, doc} -> doc
+      _ -> nil
+    end
+  end
+
+  defp notes_blocks(mount, scope, doc_id) do
+    case Reads.page(mount, scope, doc_id) do
+      {:ok, page} -> page.blocks
+      _ -> []
+    end
+  end
+
   @doc "The dev-data seed dataset — `{name, segment, 🔒 secret}` tuples."
   @spec records() :: [{String.t(), String.t(), String.t()}]
   def records, do: @dev_records
@@ -82,11 +230,21 @@ defmodule Samenerp.Seeds do
     Application.ensure_all_started(:samenerp)
     ensure_aud_partitions()
 
-    if operator_org_seeded?() do
-      {:ok, :already_seeded}
-    else
-      {:ok, seed_operator_org_and_admin()}
-    end
+    result =
+      if operator_org_seeded?() do
+        {:ok, :already_seeded}
+      else
+        {:ok, seed_operator_org_and_admin()}
+      end
+
+    # WS-Notes Phase 6 host setup — runs AFTER the org exists (a fresh DB creates it above) and
+    # OUTSIDE the `already_seeded` short-circuit so a re-run repairs a missing registry row.
+    # EVERY tenant org, not just this seeder's own: an org created by signup/operator long after
+    # the last seed is repaired here too. Idempotent, and it seeds NO content: the demo page is
+    # dev data (`run/0`), not a deploy side effect.
+    :ok = backfill_notes_search_index!()
+
+    result
   end
 
   @doc """
@@ -103,11 +261,16 @@ defmodule Samenerp.Seeds do
     Application.ensure_all_started(:samenerp)
     ensure_aud_partitions()
 
-    if operator_org_seeded?() do
-      {:ok, :already_seeded}
-    else
-      {:ok, seed_operator_org_and_admin(opts)}
-    end
+    result =
+      if operator_org_seeded?() do
+        {:ok, :already_seeded}
+      else
+        {:ok, seed_operator_org_and_admin(opts)}
+      end
+
+    :ok = backfill_notes_search_index!()
+
+    result
   end
 
   # A fresh DEV checkout is migrated into the launch month only, and the daily
@@ -335,7 +498,10 @@ defmodule Samenerp.Seeds do
       user
       |> Ash.Changeset.for_update(
         :update,
-        %{full_name: %{"first" => first_name, "last" => last_name}, emails: [%{"label" => "primary", "address" => email}]},
+        %{
+          full_name: %{"first" => first_name, "last" => last_name},
+          emails: [%{"label" => "primary", "address" => email}]
+        },
         authorize?: false
       )
       |> Ash.update!()

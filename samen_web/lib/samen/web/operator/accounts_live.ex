@@ -37,6 +37,7 @@ defmodule Samen.Web.Operator.AccountsLive do
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Reads
+  alias Samen.Web.OrgProvisioning
 
   use Samen.Web.ListLive,
     resource: Org,
@@ -95,7 +96,9 @@ defmodule Samen.Web.Operator.AccountsLive do
   @impl true
   def handle_event("new_account", _params, socket) do
     mount = socket.assigns.samen_mount
-    {:noreply, assign(socket, show_new: true, new_form: new_account_form(mount, Operator.scope(mount)))}
+
+    {:noreply,
+     assign(socket, show_new: true, new_form: new_account_form(mount, Operator.scope(mount)))}
   end
 
   def handle_event("cancel_new", _params, socket) do
@@ -113,7 +116,11 @@ defmodule Samen.Web.Operator.AccountsLive do
   # adds no policy of its own.
   def handle_event("save_new", %{"form" => params}, socket) do
     case AshPhoenix.Form.submit(socket.assigns.new_form, params: with_org(params, socket)) do
-      {:ok, _org} ->
+      {:ok, org} ->
+        # WS-Notes Phase 6 — an operator-created account IS a tenant org, so it goes through the
+        # SAME per-org provisioning seam the self-serve signup does (`Samen.Web.OrgProvisioning`:
+        # this host's Pages search registry). Non-fatal and loud, never a rolled-back account.
+        OrgProvisioning.run(socket.assigns.samen_mount, org.id)
         {:noreply, socket |> assign(show_new: false) |> load()}
 
       {:error, form} ->

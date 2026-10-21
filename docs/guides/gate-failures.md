@@ -1074,6 +1074,6 @@ signal (`storage_up`/`storage_down`, `Ecto.Migrator.run`, or the helper itself).
 ignored line-wise, because the emitted templates legitimately quote the old pattern in prose.
 
 Adversarial twin:
-`scripts/sabotages/359-db-boot-verifier-raw-matcher-neutered.patch` (the raw-boot pattern stops
+`scripts/sabotages/367-db-boot-verifier-raw-matcher-neutered.patch` (the raw-boot pattern stops
 matching a real `storage_up`, so a hand-rolled boot in a file whose name is not a known harness
 reads as "no violation") — it names the three tests that must flip.

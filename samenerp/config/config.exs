@@ -266,6 +266,18 @@ config :samen_core, :query_budget_ledger_repo, Samenerp.Repo
 # OWN book of business on the TENANT plane (clear); seeds anchor rows on this id.
 config :samenerp, :operator_org_id, "0f000000-0000-4000-8000-0000000000aa"
 
+# WS-Notes Phase 6 (unit 1c) — the ORG-PROVISIONING seam. The Pages search index is per-ORG
+# REGISTRY state (`Samen.Web.Notes.Search.register_index/2` writes `Doc.title` + `DocBlock.text`
+# into THIS host's `SearchIndex`), and search is fail-closed without it: an org that was never
+# registered answers `/pages?q=` with the honest empty set, indistinguishable from "nothing
+# matches". Seeding only ever repaired the org the seeder knew about, so every tenant created
+# afterwards was silently unsearchable. `Samen.Web.OrgProvisioning` runs this hook on the
+# creation path itself (self-serve signup + the operator plane's New-account write), and
+# `Samenerp.Seeds.seed!/0,1` backfills orgs that predate this wiring on every boot. The hook is
+# idempotent and guard-first: `SearchIndexGuard` refuses the vaulted `text_secure` column, so a
+# searchable Pages surface can never mean an indexed vault.
+config :samenerp, :org_provisioning, [{Samenerp.Seeds, :ensure_notes_search_index!, []}]
+
 # ADR-031/ADR-045 §2 — the launch AUTH gate, ARMED BY DEFAULT IN PROD (V-F1, Option A). The
 # router's tenant/shared mounts carry `authn: {:app_env, :samenerp, :auth_required?}`;
 # in dev/test this is FALSE so `Samen.Web.CurrentOrg` keeps the query-param convenience identity

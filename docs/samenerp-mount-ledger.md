@@ -529,6 +529,53 @@ templates emit the same step, so a host is gated from birth. Operator-only hosts
 generated app, so requiring a producer for it would make product analytics mandatory rather than
 opt-in. Adversarial twin: `scripts/sabotages/335-analytics-producer-reader-mount-matcher-neutered.patch`.
 
+## Amendment 4 — the PAGES surface is mounted, so the block editor has an app to live in (2026-10-20, ADR-053 §8 O4)
+
+WS-Notes shipped P1–P5 into `samen_core`/`samen_web`, but no host ever called
+`samen_notes_routes/3`, so the whole surface was reachable only from the library's own test router
+and the workstream's definition of done — "a member of samenerp can create a nested page, type
+blocks, split/merge/move/indent them, find a paragraph by its text, and follow a `[[page]]`
+backlink, with no page reload" — had no app to happen in. This amendment mounts it here.
+
+| File | What it is |
+|---|---|
+| `lib/samenerp_web/router.ex` | `samen_notes_routes(:notes, Samenerp.Docs, repo: Samenerp.Repo, search_index: Samenerp.Primitives.SearchIndex, labels: @current_org_labels)` — `GET /pages` (index) + `GET /pages/:id` (editor). The macro sets `:pages_path` on its own mount; the host's SHARED tenant label map carries `pages_path: "/pages"` too, because the sidebar is inherited chrome resolved from the CURRENT page's mount (same posture as `files_path`/`chat_path`). `mix samen.verify.nav_links` keeps the two spellings equal to the route. |
+| `lib/samenerp/docs.ex` · `priv/repo/migrations/20261018120000_mount_docs_scope.exs` | Pre-existing from WS-Notes Phase 1 — the `Doc`/`DocBlock`/`DocLink` rows the surface edits (the mount is the adoption; nothing new was authored for it). |
+| `test/notes_surface_mount_test.exs` | 5 host-level proofs through the REAL router: both routes declared; `/pages` renders this org's pages inside the shared shell + the New-page form; `/pages/:id` renders the page's block; Documents → Pages is inherited chrome on `/crm/companies` (which mounts notes nowhere); another org's page id is `Page not found` with neither its title nor its block text in the DOM (R1). |
+| `test/nav_reachability_test.exs` | Documents → Pages added to the reachable roster, so the no-dead-link leg judges `/pages` on every tenant page. |
+| `lib/samenerp/seeds.ex` | The HOST half of Pages search: `notes_mount/0` mirrors the router's mount (the router does not expose its compiled one), `ensure_notes_search_index!/1` calls `Samen.Web.Notes.Search.register_index/2` (guard-first — `pii_edb_text_secure` can never enter the tsvector), and `seed_notes_pages!/1` seeds one demo page (two plain blocks + one vaulted) and registers the index. `seed!/0,1` calls the registration OUTSIDE the `already_seeded` short-circuit, so a re-run repairs a missing row; it seeds no content. `mix samenerp.seed` runs the demo-page seed in `MIX_ENV=dev` only (`lib/mix/tasks/samenerp.seed.ex`), and the release entrypoint calls `Seeds.seed!()` from an `eval`, so no production path can reach the demo content. |
+| `config/config.exs` · `samen_web/lib/samen/web/org_provisioning.ex` | The CREATION half of the same registration: `config :samenerp, :org_provisioning, [{Samenerp.Seeds, :ensure_notes_search_index!, []}]` arms the framework seam (`{mod, fun, args}`, called as `apply(mod, fun, args ++ [org_id])`), which runs on the org-creation path itself — the signup controller after the A1 transaction commits, and the operator plane's New-account write. Non-fatal by contract (the org is already committed) and loud on failure (`{:error, [{mod, fun, reason}]}` + a `Logger.error` per failure; a raise or an unexpected return is a failure too). `Samenerp.Seeds.backfill_notes_search_index!/0` is the deploy half: `seed!/0,1` sweeps the tenant directory on every boot, so orgs that predate the wiring are repaired on the next release. |
+| `test/notes_org_provisioning_test.exs` | 4 proofs: the hook is wired AND resolvable from the MOUNT (`Mount.otp_app(Seeds.notes_mount()) == :samenerp`), which is how both call sites reach it; a real `POST /signup` (CSRF token off the form, the no-JS POST fallback) yields an org that already carries exactly `Doc.title` + `DocBlock.text` with no seed call anywhere in the test; that brand-new org's `/pages?q=` answers for a block its own member typed and deep-links to it; and the backfill registers a directly-created org that predates the hook. Anti-tautology: a directly-created org has NO registry rows, so the signup rows are the creation path doing the work. |
+| `test/notes_search_test.exs` | 5 proofs: the two registry rows are exactly `Doc.title` + `DocBlock.text` and re-registering does not duplicate; a seeded page is found by its plain block text through the REAL router (`GET /pages?q=typed`, block hit, deep link to `/pages/:id`); `?q=vaulted` renders the honest empty state with the vaulted plaintext absent from the body — with a positive control on the same page proving the silence is the vault, not a dead query; `SearchIndexGuard` refuses `text_secure` and accepts `text`; and another org's seeded page is not searchable from this org (positive control: it IS a hit when searched from the org that owns it). |
+
+**Deliberately NOT mounted: `demo`.** The WS-Notes build plan listed it second, on the assumption
+that its existing Docs mount made this a one-liner. Demo's posture is API-only (`Demo.DocsScope`'s
+moduledoc states the boundary — no web-surface router mount, the same one `samen_ics_routes`
+respected), so mounting a tenant LiveView there would be a posture change disguised as a one-liner.
+
+**Search is registered, not merely mounted.** `Samen.Web.Notes.Search` is fail-closed, so a mounted
+surface with no `SearchIndex` rows answers every `?q=` with an honest empty state — "wired" and
+"searchable" are two different claims. `Samenerp.Seeds.ensure_notes_search_index!/1` makes the
+second one true for a seeded org (and `seed!/0,1` repairs it on a re-run), which is proven end to end
+by `test/notes_search_test.exs`, and its refutability by
+`scripts/sabotages/368-samenerp-notes-seed-skips-search-registration.patch` (drops the seed's
+registration call → the "found by its plain block text" test flips; restore byte-exact).
+
+**...and it is provisioned at CREATION, not only by the seeder (unit 1c, 2026-10-21).** A seeder can
+only repair the orgs it knows about, so every tenant org created after a seed — self-serve signup,
+operator New-account — had no registry rows and therefore a permanently empty `/pages?q=`. The
+registration now also runs on the creation path via `Samen.Web.OrgProvisioning` (one config line
+above; the seam reports failures instead of unwinding a committed account), with
+`Samenerp.Seeds.backfill_notes_search_index!/0` repairing pre-existing orgs from `seed!/0,1` on
+every boot. Refutability: sabotages 369 (the config line), 370 (the operator-plane call) and 371
+(the signup call) each flip a named test in `test/notes_org_provisioning_test.exs` /
+`samen_web/test/samen/web/org_provisioning_test.exs` and restore byte-exact.
+
+**Still open on this host, named rather than implied:** `Notes.Export` (unit 2.4) is unbuilt, so
+R6's export-masking row has no mechanism yet, and `mix samen.docs.materialize` (unit 1a) has no
+samenerp caller (there is no legacy `body` content here — the host was mounted after blocks
+existed).
+
 ## Re-running the certification
 
 ```bash
@@ -538,5 +585,7 @@ cd samenerp && MIX_ENV=test bash ci.sh     # ends: ==> samenerp CI gate: ALL PAS
 That gate runs every verifier plus the host suite — **88 tests as of 2026-10-13** (the ADR-050 mount
 added `test/fleet_status_page_test.exs`'s 4; Amendment 2's cockpit mount added
 `test/fleet_cockpit_mount_test.exs`'s 8; Amendment 3 added `test/analytics_activation_test.exs`'s 10;
-the earlier figure of 61 predates all three), which includes all seven `phaseN_surface_test.exs` files. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
+the earlier figure of 61 predates all three), which includes all seven `phaseN_surface_test.exs` files.
+Amendment 4 adds `test/notes_surface_mount_test.exs`'s 5; the gate re-derives the total, so it is not
+restated here. The `mix.lock` in this app is a local resolution artifact and is deliberately not committed
 (all seven phases shipped without it).

@@ -36,8 +36,11 @@ defmodule Samenerp.NavReachabilityTest do
   @endpoint SamenerpWeb.Endpoint
 
   # {group label, item label, path} — one entry per mounted phase module that owes a destination.
+  # WS-Notes Phase 6 adds the block-page editor to the SAME Documents group Files rides: the
+  # mount sets `:pages_path` itself, so mounting `samen_notes_routes/3` IS the nav item.
   @phase_entries [
     {"Documents", "Files", "/files"},
+    {"Documents", "Pages", "/pages"},
     {"Chat", "Conversations", "/chat"},
     {"Discover", "Search", "/search"},
     {"Insights", "Activation", "/analytics"},

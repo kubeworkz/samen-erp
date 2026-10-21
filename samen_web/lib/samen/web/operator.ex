@@ -102,9 +102,7 @@ defmodule Samen.Web.Operator do
   scope is product-local and fleet-independent (ADR-044 §16.4a).
   """
   @spec otp_app(Mount.t()) :: atom() | nil
-  def otp_app(%Mount{} = mount) do
-    Mount.label(mount, :otp_app, nil) || repo_otp_app(mount)
-  end
+  def otp_app(%Mount{} = mount), do: Mount.otp_app(mount)
 
   def otp_app(_), do: nil
 
@@ -118,16 +116,6 @@ defmodule Samen.Web.Operator do
       app -> Application.get_env(app, :operator_org_id)
     end
   end
-
-  defp repo_otp_app(%Mount{repo: repo}) when is_atom(repo) do
-    if function_exported?(repo, :config, 0) do
-      repo.config()[:otp_app]
-    end
-  rescue
-    _ -> nil
-  end
-
-  defp repo_otp_app(_), do: nil
 
   # The operator org is the well-known anchor; the seed guarantees exactly one Org row in the
   # operator namespace. Read it org-lessly (the Org anchor create/read is bootstrap-friendly)
