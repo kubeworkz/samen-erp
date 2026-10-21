@@ -1,0 +1,33 @@
+# SABOTAGE: WS-NOTES R6 — THE PAGE DOWNLOAD RE-READS ON THE WRONG PLANE
+# (ADR-053 §6 R6 / §5 D5; WS-Notes Phase 2 unit 2.4). `Samen.Web.Notes.Export` renders a page as
+# Markdown/CSV from exactly ONE read — `Samen.Web.Notes.Reads.page/3` — which resolves every block's
+# `text`/`text_secure` through `Samen.Api.PiiResolution` on the ACTING plane. This patch keeps the
+# read seam and changes the plane it is called with: the download re-reads as if the caller were the
+# tenant, so an operator-plane download carries the plaintext the operator's SCREEN masks.
+#
+# Why the plane rather than "read the column": R6's whole claim is that the export is a RENDERING
+# of the read seam, so a hypothetical second data path would be a different defect. Here the seam
+# is intact and only the actor is wrong — the same renderer, the same artifact, one forged plane.
+# That is also what makes the GREEN half still pass: the tenant plane is untouched, so the only
+# tests that can fail are the ones that flip the plane, and the unvaulted positive control keeps
+# passing (proving the failure is the plane, not a broken export).
+#
+# Aimed at the builder only: `Reads`, `PiiResolution`, `Samen.Web.Csv`, the controller and the
+# route table are untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_export_masking_test.exs
+# MUST_FAIL: downloads the mask: never the plaintext, never a vt_* token
+--- a/samen_web/lib/samen/web/notes/export.ex
++++ b/samen_web/lib/samen/web/notes/export.ex
+@@ -141,7 +141,10 @@
+   # Export reads through `Reads` — never the fields. That is the whole of R6's mechanism: the
+   # plane resolution happened in one place, and this module cannot disagree with it because it
+   # never sees a raw column.
+-  defp load(mount, scope, doc_id), do: Reads.page(mount, scope, doc_id)
++  defp load(mount, scope, doc_id) do
++    tenant = %{scope | actor: Map.merge(scope.actor, %{plane: :tenant, kind: :tenant})}
++    Reads.page(mount, tenant, doc_id)
++  end
+ 
+   # ── clipboard (plain text) ─────────────────────────────────────────────────
+ 

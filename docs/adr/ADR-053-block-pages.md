@@ -15,8 +15,9 @@
   suite/probe/golden mitigation — see §3.1 item 5); and the READ/WRITE SEAM (P2) -
   `Samen.Web.Notes.Reads` (`page/3`, `block/3`), `Samen.Web.Notes.Writes` (ordered insert/update_text/
   split/merge/move/indent/archive/restore, revision CAS, `{:error, :stale}`), `Samen.Web.Notes.Inline`
-  (the constrained dialect to constructed HEEx, no `raw/1`) and `Samen.Web.Notes.Offset`. P2 unit 2.4
-  (`Export`) is NOT built, so 2.5's export-masking row stays open with it. Then the SURFACE (P3) —
+  (the constrained dialect to constructed HEEx, no `raw/1`) and `Samen.Web.Notes.Offset`; P2 unit
+  2.4 (`Samen.Web.Notes.Export` + the download routes and the page copy, R6) landed 2026-10-21, so
+  2.5's export-masking row floats with it. Then the SURFACE (P3) —
   `samen_notes_routes/3` + `IndexLive`/`PageLive` behind `Samen.Web.Tenant.Live`, the `NoteBlock`
   kit and `app.js` hook; SEARCH + BACKLINKS (P4) — `Samen.Web.Notes.Search` over the host
   `SearchIndex` (`:search_index` mount seam) and org-scoped `DocLink` resolution; and PRESENCE +
@@ -29,8 +30,10 @@
   [the build plan](../ws-notes/build-plan.md) for every deviation. NOT landed: the host mounts +
   the opt-in materialize task (P6). Sabotages **352** (stale revision CAS, R9), **353** (unknown
   type token, R11), **354** (R12 `raw/1` in the render path), **355** (R13 cross-org resolution),
-  **356** (R15 search liveness JOIN), **357** (R10 focused-block skip) and **358** (R8 envelope
-  carries text) all flip and restore byte-exact.
+  **356** (R15 search liveness JOIN), **357** (R10 focused-block skip), **358** (R8 envelope
+  carries text), **364** (R6 download resolved on the wrong plane), **372** (R6 clipboard copy
+  resolved on the wrong plane) and **373** (R8 subscriber re-reads on the wrong plane) all flip and
+  restore byte-exact.
 - **Task:** give a Samen host a Notion-shaped note surface — nested pages, typed blocks, a slash
   menu, search across them, and `[[page]]` backlinks — on the substrate that already exists, without
   inventing a second content store and without importing a client-side editor engine the repo has
@@ -291,6 +294,17 @@ R8 is asserted two ways rather than described: the envelope's `Map.keys/1` set, 
 `:erlang.term_to_binary/1` for the plaintext and for `vt_`. Sabotage **358** adds the text to the
 builder and both assertions fail; that is the proof the scan is not decorative.
 
+**The subscriber half (2026-10-21).** A clean wire is only half of R8: the envelope is clean so that
+each subscriber can re-read the value ITSELF, on its own plane. That is now proven on two REAL
+sockets through the REAL router — a tenant tab at `/pages/:id` and an operator tab at the same page
+on the framework's documented `plane: :operator` mount, both subscribed to the page topic. One
+broadcast (an external tenant-plane write, and separately a split), and each tab re-reads: the
+tenant tab shows the new text, the operator tab the mask of it, with no `vt_*` in either. Both
+re-read calls are covered because they are different code — `refresh_block/2` for a block envelope
+and the structure branch's `reload/2` — and sabotage **373** forges the plane on BOTH, which flips
+those two tests while every envelope test stays green. That asymmetry is the point: a clean wire
+does not save a subscriber that resolves wrongly.
+
 **The skip.** A broadcast never patches the `<textarea>` the user has focused (§2 D4's
 `editing_block_id`). The incoming id is DEFERRED (`deferred_block_id`) and re-read when that
 control blurs, so a remote change is applied late rather than dropped. Sabotage **357** re-reads
@@ -308,6 +322,107 @@ notifications/webhook shape: an actor-carrying action that CONSULTS `Samen.Revea
 and returns a status map, never plaintext (the decrypt stays inside `PiiResolution`, behind the
 same `opts[:repo]` seam as every other governed read). No migration: an action is not a column.
 This is a model change, not a UI one, and it is recorded here rather than buried in the build plan.
+
+### 3.3 As built — Phase 6 (2026-10-20): the first HOST mount, and the two label seams it needed
+
+P1–P5 shipped the surface into `samen_web`, but until Phase 6 no host called
+`samen_notes_routes/3`, so every page of it was reachable only from the library's test router and
+§10's definition of done had no app to happen in. samenerp is that app: one macro call over its
+existing Docs mount (`Samenerp.Docs`, migration `20261018120000`) serves `GET /pages` and
+`GET /pages/:id` through `SamenerpWeb.Endpoint`, at ≈0 authored LOC — the same one-line adoption
+as Files or Chat.
+
+Two seams are worth recording because they look redundant and are not:
+
+- **`:pages_path` is declared twice, deliberately.** The macro sets the label on its OWN mount
+  (that is what makes "mount the surface" the whole opt-in, §8 O4), but the sidebar is INHERITED
+  chrome rendered from the current page's mount — so a CRM page resolves `pages_path` from its own
+  mount or not at all. The host's shared tenant label map therefore carries `pages_path` too,
+  exactly as it carries `files_path`/`chat_path`; `mix samen.verify.nav_links` is what keeps the
+  two spellings equal to the route the macro actually declared.
+- **`:search_index` names `Samenerp.Primitives.SearchIndex`.** §5's registration seam belongs to
+  Primitives, and the Docs namespace has none of its own, so `Samen.Web.Notes.Search` reads the
+  registry from the mount label and fails CLOSED to `[]` when it is absent (never a guessed
+  module, never an unbounded scan). Registration remains host setup
+  (`Notes.Search.register_index/2`), guard-first: `SearchIndexGuard` refuses
+  `pii_edb_text_secure`, so R14 holds on the host's own registry, not just in the library test.
+  **As built:** `Samenerp.Seeds.ensure_notes_search_index!/1` performs it for a seeded org — called
+  from `seed_notes_pages!/1` and from `seed!/0,1` outside the `already_seeded` short-circuit — and
+  `samenerp/test/notes_search_test.exs` pins both halves through the real router: a plain block is a
+  block hit on `GET /pages?q=…`, and `?q=vaulted` is the empty state with the vaulted plaintext
+  absent (positive control on the same page, so the silence is the vault rather than a dead query).
+  Mounting without registering is the honest empty state by design, which is why the two claims are
+  tested separately.
+  **Unit 1c (2026-10-21) — creation-time provisioning.** Registration was still only ever performed
+  by the seeder, so it repaired the org the seeder knew about and nothing else: every tenant org
+  created afterwards — self-serve `/signup`, or an operator's "New account" — had no registry rows
+  and answered `/pages?q=` with the fail-closed empty set: wired, and indistinguishable from
+  "nothing matches". The fix is a framework seam, not a notes one. `Samen.Web.OrgProvisioning` reads
+  the host's `:org_provisioning` hook list
+  (`config :samenerp, :org_provisioning, [{Samenerp.Seeds, :ensure_notes_search_index!, []}]`) and
+  runs it on BOTH creation paths: `Samen.Web.Auth.AccountController.register/2` after the A1
+  transaction commits, and `Samen.Web.Operator.AccountsLive`'s `save_new`. It is deliberately
+  NON-FATAL (the org row is already committed, so a registry hiccup must not read as "signup
+  failed") and deliberately LOUD: `run/2` returns `{:error, [{mod, fun, reason}]}` and logs one
+  `Logger.error` per failure, and a raise or an unexpected return counts as a failure — a hook that
+  never reported success is never recorded as one. The deploy half is
+  `Samenerp.Seeds.backfill_notes_search_index!/0`, which `seed!/0,1` runs on EVERY boot, so orgs that
+  predate the wiring are repaired on the next release. Proven by
+  `samenerp/test/notes_org_provisioning_test.exs` (a real `POST /signup` through the router: the new
+  org already carries exactly the two rows and its own block is a hit — with a directly-created org
+  as the anti-tautology control that the CREATION PATH, not a default, is what registers) and
+  `samen_web/test/samen/web/org_provisioning_test.exs` (unwired = no-op, the operator path, and
+  every failure shape reported rather than raised). Twins: sabotages 369 (host config unwired), 370
+  (the operator path drops the call), 371 (the signup path drops the call).
+
+**Deliberately not mounted: `demo`.** The build plan listed it second on the assumption that its
+Docs mount made the surface a one-liner, but demo's posture is API-only (`Demo.DocsScope`'s
+moduledoc states the boundary explicitly, the same one `samen_ics_routes` respected), so a tenant
+LiveView there would be a posture change wearing a one-liner's clothes.
+  **Unit 2.4 (2026-10-21) — the download, and R6's proof.** `Notes.Export` renders a page as
+  Markdown or CSV from the SAME read seam: `load/3` calls `Reads.page/3` and names no column at all,
+  so the artifact shows exactly what the editor shows on the same plane — the tenant's own page in
+  the CLEAR, `••••` on an operator plane without a grant, never a `vt_*` token, never an unwrapped
+  mask. `samen_notes_routes/3` mounts `GET <pages_path>/:id/export.md` and `/export.csv` as plain
+  controller routes OUTSIDE the `live_session` (mount on the route assigns — the CSV/ICS export
+  posture), and `PageLive` offers both on EVERY plane: one button whose content depends on the
+  plane, since hiding it on the masked plane would be posture, not protection.
+
+  Two renderer decisions worth naming. Markdown ESCAPES block text (`&`, `<`, `>`) — R12's export
+  half — so a paragraph containing `<script>` downloads as those characters instead of a live tag in
+  whichever viewer opens the file, while a fenced `code` block keeps its bytes (a fence is already a
+  literal context); nothing is stripped, and the mask is resolved BEFORE the escape, so `••••` is
+  never escaped into or out of anything. CSV serializes through `Samen.Web.Csv.serialize/1`, so
+  RFC-4180 quoting (an embedded comma/newline stays ONE cell) and the formula-injection
+  neutralization are the same chokepoint the catalog-driven export uses rather than a second,
+  drifting escaper.
+
+  The third export §5 D5 names is the COPY, and it is the shortest path out of the app: "Copy page"
+  pushes `Export.copy_text/3` — plain text (no `#`, bullets or fences, and deliberately NO HTML
+  escaping, since a clipboard is text) from the same `load/3` — to the requesting socket, where the
+  `CopyText` hook hands it to `navigator.clipboard.writeText/1`. It is a reply to the person who
+  clicked, never a broadcast, and nothing is pre-rendered into the DOM; the page says "Copied" only
+  after the client reports the write, and "unavailable" when there is no clipboard API.
+
+  Proven by `samen_web/test/samen/web/notes_export_masking_test.exs` (19): the tenant artifact in
+  full (every block type, its own vaulted block in the clear), the operator artifact masking over
+  the ARTIFACT BYTES (a download is a second render path, so there is no HEEx to turn a `Masked`
+  into `••••` for us) with the unvaulted blocks asserted present, the CSV cell rule, the same-page
+  plane flip plus a modeled leak the scan catches, org scope (`:not_found` and a 404 that names
+  nothing), the real route's `Content-Type`/filename, a legacy zero-block body, and the clipboard
+  proven twice — at `copy_text/3` and at the SOCKET (the payload a real operator-plane socket
+  pushes). Two sabotage twins, one per way out: **364** keeps `Reads.page/3` and forges the PLANE
+  the download runs on (flipping the download, route and anti-tautology tests), and **372** does the
+  same to `copy_text/3` (flipping exactly the three clipboard assertions while every download test
+  stays green — the point being that each exit needs its own gate).
+
+**Proof.** `samenerp/test/notes_surface_mount_test.exs` drives the REAL router: it asserts both
+routes are declared, that `/pages` renders the host's pages inside the shared shell, that
+`/pages/:id` renders the page's block through the host's Docs mount, that Documents → Pages is
+inherited chrome on `/crm/companies` (a page that mounts notes nowhere), and that ANOTHER org's
+page id is `Page not found` with neither its title nor its block text in the body (R1).
+`test/nav_reachability_test.exs` adds Pages to the reachable roster, so the dead-link leg covers
+it on every tenant page.
 
 ## 4. Editor mechanics (M1)
 

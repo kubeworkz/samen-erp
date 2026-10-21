@@ -1,0 +1,30 @@
+# SABOTAGE: WS-NOTES R6, THE CLIPBOARD HALF — "Copy page" re-resolves on the TENANT plane
+# (ADR-053 §5 D5 / §6 R6; WS-Notes Phase 2 unit 2.4). `Samen.Web.Notes.Export.copy_text/3` is the
+# third export the ADR names and the shortest path out of the app: the server pushes its bytes to
+# the requesting socket and the `CopyText` hook hands them to `navigator.clipboard.writeText/1`, so
+# whatever the plane allowed is now on the user's clipboard, one paste away from anywhere.
+#
+# This patch is the "copy is a local affordance, resolve it locally" shortcut: `copy_text/3` still
+# calls the SAME `load/3` (so the read seam is intact and no column is named), but it forges the
+# actor to `plane: :tenant, kind: :tenant` first. An operator-plane copy therefore carries the
+# plaintext the operator's SCREEN masks, and the download tests stay GREEN — the copy path is a
+# separate gate precisely because it is a separate way out.
+#
+# Aimed at the copy only: `markdown/3`, `csv/3`, `plain_body/1`, `Reads`, `PiiResolution`, the
+# `CopyText` hook and the controller are untouched, so exactly the three per-plane clipboard
+# assertions flip (the tenant GREEN half and every Markdown/CSV test keep passing, proving the
+# failure is this path's plane, not a broken exporter).
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_export_masking_test.exs
+# MUST_FAIL: RED: the operator's copy is the mask — never the plaintext, never a vt_* token
+--- a/samen_web/lib/samen/web/notes/export.ex
++++ b/samen_web/lib/samen/web/notes/export.ex
+@@ -119,6 +119,8 @@
+   @spec copy_text(Samen.Web.Mount.t(), Samen.Scope.t(), term()) ::
+           {:ok, %{body: String.t()}} | {:error, :not_found}
+   def copy_text(mount, scope, doc_id) do
++    scope = %{scope | actor: Map.merge(scope.actor, %{plane: :tenant, kind: :tenant})}
++
+     with {:ok, page} <- load(mount, scope, doc_id) do
+       {:ok, %{body: plain_body(page)}}
+     end

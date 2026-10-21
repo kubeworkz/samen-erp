@@ -50,6 +50,25 @@ defmodule Samen.Web.Notes.Live do
     end
   end
 
+  @doc """
+  One page's DOWNLOAD href under this mount — `/pages/:id/export.md` or `/export.csv`, the
+  `Samen.Web.Notes.ExportController` routes `samen_notes_routes/3` mounts beside the editor
+  (WS-Notes Phase 2 unit 2.4).
+
+  Threaded with the same `?org=` the page links carry, so the download resolves the same org the
+  viewer is in. Export is safe on every plane (the renderer reads through `Notes.Reads`), which is
+  why this helper has no plane branch — hiding the link would be posture, not protection.
+  """
+  @spec export_href(Mount.t(), String.t() | nil, term(), :md | :csv) :: String.t()
+  def export_href(mount, org_id, doc_id, format) when format in [:md, :csv] do
+    base = "#{Mount.label(mount, :pages_path, "/pages")}/#{doc_id}/export.#{format}"
+
+    case org_id do
+      org_id when is_binary(org_id) and org_id != "" -> "#{base}?org=#{org_id}"
+      _ -> base
+    end
+  end
+
   @doc "The index href for this mount."
   @spec index_href(Mount.t(), String.t() | nil) :: String.t()
   def index_href(mount, org_id) do

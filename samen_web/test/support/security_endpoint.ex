@@ -117,6 +117,21 @@ defmodule Samen.WebTest.SecurityRouter do
       search_index: Samen.WebTest.Primitives.SearchIndex
     )
 
+    # WS-Notes R8 — the SAME surface on the OPERATOR plane (`:plane` is the macro's documented
+    # override), so the realtime proof can open a REAL operator socket beside the tenant one: two
+    # tabs on ONE page, one broadcast, and each subscriber re-reads on its own plane. `target_org_id`
+    # is nil, so the plane's target is the `?org=` the request is bound to (the same org the tenant
+    # tab is in) — which is exactly the operator drill-in shape, masked.
+    samen_notes_routes(:op_notes, Samen.WebTest.Docs,
+      repo: Samen.WebTest.Repo,
+      plane: :operator,
+      operator_id: "op-1",
+      session_id: "op-session",
+      path: "/op-pages",
+      labels: Map.put(@labels, :pubsub, Samen.WebTest.PubSub),
+      search_index: Samen.WebTest.Primitives.SearchIndex
+    )
+
     # P17 (ADR-045 §3, P17-carry-2) — the TENANT own-org analytics surface. It was mounted by
     # NO router this LiveView-DRIVING harness covers, so the on_mount tenant gate + CurrentOrg
     # org-authority pinning on `/analytics` were only ever verified by-construction (the read

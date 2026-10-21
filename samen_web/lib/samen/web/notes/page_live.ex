@@ -46,15 +46,25 @@ defmodule Samen.Web.Notes.PageLive do
     * a structure change (split/merge/insert/move/archive) reloads the page; that is a list change
       the user is not editing inside a single control, and the block they ARE in is value-diffed
       against its unchanged text.
+
+  ## Copy (R6's clipboard half)
+
+  "Copy page" is the third export ADR-053 §5 D5 names, and the shortest path out of the app: the
+  server renders `Samen.Web.Notes.Export.copy_text/3` (the same `Reads` seam, so the same plane
+  decision) and PUSHES it to the requesting socket, where the `CopyText` hook hands it to
+  `navigator.clipboard`. Nothing is embedded in the DOM and nothing is broadcast — a masked plane's
+  copy is `••••`, so the clipboard can hold no more than the screen showed. The page only says
+  "Copied" after the client reports it actually happened.
   """
 
   use Samen.Web.Tenant.Live
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
-  import Samen.Web.Notes.Live, only: [assign_mount: 2, notes_sidebar: 1, page_href: 3, writable?: 1]
+  import Samen.Web.Notes.Live,
+    only: [assign_mount: 2, export_href: 4, notes_sidebar: 1, page_href: 3, writable?: 1]
 
   alias Samen.Web.{Crumbs, CurrentOrg, Mount}
-  alias Samen.Web.Notes.{PubSub, Reads, Writes}
+  alias Samen.Web.Notes.{Export, PubSub, Reads, Writes}
 
   @list_types [:bulleted_list_item, :numbered_list_item, :to_do]
 
@@ -77,6 +87,7 @@ defmodule Samen.Web.Notes.PageLive do
        editing_block_id: nil,
        deferred_block_id: nil,
        focus_request: nil,
+       copy_state: nil,
        backlinks: [],
        unresolved: []
      )}
@@ -94,7 +105,8 @@ defmodule Samen.Web.Notes.PageLive do
        palette_for: nil,
        conflict: nil,
        error: nil,
-       focus_request: nil
+       focus_request: nil,
+       copy_state: nil
      )
      |> subscribe(doc_id)
      |> load(org_id, doc_id)}
@@ -356,6 +368,34 @@ defmodule Samen.Web.Notes.PageLive do
     end
   end
 
+  # ── the copy (R6's clipboard half) ─────────────────────────────────────────
+
+  # The payload is the `Export.copy_text/3` artifact — the SAME read seam the render uses — pushed
+  # to the requesting socket, where the `CopyText` hook hands it to the clipboard. Nothing is
+  # broadcast and nothing is pre-rendered into the DOM: a masked plane's copy is `••••`, so the
+  # clipboard can hold no more than the screen showed.
+  def handle_event("copy_page", _params, socket) do
+    with_scope(socket, fn mount, scope ->
+      case Export.copy_text(mount, scope, socket.assigns.doc_id) do
+        {:ok, %{body: text}} ->
+          {:noreply,
+           socket
+           |> assign(copy_state: nil)
+           |> push_event("copy_text", %{text: text})}
+
+        {:error, _reason} -> {:noreply, assign(socket, copy_state: :unavailable)}
+      end
+    end)
+  end
+
+  # The client reports what actually happened to the clipboard. The page never claims "Copied" on
+  # its own: with no JS, no permission or no `navigator.clipboard` there is no ack, and the row
+  # stays quiet rather than lying (the fail-honest posture, applied to an affordance).
+  def handle_event("copied", _params, socket), do: {:noreply, assign(socket, copy_state: :copied)}
+
+  def handle_event("copy_unavailable", _params, socket),
+    do: {:noreply, assign(socket, copy_state: :unavailable)}
+
   # ── realtime (the id-only broadcast, re-read per THIS viewer's plane) ──────
 
   @impl true
@@ -572,6 +612,46 @@ defmodule Samen.Web.Notes.PageLive do
                 phx-click="open_palette"
                 phx-value-id="end"
               >Add a block</button>
+
+              <%!-- WS-Notes unit 2.4 (ADR-053 §6 R6) — the page download. Offered on EVERY
+                   plane: the export renders through `Notes.Reads`, so a masked plane downloads
+                   masks (hiding the link would be posture, not protection). --%>
+              <a
+                id="note-export-md"
+                class="btn"
+                href={export_href(@samen_mount, @org_id, @page.doc.id, :md)}
+                download
+              >Download Markdown</a>
+              <a
+                id="note-export-csv"
+                class="btn"
+                href={export_href(@samen_mount, @org_id, @page.doc.id, :csv)}
+                download
+              >Download CSV</a>
+
+              <%!-- WS-Notes unit 2.4 (ADR-053 §5 D5, §6 R6) — the page COPY. The server pushes the
+                   `Export.copy_text/3` artifact (same read seam, same plane) and the `CopyText`
+                   hook writes it to the clipboard; nothing is rendered into an attribute, so a
+                   masked plane's copy is `••••` and the clipboard cannot out-see the screen. --%>
+              <button
+                id="note-copy-page"
+                type="button"
+                class="btn"
+                phx-click="copy_page"
+                phx-hook="CopyText"
+              >Copy page</button>
+
+              <span :if={@copy_state == :copied} id="note-copy-status" class="note-copy-status">
+                Copied
+              </span>
+              <span
+                :if={@copy_state == :unavailable}
+                id="note-copy-status"
+                class="note-copy-status"
+                role="status"
+              >
+                Copy is unavailable in this browser — use Download Markdown.
+              </span>
             </div>
           </div>
       <% end %>
@@ -738,6 +818,7 @@ defmodule Samen.Web.Notes.PageLive do
     |> assign_new(:focus_request, fn -> nil end)
     |> assign_new(:backlinks, fn -> [] end)
     |> assign_new(:unresolved, fn -> [] end)
+    |> assign_new(:copy_state, fn -> nil end)
   end
 
   defp no_org?(socket), do: CurrentOrg.no_org?(socket.assigns[:samen_mount], nil)

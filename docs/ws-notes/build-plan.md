@@ -94,8 +94,8 @@ up/down on a scratch DB; catalog regenerated and drift test green.
 | 2.1 | **DONE (2026-10-19)** — `Samen.Web.Notes.Reads` — the ONE read seam: `page/3` (doc + blocks ordered by `(position, id)`, every text resolved through `Samen.Api.PiiResolution` on the actor's plane) and `block/3` (the id-only realtime re-read path); the legacy `body` fallback decision lives here and nowhere else. |
 | 2.2 | **DONE (2026-10-19)** — `Samen.Web.Notes.Writes` — `insert_block/4`, `update_text/5`, `split/5`, `merge/3`, `move/4`, `indent/4`, `archive/3`/`restore/3`; position gaps + in-transaction rebalance **within a parent** (ADR-053 §8 O2 — the parent is always the doc root in M1, but no clause may assume it); `revision` compare-and-set (stale → `{:error, :stale}`). |
 | 2.3 | **DONE (2026-10-19)** — `Samen.Web.Notes.Inline` — the constrained dialect tokeniser + renderer to constructed HEEx (`**bold**`, `*italic*`, `` `code` ``, `~~strike~~`, `[text](https://…)`, `[[Page]]`, `@Name`); unknown syntax literal; **no `raw/1`**. Plus `Samen.Web.Notes.Offset` — the P0 findings §3 helper both the write path and the tokeniser share. |
-| 2.4 | `Samen.Web.Notes.Export` — Markdown/CSV rendering that resolves through `Reads` (not the field), so a masked plane exports masks. **NOT in the 2026-10-19 unit** (2.5's export-masking row stays open with it). |
-| 2.5 | **PARTIAL (2026-10-19)** — tests for ordering (gaps, rebalance, stale write refused), split/merge at boundaries, type-specific metadata/shape refusal, and the dialect table (every token + every near-miss twin). Export masking remains with 2.4. |
+| 2.4 | **DONE (2026-10-21)** — `Samen.Web.Notes.Export` + `ExportController` + the `samen_notes_routes/3` mounts: Markdown/CSV/clipboard rendering that resolves through `Reads` (never the field), so a masked plane exports masks. `GET /pages/:id/export.md` (title as the one `#`, blocks shifted down; every block type) and `/export.csv` (`position,type,text,checked`, serialized by `Samen.Web.Csv`); "Copy page" (`Export.copy_text/3` pushed to the requester, `CopyText` hook → `navigator.clipboard`, `Copied` only after the client acks). |
+| 2.5 | **DONE (2026-10-21 for the export-masking row; the rest 2026-10-19)** — tests for ordering (gaps, rebalance, stale write refused), split/merge at boundaries, type-specific metadata/shape refusal, the dialect table (every token + every near-miss twin), and now the export-masking proof: `samen_web/test/samen/web/notes_export_masking_test.exs` (19 — downloads, CSV, the clipboard, org scope, the route, legacy pages). |
 
 **Gate P2:** `samen_web` suite green; the dialect test table is the spec and every row has a
 near-miss twin; sabotage 352 (R9 concurrency) and 353 (R11 unknown type token) flip.
@@ -129,6 +129,46 @@ deviations, recorded rather than silently taken:
 6. **The dialect's emphasis forms require non-space edges** (`2 * 3 * 4` stays literal) and
    mentions require a word boundary (`a@b.test` stays literal); both have near-miss rows, so
    loosening either rule is a failing test, not a silent behaviour change.
+
+**As built (2026-10-21) — unit 2.4 (the R6 download).** `samen_web` green;
+`notes_export_masking_test.exs` (19, including the clipboard half added with **372**) is the proof,
+and **sabotages 364 and 372 both flip and restore byte-exact**. Findings and deviations, recorded
+rather than silently taken:
+
+1. **The plane is the sabotage's target, not the read seam.** 364 keeps `Reads.page/3` and forges the
+   actor it is called with, which is what a real regression looks like here: the renderer is shared,
+   so the only way to leak through it is to resolve on the wrong plane. It flips four tests (both
+   masking proofs, the route proof, the anti-tautology twin) and leaves the tenant/GREEN halves
+   passing — the positive control that proves the failure is the plane, not a broken export.
+2. **A download is a second render path, so the mask assertion is over the ARTIFACT body**, not a
+   DOM: `assert_masked_dom!/2` runs on the Markdown/CSV bytes (mask present, no plaintext, no
+   `vt_*`), with the unvaulted blocks asserted present so a blank or refused download cannot pass.
+3. **Markdown escapes stored text (R12's export half).** Block text is text: `&`, `<`, `>` are
+   escaped, so a paragraph reading `<script>` downloads as those characters instead of a live tag in
+   whichever Markdown viewer opens the file. Nothing is stripped — the export still says what the
+   page says — and a fenced `code` block keeps its bytes, since a fence is already a literal context.
+   The mask is resolved BEFORE this step, so `••••` is never escaped into or out of anything.
+4. **CSV reuses `Samen.Web.Csv.serialize/1`** rather than a second escaper: RFC-4180 quoting for an
+   embedded comma/newline and the formula-injection neutralization (`'=1+1`) come from the same
+   chokepoint the catalog-driven export uses, and the test round-trips through `Csv.parse/1`.
+5. **The routes sit OUTSIDE the `live_session`** (plain controller `get/4` with
+   `assigns: %{samen_mount: mount}`), matching the CSV and ICS export controllers — a bare `get/4`
+   leaves `conn.assigns[:samen_mount]` nil and every download 503s.
+6. **Both planes are served, and the link is on both.** Offering the download only on the tenant
+   plane would be posture, not protection: the masked plane's file contains masks, so the honest
+   surface is one button whose content depends on the plane (the same rule `Files.Live` follows).
+7. **A legacy body is quoted, literal text.** A zero-block page exports its `body`/`secure_body`
+   (ADR-053 §8 O3) inside the existing quote form, so its `#` cannot become a second H1 and its
+   `<script>` is escaped like any other block text.
+8. **The clipboard is the third path, and it got its own proof and its own sabotage.**
+   `Export.copy_text/3` shares `load/3` with the downloads but is plain text (no `#`/bullets/fences,
+   no HTML escaping — a clipboard is text, so `&lt;` must not be pasted), and the page's "Copy page"
+   PUSHES it to the requesting socket (never the topic) for the `CopyText` hook to
+   `navigator.clipboard.writeText`. The page only says "Copied" after the client acks. Proven at the
+   module (`copy_text/3` bytes) and at the socket (the pushed payload, on a real operator-plane
+   socket), plus the plane flip and the leak-scan refutability; **372** forges the copy's plane and
+   flips exactly those three tests while every download test stays green, and **364** (re-anchored)
+   still flips the downloads. Each way out has its own gate because each is its own leak.
 
 ## Phase 3 — the surface (~2 days)
 
@@ -231,8 +271,8 @@ deviations, recorded rather than silently taken:
 | Unit | Deliverable |
 |---|---|
 | 5.1 | **DONE (2026-10-19)** — `Samen.Web.Notes.PubSub` — `notes:page:<id>` topic, id-only envelopes, subscribe-on-mount, unsubscribe-on-terminate. |
-| 5.2 | **DONE (2026-10-19)** — `PageLive`'s `handle_info` re-reads the named block through `Reads` (plane-correct), skips `editing_block_id`, and shows the conflict banner on a stale write (the banner itself shipped with P3). The skip DEFERS: the id is recorded and re-read on blur. |
-| 5.3 | **DONE (2026-10-19)** — The three `Samen.MaskingCase` proofs: green (tenant + operator-with-grant clear), red (operator-without-grant `••••`, DOM-asserted, no `vt_*`), sabotage twin (plane flip clears / a modeled leak is detected). Plus the byte-scan assertion that no `text_secure` plaintext (and no `vt_*` token) appears in the PubSub envelope. The **export** half stays OPEN with unit 2.4 (`Notes.Export` is not built). |
+| 5.2 | **DONE (2026-10-19; R8 subscriber half 2026-10-21)** — `PageLive`'s `handle_info` re-reads the named block through `Reads` (plane-correct), skips `editing_block_id`, and shows the conflict banner on a stale write (the banner itself shipped with P3). The skip DEFERS: the id is recorded and re-read on blur. R8's consequence is now proven on TWO REAL SOCKETS (a tenant tab and an operator tab through the real router): one broadcast, each tab re-reads on its own plane, for both the block and the structure envelope (sabotage **373**). |
+| 5.3 | **DONE (2026-10-19; export 2026-10-21)** — The three `Samen.MaskingCase` proofs: green (tenant + operator-with-grant clear), red (operator-without-grant `••••`, DOM-asserted, no `vt_*`), sabotage twin (plane flip clears / a modeled leak is detected). Plus the byte-scan assertion that no `text_secure` plaintext (and no `vt_*` token) appears in the PubSub envelope. The **export** half of the same proof ships with unit 2.4 (`notes_export_masking_test.exs`, sabotages **364**/**372**), and the realtime half's per-subscriber plane proof is 5.2's sabotage **373**. |
 
 **Gate P5:** the masking trio and its refutability twin green; a broadcast into a focused block does
 not change its rendered value (sabotage 357); the envelope byte-scan test fails when the envelope
@@ -242,7 +282,8 @@ starts carrying text (sabotage 358).
 `notes_realtime_masking_test.exs` (11) drives the REAL router + endpoint (`SecurityEndpoint`): two
 live sockets on one page, a focus/typing/blur sequence, a split's two block envelopes + one
 structure envelope, the closed envelope key set, and the four-plane masking proofs. `samen_web`
-green; **357 and 358 both flip and restore byte-exact** (`scripts/sabotage.sh --range 357-358`).
+green; **357, 358 and (since 2026-10-21) 373 flip and restore byte-exact**
+(`scripts/sabotage.sh --range 357-358`, `--range 373-373`).
 Findings and deviations, recorded rather than silently taken:
 
 1. **The wave required a MODEL addition: `Doc` and `DocBlock` declare reveal actions.**
@@ -315,6 +356,51 @@ Findings and deviations, recorded rather than silently taken:
 and restore byte-exact (backgrounded or chunked — the full harness exceeds the 600 s single-call
 ceiling); `samen_core` + `samen_web` + `samenerp` + `demo` suites green with zero warnings.
 
+**As built (2026-10-20) — unit 1 for samenerp only; P6 is PARTIAL.** `samen_notes_routes(:notes,
+Samenerp.Docs, repo:, search_index: Samenerp.Primitives.SearchIndex, labels: @current_org_labels)`
+serves `/pages` + `/pages/:id` through the host endpoint, and the shared `:pages_path` label is what
+carries Documents → Pages onto every other tenant page (the macro's own label only rides its mount).
+Proof: `samenerp/test/notes_surface_mount_test.exs` (5, real router, incl. another org's page id
+rendering `Page not found`), plus Documents → Pages in `nav_reachability_test.exs`, plus
+`mix samen.verify.nav_links` green. **`demo` is deliberately NOT mounted** — its API-only posture
+(`Demo.DocsScope`'s moduledoc) makes a tenant LiveView there a posture change, not a one-liner.
+**Unit 1b — search actually answers (2026-10-20).** `Samenerp.Seeds.ensure_notes_search_index!/1`
+registers `Doc.title` + `DocBlock.text` through `Notes.Search.register_index/2` (guard-first), is
+called from `seed_notes_pages!/1` and from `seed!/0,1` OUTSIDE the `already_seeded` short-circuit (a
+re-run repairs a missing row), and `seed_notes_pages!/1` seeds the demo page (two plain blocks + one
+vaulted) — reached from `mix samenerp.seed` in `MIX_ENV=dev` only, so a checkout demonstrates a hit
+while the release entrypoint's direct `Seeds.seed!()` call registers the index and seeds nothing.
+Proof: `samenerp/test/notes_search_test.exs` (5) drives `GET /pages?q=…` through the real
+router — a plain block is a block hit with a deep link, `?q=vaulted` is the honest empty state with
+the vaulted plaintext absent from the body AND a positive control proving the same page answers for
+its plain block, the registry is exactly the two non-PII fields (idempotent), `SearchIndexGuard`
+refuses `text_secure`, and another org's page is not searchable from here (positive control: it is a
+hit from the org that owns it). Adversarial twin: sabotage **368** drops the seed's registration
+call → the "found by its plain block text" test flips, restore byte-exact.
+
+**Unit 1c — provisioned at CREATION, not only by the seeder (2026-10-21).** Unit 1b fixed search
+for the org the seeder knew about, which left the real gap open: every tenant org created afterwards
+— self-serve `/signup`, or an operator's New-account write — got no registry rows, so its
+`/pages?q=` answered the fail-closed empty state forever. Registration now ALSO runs on the
+creation path through the framework seam `Samen.Web.OrgProvisioning`
+(`config :samenerp, :org_provisioning, [{Samenerp.Seeds, :ensure_notes_search_index!, []}]`, called
+as `apply(mod, fun, args ++ [org_id])`): `Samen.Web.Auth.AccountController.register/2` after the A1
+transaction commits, and `Samen.Web.Operator.AccountsLive.save_new`. The seam is NON-FATAL (the org
+row is already committed — a registry hiccup is not "signup failed") and LOUD (`{:error, [{mod,
+fun, reason}]}` plus a `Logger.error` per failure; a raise or an unexpected return counts as a
+failure). `Samenerp.Seeds.backfill_notes_search_index!/0`, called by `seed!/0,1` on EVERY boot, is
+the deploy half: orgs that predate the wiring are repaired on the next release. Proof:
+`samenerp/test/notes_org_provisioning_test.exs` (4 — a real `POST /signup` through the router, the
+new org's rows, its own block as a genuine hit, the backfill, and a directly-created org as the
+anti-tautology control) + `samen_web/test/samen/web/org_provisioning_test.exs` (4 — unwired =
+no-op, the operator path fires for the org that write created, and every failure shape is reported
+rather than raised). Adversarial twins: sabotages **369** (host config line removed), **370**
+(operator path drops the call) and **371** (signup path drops the call).
+
+Still open: 1a (`mix samen.docs.materialize`), 2 (cookbook recipe + README row), 3 (ADR as-built —
+§3.3 now covers the host mount, the search registration, and its creation-time provisioning), 4
+(round-2 re-gate).
+
 ---
 
 ## Sabotage allocation
@@ -333,9 +419,15 @@ ceiling); `samen_core` + `samen_web` + `samenerp` + `demo` suites green with zer
 | 361 | R3 — a block can be re-parented to another doc/org on update |
 | 362 | R4 — `parent_doc_id` graft/cycle guard removed |
 | 363 | R5 — `text_secure` plane resolution bypassed / hand-masked |
-| 364 | R6 — export reads the field instead of the resolver |
+| 364 | R6 — the download resolves the page on the WRONG plane (a masked operator-plane export carries plaintext); the read seam itself is left intact |
+| 372 | R6 (clipboard half) — "Copy page" resolves on the tenant plane regardless of who is asking, so the masked operator's clipboard gets the plaintext; the download tests stay green |
+| 373 | R8 (subscriber half) — a receiving tab re-reads the broadcast on the TENANT plane (`refresh_block/2` and the structure reload), so an operator tab paints plaintext from a colleague's edit while every envelope test stays green |
 | 365 | R7 — `FreeTextScan` removed from `text` |
 | 366 | R14 — `SearchIndexGuard` neutered (a `pii_attribute` enters the index) |
+| 368 | host wiring (outside the R-numbering) — `samenerp` seeds seed the page but skip `register_index`, so a mounted surface answers `?q=` with the empty state while every other test stays green (367 is the `samen_core` boot-verifier twin) |
+| 369 | host wiring (unit 1c) — the `:org_provisioning` config line is removed, so a NEW org (created by signup or by the operator plane) is never registered and its `/pages?q=` is silently empty while every other test stays green |
+| 370 | host wiring (unit 1c) — the OPERATOR creation path drops the `OrgProvisioning.run/2` call: a sales-assisted account exists and lists, but its Pages search never answers |
+| 371 | host wiring (unit 1c) — the SELF-SERVE path drops the `OrgProvisioning.run/2` call: signup still succeeds and every other signup assertion passes, but the org's own block is not findable |
 
 ## Definition of done
 

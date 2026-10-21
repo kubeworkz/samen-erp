@@ -888,6 +888,9 @@ defmodule Samen.Web.Router do
 
     * `GET /<path>`      → `Samen.Web.Notes.IndexLive`  (the page list + "New page")
     * `GET /<path>/:id`  → `Samen.Web.Notes.PageLive`   (the block editor)
+    * `GET /<path>/:id/export.md` · `/export.csv` → `Samen.Web.Notes.ExportController`
+      (the page download; ADR-053 §6 R6 — rendered through `Notes.Reads`, so a masked plane
+      downloads masks, never plaintext and never a `vt_*` token)
 
   and threads the `:pages_path` mount label so a host that mounts this surface gets the
   Documents → Pages nav item with no further bookkeeping (X1: the label's PRESENCE is the
@@ -947,6 +950,19 @@ defmodule Samen.Web.Router do
           live(sub_path, module)
         end
       end
+
+      # WS-Notes Phase 2 unit 2.4 (ADR-053 §6 R6) — the page DOWNLOAD routes. Plain controller
+      # actions, so they live OUTSIDE the `live_session` and carry the mount on the route ASSIGNS
+      # (a bare `get/4` leaves `conn.assigns[:samen_mount]` nil and every download 503s) — the
+      # same posture as the CSV and ICS export routes. Both planes are served: `Export` renders
+      # through `Notes.Reads`, so a masked plane downloads masks rather than being refused.
+      get("#{path}/:id/export.md", Samen.Web.Notes.ExportController, :markdown,
+        assigns: %{samen_mount: mount}
+      )
+
+      get("#{path}/:id/export.csv", Samen.Web.Notes.ExportController, :csv,
+        assigns: %{samen_mount: mount}
+      )
     end
   end
 

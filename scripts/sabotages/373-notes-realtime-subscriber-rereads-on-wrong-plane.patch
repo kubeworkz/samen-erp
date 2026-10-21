@@ -1,0 +1,38 @@
+# SABOTAGE: WS-NOTES R8, THE SUBSCRIBER HALF — every tab re-reads the broadcast on the TENANT plane
+# (ADR-053 §2 D4/D5, §6 R8/R5; WS-Notes Phase 5 unit 5.1). R8 is only half a guarantee when the wire
+# is clean: the envelope carries `{block_id, revision}` so each subscriber can RE-READ the value
+# itself, and that re-read is what resolves on the RECEIVING viewer's plane. This patch keeps both
+# envelopes byte-identical and makes the re-read resolve as the tenant — so an operator tab that
+# receives a colleague's edit paints the PLAINTEXT under its own DOM (the same defect R5 forbids on
+# a first render, arriving through the realtime path instead).
+#
+# Two hunks, one invariant, because there are two re-read calls: `refresh_block/2` (the block
+# envelope) and the `{:page_structure_changed, …}` branch's `reload/2` (the structure envelope). Fix
+# one and the other still leaks, which is exactly why both are aimed at.
+#
+# NOT TOUCHED, deliberately: `Samen.Web.Notes.PubSub` (the envelopes, the topic, the byte-scanned key
+# set), `PageLive`'s `handle_event` write path, `Reads`, `PiiResolution` and the initial `load/3`.
+# So the ENVELOPE tests stay green and only the two per-plane re-read tests flip — the point being
+# that a clean wire does not save a subscriber that resolves on the wrong plane.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_realtime_masking_test.exs
+# MUST_FAIL: a broadcast is re-read per SUBSCRIBER: the operator tab masks what the tenant tab shows
+--- a/samen_web/lib/samen/web/notes/page_live.ex
++++ b/samen_web/lib/samen/web/notes/page_live.ex
+@@ -416,6 +416,8 @@
+ 
+   def handle_info({:page_structure_changed, %{doc_id: doc_id}}, socket) do
+     if to_string(doc_id) == to_string(socket.assigns[:doc_id]) do
++      mount = %{socket.assigns.samen_mount | plane: %Samen.Web.Plane{kind: :tenant}}
++      socket = %{socket | assigns: Map.put(socket.assigns, :samen_mount, mount)}
+       {:noreply, reload(socket, [])}
+     else
+       {:noreply, socket}
+@@ -701,6 +703,7 @@
+   defp refresh_block(socket, block_id) do
+     mount = socket.assigns.samen_mount
+     scope = Mount.scope(mount, socket.assigns.org_id)
++    scope = %{scope | actor: Map.merge(scope.actor, %{plane: :tenant, kind: :tenant})}
+ 
+     case Reads.block(mount, scope, block_id) do
+       {:ok, block} ->

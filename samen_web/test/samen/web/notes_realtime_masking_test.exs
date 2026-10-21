@@ -15,6 +15,14 @@ defmodule Samen.Web.NotesRealtimeMaskingTest do
       the serialized envelope finds neither the block's plaintext nor a `vt_*` vault token. The
       struct handed to the builder DOES carry a token for a vaulted block, so "send the text to
       save a re-read" is a one-line mistake — sabotage **358** — that this test catches.
+    * **the re-read happens on the RECEIVING plane (R8's other half)** — two REAL sockets through
+      the REAL router on the same page (a tenant tab and an operator tab, the latter on the
+      framework's documented `plane: :operator` mount): one broadcast, and each tab re-reads the
+      id itself, so the operator tab shows the mask of what the tenant tab shows in the clear.
+      Covered for BOTH paths — the block envelope (`refresh_block/2`) and the structure envelope
+      (`reload/2`) — because they re-read through different calls. Sabotage **373** makes both
+      re-read on the writer's plane and these two tests are what flip (the envelope tests stay
+      green, which is the point: a clean wire is not enough if the subscriber resolves wrongly).
     * **masking (INV-1) at the resolver** — the SAME `DocBlock` row resolves CLEAR on the tenant
       plane, CLEAR for an operator WITH a grant, and `••••` for an operator WITHOUT one
       (`assert_plane_clear!` / `assert_plane_masked!` / `assert_two_plane!`).
@@ -25,8 +33,9 @@ defmodule Samen.Web.NotesRealtimeMaskingTest do
       scan that the masked render passes (`assert_leak_detected!`), so the red assertion is
       refutable rather than vacuous.
 
-  The export half of 5.3's byte scan stays OPEN with unit 2.4 (`Samen.Web.Notes.Export` is not
-  built); the PubSub half is what this phase ships and what the gate names.
+  The export half of 5.3's byte scan landed with unit 2.4: `notes_export_masking_test.exs` proves
+  the downloads and the clipboard resolve through the same seam, and sabotages **364**/**372** are
+  its twins. This file is the realtime half.
   """
 
   use Samen.WebTest.DataCase, async: false
@@ -48,6 +57,7 @@ defmodule Samen.Web.NotesRealtimeMaskingTest do
   @pubsub Samen.WebTest.PubSub
 
   @secret "NOTES-REALTIME-PLAINTEXT-SENTINEL"
+  @rotated "NOTES-REALTIME-ROTATED-SENTINEL"
 
   defmodule AllowAllGrant do
     @moduledoc false
@@ -281,6 +291,97 @@ defmodule Samen.Web.NotesRealtimeMaskingTest do
     assert payload.revision >= 1
 
     drain(view)
+  end
+
+  # ── R8's other half: WHO re-reads, and on WHICH plane (real sockets) ──────
+
+  # The envelope tests above prove the WIRE carries ids. These two prove the consequence the
+  # envelope relies on: every subscriber re-reads the id itself, on ITS plane. Both run two REAL
+  # sockets through the REAL router on the SAME page — a tenant tab and an operator tab (the
+  # `/op-pages` mount) — so "per-plane" is a fact about two live LiveView processes, not about a
+  # scope built in a helper.
+
+  test "a broadcast is re-read per SUBSCRIBER: the operator tab masks what the tenant tab shows", %{
+    org_id: org_id,
+    doc: doc
+  } do
+    block = insert!(org_id, doc.id, %{type: :paragraph, text_secure: @secret})
+
+    {:ok, tenant_view, tenant_html} = live(build_conn(), "/pages/#{doc.id}?org=#{org_id}")
+    {:ok, operator_view, operator_html} = live(build_conn(), "/op-pages/#{doc.id}?org=#{org_id}")
+
+    # Both tabs start from the SAME row, resolved on their own plane.
+    assert tenant_html =~ @secret
+    assert_masked_dom!(operator_html, [@secret])
+
+    Phoenix.PubSub.subscribe(@pubsub, PubSub.topic(doc.id))
+
+    # A write from ANOTHER process (another tab, or a job) on the tenant plane, through the
+    # governed write path: the block stays vaulted and the returned struct carries the NEW
+    # plaintext — exactly the shape a "send the value along" envelope would leak.
+    {:ok, updated} =
+      Writes.update_text(notes_mount(), scope_for(org_id), block.id, @rotated, secure: true)
+
+    assert :ok = PubSub.broadcast_block_changed(notes_mount(), doc.id, updated)
+
+    assert_receive {:block_changed, payload}, 2_000
+    assert payload.block_id == block.id
+    assert Map.keys(payload) |> Enum.sort() == [:block_id, :revision]
+
+    bytes = :erlang.term_to_binary(payload)
+    refute bytes =~ @rotated, "the rotated plaintext must never transit PubSub"
+    refute bytes =~ "vt_", "a vault token must never transit PubSub"
+
+    # Both tabs received the SAME envelope, and each re-read the id on ITS plane: the tenant tab
+    # shows the new value, the operator tab the mask of it — never either plaintext.
+    assert render(tenant_view) =~ @rotated
+
+    operator_after = render(operator_view)
+    assert operator_after =~ mask()
+    refute operator_after =~ @rotated
+    refute operator_after =~ @secret
+    refute operator_after =~ "vt_"
+
+    drain([tenant_view, operator_view])
+  end
+
+  test "a structure change reloads each tab through ITS own plane — masked on the operator tab", %{
+    org_id: org_id,
+    doc: doc
+  } do
+    plain = insert!(org_id, doc.id, %{type: :paragraph, text: "alpha beta"})
+    _vaulted = insert!(org_id, doc.id, %{type: :paragraph, text_secure: @secret})
+
+    {:ok, tenant_view, _html} = live(build_conn(), "/pages/#{doc.id}?org=#{org_id}")
+    {:ok, operator_view, operator_html} = live(build_conn(), "/op-pages/#{doc.id}?org=#{org_id}")
+
+    assert_masked_dom!(operator_html, [@secret])
+
+    Phoenix.PubSub.subscribe(@pubsub, PubSub.topic(doc.id))
+
+    # The tenant tab splits a block: two id-only block envelopes + one structure envelope.
+    tenant_view
+    |> element("#note-text-#{plain.id}")
+    |> render_hook("split_block", %{"id" => plain.id, "offset" => 5})
+
+    assert_receive {:block_changed, _}, 2_000
+    assert_receive {:page_structure_changed, payload}, 2_000
+    assert payload.doc_id == doc.id
+    assert Map.keys(payload) |> Enum.sort() == [:doc_id, :revision]
+    refute :erlang.term_to_binary(payload) =~ @secret
+
+    # The operator tab RELOADS the page on the structure envelope, and that reload is a read on
+    # the OPERATOR plane: the split is visible, and the vaulted block is still the mask.
+    operator_after = render(operator_view)
+    assert operator_after =~ "alpha"
+    assert operator_after =~ "beta"
+    assert operator_after =~ mask()
+    refute operator_after =~ @secret
+    refute operator_after =~ "vt_"
+
+    assert render(tenant_view) =~ @secret
+
+    drain([tenant_view, operator_view])
   end
 
   # ── the three masking proofs on the SAME vaulted block (INV-1) ─────────────

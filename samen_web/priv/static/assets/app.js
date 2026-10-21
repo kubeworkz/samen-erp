@@ -112,3 +112,26 @@
       el.rows = Math.max(1, Math.min(rows, 24));
     }
   };
+
+  // (g) The `CopyText` hook (WS-Notes unit 2.4; ADR-053 §5 D5, §6 R6) — the page COPY's client
+  //     half, and NOTHING more. It resolves no value and reads no field: the server already
+  //     plane-resolved the payload and pushed it here, so this hook's only job is to hand those
+  //     bytes to the clipboard and report what actually happened. It never writes to the DOM.
+  //
+  //     Honesty on the way out matters as much as masking: with no clipboard API or no permission
+  //     the hook reports `copy_unavailable` instead of leaving the page claiming success.
+  window.SamenHooks.CopyText = {
+    handleEvent: function (event, payload) {
+      if (event !== "copy_text" || !payload || typeof payload.text !== "string") return;
+      var hook = this;
+      var clipboard = navigator.clipboard;
+      if (!clipboard || typeof clipboard.writeText !== "function") {
+        hook.pushEvent("copy_unavailable", {});
+        return;
+      }
+      clipboard.writeText(payload.text).then(
+        function () { hook.pushEvent("copied", {}); },
+        function () { hook.pushEvent("copy_unavailable", {}); }
+      );
+    }
+  };
