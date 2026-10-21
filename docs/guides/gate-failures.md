@@ -940,7 +940,7 @@ FAIL: samen.verify.fleet — 1 of 5 verifier(s) failed (2 violation(s) total).
 
 **Meaning:** the AGGREGATE ran every TREE-SCOPED verifier against one tree and at least one
 member failed. The roster is `Samen.Verifier.Registry.tree_scoped/0` (`agent_coverage`,
-`fleet_wire`, `pii_reads`, `never_read_current`, `analytics_producer` — the verifiers whose
+`fleet_wire`, `pii_reads`, `never_read_current`, `analytics_producer`, `db_boot` — the verifiers whose
 findings come from reading SOURCE FILES under a tree); its moduledoc at
 `samen_core/lib/samen/verifier/registry.ex` names the DB- and module-introspecting tiers it
 deliberately EXCLUDES, and why. Each member runs as its own OS process
@@ -1031,3 +1031,49 @@ Adversarial twin:
 `scripts/sabotages/335-analytics-producer-reader-mount-matcher-neutered.patch` (both
 `reader_call?/1` clauses return `false`, so the mount matcher fires on nothing and the verifier
 prints OK over an unfed reader) — it names the test that must flip.
+
+## `mix samen.verify.db_boot` — the tolerant-boot gate (`Samen.TestDb`)
+
+Runs tree-scoped in the ROOT gate's `verifiers` tier and in `mix samen.verify.fleet`
+(`--root`). It is static — source files only, no DB, no boot.
+
+**Errors** (`samen_core/lib/mix/tasks/samen.verify.db_boot.ex`):
+
+```text
+FAIL: samen.verify.db_boot found 1 violation(s):
+  • pawchart: pawchart/priv/anti_tautology_probe.exs:22 boots the database BY HAND
+    (`Ecto.Adapters.Postgres.storage_up`) — route it through the shared tolerant boot
+    `Samen.TestDb.boot!/2` ...
+
+FAIL: samen.verify.db_boot found 1 violation(s):
+  • demo: demo/test/test_helper.exs is an emitted/host harness that never routes its database
+    boot through `Samen.TestDb` ...
+```
+
+**Meaning:** a harness that owns a database — the emitted `test_helper` / `ci_bootstrap` /
+`anti_tautology_probe`, a vertical's own copy of those, a host `test_helper.exs`, a
+`test/support/` harness — reaches the adapter's storage API directly instead of the ONE shared
+tolerant boot. `:ok = Ecto.Adapters.Postgres.storage_up(...)` hard-matches
+`{:error, :already_up}` whenever the drop was refused (the previous BEAM's pool is still
+closing on the database), so the harness MatchErrors at its own boot line, before a single
+assertion. That is not hypothetical: on 2026-10-20 the PawChart and SamenERP anti-tautology
+probes died exactly there under the root gate, reporting a boot crash instead of a verdict.
+A green run cannot reveal the regression, which is why this gate exists.
+
+**Fix:** replace the hand-rolled drop/create/start/migrate with `Samen.TestDb.boot!(Repo)`, or
+with `Samen.TestDb.ensure_up!(Repo)` + start + `Ecto.Migrator.run` when something must happen
+BETWEEN create and migrate (samen_core's test helper does exactly that for its `pgvector`
+pre-check). A `test/support/` harness passes its explicit scratch `config` to
+`Samen.TestDb.ensure_up!/1` instead of hand-rolling `storage_down`/`storage_up`.
+
+The `:bad_root` and `:empty_discovery` variants fail closed like every tree-scoped gate: a
+root that is not a directory, a tree with no app, or an app with no harness file certifies
+nothing. DB-LESS `test_helper.exs` files (`samen_web`'s and the adapter packages' — a KMS dir
+plus `ExUnit.start()`) are correctly exempt: a helper owes the call once its code shows a boot
+signal (`storage_up`/`storage_down`, `Ecto.Migrator.run`, or the helper itself). Comments are
+ignored line-wise, because the emitted templates legitimately quote the old pattern in prose.
+
+Adversarial twin:
+`scripts/sabotages/359-db-boot-verifier-raw-matcher-neutered.patch` (the raw-boot pattern stops
+matching a real `storage_up`, so a hand-rolled boot in a file whose name is not a known harness
+reads as "no violation") — it names the three tests that must flip.

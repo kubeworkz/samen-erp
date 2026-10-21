@@ -29,7 +29,8 @@ defmodule Samen.VerifyFleetTest do
                "samen.verify.fleet_wire",
                "samen.verify.pii_reads",
                "samen.verify.never_read_current",
-               "samen.verify.analytics_producer"
+               "samen.verify.analytics_producer",
+               "samen.verify.db_boot"
              ]
 
       for entry <- Registry.tree_scoped() do

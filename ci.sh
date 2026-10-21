@@ -183,7 +183,7 @@ echo "==> Running AI runtime eval + mask-leak red-team tier (ADR-043 D8 / §10 �
 echo "==> AI eval tier: PASSED"
 fi
 
-if ! skip_tier verifiers "the whole-tree verifiers (agent_coverage · tool_actor_identity · tool_surface · replay_schema · analytics_producer)"; then
+if ! skip_tier verifiers "the whole-tree verifiers (agent_coverage · tool_actor_identity · tool_surface · replay_schema · analytics_producer · db_boot)"; then
 # --- agent-coverage verifier (ADR-047 A7 / §9#6) --------------------------------------
 # The agent loop A1-A6 built is made SELF-DEFENDING here. `mix samen.verify.agent_coverage`
 # runs from samen_core but scans the WHOLE umbrella tree (the anti-bypass probe technique),
@@ -283,6 +283,26 @@ echo "==> Running analytics-producer verifier (ADR-021 — silent-empty-funnel g
   mix samen.verify.analytics_producer --root "$REPO_ROOT"
 )
 echo "==> analytics-producer verifier: PASSED"
+
+# --- db-boot verifier (the tolerant-boot gate — `Samen.TestDb`) ---------------------------
+# The harness half of every gate's database story, run TREE-SCOPED over the whole checkout:
+# the emitted templates + their goldens (`test_helper`, `ci_bootstrap`, `anti_tautology_probe`),
+# the verticals' own `priv/` probes and bootstraps, and every host's `test/test_helper.exs` /
+# `test/support/` harness must reach the database through ONE shared tolerant boot — never a
+# hand-rolled `:ok = Ecto.Adapters.Postgres.storage_up(...)`. That line MatchErrors on the
+# benign `{:error, :already_up}` race that follows another BEAM's exit (drop refused while the
+# previous pool closes), killing a harness at its own boot line before it asserts anything —
+# observed 2026-10-20 when the PawChart and SamenERP anti-tautology probes died exactly there
+# under this gate. The defect is INVISIBLE in a green run, which is why nothing else in CI
+# would notice it coming back. Static (source only — no DB, no boot), fail-closed on an
+# unwalkable or empty tree, sabotage-refutable at scripts/sabotages/359-*.
+echo ""
+echo "==> Running db-boot verifier (tolerant boot — emitted harnesses + priv probes route through Samen.TestDb)"
+(
+  cd "$REPO_ROOT/samen_core"
+  mix samen.verify.db_boot --root "$REPO_ROOT"
+)
+echo "==> db-boot verifier: PASSED"
 fi
 
 if ! skip_tier stripe "the samen_stripe adapter package gate"; then

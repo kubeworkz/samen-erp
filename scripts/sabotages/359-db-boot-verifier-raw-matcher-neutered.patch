@@ -1,0 +1,27 @@
+# SABOTAGE: the TOLERANT-BOOT verifier's RAW matcher
+# (`Mix.Tasks.Samen.Verify.DbBoot.raw_boot_sites/1`, rule 1). The gate's whole point is to
+# notice a hand-rolled `:ok = Ecto.Adapters.Postgres.storage_up(...)` in a harness file whose
+# NAME is not one of the emitted ones (a `test/support/` helper, a new probe), which is exactly
+# where a copy-pasted boot reappears. Neutering the pattern to one that matches no real call
+# models the vacuous-gate regression this class of verifier is prone to: the scan finds zero raw
+# sites, so a hand-rolled boot reads as "no violation" and the gate prints "OK — no violations"
+# over the very defect it exists to retire (the 2026-10-20 boot crash was in exactly such a
+# file). Rule 2 is untouched, so the named failures are the RAW-path ones — the rule-1-only
+# support-harness case, the probe case (which then collapses to `missing_helper`), and the
+# end-to-end red tree that becomes green.
+# APP: samen_core
+# TEST_FILES: test/verify_db_boot_test.exs
+# MUST_FAIL: RED (test/support): a hand-rolled storage_up is caught even when the name is not a harness
+# MUST_FAIL: RED (priv probe): the raw boot is caught in a probe too, and reported once per file
+# MUST_FAIL: END TO END: a red tree exits 1 and prints its JSON report
+--- a/samen_core/lib/mix/tasks/samen.verify.db_boot.ex
++++ b/samen_core/lib/mix/tasks/samen.verify.db_boot.ex
+@@ -133,7 +133,7 @@
+   @boot_signals ~r/(?:storage_up|storage_down|Ecto\.Migrator\.run|Samen\.TestDb)/
+ 
+   # A raw adapter storage call — the hand-rolled boot this gate exists to retire.
+-  @raw_storage ~r/Ecto\.Adapters\.[A-Z]\w*\.(?:storage_up|storage_down)\b/
++  @raw_storage ~r/Ecto\.Adapters\.[A-Z]\w*\.storage_up_removed_by_sabotage\b/
+ 
+   # A real CALL to the shared helper (never a comment-only mention: comments are stripped).
+   @helper_call ~r/Samen\.TestDb\.(?:boot!|ensure_up!)\s*\(/

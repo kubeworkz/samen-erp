@@ -31,6 +31,10 @@ defmodule Samen.Verifier.Registry do
       `lib/` mounts the own-org analytics reader must configure its product-event producer (the
       `Samen.Analytics` emitter AND the `:product_event_rollup` spec) in `config/`. Takes
       `--root`.
+    * `samen.verify.db_boot` — the tolerant-boot gate: every harness surface an app carries
+      (emitted templates + their goldens, `priv/` probes and `ci_bootstrap.exs`, test helpers
+      and `test/support/`) must reach the database through `Samen.TestDb` rather than a
+      hand-rolled `:ok = storage_up(...)`. Takes `--root`.
 
   ## Named exclusions (and why)
 
@@ -88,6 +92,12 @@ defmodule Samen.Verifier.Registry do
       task: "samen.verify.analytics_producer",
       scope:
         "walk every app under the tree: a mounted own-org analytics reader needs its producer",
+      tree_args: :root
+    },
+    %{
+      task: "samen.verify.db_boot",
+      scope:
+        "walk every app's harness surface: emitted templates + goldens, priv probes, test helpers",
       tree_args: :root
     }
   ]

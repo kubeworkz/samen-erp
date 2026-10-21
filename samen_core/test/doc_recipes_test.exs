@@ -303,7 +303,10 @@ defmodule Samen.Gen.DocRecipesTest do
     {"samen_core/lib/mix/tasks/samen.verify.fleet.ex", "verifier(s) failed"},
     {"samen_core/lib/samen/verifier/fleet.ex", "could not be evaluated"},
     {"samen_core/lib/samen/verifier/fleet.ex", "no JSON report on stdout"},
-    {"samen_core/lib/samen/verifier/registry.ex", "tree-scoped"}
+    {"samen_core/lib/samen/verifier/registry.ex", "tree-scoped"},
+    # the TOLERANT-BOOT gate (`mix samen.verify.db_boot`) — the raw-boot diagnostic its index
+    # section quotes, which must exist verbatim in the task that prints it.
+    {"samen_core/lib/mix/tasks/samen.verify.db_boot.ex", "boots the database BY HAND"}
   ]
 
   test "AC-G10-4: every quoted load-bearing error string exists in its verifier source" do
