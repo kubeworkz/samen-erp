@@ -73,8 +73,10 @@ defmodule Mix.Tasks.Samen.Verify.Migrations do
     scratch_config = scratch_config(base_repo)
     scratch_repo = define_scratch_repo(base_repo, scratch_config)
 
-    _ = Ecto.Adapters.Postgres.storage_down(scratch_config)
-    :ok = Ecto.Adapters.Postgres.storage_up(scratch_config)
+    # Tolerant create (see `Samen.TestDb`): a scratch DB left behind by a crashed earlier run
+    # answers `{:error, :already_up}`, and a hard match would kill the VERIFIER instead of
+    # reporting the migration contract. The down-check migrates the DB it finds either way.
+    :ok = Samen.TestDb.ensure_up!(scratch_config)
 
     {:ok, pid} = scratch_repo.start_link(scratch_config)
 

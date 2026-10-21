@@ -216,14 +216,17 @@ defmodule Samen.Gen.DocCommands do
       },
       %{
         id: :ecto_create,
-        # Executed (as storage_up) by the emitted ci_bootstrap the probes' ci.sh runs.
+        # Executed (as `storage_up`) by the emitted ci_bootstrap the probes' ci.sh runs. The
+        # emitted harnesses call ONE tolerant boot (`Samen.TestDb`), so the create seam is the
+        # helper's own `storage_up` call — still real, still emitted-and-run, just no longer
+        # copy-pasted into every template.
         match: fn argv -> argv == ["mix", "ecto.create"] end,
-        evidence: [{:templates, "Ecto.Adapters.Postgres.storage_up"} | ci_sh_evidence]
+        evidence: [{:templates, "adapter.storage_up(config)"} | ci_sh_evidence]
       },
       %{
         id: :ecto_migrate,
         match: fn argv -> argv == ["mix", "ecto.migrate"] end,
-        evidence: [{:templates, "Ecto.Migrator.run(Repo, :up, all: true)"} | ci_sh_evidence]
+        evidence: [{:templates, "Ecto.Migrator.run(repo, :up, all: true)"} | ci_sh_evidence]
       },
       %{
         id: :app_seed,

@@ -486,10 +486,10 @@ defmodule Samen.Gen.PostTemplates do
     File.rm_rf!(kms_key_dir)
     Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 
-    _ = Ecto.Adapters.Postgres.storage_down(Repo.config())
-    :ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
-    {:ok, _} = Repo.start_link()
-    Ecto.Migrator.run(Repo, :up, all: true)
+    # Tolerant boot (create-if-absent + migrate): a probe that follows a `mix test` VM can find
+    # the database still held, so a hard `:ok = storage_up(...)` would crash before the
+    # catalog-parity check ever runs. See `Samen.TestDb`.
+    Samen.TestDb.boot!(Repo)
 
     table = "<%= table %>"
     column = "<%= abbrev %>_name"

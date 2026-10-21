@@ -112,8 +112,11 @@ defmodule Samen.MultiNode.Harness do
   """
   def create_and_migrate_db! do
     config = repo_config()
-    _ = Ecto.Adapters.Postgres.storage_down(config)
-    :ok = Ecto.Adapters.Postgres.storage_up(config)
+
+    # Tolerant create (`Samen.TestDb`): the drop is best-effort and the create retries until the
+    # DB verifiably reports :up, so a proof DB still held by a just-exited node cannot crash the
+    # harness at its own boot line before it asserts anything.
+    :ok = Samen.TestDb.ensure_up!(config)
 
     {:ok, pid} = Samen.MultiNode.Repo.start_link(config)
 

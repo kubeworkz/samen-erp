@@ -12,11 +12,10 @@ kms_key_dir =
 File.rm_rf!(kms_key_dir)
 Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 
-_ = Ecto.Adapters.Postgres.storage_down(Repo.config())
-:ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
-
-{:ok, _} = Repo.start_link()
-Ecto.Migrator.run(Repo, :up, all: true)
+# Tolerant boot (create-if-absent + migrate): the root gate runs sibling app gates
+# concurrently against one Postgres, so a contended DROP/CREATE must not crash the bootstrap.
+# See `Samen.TestDb`.
+Samen.TestDb.boot!(Repo)
 
 # The `aud_event` migration creates only the FIXED launch-month partition; the daily
 # `Samen.AuditEvent.PartitionManager` Oban job that rolls partitions forward in production does

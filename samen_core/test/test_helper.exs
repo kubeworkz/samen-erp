@@ -18,19 +18,15 @@ Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 System.at_exit(fn _ -> File.rm_rf!(kms_key_dir) end)
 
 # Drop + create + migrate so the schema always matches the generated migrations.
-# storage_down can fail with {:error, "database is being accessed..."} if a prior
-# BEAM was hard-killed and left idle pool connections (the 21-session `object_in_use`
-# failure seen in ci.sh). storage_up can then be {:error, :already_up} because
-# the DB was never dropped. Normalize both so the harness is crash-resilient:
-# when the drop is blocked we simply re-migrate the existing DB (sandbox tests
-# rollback anyway; the drop is only for schema convergence).
-_ = Ecto.Adapters.Postgres.storage_down(TestRepo.config())
-
-case Ecto.Adapters.Postgres.storage_up(TestRepo.config()) do
-  :ok -> :ok
-  {:error, :already_up} -> :ok
-  other -> raise "storage_up failed: #{inspect(other)}"
-end
+# `Samen.TestDb.ensure_up!/1` is the ONE tolerant create: `storage_down` can fail with
+# {:error, "database is being accessed..."} if a prior BEAM was hard-killed and left idle pool
+# connections (the 21-session `object_in_use` failure seen in ci.sh), and the `storage_up` that
+# follows then answers {:error, :already_up}. The helper treats the drop as best-effort, retries
+# the create until the DB verifiably reports :up, and raises on anything genuinely wrong.
+#
+# The CREATE must precede `start_link` here because the pgvector pre-check below queries the
+# live repo before migrating (that is exactly why `ensure_up!/2` is separate from `boot!/2`).
+:ok = Samen.TestDb.ensure_up!(TestRepo)
 
 {:ok, _} = TestRepo.start_link()
 

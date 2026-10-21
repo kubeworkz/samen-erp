@@ -7,11 +7,10 @@ Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 
 alias Samenerp.Repo
 
-_ = Ecto.Adapters.Postgres.storage_down(Repo.config())
-:ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
-
-{:ok, _} = Repo.start_link()
-Ecto.Migrator.run(Repo, :up, all: true)
+# Tolerant boot: this suite runs right after another gate may have held the database, so the
+# drop is best-effort and the create retries. Anything genuinely wrong still raises. See
+# `Samen.TestDb`.
+Samen.TestDb.boot!(Repo)
 # The `aud_event` migration creates only the FIXED launch-month (July 2026) partition; the
 # daily `Samen.AuditEvent.PartitionManager` Oban job that rolls partitions forward in
 # production never runs under the test harness. Ensure the CURRENT + upcoming months'

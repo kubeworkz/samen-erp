@@ -18,10 +18,12 @@ kms_key_dir =
 File.rm_rf!(kms_key_dir)
 Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 
-_ = Ecto.Adapters.Postgres.storage_down(Repo.config())
-:ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
-{:ok, _} = Repo.start_link()
-Ecto.Migrator.run(Repo, :up, all: true)
+# What this probe needs is a MIGRATED database, not a virgin one (it writes and reads back its OWN
+# row by id), so the shared tolerant boot owns the drop/create/migrate dance: the drop is
+# best-effort (the previous `mix test` VM's pool may still hold the database), the create retries,
+# and anything genuinely wrong raises loudly instead of leaving the baseline to fail for the
+# wrong reason. See `Samen.TestDb`.
+Samen.TestDb.boot!(Repo)
 
 org = "00000000-0000-0000-0000-0000000000c9"
 plaintext = "PROBE-rne-SECRET-985"

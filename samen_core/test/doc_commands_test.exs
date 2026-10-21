@@ -71,7 +71,14 @@ defmodule Samen.Gen.DocCommandsTest do
       |> Path.wildcard()
       |> Enum.map_join("\n", &File.read!/1)
 
-    Map.update!(base, :templates, &(&1 <> "\n" <> eex_bodies))
+    # ...and the SHARED tolerant boot (`Samen.TestDb`) the emitted `ci_bootstrap.exs` /
+    # `test_helper.exs` / probes all call: it is what actually runs the documented
+    # `ecto.create` (storage_up) and `ecto.migrate` (Ecto.Migrator.run), so it belongs in the
+    # corpus that proves those commands are executed rather than aspirational.
+    shared_boot = File.read!(Path.join(@core_root, "lib/samen/test_db.ex"))
+
+    base
+    |> Map.update!(:templates, &(&1 <> "\n" <> eex_bodies <> "\n" <> shared_boot))
   end
 
   defp extracted do

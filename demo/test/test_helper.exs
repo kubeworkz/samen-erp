@@ -12,12 +12,10 @@ File.rm_rf!(kms_key_dir)
 Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 System.at_exit(fn _ -> File.rm_rf!(kms_key_dir) end)
 
-# Drop + create + migrate.
-_ = Ecto.Adapters.Postgres.storage_down(Repo.config())
-:ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
-
-{:ok, _} = Repo.start_link()
-Ecto.Migrator.run(Repo, :up, all: true)
+# Drop + create + migrate, tolerantly (the DB may still be held by the VM that just exited):
+# the drop is best-effort, the create retries, anything genuinely wrong still raises.
+# See `Samen.TestDb`.
+Samen.TestDb.boot!(Repo)
 
 # The `aud_event` migration creates only the FIXED launch-month (July 2026) partition; the daily
 # `Samen.AuditEvent.PartitionManager` Oban job that rolls partitions forward in production never

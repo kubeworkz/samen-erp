@@ -551,8 +551,9 @@ defmodule Samen.MigrationExpandContractTest do
       |> Keyword.put(:pool_size, 5)
       |> Keyword.put(:database, db)
 
-    _ = Ecto.Adapters.Postgres.storage_down(config)
-    :ok = Ecto.Adapters.Postgres.storage_up(config)
+    # Tolerant create (`Samen.TestDb`): a scratch DB whose drop is briefly refused (a prior run's
+    # pool still closing) must not MatchError-kill the test before it asserts anything.
+    :ok = Samen.TestDb.ensure_up!(config)
 
     {:ok, _} = ScratchRepo.start_link(config)
     {ScratchRepo, config}

@@ -7,11 +7,9 @@ Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
 
 alias <%= module %>.Repo
 
-_ = Ecto.Adapters.Postgres.storage_down(Repo.config())
-:ok = Ecto.Adapters.Postgres.storage_up(Repo.config())
-
-{:ok, _} = Repo.start_link()
-Ecto.Migrator.run(Repo, :up, all: true)
+# Tolerant boot: a `mix test` run that follows another suite can find the database still held
+# (its pool closing), so the drop is best-effort and the create retries. See `Samen.TestDb`.
+Samen.TestDb.boot!(Repo)
 Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
 
 ExUnit.start()
