@@ -78,7 +78,10 @@ defmodule Samen.WebTest.TenantAuthn do
       otp_app: :samen_web_tenant_authn_test_host,
       title: "Labeled Freight",
       authn: {:app_env, :samen_web_tenant_authn_test_host, :auth_required?},
-      authorized_orgs: {Samen.WebTest.TenantAuthn, :authorized_org_ids, []}
+      authorized_orgs: {Samen.WebTest.TenantAuthn, :authorized_org_ids, []},
+      # Driftwood-shaped includes the Identity seam: an ARMABLE host that mounts the admin-rank
+      # kinds (here `:billing`/`:support`) without it does not compile (ADR-045 §4.4).
+      identity_namespace: Samen.WebTest.Operator
     }
 
     pipeline :browser do

@@ -1,0 +1,24 @@
+# SABOTAGE: ADR-045 §4.4 / ADR-053 §2 D5 — THE ADMIN-RANK MOUNTS STOP REFUSING A MISSING SEAM
+# `samen_notes_routes/3`, `samen_module_routes(:billing|:marketing|:support, …)`,
+# `samen_flags_routes/3`, `samen_tenant_analytics_routes/2` and `samen_chat_routes/3` refuse to
+# compile an ARMABLE tenant mount (`:authn` present) that names no `:identity_namespace`, because on
+# an armed host `TenantRole` then fails every role closed to `:member`: the vault exit, billing
+# settings, campaign writes, KB authoring, flag toggles, the analytics role gate and the org-wide
+# disclosure flip all exist in the model and are denied to every admin — with no dev-time symptom
+# (a disarmed host resolves `:admin`). This patch makes the `armable?` half of the guard constant
+# `false`, so the same mounts compile quietly again and the defect ships silent.
+#
+# Aimed at the compile guard only. The disarmed-only, member-rank and operator-plane exemptions are
+# untouched (they were never supposed to refuse), and nothing else in any mount changes — so the
+# four CONTROL probes stay green and the failing assertions are exactly the three refusal probes.
+# APP: samen_web
+# TEST_FILES: test/samen/web/identity_seam_compile_guard_test.exs
+# MUST_FAIL: an armable tenant notes mount with no :identity_namespace does not compile
+# MUST_FAIL: a @labels module attribute is seen through
+# MUST_FAIL: every guarded armed tenant surface refuses to compile without the seam
+--- a/samen_web/lib/samen/web/router.ex
++++ b/samen_web/lib/samen/web/router.ex
+@@ -2180,2 +2180,2 @@
+-    armable? = Map.has_key?(labels, :authn)
++    armable? = false
+     tenant? = match?(%Samen.Web.Plane{kind: :tenant}, mount.plane)

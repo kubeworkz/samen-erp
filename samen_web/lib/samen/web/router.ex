@@ -37,6 +37,12 @@ defmodule Samen.Web.Router do
     * `:path`   — the mount path prefix (default `/crm`, `/billing`, `/support`).
     * `:labels` — optional UI copy overrides (workspace title, glyph, crumb root).
     * `:session_name` — override the `live_session` name (default derived from kind+path).
+
+  The ADMIN-RANK kinds (`:billing`, `:marketing`, `:support`) REFUSE TO COMPILE on an armable
+  tenant mount (`:authn` present) that names no `:identity_namespace` — without the seam every role
+  resolves fail-closed to `:member` on an armed host, so their admin-gated writes would be denied to
+  every admin, silently. See `__assert_tenant_identity_seam__/4`. `:crm`/`:work`/`:banking`/`:erp`
+  are member-rank and unaffected.
   """
 
   @doc "Mount a samen_web module (`:crm | :billing | :support | :marketing`) under the host router scope."
@@ -85,6 +91,10 @@ defmodule Samen.Web.Router do
           plane: Samen.Web.Router.__plane__(opts),
           labels: Keyword.get(opts, :labels)
         )
+
+      # COMPILE-TIME identity-seam refusal for the ADMIN-RANK kinds (:billing/:marketing/:support);
+      # a member-rank kind (:crm/:work/…) is a no-op. See `__assert_tenant_identity_seam__/4`.
+      Samen.Web.Router.__assert_tenant_identity_seam__(mount, path, __ENV__, kind)
 
       # B-SEC / S1 — the TENANT authz gate. Every tenant `live_session` carries
       # `{Samen.Web.TenantAuthz, :require_tenant}`: the on_mount `:halt` is the ONLY
@@ -540,6 +550,10 @@ defmodule Samen.Web.Router do
       seam (data on the mount).
     * `:session_name`    — override the `live_session` name.
     * `:on_mount`        — OPTIONAL `on_mount` hooks for this chat `live_session` (default `[]`).
+
+  An ARMABLE tenant chat mount (`:authn` present) that names no `:identity_namespace` REFUSES TO
+  COMPILE: the org-wide disclosure flip is admin-gated, and without the seam it would be denied to
+  every admin on an armed host (see `__assert_tenant_identity_seam__/4`).
       An OPERATOR-plane chat mount (the operator desk-chat) passes
       `[{Samen.Web.Operator.Authz, :require_operator}]` (with an `:operator_authority` label) so
       the operator-ROLE gate runs on the WEBSOCKET mount, not just the HTTP dead-render (T146).
@@ -565,6 +579,9 @@ defmodule Samen.Web.Router do
           plane: Samen.Web.Router.__plane__(opts),
           labels: Keyword.get(opts, :labels)
         )
+
+      # The org-wide disclosure toggle is admin-gated (S1a chat) — same compile-time seam rule.
+      Samen.Web.Router.__assert_tenant_identity_seam__(mount, path, __ENV__, :chat)
 
       # T146 — an OPTIONAL `:on_mount` (default `[]`, a no-op for every existing caller). A host
       # mounting the chat LiveViews on the OPERATOR plane (`plane: :operator`, e.g. the operator
@@ -690,6 +707,10 @@ defmodule Samen.Web.Router do
   `samen_notifications_routes/3` (`:repo` required; `:domain`, `:plane`,
   `:operator_id`/`:target_org_id`, `:path` (default `/flags`), `:labels`,
   `:session_name`).
+
+  An ARMABLE tenant mount (`:authn` present) that names no `:identity_namespace` REFUSES TO COMPILE:
+  without the seam the admin-rank toggle is denied to every admin on an armed host (see
+  `__assert_tenant_identity_seam__/4`).
   """
   defmacro samen_flags_routes(kind, namespace, opts \\ []) do
     kind = Macro.expand(kind, __CALLER__)
@@ -714,6 +735,9 @@ defmodule Samen.Web.Router do
           plane: Samen.Web.Router.__plane__(opts),
           labels: Keyword.get(opts, :labels)
         )
+
+      # The flag toggles are admin-gated (ADR-020) — same compile-time seam rule.
+      Samen.Web.Router.__assert_tenant_identity_seam__(mount, path, __ENV__, :flags)
 
       # B-SEC / S1 — the TENANT authz gate. Every tenant `live_session` carries
       # `{Samen.Web.TenantAuthz, :require_tenant}`: the on_mount `:halt` is the ONLY
@@ -752,6 +776,11 @@ defmodule Samen.Web.Router do
 
   Options: `:repo` (required); `:domain` (default `namespace`), `:plane`, `:path` (default
   `/analytics`), `:labels`, `:session_name`.
+
+  An ARMABLE tenant mount (`:authn` present) that names no `:identity_namespace` REFUSES TO COMPILE:
+  the view's role gate reads the caller's REAL membership (via `TenantRole.authenticated_scope/2`),
+  so without the seam an admin-rank view is refused to every admin on an armed host (see
+  `__assert_tenant_identity_seam__/4`).
   """
   defmacro samen_tenant_analytics_routes(namespace, opts \\ []) do
     path = Keyword.get(opts, :path, "/analytics")
@@ -772,6 +801,9 @@ defmodule Samen.Web.Router do
           plane: Samen.Web.Router.__plane__(opts),
           labels: Keyword.get(opts, :labels)
         )
+
+      # The own-org analytics view is role-gated (P17) — same compile-time seam rule.
+      Samen.Web.Router.__assert_tenant_identity_seam__(mount, path, __ENV__, :analytics)
 
       live_session session_name,
         on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
@@ -904,6 +936,18 @@ defmodule Samen.Web.Router do
   A `:plane` override mounts the same two LiveViews on the operator plane, where every block's
   `text_secure` renders `••••` through `Samen.Api.PiiResolution` (never a `vt_*` token, never
   plaintext); writes there are refused by the kernel policy, not by the page.
+
+  ## An ARMABLE tenant mount MUST name `:identity_namespace` — it does not compile otherwise
+
+  `:authn` is the label that makes a host armable. On an armed host `Samen.Web.TenantRole` derives
+  every role from the caller's real `Identity.Membership` **through the mount's
+  `:identity_namespace`**, and fails CLOSED to `:member` when it is absent — so the admin-only
+  vault exit (ADR-053 §2 D5) is silently denied to every admin, and the failure is invisible in
+  dev (a disarmed host resolves `:admin`). The mount therefore REFUSES TO COMPILE when it carries
+  `:authn`, is on the tenant plane, and names no identity namespace, naming the fix — the same
+  posture as `Samen.Web.Tenant.Live`'s render refusal and `samen_mcp_route/1`'s. A disarmed-only
+  mount (no `:authn`) and an operator-plane mount (roles are `:admin` there by definition) are
+  unaffected.
   """
   defmacro samen_notes_routes(kind, namespace, opts \\ []) do
     kind = Macro.expand(kind, __CALLER__)
@@ -936,6 +980,12 @@ defmodule Samen.Web.Router do
           plane: Samen.Web.Router.__plane__(opts),
           labels: labels
         )
+
+      # COMPILE-TIME refusal, in the host's own build: an armable tenant mount with no identity
+      # seam would ship the vault exit dead for every admin (see the moduledoc). `opts` is a real
+      # keyword list by now, so a `@labels` module attribute is resolved — unlike an expansion-time
+      # AST inspection, which cannot see through one.
+      Samen.Web.Router.__assert_tenant_identity_seam__(mount, path, __ENV__, :notes)
 
       # B-SEC / S1 — the TENANT authz gate. Every tenant `live_session` carries
       # `{Samen.Web.TenantAuthz, :require_tenant}`: the on_mount `:halt` is the ONLY
@@ -2127,6 +2177,71 @@ defmodule Samen.Web.Router do
   @doc false
   def __fleet_cockpit_label__(labels, false), do: labels
   def __fleet_cockpit_label__(labels, true), do: Map.put(labels, :fleet_cockpit, true)
+
+  # The armed tenant surfaces that carry an ADMIN-RANK capability: each one derives the caller's
+  # role through `Samen.Web.TenantRole`, so without the seam the capability exists in the model
+  # and is unreachable for every admin. A surface opts in here (never implicitly by mount kind).
+  @identity_seam_surfaces [:notes, :billing, :marketing, :support, :flags, :analytics, :chat]
+
+  @doc false
+  # `:authn` marks a host as ARMABLE; on an armed host `Samen.Web.TenantRole` resolves roles from
+  # the caller's real `Identity.Membership` through the mount's `:identity_namespace`, failing
+  # CLOSED to `:member` without it. On the surfaces listed above that fail-closed default is not
+  # acceptable: the admin-rank capability (`seam_consequence/1`) would exist and be denied to every
+  # admin, silently, with no dev-time symptom (a disarmed host resolves `:admin`). So an armable
+  # tenant mount of one of those surfaces without the seam is a COMPILE ERROR in the host that
+  # mounts it, not a runtime surprise — the `Tenant.Live` / `samen_mcp_route` posture.
+  #
+  # Operator-plane mounts are exempt: their role is `:admin` by plane (T146/T150-gated), so the
+  # seam is never consulted. Disarmed-only mounts are exempt for the same reason.
+  def __assert_tenant_identity_seam__(%Samen.Web.Mount{} = mount, path, env, surface) do
+    labels = mount.labels || %{}
+    armable? = Map.has_key?(labels, :authn)
+    tenant? = match?(%Samen.Web.Plane{kind: :tenant}, mount.plane)
+
+    if surface in @identity_seam_surfaces and armable? and tenant? and
+         not Map.has_key?(labels, :identity_namespace) do
+      raise CompileError,
+        file: env.file,
+        line: env.line,
+        description:
+          "IDENTITY SEAM: the #{surface} tenant mount at #{inspect(path)} is ARMABLE (it carries " <>
+            "`:authn`) but names no `:identity_namespace`.\n\n" <>
+            "On an armed host, `Samen.Web.TenantRole` resolves every role from the caller's real " <>
+            "`Identity.Membership` through that label and fails CLOSED to `:member` when it is " <>
+            "missing — so #{seam_consequence(surface)}, silently. A disarmed host hides the " <>
+            "defect (it resolves `:admin`), which is exactly why this is caught at compile " <>
+            "time.\n\n" <>
+            "Pass labels: %{identity_namespace: MyApp.Operator} — the Identity scope that " <>
+            "materialises `User`/`Membership` (ADR-045 §4.4). Operator-plane mounts " <>
+            "(`plane: :operator`) and disarmed-only mounts (no `:authn`) do not need it."
+    end
+
+    :ok
+  end
+
+  # What breaks, per guarded surface — the message has to name the dead capability, not just the
+  # missing label, or the host cannot tell whether the error applies to it.
+  defp seam_consequence(:notes),
+    do: "the admin-only vault exit (ADR-053 §2 D5) would be denied to every admin"
+
+  defp seam_consequence(:billing),
+    do: "the admin-gated settings/plan/payment writes would be denied to every admin"
+
+  defp seam_consequence(:marketing),
+    do: "the admin-gated campaign publish/archive writes would be denied to every admin"
+
+  defp seam_consequence(:support),
+    do: "the admin-gated KB authoring writes would be denied to every admin"
+
+  defp seam_consequence(:flags),
+    do: "the admin-gated feature-flag toggles would be denied to every admin"
+
+  defp seam_consequence(:analytics),
+    do: "the role-gated own-org analytics view would be refused to every admin"
+
+  defp seam_consequence(:chat),
+    do: "the admin-gated org-wide disclosure toggle would be denied to every admin"
 
   @doc false
   def __plane__(opts) do

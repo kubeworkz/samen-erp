@@ -28,6 +28,11 @@ defmodule Samen.WebTest.NavLinksHost.Router do
   # samen.verify.nav_links` fails on).
   @labels %{
     authn: {:app_env, :samen_web, false},
+    # ADR-045 §4.4 — this host is ARMABLE (it carries `:authn`), so the admin-rank mounts
+    # (billing/support/marketing/chat/flags/analytics) must name the Identity seam; the mount
+    # macros REFUSE TO COMPILE without it. A reference host that skipped it would be exactly the
+    # silent-fail-closed shape the compile guard exists to prevent.
+    identity_namespace: Samen.WebTest.Operator,
     erp_path: "/erp",
     banking_path: "/banking",
     work_path: "/work",
