@@ -125,7 +125,7 @@ defmodule Samen.Web.IdentitySeamCompileGuardTest do
   # ── harness ────────────────────────────────────────────────────────────────
 
   defp notes_mount_src, do: mount_src(:notes)
-  defp flags_mount_src(extra \\ ""), do: mount_src(:flags, extra)
+  defp flags_mount_src(extra), do: mount_src(:flags, extra)
   defp crm_mount_src, do: mount_src(:crm)
 
   defp mount_src(surface, extra \\ "") do
