@@ -44,6 +44,7 @@ defmodule Samen.Web.Notes.Writes do
       indent/4         {:ok, block} | {:ok, :noop} | {:error, :not_indentable | term}
       archive/3        {:ok, block} | {:error, term}
       restore/3        {:ok, block} | {:error, :not_found | term}
+      declassify/4     {:ok, block} | {:error, :no_reason | :forbidden | :not_found | term}
 
   Every multi-write operation runs inside `repo.transaction/1`; an error rolls the lot back.
   Structural operations also bump the page's `Doc.revision`, which is what the realtime
@@ -131,8 +132,34 @@ defmodule Samen.Web.Notes.Writes do
   Options:
 
     * `:revision` — the revision the client last saw; a mismatch is `{:error, :stale}` (R9).
-    * `:secure` — write `text_secure` (the vaulted column, `••••` on a masked plane) instead of
-      the plain `text`. The other column is cleared in the same write: a block has ONE text.
+    * `:secure` — RAISE the classification: write `text_secure` (the vaulted column, `••••` on a
+      masked plane) instead of the plain `text`. The other column is cleared in the same write: a
+      block has ONE text.
+
+  ## Classification is sticky — an edit cannot declassify
+
+  The column is chosen by `keep_classification/2`: a block that is ALREADY vaulted keeps its edit in
+  `text_secure`, whatever the caller passed (including an explicit `secure: false`), so a block
+  never leaves the vault as a side effect of typing. `:secure` can only raise: a plain block may be
+  opted INTO the vault (`PageLive`'s sensitive-page toggle would pass it), and nothing in this API
+  can move one out.
+
+  That stickiness is what makes the editor safe by construction. `PageLive`'s debounced `block_text`
+  handler passes no `:secure` at all — it only knows the text the textarea holds — so before this
+  rule, editing a 🔒 block wrote its plaintext into `text` and cleared `text_secure`: one keystroke
+  declassified content, the operator plane stopped masking it, and the block's own `secure?` read
+  flipped. Clearing a vault column is a DATA-GOVERNANCE decision; it needs a governed action of its
+  own (with its own audit and policy), never a side effect of an ordinary edit.
+
+  ## The helper is the CONVENIENCE; the model is the GUARANTEE
+
+  Routing an edit by the row's classification is a UX decision, and a module can only bind its own
+  callers. The invariant itself lives in the model: `Samen.Scopes.Docs.BlockVault`, installed on
+  `DocBlock`'s `:update` action, REFUSES any governed write that would clear `text_secure` on a
+  vaulted row (or give it a plain `text` twin), so a second write path — a seed, another host, a
+  helper added after this one — cannot declassify content by typing into it. This module never
+  trips that guard: it reads the classification first (`fetch_block/3` selects `text_secure`) and
+  writes the column the block already lives in.
 
   A non-binary value is refused (`{:error, :not_a_string}`) rather than cast.
   """
@@ -141,12 +168,13 @@ defmodule Samen.Web.Notes.Writes do
   def update_text(mount, scope, block_id, text, opts \\ [])
 
   def update_text(mount, scope, block_id, text, opts) when is_binary(text) do
-    secure? = Keyword.get(opts, :secure, false)
+    requested_secure? = Keyword.get(opts, :secure, false) == true
     expected = Keyword.get(opts, :revision)
 
     in_tx(mount, fn ->
       with {:ok, block} <- fetch_block(mount, scope, block_id),
            revision = expected || block.revision,
+           secure? = keep_classification(requested_secure?, block),
            attrs = text_attrs(text, secure?) |> Map.put(:revision, revision + 1) do
         # A text edit is NOT a structural change: it does not bump the page revision (the
         # id-only `{:block_changed, id, revision}` envelope carries the block's own).
@@ -387,6 +415,65 @@ defmodule Samen.Web.Notes.Writes do
         {:ok, restored}
       end
     end)
+  end
+
+  # ── the named door out of the vault (R17) ──────────────────────────────────
+
+  @doc """
+  Move one block's text OUT of the vault — the ONLY way content stops being 🔒 (ADR-053 §2 D5,
+  R17).
+
+  This helper deliberately does NOT decide who may do it: the `:declassify_text` action in
+  `Samen.Scopes.Docs` owns the gate (`RoleAtLeast :admin`, tenant plane only), the reveal (bound
+  to the block's own id), the move, the revision bump and the `docs.block.declassified` audit row.
+  Routing the caller here just keeps the surface on the same `in_tx` + error-shape discipline as
+  every other write (`{:error, :forbidden}` is a refusal by POLICY, `{:error, :no_reason}` is a
+  blank reason refused before the transaction opens).
+
+  A non-binary or blank `reason` is `{:error, :no_reason}` — the audit row is the record of WHY a
+  classification was reduced, so there is no "just this once" path.
+
+  The page's link graph is re-synced in the same transaction: the text is plain now, so any
+  `[[Title]]` inside it becomes a real link edge for the first time.
+  """
+  @spec declassify(Mount.t(), Samen.Scope.t(), term(), binary()) ::
+          {:ok, struct()} | {:error, :no_reason | :forbidden | term()}
+  def declassify(mount, scope, block_id, reason) when is_binary(reason) do
+    if String.trim(reason) == "" do
+      {:error, :no_reason}
+    else
+      in_tx(mount, fn ->
+        with {:ok, block} <- fetch_block(mount, scope, block_id),
+             {:ok, updated} <-
+               block
+               |> Ash.Changeset.for_update(:declassify_text, %{reason: reason}, scope: scope)
+               |> update(),
+             {:ok, _links} <- sync_links(mount, scope, block.doc_id) do
+          {:ok, updated}
+        else
+          {:error, error} -> {:error, declassify_error(error)}
+        end
+      end)
+    end
+  end
+
+  def declassify(_mount, _scope, _block_id, _reason), do: {:error, :no_reason}
+
+  # A policy refusal arrives as `Ash.Error.Forbidden` (a single error) or wrapped in
+  # `Ash.Error.Invalid`; the surface shows ONE message for "not you", so it is classified here.
+  defp declassify_error(%Ash.Error.Forbidden{}), do: :forbidden
+
+  defp declassify_error(error) do
+    if forbidden_error?(error), do: :forbidden, else: error
+  end
+
+  defp forbidden_error?(error) do
+    error
+    |> Ash.Error.to_ash_error()
+    |> Map.get(:errors, [])
+    |> Enum.any?(&match?(%Ash.Error.Forbidden{}, &1))
+  rescue
+    _ -> false
   end
 
   # ── pages ──────────────────────────────────────────────────────────────────
@@ -839,6 +926,14 @@ defmodule Samen.Web.Notes.Writes do
   end
 
   # ── internals ──────────────────────────────────────────────────────────────
+
+  # Classification can only go UP. A vaulted block is detected from the row itself (the vault column
+  # is non-nil on every read, masked or clear), so the decision does not depend on the caller
+  # remembering to pass `:secure` — which is exactly the bug this prevents.
+  defp keep_classification(requested_secure?, block),
+    do: requested_secure? or vaulted?(block)
+
+  defp vaulted?(block), do: not is_nil(Map.get(block, :text_secure))
 
   defp text_attrs(text, true), do: %{text_secure: text, text: nil}
   defp text_attrs(text, false), do: %{text: text, text_secure: nil}

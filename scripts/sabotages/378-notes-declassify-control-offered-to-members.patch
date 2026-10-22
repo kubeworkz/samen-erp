@@ -1,0 +1,24 @@
+# SABOTAGE: WS-NOTES/ADR-053 §2 D5 — THE VAULT EXIT IS OFFERED TO EVERY MEMBER
+# `PageLive` decides whether to render the "Move out of the vault" control from `can_declassify?/2`:
+# the tenant plane (never the operator one) AND an admin-rank membership role, derived through
+# `Samen.Web.TenantRole.admin_scope/2` — the ONE helper that answers "what does this principal
+# actually hold in this org?", never `Mount.scope/2`'s fabricated `:member`. This patch drops the
+# role half, so on an ARMED host every member is shown a 🔓 button on a vaulted block and the
+# reason form to go with it: the surface advertises a governance action the member cannot perform.
+#
+# Aimed at the SURFACE's gate only. The model's `RoleAtLeast :admin` policy, the tenant-plane
+# refusal, the blank-reason refusal and the audit writer are untouched — so a member's crafted
+# `declassify_block` event is still refused and the row stays vaulted. The defect is the OFFERED
+# affordance (the page's posture), which is exactly what the failing assertion reads.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_declassify_ui_test.exs
+# MUST_FAIL: a member is never OFFERED the control
+# MUST_FAIL: the same armed route offers a REAL non-admin member nothing
+--- a/samen_web/lib/samen/web/notes/page_live.ex
++++ b/samen_web/lib/samen/web/notes/page_live.ex
+@@ -863,4 +863,3 @@
+   defp can_declassify?(%Mount{} = mount, org_id) when is_binary(org_id) do
+-    writable?(mount) and
+-      Samen.Scope.Role.at_least?(TenantRole.admin_scope(mount, org_id).actor.role, :admin)
++    writable?(mount)
+   end

@@ -32,7 +32,9 @@ defmodule Samen.Scopes.Docs.Blueprint do
     PII writes it here instead of `body` | **yes** — `vault: :pii_doc_body` (Doc) /
     `:pii_note_body` (Note) |
   | `text` / `text_secure` (DocBlock) | the SAME pair one level down — `text` plain +
-    `FreeTextScan`, `text_secure` vaulted (`vault: :pii_block_text`) | per block |
+    `FreeTextScan`, `text_secure` vaulted (`vault: :pii_block_text`); the vault column is
+    CLEAR-REFUSED by `Samen.Scopes.Docs.BlockVault`, so a block never leaves the vault through a
+    write | per block |
   | `title` (Doc only), `subject_key`, `custom`, ids/timestamps, `owner_id`,
     `parent_doc_id`, `icon`, `position`, `revision`, `metadata`, `checked` | non-PII | no |
 
@@ -318,6 +320,16 @@ defmodule Samen.Scopes.Docs.Blueprint do
         re-parented into another doc — or another org. `parent_block_id` stays
         updatable (M2 re-parents a container's children).
 
+        ## Classification is irreversible here
+
+        `text_secure` is the vaulted column. `Samen.Scopes.Docs.BlockVault` refuses any
+        update that would CLEAR it, so the classification an author declared at the write
+        site can never be dropped by a write path — including one added later. Editing
+        vaulted text means writing `text_secure` again; leaving the vault is a
+        data-governance action, not an edit. That action is `:declassify_text` — admin-gated,
+        reason-bearing, audited in the same transaction, and the only path that clears the
+        column (`Samen.Scopes.Docs.BlockDeclassify`).
+
         Archivable (ADR-040 §5.9). Table `#{unquote(abbrev)}_doc_block`.
         """
         use Samen.Resource,
@@ -390,6 +402,10 @@ defmodule Samen.Scopes.Docs.Blueprint do
           change({Samen.Pii.FreeTextScan, fields: [:text]})
           # The closed shape: type ⇄ metadata/checked (R11's substrate half).
           change(Samen.Scopes.Docs.BlockShape)
+          # The one-way door on the vault column (ADR-053 §2 D5): declared at the write site,
+          # irreversible IN THE MODEL — no write helper (present or future, in any host) can clear
+          # `text_secure`. UPDATE only: a create cannot declassify anything.
+          change(Samen.Scopes.Docs.BlockVault, on: [:update])
         end
 
         actions do
@@ -430,6 +446,19 @@ defmodule Samen.Scopes.Docs.Blueprint do
             require_atomic?(false)
           end
 
+          # THE one named door out of the vault (ADR-053 §2 D5 / R17). `BlockVault` shuts the
+          # ordinary edit path on purpose; without a sanctioned way to correct an
+          # over-classification the rule would mean "vaulted forever, even when wrong". This is
+          # that way: no attributes accepted (the plaintext comes from the vault itself, never
+          # from the caller), a required reason, an audit row in the same transaction, and an
+          # admin-only policy below.
+          update :declassify_text do
+            accept([])
+            argument(:reason, :string, allow_nil?: false)
+            require_atomic?(false)
+            change(Samen.Scopes.Docs.BlockDeclassify)
+          end
+
           destroy :destroy do
             require_atomic?(false)
           end
@@ -467,6 +496,14 @@ defmodule Samen.Scopes.Docs.Blueprint do
           policy action_type([:create, :update, :destroy]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+
+          # The named door is ADMIN-only (owner outranks admin). Additive to — ANDed with — the
+          # broad update policy above, the `Identity.Invitation.:revoke` precedent: a `member`
+          # who may edit the page still cannot change what the page stores at rest.
+          policy action(:declassify_text) do
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
             authorize_if(always())
           end
 

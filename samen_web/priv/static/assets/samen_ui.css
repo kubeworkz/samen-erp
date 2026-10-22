@@ -1205,6 +1205,28 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
   color: #7C2D12; background: #fff; border: 1px solid #FED7AA; border-radius: 6px;
 }
+/* WS-Notes / ADR-053 §2 D5 — the vault exit (admin-only, reason-required). */
+.note-declassify {
+  padding: 10px 12px; margin: 8px 0; font-size: 13px;
+  background: var(--card); border: 1px solid var(--line2); border-radius: 9px;
+}
+.note-declassify-title { margin: 0 0 4px; font-weight: 600; }
+.note-declassify-body { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+.note-declassify label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+.note-declassify textarea {
+  display: block; width: 100%; box-sizing: border-box; resize: vertical;
+  padding: 6px 8px; font: inherit; color: var(--ink);
+  background: #fff; border: 1px solid var(--line2); border-radius: 6px;
+}
+.note-declassify-actions { display: flex; gap: 6px; margin-top: 6px; }
+.note-declassify-actions button {
+  font: inherit; font-size: 12px; padding: 4px 9px; cursor: pointer;
+  color: #0F766E; background: #F0FDFA; border: 1px solid #CCFBF1; border-radius: 6px;
+}
+.note-declassify-actions button[type="button"] {
+  color: var(--muted); background: transparent; border-color: var(--line2);
+}
+
 .note-error {
   padding: 10px 12px; margin: 8px 0; font-size: 13px;
   color: #7F1D1D; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 9px;

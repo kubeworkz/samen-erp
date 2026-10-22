@@ -29,6 +29,7 @@ defmodule Samen.Web.NotesKeyboardTest do
   """
 
   use Samen.WebTest.DataCase, async: false
+  use Samen.MaskingCase
 
   require Ash.Query
 
@@ -40,6 +41,8 @@ defmodule Samen.Web.NotesKeyboardTest do
   alias Samen.WebTest.SecurityHost
 
   @endpoint Samen.WebTest.SecurityEndpoint
+
+  @secret "NOTES-VAULTED-EDIT-SENTINEL"
 
   setup do
     previous = Application.get_env(SecurityHost.otp_app(), :auth_required?)
@@ -169,6 +172,48 @@ defmodule Samen.Web.NotesKeyboardTest do
     assert render(view) =~ "from another tab"
   end
 
+  # The form is the ORDINARY edit path: `phx-change` carries only the block id and the text the
+  # textarea holds — no classification hint at all. On a vaulted block that used to mean the write
+  # landed in the PLAIN column and cleared `text_secure`, so typing one character declassified 🔒
+  # content and the operator plane stopped masking it. The write is now sticky instead: the row
+  # keeps its vault, the operator plane still masks the EDITED value, and only a governed action
+  # (not a keystroke) could ever move it out.
+  test "an ordinary edit of a VAULTED block keeps it vaulted — the UI cannot declassify", %{
+    org_id: org_id
+  } do
+    doc = seed_doc!(org_id)
+
+    {:ok, block} =
+      Writes.insert_block(tenant_mount(), tenant_scope(org_id), doc.id, %{
+        type: :paragraph,
+        text_secure: @secret
+      })
+
+    {:ok, view, html} = live(build_conn(), "/pages/#{doc.id}?org=#{org_id}")
+
+    # On the tenant's OWN plane the vaulted text renders clear, so the textarea holds it.
+    assert html =~ @secret
+
+    edited = @secret <> " · typed"
+    view |> form("#note-form-#{block.id}", %{"text" => edited}) |> render_change()
+
+    assert view |> element("#note-text-#{block.id}") |> render() =~ edited
+
+    # The ROW is still vaulted: the edit rewrote the ciphertext column and left `text` empty.
+    assert [row] = blocks(org_id, doc.id)
+    assert row.secure?, "an ordinary UI edit must not declassify the block"
+    assert_plane_clear!(row.text, edited)
+
+    # And a masked reader of the same page sees the mask of the EDITED value — the proof that
+    # nothing landed in the clear column (a declassified block would render in the clear here).
+    operator = operator_mount(org_id)
+    {:ok, operator_page} = Reads.page(operator, Mount.scope(operator, org_id), doc.id)
+
+    operator_block = hd(operator_page.blocks)
+    assert operator_block.secure?
+    assert_plane_masked!(operator_block.text, edited)
+  end
+
   test "creating a page from the index lands on its editor", %{org_id: org_id} do
     {:ok, view, _html} = live(build_conn(), "/pages?org=#{org_id}")
 
@@ -189,6 +234,13 @@ defmodule Samen.Web.NotesKeyboardTest do
   end
 
   defp tenant_scope(org_id), do: Mount.scope(tenant_mount(), org_id)
+
+  defp operator_mount(org_id) do
+    Mount.new(:notes, Samen.WebTest.Docs, Samen.WebTest.Repo,
+      plane: Plane.operator("op-1", org_id),
+      labels: %{pages_path: "/pages"}
+    )
+  end
 
   defp seed_doc!(org_id) do
     Doc

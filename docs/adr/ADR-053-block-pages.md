@@ -175,6 +175,112 @@ own org renders clear. Exports (Markdown/CSV/clipboard-copy) resolve through the
 masked plane exports masks. "Sensitive page" is a UX affordance that writes `text_secure` at the
 write site — it is not a second storage mode and not a runtime reclassification.
 
+**Classification is sticky on the edit path (2026-10-21).** `Writes.update_text/5` picks the column
+from the ROW, not from the caller: a block whose `text_secure` is set keeps its edit in the vault,
+and `:secure` can only raise a plain block into it. D5's write site would otherwise be one-sided —
+the editor's debounced `block_text` handler passes no classification hint at all (it knows the
+ids and the textarea's value), so the pre-review behaviour wrote the edit into `text` and cleared
+`text_secure`: a single keystroke in a 🔒 block declassified it, the operator plane stopped masking
+it, and the ciphertext was gone with no error, banner or audit line. Leaving the vault is a
+data-governance decision and needs a governed action of its own, never a side effect of typing.
+Proven at the module (`notes_reads_writes_test.exs`) and through the real form on the real router
+(`notes_keyboard_test.exs`); sabotage **374** makes the classifier answer "plain" and all three
+assertions flip.
+
+**…and the rule is enforced in the MODEL, not only in the helper (2026-10-21).** A write seam is a
+convention: a second caller — a seed, a host's own LiveView, a future `Notes` helper — is free to
+choose its column differently, and `update_text/5`'s stickiness would not protect it. So
+`Samen.Scopes.Docs.BlockVault` (installed on `DocBlock`'s `:update` action, the same
+`Ash.Resource.Change` shape as `BlockShape`) refuses, on the governed write path itself:
+
+  * clearing `text_secure` on a row that holds a vaulted value — the declassification shape,
+    whatever else the changeset writes;
+  * giving a vaulted block a plain `text` twin (the vault column is its only text; the read seam
+    prefers `text_secure`, so a twin would sit unclassified at rest and invisible in the UI);
+  * a clear on a changeset with no original data (`%OriginalDataNotAvailable{}`), where the
+    classification cannot be seen — **unknown fails closed**, rather than being assumed plain.
+
+Re-writing `text_secure` stays open (that IS the edit path), and a write that touches neither text
+column (`position`, `revision`, `checked`, `metadata`, `type`) is untouched, so ordering churn pays
+nothing. A `%Ash.NotLoaded{}` column never reaches that clause because Ash gets there first, and
+that is the second layer, proved by the same suite: Ash itself drops a
+`text_secure: nil` change it cannot attribute to a `%Ash.NotLoaded{}` column, so a caller that never
+selected the classification cannot null it by accident either. Proven in `docs_scope_test.exs` c10
+(loaded clear refused, twin refused, pure no-data clear refused, unloaded clear survives, re-vault +
+plain-edit + structural-write controls); sabotage **375** makes the guard read every row as plain and
+all four red assertions flip.
+
+**…and the door that IS open is a named action, not a flag (2026-10-21).** "Never as a side effect"
+is not "never": content is sometimes over-classified, and the people who own the data need a way to
+say so. `DocBlock.:declassify_text` is that way, and it is deliberately a DIFFERENT action from
+`:update`, so `BlockVault` never has to grow an exception and no edit path can reach it:
+
+  * **`accept []`** — a caller cannot supply `text` or `text_secure`. The plaintext written to
+    `text` is the plaintext that was IN the vault, revealed server-side through the single
+    `Samen.Vault.reveal/3` chokepoint (bound to the block's own id as the subject, the F4.1 bind).
+    A declassify therefore cannot *replace* content, only move it;
+  * **the role gate is policy, not UI** — `policy action(:declassify_text)` adds
+    `RoleAtLeast, role: :admin` on top of the broad update policy, the `Identity.Invitation.:revoke`
+    precedent. A `member` who may edit the page still cannot change what it stores at rest, and an
+    org-less or absent actor is denied by rank;
+  * **an operator plane is refused in the guard** — a reveal grant is temporary, this is permanent;
+    moving tenant content into a plaintext column is the tenant's decision (same posture as
+    `Samen.Pii.WriteGuard`);
+  * **a required `reason` and an audit row in the same transaction** —
+    `Samen.Scopes.Docs.Audit.text_declassified/5` calls `Samen.AuditChain.Writer` (so `aud_event`
+    AND its chain link land atomically). The write FAILS if the audit cannot be recorded, and the
+    row carries the block id, actor id, revision and reason — never the text;
+  * **it re-enters `FreeTextScan` explicitly** — the revealed value is about to be an ordinary plain
+    column, so it is scanned by the same `Samen.PiiReasonScan` chokepoint before it lands. A
+    vaulted value that is itself a bare email/SSN/phone shape therefore CANNOT be laundered into
+    `text`; it stays vaulted;
+  * **a non-vaulted block is an error**, not a silent no-op, and the revision is bumped (a
+    declassify is a content write; a stale editor's CAS must see it).
+
+What it deliberately does NOT do: delete the `pii_vault` ciphertext row. The domain column no longer
+references it and it is destroyed with the rest of the subject's PII at erasure; deleting it here
+would be a second, unreviewed mutation on an action whose only job is to change where the content
+lives. That residue is named rather than hidden.
+
+Proven in `docs_scope_test.exs` c11: a member is refused by policy with the row still vaulted and no
+audit row; an admin succeeds (the anti-tautology control) with the vault's own prose in `text`, the
+column cleared, the revision moved and one `aud_event` row naming the block, the actor and the
+reason while carrying no text; a plain block and an operator-plane admin are both refused; and a
+bare-email vaulted value is refused by the scan and stays vaulted. Sabotage **376** drops the role
+gate and flips exactly the member denial; sabotage **377** makes the audit writer a no-op and flips
+the audited control.
+
+**The editor's half of the same door (2026-10-21).** A model-only exit would leave the surface with
+no way to use it, so `PageLive` renders one control on a vaulted block — "Move out of the vault" —
+which opens `NoteBlock.note_declassify_form/1`: a reason textarea, a submit, and no value on screen
+(the dialog must not become a second place a mask could be peeled). The write goes through
+`Writes.declassify/4` with `TenantRole.admin_scope/2` — the REAL membership role on an armed host,
+because `Mount.scope/2` fabricates `:member` and a role check on it would gate nothing — and the
+reason is refused when blank in the model, not only in the form. Whether the control is OFFERED is
+posture (tenant plane, admin rank); what refuses a member's crafted `declassify_block` event is the
+policy. Proven through the real router in `notes_declassify_ui_test.exs`: the admin path moves the
+text, drops the control and leaves `aud_event` agreeing with the row; an armed host's member gets
+no control and a refused write with the ciphertext byte-identical and no audit row; the operator
+plane renders `••••`, no `vt_*` token and no control. The armed ADMIN leg is not taken on faith:
+a real `Identity.Membership` at `:admin` (created by the sanctioned `Register`/`Invite` path) is
+resolved through the notes mount's `:identity_namespace` seam — the label every real host's shared
+map carries, and whose absence fails an armed module mount CLOSED to `:member` — and that admin
+drives the control to a committed declassification on the same route that refuses the member.
+Sabotage **378** drops the surface's role gate and flips both member denials while the model's own
+refusals stay green.
+
+Because that seam is what makes the capability reachable at all, an ARMABLE tenant mount of ANY
+admin-rank surface (`:notes` here; `:billing`, `:marketing`, `:support`, `:flags`, `:analytics`,
+`:chat` — the list is `@identity_seam_surfaces` in `Samen.Web.Router`) that does not name
+`:identity_namespace` **REFUSES TO COMPILE** — not a warning: `IO.warn/2` is not promoted by
+`--warnings-as-errors`, so a warning would still ship the dead capability, and a disarmed dev host
+hides the defect entirely (it resolves `:admin`). The check runs in the quoted module body, so a
+host passing `labels: @current_org_labels` (samenerp's shape) is seen through; disarmed-only,
+member-rank (`:crm`/`:work`/…) and operator-plane mounts are exempt (they never consult the seam).
+`identity_seam_compile_guard_test.exs` proves the refusal and its message for every guarded surface,
+the legitimate shapes, and that the real security host's mounts carry the label; sabotage **379**
+neutralises the guard and flips exactly the refusal probes.
+
 ### D6 — History is page-level snapshots, not per-keystroke paper trail
 
 `Doc` carries `revision` and (per host) `versioned: :changes_only` so metadata changes are audited by
@@ -472,6 +578,8 @@ Each row ships with a committed sabotage patch (numbers assigned at build time f
 | R13 | A backlink never crosses orgs (title resolution is org-scoped) | resolution runs without `OrgScope` |
 | R14 | A `pii_attribute` cannot enter the search index | `SearchIndexGuard` is neutered |
 | R15 | Archived pages and their blocks leave the tree, the search index, and backlink results | the archive filter is dropped on one of the three |
+| R16 | A vaulted block stays vaulted: the model refuses a `text_secure` clear (or a plain `text` twin) on any governed write, and fails closed when the classification is not loaded | `BlockVault` reads the stored classification as plain (sabotage **375**) |
+| R17 | Leaving the vault is a NAMED, audited, admin-only action: a `member` cannot declassify (policy), the plaintext is the vault's own (no caller-supplied text), the plain column's `FreeTextScan` still applies, and an audit row lands in the same transaction; the editor offers the control only where that write could be admitted | the action's `RoleAtLeast :admin` gate is dropped (sabotage **376**); the audit writer is a no-op (sabotage **377**); the surface's role gate is dropped so every member is offered the control (sabotage **378**); the mount's compile-time identity-seam guard is neutered, so an armable host without the seam ships dead admin-rank capabilities (sabotage **379**) |
 
 ## 7. Consequences
 

@@ -22,6 +22,17 @@ defmodule Samen.Web.Notes.PageLive do
   A masked WRITE is refused at the seam (a split/merge that would write `••••` into content), and
   the page shows that refusal instead of pretending the edit landed.
 
+  ## The vault exit (ADR-053 §2 D5 / R17) is an ADMIN affordance, and it is a FORM
+
+  A 🔒 block's text moves out of the vault only through `:declassify_text`, which is `RoleAtLeast
+  :admin` and tenant-plane only. The editor surfaces that as ONE control per vaulted block
+  (`Move out of the vault`) that opens a reason form and posts `declassify_block`; the write goes
+  through `Writes.declassify/4` with `Samen.Web.TenantRole.admin_scope/2` — the REAL membership
+  role on an armed host, never `Mount.scope/2`'s fabricated `:member`, which would make any role
+  check here vacuous. A member's crafted event is therefore refused by the MODEL (policy), and
+  the page shows the refusal instead of pretending it landed; the operator plane never offers the
+  control at all (its text is `••••`, and a reveal grant is temporary while this is permanent).
+
   ## Concurrency
 
   Every text write carries the block `revision` the client last saw (a hidden field inside that
@@ -63,7 +74,7 @@ defmodule Samen.Web.Notes.PageLive do
   import Samen.Web.Notes.Live,
     only: [assign_mount: 2, export_href: 4, notes_sidebar: 1, page_href: 3, writable?: 1]
 
-  alias Samen.Web.{Crumbs, CurrentOrg, Mount}
+  alias Samen.Web.{Crumbs, CurrentOrg, Mount, TenantRole}
   alias Samen.Web.Notes.{Export, PubSub, Reads, Writes}
 
   @list_types [:bulleted_list_item, :numbered_list_item, :to_do]
@@ -86,6 +97,8 @@ defmodule Samen.Web.Notes.PageLive do
        error: nil,
        editing_block_id: nil,
        deferred_block_id: nil,
+       declassify_for: nil,
+       declassify_allowed?: false,
        focus_request: nil,
        copy_state: nil,
        backlinks: [],
@@ -105,6 +118,7 @@ defmodule Samen.Web.Notes.PageLive do
        palette_for: nil,
        conflict: nil,
        error: nil,
+       declassify_for: nil,
        focus_request: nil,
        copy_state: nil
      )
@@ -122,6 +136,7 @@ defmodule Samen.Web.Notes.PageLive do
       socket
       |> defaults()
       |> assign(org_id: org_id, doc_id: doc_id)
+      |> assign(declassify_allowed?: can_declassify?(mount, org_id))
 
     cond do
       is_nil(org_id) ->
@@ -342,6 +357,40 @@ defmodule Samen.Web.Notes.PageLive do
     end)
   end
 
+  # ── the named door out of the vault (R17) ──────────────────────────────────
+
+  def handle_event("open_declassify", %{"id" => id}, socket) do
+    # The control is only rendered to an admin on the tenant plane; a crafted event opens the form
+    # for anyone, and the WRITE below is what refuses (policy, not posture).
+    {:noreply, assign(socket, declassify_for: id, palette_for: nil, conflict: nil, error: nil)}
+  end
+
+  def handle_event("cancel_declassify", _params, socket) do
+    {:noreply, assign(socket, declassify_for: nil)}
+  end
+
+  def handle_event("declassify_block", %{"block_id" => id, "reason" => reason}, socket) do
+    with_scope(socket, fn mount, _scope ->
+      # ADMIN-ranked, and derived through the ONE tenant-role helper (see the moduledoc): on an
+      # armed host this is the authenticated principal's real membership role, and `Writes.
+      # declassify/4`'s action re-checks it against the model's policy.
+      admin_scope = TenantRole.admin_scope(mount, socket.assigns.org_id)
+
+      case Writes.declassify(mount, admin_scope, id, reason) do
+        {:ok, block} ->
+          {:noreply,
+           socket
+           |> assign(declassify_for: nil)
+           |> publish_block(block)
+           |> reload(error: nil)}
+
+        {:error, :forbidden} -> {:noreply, assign(socket, error: declassify_forbidden_message())}
+        {:error, :no_reason} -> {:noreply, assign(socket, error: declassify_reason_message())}
+        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+      end
+    end)
+  end
+
   # ── conflict / focus ───────────────────────────────────────────────────────
 
   def handle_event("reload_block", %{"id" => _id}, socket) do
@@ -479,6 +528,13 @@ defmodule Samen.Web.Notes.PageLive do
 
             <.note_palette :if={@palette_for} block_id={@palette_for} />
 
+            <%!-- The reason form is the vault exit's whole surface: it collects WHY and posts
+                 `declassify_block`. Rendered only where the write it leads to could be admitted. --%>
+            <.note_declassify_form
+              :if={@declassify_for && @declassify_allowed?}
+              block_id={@declassify_for}
+            />
+
             <div
               id="note-blocks"
               class="note-editor"
@@ -548,6 +604,19 @@ defmodule Samen.Web.Notes.PageLive do
                     phx-value-id={block.id}
                     aria-label="Archive block"
                   >✕</button>
+
+                  <%!-- ADR-053 §2 D5 / R17 — the ONLY affordance that can clear a classification.
+                       ADMIN on the tenant plane only: the operator plane reads `••••` here and
+                       never gets the control (a reveal is temporary; this is permanent). --%>
+                  <button
+                    :if={@declassify_allowed? and block.secure?}
+                    type="button"
+                    id={"note-declassify-" <> block.id}
+                    class="note-control"
+                    phx-click="open_declassify"
+                    phx-value-id={block.id}
+                    aria-label="Move this block out of the vault"
+                  >🔓</button>
                 </:controls>
               </.note_block_row>
             </div>
@@ -788,6 +857,16 @@ defmodule Samen.Web.Notes.PageLive do
 
   defp editable?(mount, org_id), do: writable?(mount) and is_binary(org_id)
 
+  # The vault exit is offered only where the write could be admitted: tenant plane + a real
+  # admin-rank membership role (ADR-053 §2 D5). The model re-checks both — this decides whether
+  # the affordance is OFFERED, never whether the write lands.
+  defp can_declassify?(%Mount{} = mount, org_id) when is_binary(org_id) do
+    writable?(mount) and
+      Samen.Scope.Role.at_least?(TenantRole.admin_scope(mount, org_id).actor.role, :admin)
+  end
+
+  defp can_declassify?(_mount, _org_id), do: false
+
   defp list_type?(type), do: type in @list_types
 
   defp page_title(%{doc: %{title: title}}) when is_binary(title), do: title
@@ -813,6 +892,8 @@ defmodule Samen.Web.Notes.PageLive do
     |> assign_new(:palette_for, fn -> nil end)
     |> assign_new(:conflict, fn -> nil end)
     |> assign_new(:error, fn -> nil end)
+    |> assign_new(:declassify_for, fn -> nil end)
+    |> assign_new(:declassify_allowed?, fn -> false end)
     |> assign_new(:editing_block_id, fn -> nil end)
     |> assign_new(:deferred_block_id, fn -> nil end)
     |> assign_new(:focus_request, fn -> nil end)
@@ -825,6 +906,16 @@ defmodule Samen.Web.Notes.PageLive do
 
   defp masked_message do
     "This block is masked on this plane — writing it would put the mask into the page's content."
+  end
+
+  defp declassify_forbidden_message do
+    "Only an admin can move content out of the vault. This block is unchanged — if you need it " <>
+      "in the clear, an admin has to do it and record a reason."
+  end
+
+  defp declassify_reason_message do
+    "Give a reason: the audit entry is the record of why this text is no longer confidential, and " <>
+      "it cannot be empty."
   end
 
   defp write_error(%Ash.Error.Invalid{}), do: "That change was refused by the page's write rules."

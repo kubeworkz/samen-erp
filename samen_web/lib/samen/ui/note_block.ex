@@ -1,7 +1,16 @@
 defmodule Samen.UI.NoteBlock do
   @moduledoc """
   The block-editor kit for WS-Notes (ADR-053 §2 D3 / §4; WS-Notes Phase 3 unit 3.3):
-  `note_block_row/1`, `note_palette/1`, `note_conflict_banner/1`, `note_empty_state/1`.
+  `note_block_row/1`, `note_palette/1`, `note_conflict_banner/1`, `note_declassify_form/1`,
+  `note_empty_state/1`.
+
+  ## The vault exit is a FORM, not a toggle (R17)
+
+  `note_declassify_form/1` is the ONLY affordance in the editor that can clear a classification, and
+  it does not clear anything itself: it collects the REASON and posts it to the `declassify_block`
+  event, whose write goes through the governed `:declassify_text` action. Whether the form exists at
+  all is decided by `Samen.Web.Notes.PageLive` (tenant plane, admin ranked) — the component is
+  handed nothing but an id and renders the same for whoever the page lets in.
 
   ## Masking (LOAD-BEARING)
 
@@ -192,6 +201,49 @@ defmodule Samen.UI.NoteBlock do
       <span>This block changed while you were typing — your edit was not applied.</span>
       <button type="button" phx-click="reload_block" phx-value-id={@block_id}>Load the current text</button>
       <button type="button" phx-click="dismiss_conflict">Dismiss</button>
+    </div>
+    """
+  end
+
+  attr :block_id, :string, required: true
+
+  @doc """
+  The named door OUT of the vault (ADR-053 §2 D5 / R17): a reason field and one button.
+
+  The reason is required (`required` on the textarea, and the model refuses a blank one), because
+  the audit row is the record of WHY a classification was reduced. Nothing here touches the value:
+  the text the user sees in the panel is never rendered into it, so a masked plane cannot leak a
+  block through its own declassify dialog.
+  """
+  def note_declassify_form(assigns) do
+    ~H"""
+    <div
+      class="note-declassify"
+      id={"note-declassify-panel-" <> @block_id}
+      role="group"
+      aria-label="Move this block out of the vault"
+    >
+      <p class="note-declassify-title">Move out of the vault</p>
+      <p class="note-declassify-body">
+        This block's text is stored encrypted (🔒). Moving it out writes the text into the page's
+        plain column permanently and records an audit entry naming you and your reason. Editing a
+        🔒 block can never do this by accident.
+      </p>
+      <form id={"note-declassify-form-" <> @block_id} phx-submit="declassify_block">
+        <input type="hidden" name="block_id" value={@block_id} />
+        <label for={"note-declassify-reason-" <> @block_id}>Why is this no longer confidential?</label>
+        <textarea
+          id={"note-declassify-reason-" <> @block_id}
+          name="reason"
+          rows="2"
+          required
+          aria-label="Reason for moving this block out of the vault"
+        ></textarea>
+        <div class="note-declassify-actions">
+          <button type="submit" id={"note-declassify-submit-" <> @block_id}>Move out of the vault</button>
+          <button type="button" phx-click="cancel_declassify">Cancel</button>
+        </div>
+      </form>
     </div>
     """
   end

@@ -111,9 +111,19 @@ defmodule Samen.WebTest.SecurityRouter do
     # seam chat and notifications ride). Pointed at the test VM's PubSub so the editor's
     # subscribe/re-read path is driven for real: id-only envelopes, per-plane re-read, and the
     # `editing_block_id` skip (R8/R10).
+    #
+    # R17 (the vault exit) — the `:identity_namespace` seam is wired here as it is on the flags
+    # mount below, and as EVERY real host wires it (samenerp's shared label map). Without it an
+    # armed module mount fails CLOSED to `:member` (TenantRole), so the declassify control's real
+    # admin leg could only ever be proven at the helper layer. With it, an armed host derives the
+    # authenticated principal's REAL `Identity.Membership` role, which is exactly what the
+    # `RoleAtLeast :admin` gate needs — and what an armed non-admin must still be denied.
     samen_notes_routes(:notes, Samen.WebTest.Docs,
       repo: Samen.WebTest.Repo,
-      labels: Map.put(@labels, :pubsub, Samen.WebTest.PubSub),
+      labels:
+        @labels
+        |> Map.put(:pubsub, Samen.WebTest.PubSub)
+        |> Map.put(:identity_namespace, Samen.WebTest.Operator),
       search_index: Samen.WebTest.Primitives.SearchIndex
     )
 

@@ -1,0 +1,22 @@
+# SABOTAGE: WS-NOTES/ADR-053 §2 D5 — THE DECLASSIFY ACTION'S ROLE GATE IS DROPPED
+# `DocBlock.:declassify_text` is the ONE sanctioned way out of the vault, and its policy is what
+# makes that door admin-only: the broad `:update` policy still lets a `member` edit the page, so
+# removing THIS line means any member can move a 🔒 block's plaintext into the plain `text` column
+# and clear `text_secure` — a permanent declassification by the least-privileged tenant role.
+#
+# Aimed at the ACTION policy only. The audit writer, the vault read and the model's one-way door
+# (`BlockVault`) are untouched, so the admin control test stays green — the red path is exactly
+# "a member may not", not a blanket refusal.
+# APP: samen_core
+# TEST_FILES: test/docs_scope_test.exs
+# MUST_FAIL: a MEMBER is refused by policy
+--- a/samen_core/lib/samen/scopes/docs/blueprint.ex
++++ b/samen_core/lib/samen/scopes/docs/blueprint.ex
+@@ -501,7 +501,6 @@
+           # broad update policy above, the `Identity.Invitation.:revoke` precedent: a `member`
+           # who may edit the page still cannot change what the page stores at rest.
+           policy action(:declassify_text) do
+-            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+             authorize_if(always())
+           end
+ 

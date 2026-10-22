@@ -15,6 +15,10 @@ defmodule Samen.Web.NotesReadsWritesTest do
     * **Split/merge boundaries** — UTF-16 caret offsets (emoji included), offset clamping, a
       list item keeping its type, a paragraph tail becoming a paragraph, merging the first
       block is a no-op, and a merge never DOWNGRADES a vaulted block to the plain column.
+    * **Classification is sticky on an ordinary edit** — `update_text/5` picks the column from the
+      ROW, not from the caller, so editing a 🔒 block rewrites its ciphertext and leaves `text`
+      empty (and the operator plane still masks the EDITED value). Explicit `secure: false`
+      cannot declassify either; `:secure` is raise-only. Sabotage **374** flips these.
     * **Masking (INV-1)** — the read seam resolves `text_secure` per plane (tenant clear /
       operator `••••`, never a `vt_*` token), and a write that would have to manipulate a
       masked value is refused rather than writing `••••` into content.
@@ -349,6 +353,51 @@ defmodule Samen.Web.NotesReadsWritesTest do
       page = page!(org_id, doc.id)
       assert hd(page.blocks).secure?
       assert_plane_clear!(hd(page.blocks).text, @secret)
+    end
+
+    # The ordinary edit path (`PageLive`'s debounced `block_text`) passes NO `:secure` — it just
+    # hands over what the textarea says. For a vaulted block that used to mean "write this as the
+    # PLAIN column and clear `text_secure`": one keystroke silently declassified 🔒 content, and
+    # the operator plane stopped masking it. Classification is therefore STICKY on this path: an
+    # edit rewrites the column the block already lives in.
+    test "an ordinary edit of a VAULTED block keeps it vaulted — no silent declassification" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id)
+      block = insert!(org_id, doc.id, %{text_secure: @secret})
+      edited = @secret <> " · edited"
+
+      assert {:ok, updated} =
+               Writes.update_text(docs_mount(:tenant), tenant_scope(org_id), block.id, edited)
+
+      # The ciphertext column was REWRITTEN and the plain column is still empty.
+      assert updated.text == nil
+      assert updated.text_secure != edited
+
+      page_block = hd(page!(org_id, doc.id).blocks)
+      assert page_block.secure?, "a plain edit must not move the block out of the vault"
+      assert_plane_clear!(page_block.text, edited)
+
+      # …and the operator plane masks the NEW value: nothing landed in the clear column.
+      {:ok, operator_page} =
+        Reads.page(docs_mount({:operator, org_id}), operator_scope(org_id), doc.id)
+
+      operator_block = hd(operator_page.blocks)
+      assert operator_block.secure?
+      assert_plane_masked!(operator_block.text, edited)
+    end
+
+    test "an explicit `secure: false` cannot declassify either — the option is raise-only" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id)
+      block = insert!(org_id, doc.id, %{text_secure: @secret})
+
+      assert {:ok, updated} =
+               Writes.update_text(docs_mount(:tenant), tenant_scope(org_id), block.id, "edited",
+                 secure: false
+               )
+
+      assert updated.text == nil
+      assert hd(page!(org_id, doc.id).blocks).secure?
     end
 
     test "refuses a non-binary value instead of casting it" do

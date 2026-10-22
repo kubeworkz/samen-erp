@@ -1,0 +1,27 @@
+# SABOTAGE: WS-NOTES R5/ADR-053 §5 D5 — AN ORDINARY EDIT SILENTLY DECLASSIFIES A VAULTED BLOCK
+# (WS-Notes Phase 2 unit 2.2; the declassification review). `Writes.update_text/5` picks the column
+# from `keep_classification/2`: a block whose `text_secure` is set stays in the vault, whatever the
+# caller passed. This patch makes `vaulted?/1` answer `false`, so classification is whatever the
+# CALLER asked for — and `PageLive`'s debounced `block_text` handler, which only knows the text the
+# textarea holds, asks for nothing. One keystroke in a 🔒 block therefore writes its plaintext into
+# `text` and clears `text_secure`: the row leaves the vault, the operator plane stops masking it,
+# and the vault column's ciphertext is gone. No error, no banner, no audit line.
+#
+# Aimed at the classifier only: `text_attrs/2` (the one-text-per-block rule), the CAS, the
+# masked-write refusal, the split/merge stickiness and `Pii.WriteGuard` are untouched. So the split
+# and merge tests (which classify by their own path) stay GREEN — the defect is exactly the
+# module-level edit path plus the UI form that rides it.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_reads_writes_test.exs test/samen/web/notes_keyboard_test.exs
+# MUST_FAIL: an ordinary edit of a VAULTED block keeps it vaulted — the UI cannot declassify
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -863,7 +863,7 @@
+   defp keep_classification(requested_secure?, block),
+     do: requested_secure? or vaulted?(block)
+ 
+-  defp vaulted?(block), do: not is_nil(Map.get(block, :text_secure))
++  defp vaulted?(_block), do: false
+ 
+   defp text_attrs(text, true), do: %{text_secure: text, text: nil}
+   defp text_attrs(text, false), do: %{text: text, text_secure: nil}

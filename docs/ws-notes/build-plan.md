@@ -160,15 +160,81 @@ rather than silently taken:
 7. **A legacy body is quoted, literal text.** A zero-block page exports its `body`/`secure_body`
    (ADR-053 §8 O3) inside the existing quote form, so its `#` cannot become a second H1 and its
    `<script>` is escaped like any other block text.
-8. **The clipboard is the third path, and it got its own proof and its own sabotage.**
+8. **Classification is sticky on the edit path — the declassification review (2026-10-21).**
+   `Writes.update_text/5` chose the column from the caller's `:secure` option, which defaulted
+   `false`, and `PageLive`'s debounced `block_text` passes no option at all: editing a 🔒 block
+   wrote its plaintext into `text` and cleared `text_secure`, so one keystroke declassified it, the
+   operator plane stopped masking it, and the ciphertext was lost. `keep_classification/2` now
+   reads the ROW (a set `text_secure` keeps the edit in the vault) and `:secure` is raise-only.
+   Proven at the module and through the real form; sabotage **374** (`vaulted?/1` answers false)
+   flips both, while the split/merge stickiness tests stay green because they classify on their own
+   path.
+8a. **The same rule moved into the MODEL (2026-10-21) — the helper was never the guarantee.**
+   `Samen.Scopes.Docs.BlockVault`, an `Ash.Resource.Change` installed on `DocBlock`'s `:update`
+   action beside `BlockShape`, refuses any governed write that would clear `text_secure` on a row
+   that holds a vaulted value, OR give a vaulted block a plain `text` twin (the vault column is its
+   only text). A changeset with no original data cannot clear it either — unknown fails closed. The
+   edit path stays open (writing `text_secure` again is how vaulted text changes) and a write that
+   touches neither text column is untouched, so ordering churn pays nothing. `docs_scope_test.exs`
+   **c10** carries the red paths (loaded clear, bare clear, twin, pure no-data clear) and three
+   controls (re-vault accepted, plain-block edit accepted, `position` write on an unloaded row
+   accepted); the suite also pins the layer BENEATH the guard — Ash drops a `text_secure: nil`
+   change it cannot attribute to a `%Ash.NotLoaded{}` column, so a caller that never selected the
+   classification cannot null it by accident. Sabotage **375** (`stored_classification/1` answers
+   `:plain`) flips all four reds while 374 still flips the helper's own tests.
+9. **The clipboard is the third path, and it got its own proof and its own sabotage.**
    `Export.copy_text/3` shares `load/3` with the downloads but is plain text (no `#`/bullets/fences,
    no HTML escaping — a clipboard is text, so `&lt;` must not be pasted), and the page's "Copy page"
    PUSHES it to the requesting socket (never the topic) for the `CopyText` hook to
    `navigator.clipboard.writeText`. The page only says "Copied" after the client acks. Proven at the
    module (`copy_text/3` bytes) and at the socket (the pushed payload, on a real operator-plane
-   socket), plus the plane flip and the leak-scan refutability; **372** forges the copy's plane and
-   flips exactly those three tests while every download test stays green, and **364** (re-anchored)
-   still flips the downloads. Each way out has its own gate because each is its own leak.
+   socket), plus the   plane flip and the leak-scan refutability; **372** forges the copy's plane and
+   flips exactly those three tests while every download test stays green, and **364**
+   (re-anchored) still flips the downloads. Each way out has its own gate because each
+   is its own leak.
+10. **Leaving the vault is a named action, not a flag (2026-10-21).** `BlockVault` shuts the
+   ordinary edit path on purpose; without a sanctioned exception, "a block never leaves the vault"
+   would also mean content that was over-classified at authoring can never be corrected. So the
+   door is `DocBlock.:declassify_text` (`Samen.Scopes.Docs.BlockDeclassify`): a DIFFERENT action
+   from `:update`, so `BlockVault` needs no exception and no edit path can reach it. It accepts no
+   attributes — the plaintext it writes to `text` is the vault's own, revealed server-side and bound
+   to the block's subject — requires a `reason`, refuses an operator-plane actor, bumps
+   `revision`, re-enters `FreeTextScan` (a bare-email vaulted value cannot be laundered into the
+   plain column), and writes its `aud_event` + chain row in the SAME transaction (an unauditable
+   declassify fails). The role gate is policy: `RoleAtLeast, role: :admin`, additive to the broad
+   update policy (`Identity.Invitation.:revoke` precedent), so a member may still edit the page but
+   cannot change what it stores at rest. Proven at the model in `docs_scope_test.exs` c11 — member
+   denied (row vaulted, no audit row), admin control succeeds with one audit row naming block,
+   actor, revision and reason and carrying no text, plain block / operator plane / bare-email value
+   all refused; **376** drops the role gate and flips exactly the member denial, **377** makes the
+   audit writer a no-op and flips the audited control.
+11. **The door has a form, and the surface never adopts the role gate's answer as the guarantee
+   (2026-10-21).** A model-only exit would leave the editor's only way out a console command, so
+   `PageLive` renders ONE control on a vaulted block — “Move out of the vault” — which opens
+   `NoteBlock.note_declassify_form/1`: a reason textarea and a submit, no value on screen. The form
+   posts `declassify_block`, whose write goes through `Writes.declassify/4` with
+   `TenantRole.admin_scope/2` (the REAL membership role on an armed host — `Mount.scope/2`
+   fabricates `:member`, so a role check on it would gate nothing) and returns `:forbidden` /
+   `:no_reason` as distinct refusals. Whether the control is OFFERED is decided by the same
+   `admin_scope/2` + tenant-plane check, and that decision is only posture: the member and operator
+   red paths drive what the model does with a crafted event. Proven in
+   `notes_declassify_ui_test.exs` through the real router (admin: control → form → clear text, the
+   control gone, DB + `aud_event` agree; member on an ARMED host: no control, crafted event
+   refused, ciphertext byte-identical, no audit; operator plane: `••••`, no control). The ARMED
+   ADMIN leg is driven with a REAL membership too — `Register`/`Invite` (the S1a harness shape) put
+   the principal in the org at `:admin`, and `TenantRole` resolves it through the notes mount's
+   `:identity_namespace` seam (wired in the security host exactly as samenerp's shared label map
+   wires it; without the seam an armed module mount fails CLOSED to `:member`). The paired real
+   `:member` drives the same route and gets no control plus a refused pushed event. **378** drops
+   the surface's role gate and flips both member denials, while the model's own refusals (376) stay
+   green. And because the seam is what makes the control reachable at all, an ARMABLE tenant mount
+   without it no longer compiles at all — for notes AND the other admin-rank surfaces
+   (`:billing`/`:marketing`/`:support` module routes, `samen_flags_routes/3`,
+   `samen_tenant_analytics_routes/2`, `samen_chat_routes/3`; the list is `@identity_seam_surfaces`).
+   The refusal names the dead capability and the fix; `identity_seam_compile_guard_test.exs` proves
+   it per surface with the legitimate shapes as controls, and **379** neutralises the guard. The
+   check runs in the quoted module body, so a `@current_org_labels` attribute is seen through —
+   which is why the four real host apps still compile unchanged.
 
 ## Phase 3 — the surface (~2 days)
 
@@ -422,6 +488,12 @@ Still open: 1a (`mix samen.docs.materialize`), 2 (cookbook recipe + README row),
 | 364 | R6 — the download resolves the page on the WRONG plane (a masked operator-plane export carries plaintext); the read seam itself is left intact |
 | 372 | R6 (clipboard half) — "Copy page" resolves on the tenant plane regardless of who is asking, so the masked operator's clipboard gets the plaintext; the download tests stay green |
 | 373 | R8 (subscriber half) — a receiving tab re-reads the broadcast on the TENANT plane (`refresh_block/2` and the structure reload), so an operator tab paints plaintext from a colleague's edit while every envelope test stays green |
+| 374 | R5 / D5 — classification is not sticky: `vaulted?/1` answers false, so an ordinary edit (the `block_text` form) writes a 🔒 block's plaintext into `text` and clears `text_secure` |
+| 376 | R17 / D5 — the declassify action's `RoleAtLeast, role: :admin` gate is dropped, so a `member` can move a 🔒 block's plaintext into the plain column and clear the vault |
+| 377 | R17 / D5 — the declassification audit writer becomes a no-op: the block still leaves the vault, but no `aud_event` row records who did it, to which revision, or why |
+| 378 | R17 / D5 (surface half) — `PageLive.can_declassify?/2` drops its admin-rank clause, so on an ARMED host every member is offered the vault-exit control and its reason form; the model's policy is left intact, so the crafted write is still refused |
+| 379 | R17 / D5 / ADR-045 §4.4 (wiring half) — the compile guard goes inert (`armable?` is `false`), so an armable tenant host that forgets `:identity_namespace` compiles quietly and ships dead admin-rank capabilities (vault exit, billing, campaign/KB writes, flag toggles, the analytics role gate, the disclosure flip); the disarmed/member-rank/operator exemptions were never guarded, so only the three refusal probes flip |
+| 375 | R16 / D5 (model half) — `BlockVault.stored_classification/1` answers `:plain`, so the governed write path accepts a `text_secure` clear (or a plaintext twin) on a vaulted block; the helper's own stickiness is left intact, so this is the layer BELOW 374 |
 | 365 | R7 — `FreeTextScan` removed from `text` |
 | 366 | R14 — `SearchIndexGuard` neutered (a `pii_attribute` enters the index) |
 | 368 | host wiring (outside the R-numbering) — `samenerp` seeds seed the page but skip `register_index`, so a mounted surface answers `?q=` with the empty state while every other test stays green (367 is the `samen_core` boot-verifier twin) |

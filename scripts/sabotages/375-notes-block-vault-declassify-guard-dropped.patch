@@ -1,0 +1,32 @@
+# SABOTAGE: WS-NOTES/ADR-053 §2 D5 — THE MODEL'S ONE-WAY DOOR ON A VAULTED BLOCK IS DROPPED
+# `Samen.Scopes.Docs.BlockVault` is the model-level refusal that keeps a `DocBlock` in the vault:
+# any update that would clear `text_secure` (or give a vaulted block a plain `text` twin) is
+# refused at the governed write path. This patch makes the stored classification read as `:plain`
+# whatever the row actually holds, so both predicates go quiet: a clear SUCCEEDS, the row leaves
+# the vault, its ciphertext is gone and the operator plane stops masking it.
+#
+# Aimed at the guard ONLY. `Samen.Web.Notes.Writes` still classifies writes from the row (its own
+# `keep_classification/2`), so the ordinary editor path stays green — this is the layer BELOW the
+# helper, proven at the model. The "defence in depth" c10 test also stays green on purpose: it
+# pins the OTHER mechanism (Ash drops a `text_secure: nil` change it cannot attribute to a
+# `%Ash.NotLoaded{}` column), which this patch does not touch.
+# APP: samen_core
+# TEST_FILES: test/docs_scope_test.exs
+# MUST_FAIL: a declassifying update (plain text in, text_secure nulled) is REFUSED
+# MUST_FAIL: even a bare `text_secure: nil` (no plain text at all) is refused
+# MUST_FAIL: a vaulted block cannot gain a plaintext twin
+# MUST_FAIL: a changeset with NO original data cannot clear the vault
+--- a/samen_core/lib/samen/scopes/docs/block_vault.ex
++++ b/samen_core/lib/samen/scopes/docs/block_vault.ex
+@@ -106,10 +106,7 @@
+   # write is not (see `writes_plain_twin?/2`).
+   defp stored_classification(changeset) do
+     case Ash.Changeset.fetch_data(changeset, :text_secure) do
+-      {:ok, nil} -> :plain
+-      {:ok, %Ash.NotLoaded{}} -> :unknown
+-      {:ok, _vaulted_value} -> :vaulted
+-      :error -> :unknown
++      _ -> :plain
+     end
+   end
+ end

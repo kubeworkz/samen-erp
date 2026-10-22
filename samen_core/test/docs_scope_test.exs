@@ -69,6 +69,21 @@ defmodule Samen.DocsScopeTest do
 
   @secret_body "vaulted.subject@sample.invalid"
 
+  # The block-vault sentinels (c10). Two DISTINCT values so an accepted re-vault can be told
+  # apart from the value it replaced — never the same string, which would make the assertion
+  # vacuous.
+  @secret_block "NOTES-BLOCK-VAULT-SENTINEL · block@sample.invalid"
+  @secret_block_v2 "NOTES-BLOCK-VAULT-SENTINEL-v2 · block2@sample.invalid"
+
+  # c11 — the sanctioned door out of the vault. The prose sentinel is deliberately NOT PII-shaped:
+  # `FreeTextScan` still guards the plain column a declassify writes into (see the laundering red
+  # path), so the positive control has to be ordinary content.
+  @block_prose "Q3 budget notes — no personal data in this paragraph."
+  # A BARE value shape (no surrounding prose): the only thing `PiiReasonScan` calls PII-shaped.
+  @block_bare_email "launder-me@sample.invalid"
+  @docs_admin "u:docs-admin"
+  @docs_member "u:docs-member"
+
   defp new_doc(scope, org, attrs \\ %{}) do
     Doc
     |> Ash.Changeset.for_create(:create, Map.merge(%{org_id: org, title: "Doc"}, attrs),
@@ -104,6 +119,49 @@ defmodule Samen.DocsScopeTest do
       scope: scope
     )
     |> Ash.create!()
+  end
+
+  # A tenant-plane scope with an explicit role/actor id (c11's policy red paths need a member
+  # and an admin acting on the SAME org and row).
+  defp scope_as(org_id, role, actor_id) do
+    %Samen.Scope{
+      actor: %{id: actor_id, org_id: org_id, role: role, kind: :tenant, plane: :tenant}
+    }
+  end
+
+  # The raw domain columns of a block — what actually landed at rest, outside Ash's types.
+  defp raw_block(id) do
+    %{rows: [[text, secure]]} =
+      @repo.query!(
+        "SELECT sdb_text, pii_sdb_text_secure FROM sdb_doc_block WHERE sdb_id = $1",
+        [Ecto.UUID.dump!(id)]
+      )
+
+    %{text: text, secure: secure}
+  end
+
+  # The aud_event rows naming this block as their subject (the declassification record).
+  defp aud_rows(subject_id) do
+    %{rows: rows} =
+      @repo.query!(
+        "SELECT aud_event_type, aud_actor_id, aud_detail FROM aud_event " <>
+          "WHERE aud_subject_id = $1",
+        [subject_id]
+      )
+
+    Enum.map(rows, fn [event_type, actor_id, detail] ->
+      %{event_type: event_type, actor: actor_id, detail: detail}
+    end)
+  end
+
+  # The fresh row behind a write attempt, WITH the vault column selected — the only way to
+  # assert what actually landed at rest (`text_secure` is sensitive, so a default read leaves
+  # it `%Ash.NotLoaded{}`).
+  defp reload_block(scope, id) do
+    DocBlock
+    |> Ash.Query.filter(id == ^id)
+    |> Ash.Query.ensure_selected([:text_secure])
+    |> Ash.read_one!(scope: scope)
   end
 
   # A block/link write that Ash REFUSES (a changeset that carries errors, or an
@@ -647,6 +705,340 @@ defmodule Samen.DocsScopeTest do
 
       assert AshPostgres.DataLayer.Info.table(DocBlock) == "sdb_doc_block"
       assert AshPostgres.DataLayer.Info.table(DocLink) == "sdl_doc_link"
+    end
+  end
+
+  # ── c10: the model's one-way door on the block vault column ────────────────
+
+  describe "c10 — BlockVault: a vaulted block cannot be DECLASSIFIED by any write" do
+    setup %{org: org, scope: scope} do
+      doc = new_doc(scope, org, %{title: "Sensitive page"})
+      block = new_block(scope, org, doc, %{text: nil, text_secure: @secret_block})
+      {:ok, block: block}
+    end
+
+    # The realistic shape: a write path reads the row FIRST (it must, to CAS its revision and to
+    # know which column it is editing), so the classification is loaded when the write is built.
+    test "RED: a declassifying update (plain text in, text_secure nulled) is REFUSED — the row " <>
+           "stays in the vault",
+         %{scope: scope, block: block} do
+      row = reload_block(scope, block.id)
+
+      # The exact shape a write helper would send if it chose its column from the CALLER
+      # instead of from the row: one text written plain, the vault column cleared.
+      assert {:error, _} =
+               refused_changeset(fn ->
+                 row
+                 |> Ash.Changeset.for_update(
+                   :update,
+                   %{text: "leaked plaintext", text_secure: nil},
+                   scope: scope
+                 )
+                 |> Ash.update!()
+               end)
+
+      fresh = reload_block(scope, block.id)
+      assert fresh.text == nil, "a REFUSED write must not have applied its plain column either"
+      assert fresh.text_secure != nil
+
+      # At rest the row is STILL a vault token with no plaintext anywhere — the structural
+      # proof, not just a nil check (a helper could have re-written it with something else).
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [@secret_block])
+
+      # And it still resolves to the ORIGINAL secret on the tenant plane.
+      assert resolve_on_plane(fresh, DocBlock, :tenant, repo: @repo).text_secure == @secret_block
+    end
+
+    test "RED: even a bare `text_secure: nil` (no plain text at all) is refused",
+         %{scope: scope, block: block} do
+      row = reload_block(scope, block.id)
+
+      assert {:error, _} =
+               refused_changeset(fn ->
+                 row
+                 |> Ash.Changeset.for_update(:update, %{text_secure: nil}, scope: scope)
+                 |> Ash.update!()
+               end)
+
+      assert reload_block(scope, block.id).text_secure != nil
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [@secret_block])
+    end
+
+    test "RED: a vaulted block cannot gain a plaintext twin (`text` while the vault holds a value)",
+         %{scope: scope, block: block} do
+      row = reload_block(scope, block.id)
+
+      # Not a declassify (the vault survives) but the same class of mistake: unclassified content
+      # in the plain column that the read seam would never show.
+      assert {:error, _} =
+               refused_changeset(fn ->
+                 row
+                 |> Ash.Changeset.for_update(:update, %{text: "unclassified twin"}, scope: scope)
+                 |> Ash.update!()
+               end)
+
+      assert reload_block(scope, block.id).text == nil
+    end
+
+    test "RED (pure): a changeset with NO original data cannot clear the vault — unknown fails CLOSED" do
+      # An atomic upgrade carries `%OriginalDataNotAvailable{}` instead of the row, so the guard
+      # cannot SEE the stored value. "Cannot prove it is plain" must never mean "declassify".
+      base = Ash.Changeset.for_update(%DocBlock{id: Ash.UUID.generate()}, :update, %{text: "x"})
+
+      cs = %{
+        base
+        | data: %Ash.Changeset.OriginalDataNotAvailable{},
+          attributes: Map.put(base.attributes, :text_secure, nil)
+      }
+
+      refused = Samen.Scopes.Docs.BlockVault.change(cs, [], %{})
+
+      refute refused.valid?
+
+      assert Enum.any?(
+               refused.errors,
+               &match?(%Ash.Error.Changes.InvalidAttribute{field: :text_secure}, &1)
+             )
+    end
+
+    test "RED (defence in depth): a write that never loaded the classification cannot null the " <>
+           "vault — Ash drops the unattributable change and the row stays vaulted",
+         %{scope: scope, block: block} do
+      # A caller that read the row WITHOUT the sensitive column gets a record whose
+      # `text_secure` is `%Ash.NotLoaded{}`. Setting it to nil against that is not a change Ash
+      # will attribute to the row, so it is dropped — and the vault survives. This is the layer
+      # BELOW the guard; c10's guard handles the loaded case, and both must hold.
+      unloaded = DocBlock |> Ash.Query.filter(id == ^block.id) |> Ash.read_one!(scope: scope)
+      assert match?(%Ash.NotLoaded{}, unloaded.text_secure)
+
+      {:ok, _updated} =
+        unloaded
+        |> Ash.Changeset.for_update(:update, %{text_secure: nil}, scope: scope)
+        |> Ash.update()
+
+      fresh = reload_block(scope, block.id)
+      assert fresh.text_secure != nil
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [@secret_block])
+
+      # …and it still resolves to the secret: nothing was lost by the attempted clear.
+      assert resolve_on_plane(fresh, DocBlock, :tenant, repo: @repo).text_secure == @secret_block
+    end
+
+    test "CONTROL: writing `text_secure` again (the edit path) is ACCEPTED and stays vaulted",
+         %{scope: scope, block: block} do
+      row = reload_block(scope, block.id)
+
+      updated =
+        row
+        |> Ash.Changeset.for_update(
+          :update,
+          %{text_secure: @secret_block_v2, text: nil},
+          scope: scope
+        )
+        |> Ash.update!()
+
+      assert updated.text == nil
+      # The NEW value is what the vault holds — the guard does not merely allow the write, it
+      # lets the edit land: anti-tautology for both red paths above.
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [@secret_block_v2])
+
+      fresh = reload_block(scope, block.id)
+      assert resolve_on_plane(fresh, DocBlock, :tenant, repo: @repo).text_secure == @secret_block_v2
+    end
+
+    test "CONTROL: a PLAIN block's ordinary edit still works (the guard is not a blanket refusal)",
+         %{org: org, scope: scope} do
+      doc = new_doc(scope, org, %{title: "Plain page"})
+      plain = new_block(scope, org, doc, %{text: "hello"})
+
+      updated =
+        reload_block(scope, plain.id)
+        |> Ash.Changeset.for_update(
+          :update,
+          %{text: "hello again", text_secure: nil},
+          scope: scope
+        )
+        |> Ash.update!()
+
+      assert updated.text == "hello again"
+      fresh = reload_block(scope, plain.id)
+      assert fresh.text == "hello again"
+      assert fresh.text_secure == nil
+    end
+
+    test "CONTROL: a structural write (position) on a vaulted block is NOT touched by the guard",
+         %{scope: scope, block: block} do
+      # Read WITHOUT the vault column on purpose: the guard must not fish for data (or refuse)
+      # on a write that cannot declassify anything — ordering churn pays nothing.
+      unloaded = DocBlock |> Ash.Query.filter(id == ^block.id) |> Ash.read_one!(scope: scope)
+
+      moved =
+        unloaded
+        |> Ash.Changeset.for_update(:update, %{position: 4096, revision: 2}, scope: scope)
+        |> Ash.update!()
+
+      assert moved.position == 4096
+      assert reload_block(scope, block.id).text_secure != nil
+    end
+  end
+
+  # ── c11: the named door OUT of the vault — role-gated and audited ──────────
+
+  describe "c11 — declassify_text: the one sanctioned way out of the vault" do
+    setup %{org: org} do
+      member = scope_as(org, :member, @docs_member)
+      admin = scope_as(org, :admin, @docs_admin)
+      doc = new_doc(member, org, %{title: "Sensitive page"})
+      block = new_block(member, org, doc, %{text: nil, text_secure: @block_prose})
+      {:ok, doc: doc, block: block, member: member, admin: admin}
+    end
+
+    test "RED: a MEMBER is refused by policy — the row stays vaulted and NOTHING is audited",
+         %{block: block, member: member} do
+      row = reload_block(member, block.id)
+
+      # A member may edit this page (the broad `:update` policy allows it) — the refusal here
+      # is the DEDICATED admin gate on the named action, not a blanket "no writes".
+      assert {:error, %Ash.Error.Forbidden{}} =
+               row
+               |> Ash.Changeset.for_update(
+                 :declassify_text,
+                 %{reason: "member tries to leave the vault"},
+                 scope: member
+               )
+               |> Ash.update()
+
+      fresh = reload_block(member, block.id)
+      assert fresh.text == nil
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [@block_prose])
+
+      # Refused is not "failed after writing": no half-applied change, and no audit row that
+      # would describe a declassification which never happened.
+      assert aud_rows(block.id) == []
+    end
+
+    test "CONTROL: an ADMIN declassifies — the vault's own plaintext lands in `text`, the " <>
+           "column clears, and the write is AUDITED",
+         %{block: block, admin: admin} do
+      row = reload_block(admin, block.id)
+      before_revision = row.revision
+
+      updated =
+        row
+        |> Ash.Changeset.for_update(
+          :declassify_text,
+          %{reason: "over-classified at authoring"},
+          scope: admin
+        )
+        |> Ash.update!()
+
+      assert updated.text == @block_prose
+      assert updated.revision == before_revision + 1, "a declassify is a content write"
+
+      fresh = reload_block(admin, block.id)
+      assert fresh.text == @block_prose
+      assert fresh.text_secure == nil
+
+      # At rest: the plain column holds exactly the vaulted prose, the vault column is empty.
+      assert raw_block(block.id) == %{text: @block_prose, secure: nil}
+
+      # …and the governance decision is on the record: who, which block, which revision, why.
+      assert [%{event_type: "system", actor: @docs_admin, detail: detail}] = aud_rows(block.id)
+      assert detail =~ "docs.block.declassified"
+      assert detail =~ "field=text_secure"
+      assert detail =~ "revision=#{before_revision + 1}"
+      assert detail =~ "reason=over-classified at authoring"
+      refute detail =~ @block_prose, "the audit row must never carry the block's text"
+    end
+
+    test "RED: a BLANK reason is refused — the audit row must say WHY",
+         %{block: block, admin: admin} do
+      vaulted_at_rest = raw_block(block.id)
+
+      assert {:error, err} =
+               reload_block(admin, block.id)
+               |> Ash.Changeset.for_update(
+                 :declassify_text,
+                 %{reason: "   "},
+                 scope: admin
+               )
+               |> Ash.update()
+
+      assert inspect(err) =~ "no longer classified",
+             "the refusal must name the missing reason"
+      assert raw_block(block.id) == vaulted_at_rest, "a blank reason must not move the text"
+      assert aud_rows(block.id) == [], "and must not write a record that says nothing"
+    end
+
+    test "RED: a block that is NOT vaulted cannot be declassified (a no-op is not success)",
+         %{org: org, admin: admin} do
+      doc = new_doc(admin, org, %{title: "Plain page"})
+      plain = new_block(admin, org, doc, %{text: "already plain"})
+
+      assert {:error, err} =
+               reload_block(admin, plain.id)
+               |> Ash.Changeset.for_update(
+                 :declassify_text,
+                 %{reason: "nothing here"},
+                 scope: admin
+               )
+               |> Ash.update()
+
+      assert inspect(err) =~ "not vaulted"
+      assert raw_block(plain.id) == %{text: "already plain", secure: nil}
+      assert aud_rows(plain.id) == []
+    end
+
+    test "RED: a vaulted value that is ITSELF PII-shaped is refused — declassify cannot launder it",
+         %{org: org, admin: admin} do
+      doc = new_doc(admin, org, %{title: "PII page"})
+      block = new_block(admin, org, doc, %{text: nil, text_secure: @block_bare_email})
+
+      # The forced plaintext re-enters the ordinary tenant free-text chokepoint, so the very
+      # content most likely to be over-classified is also the content that must STAY vaulted.
+      assert {:error, err} =
+               reload_block(admin, block.id)
+               |> Ash.Changeset.for_update(
+                 :declassify_text,
+                 %{reason: "launder attempt"},
+                 scope: admin
+               )
+               |> Ash.update()
+
+      assert inspect(err) =~ "pii-shaped"
+
+      fresh = reload_block(admin, block.id)
+      assert fresh.text == nil
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [
+        @block_bare_email
+      ])
+      assert aud_rows(block.id) == []
+    end
+
+    test "RED: an operator-plane admin cannot declassify — classification is the tenant's call",
+         %{block: block, org: org} do
+      operator = %Samen.Scope{
+        actor: %{
+          id: @docs_admin,
+          org_id: org,
+          role: :admin,
+          kind: :operator,
+          plane: :operator
+        }
+      }
+
+      assert {:error, err} =
+               reload_block(operator, block.id)
+               |> Ash.Changeset.for_update(
+                 :declassify_text,
+                 %{reason: "operator cleanup"},
+                 scope: operator
+               )
+               |> Ash.update()
+
+      assert inspect(err) =~ "operator-plane"
+      Samen.RedPath.assert_vault_routed!(@repo, DocBlock, block.id, [:text_secure], [@block_prose])
+      assert aud_rows(block.id) == []
     end
   end
 end

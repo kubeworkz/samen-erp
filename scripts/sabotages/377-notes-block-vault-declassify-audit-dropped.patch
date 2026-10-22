@@ -1,0 +1,32 @@
+# SABOTAGE: WS-NOTES/ADR-053 §2 D5 — THE DECLASSIFICATION IS NO LONGER AUDITED
+# A declassify is the one write in the scope that REDUCES a classification, so it must leave a
+# row an auditor can find: who, which block, which revision, why. This patch makes the audit
+# writer answer `{:ok, :skipped}` without writing anything, so the block still leaves the vault
+# (text moved, `text_secure` cleared) but no `aud_event` row exists to say so.
+#
+# Aimed at the AUDIT writer only. The action's admin policy, the vault reveal and the model's
+# one-way door are untouched, so the member-refusal and laundering red paths stay green — the
+# failing assertion is the one that proves a successful declassification is recorded.
+# APP: samen_core
+# TEST_FILES: test/docs_scope_test.exs
+# MUST_FAIL: the vault's own plaintext lands in
+--- a/samen_core/lib/samen/scopes/docs/audit.ex
++++ b/samen_core/lib/samen/scopes/docs/audit.ex
+@@ -33,16 +33,5 @@
+   """
+   @spec text_declassified(module(), String.t(), map(), String.t() | nil, String.t()) ::
+           {:ok, term()} | {:error, term()}
+-  def text_declassified(repo, org_id, block, actor_id, reason) do
+-    Samen.AuditChain.Writer.write(repo, %{
+-      org_id: to_string(org_id),
+-      event_type: "system",
+-      subject_id: to_string(block.id),
+-      actor_id: actor_id,
+-      correlation_id: org_id,
+-      detail:
+-        "docs.block.declassified field=text_secure revision=#{block.revision} " <>
+-          "reason=#{reason}"
+-    })
+-  end
++  def text_declassified(_repo, _org_id, _block, _actor_id, _reason), do: {:ok, :skipped}
+ end

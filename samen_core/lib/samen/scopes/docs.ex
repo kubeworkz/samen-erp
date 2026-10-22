@@ -24,9 +24,11 @@ defmodule Samen.Scopes.Docs do
 
   `body` is plain, write-guarded by `Samen.Pii.FreeTextScan` (refuses a bare
   email/SSN/phone-shaped value). `secure_body` is the vaulted alternative for content the
-  caller has classified as carrying subject PII. `DocBlock` carries the SAME pair one
+  caller has classified as carrying subject PII.  `DocBlock` carries the SAME pair one
   level down (`text` / `text_secure`, `vault: :pii_block_text`), so a single sensitive
-  paragraph is a vaulted COLUMN rather than an unclassified element of a jsonb blob. See
+  paragraph is a vaulted COLUMN rather than an unclassified element of a jsonb blob. Leaving
+  that vault is the named `DocBlock.:declassify_text` action (admin-gated, reason-bearing,
+  audited; `Samen.Scopes.Docs.BlockDeclassify`) — never a side effect of an edit. See
   `Samen.Scopes.Docs.Blueprint` moduledoc for the full posture table.
 
   ## Object-ref attachment
