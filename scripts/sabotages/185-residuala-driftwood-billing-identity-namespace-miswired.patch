@@ -1,0 +1,34 @@
+# SABOTAGE: Residual A (Batch 7) — MIS-WIRE driftwood's tenant-plane `:identity_namespace` seam to
+# the Billing scope itself, which materializes no Membership, by rewriting
+# `identity_namespace: Driftwood.Operator` → `Driftwood.Billing` in `@current_org_labels`. The
+# tenant-plane Billing surface can then no longer resolve the caller's REAL per-org Membership role,
+# so the admin-gated checkout/portal writes fail CLOSED for EVERYONE — a broker ADMIN can no longer
+# subscribe/manage-payment — reintroducing the Batch-2 silent-breakage class on driftwood. The
+# `:identity_namespace` enumerating guard's driftwood real-router twin FLIPS: the enumerated billing
+# mount's label no longer MATERIALIZES identity, and a seeded ADMIN no longer resolves as a billing
+# admin. Non-vacuous — the MEMBER-is-not-admin control still passes. Reverts byte-exact.
+#
+# RE-ANCHORED (2026-10-23): this patch used to DELETE the label. Since 53eae0cc the framework's
+# `Samen.Web.Router.__assert_tenant_identity_seam__/4` refuses to COMPILE an armable tenant mount of
+# a guarded surface that names no `:identity_namespace`, so the deletion produced a compile error
+# ("suite failed but no test-failure headers found") instead of a named-test flip. The compile guard
+# asserts the label's PRESENCE; the enumerating guard below asserts its SUBSTANCE — that the named
+# namespace materializes `User`/`Membership`. Mis-wiring keeps the host compiling and refutes the
+# load-bearing half: the beacon still looks wired, and the role still collapses to `:member` for a
+# real admin.
+# APP: driftwood
+# TEST_FILES: test/billing_identity_namespace_test.exs
+# MUST_FAIL: the real router billing mount wires :identity_namespace to an identity-materializing namespace
+# MUST_FAIL: a seeded ADMIN resolves as a billing admin; a MEMBER does not
+diff --git a/driftwood/lib/driftwood_web/router.ex b/driftwood/lib/driftwood_web/router.ex
+--- a/driftwood/lib/driftwood_web/router.ex
++++ b/driftwood/lib/driftwood_web/router.ex
+@@ -78,7 +78,7 @@
+     # spine — the SAME namespace `samen_settings_routes` mounts). Billing lives in its own
+     # scope namespace (`Driftwood.Billing`), which materializes no Membership, so the
+     # admin-gated checkout/portal writes derive the acting role through this sibling seam.
+-    identity_namespace: Driftwood.Operator,
++    identity_namespace: Driftwood.Billing,
+     operator_workspace: "Driftwood Ops",
+     seed_command: "mix driftwood.seed",
+     # PP-10 (Batch 3 NAV-REACHABILITY): the freight "Operations" nav group (Dispatch board /

@@ -1,0 +1,32 @@
+# SABOTAGE: PP-5 (Batch 2 TENANT-ROLE) / the :identity_namespace enumerating guard — MIS-WIRE
+# pawchart's `@current_org_labels` `:identity_namespace` seam to the Billing scope itself, which
+# materializes no Membership. The tenant-plane Billing surface can then no longer resolve the
+# caller's REAL per-org Membership role (the `PawChart.Operator` spine is no longer named), so the
+# role-gated billing writes fail CLOSED for EVERYONE — a clinic ADMIN can no longer
+# subscribe/manage-payment — reintroducing the Batch-2 silent-breakage class. Both the enumerating
+# guard (the wired namespace no longer MATERIALIZES identity) and the admin positive control FLIP.
+#
+# RE-ANCHORED (2026-10-23): this patch used to DELETE the label. Since 53eae0cc the framework's
+# `Samen.Web.Router.__assert_tenant_identity_seam__/4` refuses to COMPILE an armable tenant mount of
+# a guarded surface that names no `:identity_namespace`, so the deletion produced a compile error
+# ("suite failed but no test-failure headers found") instead of a named-test flip. The compile guard
+# asserts the label's PRESENCE; the enumerating guard below asserts its SUBSTANCE — that the named
+# namespace materializes `User`/`Membership`. Mis-wiring keeps the host compiling and refutes the
+# load-bearing half: the beacon still looks wired, and the role still collapses to `:member` for a
+# real admin. Reverts byte-exact.
+# APP: pawchart
+# TEST_FILES: test/billing_role_gate_test.exs
+# MUST_FAIL: wires :identity_namespace to an identity-materializing namespace
+# MUST_FAIL: an ADMIN resolves the admin billing actor
+diff --git a/pawchart/lib/pawchart_web/router.ex b/pawchart/lib/pawchart_web/router.ex
+--- a/pawchart/lib/pawchart_web/router.ex
++++ b/pawchart/lib/pawchart_web/router.ex
+@@ -67,7 +67,7 @@
+     org_directory: {PawChart.Directory, :orgs, []},
+     authn: {:app_env, :pawchart, :auth_required?},
+     authorized_orgs: {PawChart.Auth, :authorized_org_ids, []},
+-    identity_namespace: PawChart.Operator,
++    identity_namespace: PawChart.Billing,
+     host_nav_extra: {PawChartWeb.ClinicLive, :clinic_nav_data, []},
+     operator_workspace: "PawChart Ops",
+     seed_command: "mix pawchart.seed",

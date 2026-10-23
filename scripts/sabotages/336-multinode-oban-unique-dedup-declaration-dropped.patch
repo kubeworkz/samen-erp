@@ -8,10 +8,10 @@
 # (same `"key"` args) any number of times, from EITHER node, collapses to ONE `oban_jobs` row, so
 # the side effect fires ONCE cluster-wide. Dropping the declaration does not change the crash story
 # or the fetch path — it silently turns "fan out this job from both nodes" into one execution PER
-# ENQUEUE (the proof fans it out 40× from A and 40× from B, i.e. 80 executions of one logical job).
-# That is the real regression shape this declaration exists to prevent, and it is a one-line
-# deletion: the kind of edit that looks tidy in review and doubles a customer's side effects in
-# production.
+# ENQUEUE (the two-node proof fans it out 40× from A and 40× from B, i.e. 80 executions of one
+# logical job). That is the real regression shape this declaration exists to prevent, and it is a
+# one-line deletion: the kind of edit that looks tidy in review and doubles a customer's side
+# effects in production.
 #
 # WHY THIS AND NOT THE "exactly-once: 120 distinct jobs" TEST. That test's guarantee is
 # `FOR UPDATE SKIP LOCKED` inside Oban's engine, coordinated by Postgres — no file in this
@@ -22,13 +22,23 @@
 # patch refutes the level a repository change can actually break, and says so rather than implying
 # the whole tier is now adversarially covered.
 #
-# WHAT THE NAMED TEST SHOWS. With the declaration gone, `exec_count("dedup-key") == 1` reads 80
-# (two nodes × 40 inserts). The assertion is the only thing that moves: the negative control
-# (`NoUniqueWorker`, no `unique`, same body) still fires many times and still asserts > 1, so the
-# failure is the exactly-once claim being false — not the harness failing to boot, not the peers
-# failing to produce, and not a setup error (a `setup_all` failure invalidates all three tests and
-# prints no `N) test …` header, which the harness already fails closed on with "no test-failure
-# headers found").
+# RE-ANCHORED (2026-10-23) — so the patch certifies on EVERY host. The anchor used to be the
+# two-node test alone (`test/multinode/oban_multinode_test.exs`, `ENV: SAMEN_MULTINODE=1`), whose
+# `setup_all` needs `epmd` and a working Erlang distribution. On a host where distribution cannot
+# start (`could not start distribution (is epmd up?)`) `setup_all` invalidates all three tests and
+# prints no `N) test …` header, so the replay failed closed with "no test-failure headers found" —
+# the sabotage was uncertifiable there through no fault of the declaration. The anchor is now the
+# epmd-FREE leg of the same guarantee, `test/oban_unique_insert_dedup_test.exs`: the identical
+# `Oban.insert/1` fan-out (40×, the same order as one node of the two-node proof) counted in
+# `oban_jobs` against the sandboxed test repo, with `NoUniqueWorker` as the in-run negative
+# control. `ENV:` is no longer needed (that file is not ExUnit-excluded). The cross-node leg is
+# unchanged and still runs wherever a distribution is available.
+#
+# WHAT THE NAMED TEST SHOWS. With the declaration gone, the single-node fan-out lands 40 `oban_jobs`
+# rows instead of 1, so `job_rows(UniqueWorker, key) == 1` reads 40. The assertion is the only thing
+# that moves: the negative control (`NoUniqueWorker`, no `unique`, same body) still lands one row
+# per enqueue and still asserts `== 40`, so the failure is the exactly-once claim being false — not
+# a harness boot failure, not a setup error, and not a tautology.
 #
 # NOT TOUCHED, deliberately: the negative control (`NoUniqueWorker`), the other two proof workers,
 # the `mn_exec` ledger and every detector that reads it, the proof's own enqueue seam
@@ -42,16 +52,9 @@
 # and the result reads exactly like the sibling workers' one-line form. No warning is introduced (the
 # `Oban.Job.states()` reference the option held leaves nothing unused behind), so nothing needs
 # confining for a `--warnings-as-errors` compile.
-#
-# `# ENV:` (added to the harness for exactly this class of patch): the L4 tier is ExUnit-EXCLUDED
-# unless `SAMEN_MULTINODE=1` (`samen_core/test/test_helper.exs`), so a replay that ran this file
-# without the flag would collect 0 tests, exit 0, and be reported as "suite PASSED under sabotage —
-# the guarantee did not flip (vacuous gate)". The header hands exactly that flag to this patch's
-# `mix test`, making the replay actually RUN the three named tests.
 # APP: samen_core
-# TEST_FILES: test/multinode/oban_multinode_test.exs
-# MUST_FAIL: uniqueness dedup: same unique job fanned out from both nodes fires ONCE
-# ENV: SAMEN_MULTINODE=1
+# TEST_FILES: test/oban_unique_insert_dedup_test.exs
+# MUST_FAIL: uniqueness dedup: the unique job fanned out 40x from ONE node lands ONE row
 --- a/samen_core/test/support/multinode/workers.ex
 +++ b/samen_core/test/support/multinode/workers.ex
 @@ -34,8 +34,7 @@ defmodule Samen.MultiNode.UniqueWorker do
