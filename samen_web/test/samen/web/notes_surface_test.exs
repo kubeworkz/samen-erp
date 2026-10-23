@@ -25,7 +25,7 @@ defmodule Samen.Web.NotesSurfaceTest do
   use Samen.WebTest.DataCase, async: false
 
   alias Samen.Web.{Mount, Notes.IndexLive, Notes.PageLive, Notes.Reads, Notes.Writes, Plane}
-  alias Samen.WebTest.Docs.Doc
+  alias Samen.WebTest.Docs.{Doc, DocBlock, DocLink}
 
   @secret "NOTES-SURFACE-PLAINTEXT-SENTINEL"
 
@@ -60,6 +60,48 @@ defmodule Samen.Web.NotesSurfaceTest do
   defp blocks(org_id, doc_id) do
     {:ok, page} = Reads.page(notes_mount(), scope_for(org_id), doc_id)
     page.blocks
+  end
+
+  # A socket loaded the way the route loads it, so a handler can be driven without a router.
+  defp index_socket(mount, org_id) do
+    %Phoenix.LiveView.Socket{}
+    |> Phoenix.Component.assign(:samen_mount, mount)
+    |> Phoenix.Component.assign(:samen_acting_as, false)
+    |> IndexLive.load(org_id, "")
+  end
+
+  # The editor's socket, loaded the way the route loads it (the copy/declassify tests' shape).
+  defp page_socket(mount, org_id, doc_id) do
+    %Phoenix.LiveView.Socket{}
+    |> Phoenix.Component.assign(:samen_mount, mount)
+    |> Phoenix.Component.assign(:samen_acting_as, false)
+    |> PageLive.load(org_id, doc_id)
+  end
+
+  # Render a socket's assigns the way `render_live/3` does — a handler's RESULT can then be
+  # asserted in the DOM instead of only in `assigns`.
+  defp html_of(socket), do: render_html(IndexLive, socket.assigns)
+
+  # The trash view: the `:archived` read, never a raw table query, so "recoverable" is asserted
+  # through the same seam a restore would use.
+  defp archived_ids(org_id) do
+    Doc
+    |> Ash.Query.for_read(:archived)
+    |> Ash.Query.ensure_selected([:id])
+    |> Ash.read!(scope: scope_for(org_id))
+    |> Enum.map(& &1.id)
+  end
+
+  defp links(org_id), do: Ash.read!(DocLink, scope: scope_for(org_id))
+
+  defp aud_event_types(subject_id) do
+    %{rows: rows} =
+      Samen.WebTest.Repo.query!(
+        "SELECT aud_event_type FROM aud_event WHERE aud_subject_id = $1",
+        [to_string(subject_id)]
+      )
+
+    Enum.map(rows, fn [type] -> type end)
   end
 
   # ── the index ──────────────────────────────────────────────────────────────
@@ -105,6 +147,252 @@ defmodule Samen.Web.NotesSurfaceTest do
       html = render_live(IndexLive, notes_mount(), [mine])
 
       refute html =~ "Foreign secret title"
+    end
+  end
+
+  # ── deleting a page ────────────────────────────────────────────────────────
+
+  describe "deleting a page" do
+    test "every row offers a delete control on the tenant plane; the operator plane is not offered one" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+
+      html = render_live(IndexLive, notes_mount(), [org_id])
+
+      assert html =~ "note-delete-#{doc.id}"
+      assert html =~ ~s(phx-value-id="#{doc.id}")
+
+      operator_html = render_live(IndexLive, notes_mount(Plane.operator("op-1", org_id)), [org_id])
+
+      refute operator_html =~ "note-delete-#{doc.id}",
+             "the operator plane must not be OFFERED a delete it cannot be given"
+
+      # Positive control: the plane hides the CONTROL, not the list.
+      assert operator_html =~ "/pages/#{doc.id}?org=#{org_id}"
+    end
+
+    test "the ✕ only asks — nothing is archived until the confirmation is clicked" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+
+      {:noreply, confirming} = IndexLive.handle_event("confirm_archive", %{"id" => doc.id}, index_socket(notes_mount(), org_id))
+
+      assert confirming.assigns.confirm == doc.id
+      assert archived_ids(org_id) == [], "asking must not delete anything"
+      assert {:ok, _page} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+
+      html = html_of(confirming)
+      assert html =~ "note-delete-confirm-#{doc.id}"
+      assert html =~ "Delete “Retire me”?"
+      assert html =~ "note-delete-yes-#{doc.id}"
+      assert html =~ "note-delete-cancel-#{doc.id}"
+
+      {:noreply, cancelled} = IndexLive.handle_event("cancel_archive", %{}, confirming)
+
+      assert cancelled.assigns.confirm == nil
+      assert archived_ids(org_id) == []
+      refute html_of(cancelled) =~ "note-delete-confirm-#{doc.id}"
+    end
+
+    test "confirming deletes the page: it leaves the tree and is RECOVERABLE, not shredded" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+
+      {:noreply, confirming} =
+        IndexLive.handle_event("confirm_archive", %{"id" => doc.id}, index_socket(notes_mount(), org_id))
+
+      {:noreply, after_delete} = IndexLive.handle_event("archive_page", %{"id" => doc.id}, confirming)
+
+      # Gone from every read the tree uses…
+      assert after_delete.assigns.pages == []
+      assert after_delete.assigns.confirm == nil
+      assert {:error, :not_found} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+      refute render_live(IndexLive, notes_mount(), [org_id]) =~ "Retire me"
+
+      # …and recoverable, not shredded: the row is in the trash view, with the audit line that
+      # records WHO deleted it. Sabotage 380 (the `:archive` action swapped for a hard
+      # `:destroy`) flips this, and nothing else in the suite pins it.
+      assert archived_ids(org_id) == [doc.id]
+      assert "record_archived" in aud_event_types(doc.id)
+    end
+
+    test "the EDITOR offers the same delete — tenant plane only, and it asks first" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+      _block = insert!(org_id, doc.id, %{type: :paragraph, text: "still here"})
+
+      html = render_live(PageLive, notes_mount(), [org_id, doc.id])
+      assert html =~ "note-delete-page"
+      refute html =~ "note-delete-page-confirm", "the confirm must not be open before it is asked"
+
+      operator_html = render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
+      refute operator_html =~ "note-delete-page", "the operator plane is not OFFERED the delete"
+      assert operator_html =~ "Retire me", "the page itself still renders on that plane"
+    end
+
+    test "the editor's delete asks first, then archives the page and leaves for the index" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+      socket = page_socket(notes_mount(), org_id, doc.id)
+
+      {:noreply, confirming} = PageLive.handle_event("confirm_delete", %{}, socket)
+
+      assert confirming.assigns.confirm_delete == true
+      assert archived_ids(org_id) == [], "asking must not delete anything"
+
+      confirm_html = render_html(PageLive, confirming.assigns)
+      assert confirm_html =~ "note-delete-page-confirm"
+      assert confirm_html =~ "Delete “Retire me”?"
+
+      {:noreply, cancelled} = PageLive.handle_event("cancel_delete", %{}, confirming)
+
+      assert cancelled.assigns.confirm_delete == false
+      assert archived_ids(org_id) == []
+      refute render_html(PageLive, cancelled.assigns) =~ "note-delete-page-confirm"
+
+      {:noreply, reconfirm} = PageLive.handle_event("confirm_delete", %{}, cancelled)
+      {:noreply, leaving} = PageLive.handle_event("delete_page", %{}, reconfirm)
+
+      # The editor leaves for the index it can no longer be reached from…
+      assert {:live, :redirect, opts} = leaving.redirected
+
+      assert opts[:to] == "/pages?org=#{org_id}&deleted=#{doc.id}",
+             "the index must be handed the page that was just deleted, so it can offer the undo"
+
+      # …the write is the SAME soft delete the index row performs…
+      assert archived_ids(org_id) == [doc.id]
+      assert {:error, :not_found} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+
+      # …and a second attempt (another tab, a stale socket) SAYS so instead of claiming a delete.
+      {:noreply, stale} = PageLive.handle_event("delete_page", %{}, reconfirm)
+      assert stale.assigns.error =~ "already gone"
+      assert archived_ids(org_id) == [doc.id]
+    end
+
+    test "the delete offers an UNDO, and the undo puts the page back with its content" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+      _block = insert!(org_id, doc.id, %{type: :paragraph, text: "Undo keeps my content"})
+
+      {:noreply, confirming} =
+        IndexLive.handle_event("confirm_archive", %{"id" => doc.id}, index_socket(notes_mount(), org_id))
+
+      {:noreply, after_delete} = IndexLive.handle_event("archive_page", %{"id" => doc.id}, confirming)
+
+      assert after_delete.assigns.deleted == doc.id
+
+      notice = html_of(after_delete)
+      assert notice =~ "notes-deleted-notice"
+      assert notice =~ "Page deleted."
+      assert notice =~ "notes-undo-delete"
+
+      {:noreply, undone} = IndexLive.handle_event("undo_delete", %{}, after_delete)
+
+      # The row is back, the notice is gone, and the write was the model's `:restore` — which is
+      # what makes the page (and its blocks) return intact instead of as an empty shell.
+      assert undone.assigns.deleted == nil
+      assert Enum.any?(undone.assigns.pages, &(&1.id == doc.id))
+      assert archived_ids(org_id) == []
+      assert {:ok, page} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+      assert Enum.any?(page.blocks, &(&1.text == "Undo keeps my content"))
+      assert "record_restored" in aud_event_types(doc.id)
+      refute html_of(undone) =~ "notes-deleted-notice"
+
+      # The URL loses the `?deleted=` carrier, so a reload cannot re-offer an undo that no longer
+      # applies.
+      assert {:live, :patch, opts} = undone.redirected
+      assert opts[:to] == "/pages?org=#{org_id}"
+    end
+
+    test "the editor's ?deleted carrier gives the index the same undo" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Retire me"})
+      {:ok, _deleted} = Writes.archive_page(notes_mount(), scope_for(org_id), doc.id)
+
+      uri = "/pages?org=#{org_id}&deleted=#{doc.id}"
+
+      {:noreply, landing} =
+        IndexLive.handle_params(%{"org" => org_id, "deleted" => doc.id}, uri, index_socket(notes_mount(), org_id))
+
+      assert landing.assigns.deleted == doc.id
+      assert html_of(landing) =~ "notes-deleted-notice"
+
+      {:noreply, undone} = IndexLive.handle_event("undo_delete", %{}, landing)
+      assert {:ok, _page} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+      assert archived_ids(org_id) == []
+      assert undone.assigns.deleted == nil
+    end
+
+    test "an undo is idempotent at the seam: a second restore writes no second audit row" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id)
+      {:ok, _deleted} = Writes.archive_page(notes_mount(), scope_for(org_id), doc.id)
+
+      assert {:ok, _restored} = Writes.restore_page(notes_mount(), scope_for(org_id), doc.id)
+      assert {:ok, _already_live} = Writes.restore_page(notes_mount(), scope_for(org_id), doc.id)
+
+      assert Enum.count(aud_event_types(doc.id), &(&1 == "record_restored")) == 1
+      assert {:ok, _page} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+    end
+
+    test "another org's page cannot be deleted — and the refusal names nothing" do
+      mine = Ash.UUID.generate()
+      theirs = Ash.UUID.generate()
+      foreign = seed_doc!(theirs, %{title: "Foreign secret title"})
+
+      assert {:error, :not_found} = Writes.archive_page(notes_mount(), scope_for(mine), foreign.id)
+
+      # Nothing moved, and the page is still readable in its own org.
+      assert archived_ids(theirs) == []
+      assert {:ok, _page} = Reads.page(notes_mount(), scope_for(theirs), foreign.id)
+
+      # Positive control: the SAME call in the page's own org deletes it, so the refusal above is
+      # the org scope and not a broken path.
+      assert {:ok, _deleted} = Writes.archive_page(notes_mount(), scope_for(theirs), foreign.id)
+      assert archived_ids(theirs) == [foreign.id]
+    end
+
+    test "deleting is a MEMBER write — a viewer is refused and the page survives" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id)
+
+      viewer = %Samen.Scope{
+        actor: %{id: "user:viewer", org_id: org_id, role: :viewer, kind: :tenant, plane: :tenant}
+      }
+
+      assert {:error, _refused} = Writes.archive_page(notes_mount(), viewer, doc.id)
+      assert archived_ids(org_id) == []
+      assert {:ok, _page} = Reads.page(notes_mount(), scope_for(org_id), doc.id)
+
+      # Positive control — same page, same path, a member scope.
+      assert {:ok, _deleted} = Writes.archive_page(notes_mount(), scope_for(org_id), doc.id)
+    end
+
+    test "deleting a page destroys BOTH directions of its link graph, and leaves its blocks live" do
+      org_id = Ash.UUID.generate()
+      target = seed_doc!(org_id, %{title: "Target page"})
+      source = seed_doc!(org_id, %{title: "Source page"})
+
+      # Source → target (this page links here) …
+      _ = insert!(org_id, source.id, %{type: :paragraph, text: "see [[Target page]]"})
+      # … and target → source (the deleted page links out).
+      _ = insert!(org_id, target.id, %{type: :paragraph, text: "back to [[Source page]]"})
+
+      assert length(links(org_id)) == 2, "both edges must exist before the delete"
+
+      assert {:ok, _deleted} = Writes.archive_page(notes_mount(), scope_for(org_id), target.id)
+
+      # No edge survives in either direction: nothing points AT the page the tree no longer has.
+      assert links(org_id) == []
+
+      # The blocks are NOT archived with the page (ADR-053 §3.1) — they stay rows, unreachable
+      # because every surface joins through an archive-filtered PAGE read…
+      assert {:error, :not_found} = Reads.page(notes_mount(), scope_for(org_id), target.id)
+      assert Enum.any?(Ash.read!(DocBlock, scope: scope_for(org_id)), &(&1.doc_id == target.id))
+
+      # …while the page that linked here keeps its own content untouched.
+      assert {:ok, source_page} = Reads.page(notes_mount(), scope_for(org_id), source.id)
+      assert Enum.any?(source_page.blocks, &(&1.text == "see [[Target page]]"))
     end
   end
 

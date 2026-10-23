@@ -52,6 +52,64 @@ defmodule Samen.Web.TenantRole do
   alias Samen.Web.{CurrentOrg, Mount}
 
   @doc """
+  The tenant-plane write scope that NAMES THE ACTOR — `Mount.scope/2`'s authority, with the
+  actor's `:id` replaced by the authenticated principal's `Identity.User` id when the host can
+  resolve one (`principal_actor_id/2`), and unchanged otherwise.
+
+  ## Why a write scope needs an identity, not just a role
+
+  `Mount.scope/2` fabricates a per-org pseudo-principal (`id: "broker:<org_id>"`, `role: :member`)
+  so a surface can read the org's own data on the tenant plane. That is the right shape for
+  AUTHORITY and the wrong shape for ATTRIBUTION: every governance audit row written through it
+  says the workspace deleted the record, so "who removed this page?" — the question the audit
+  trail exists to answer — comes back with nobody's name in it.
+
+  This helper is the attribution half and ONLY the attribution half. It preserves `plane`, `kind`
+  and `role` exactly (`Mount.scope/2`'s), so masking (`Samen.Api.PiiResolution` reads `plane`) and
+  RBAC (`RoleAtLeast`) behave byte-identically; it changes one value, the actor's id, and only
+  when `resolve_actor/3` finds a real `Identity.User` for the stashed principal.
+
+  ## The three postures
+
+    1. **OPERATOR plane** — `Mount.scope/2` VERBATIM. A tenant record must not be attributed to an
+       operator's user row (and the operator's own audit identity belongs to the operator plane).
+    2. **ARMED/DISARMED tenant plane WITH a resolvable principal** — the real `Identity.User` id, so
+       `Samen.Archival.Audit` writes a person into `aud_actor_id` and a surface can read them back.
+    3. **No identity spine / no principal / no membership (the ADR-031 dev posture, or a module
+       mount with no `:identity_namespace` seam)** — `Mount.scope/2` VERBATIM. The trail keeps the
+       workspace pseudo-principal: an honest "the workspace did this", never a fabricated name.
+  """
+  @spec identity_scope(Mount.t(), String.t() | nil) :: Samen.Scope.t()
+  def identity_scope(%Mount{plane: %{kind: :operator}} = mount, org_id), do: Mount.scope(mount, org_id)
+
+  def identity_scope(%Mount{} = mount, org_id) do
+    %Samen.Scope{actor: actor} = Mount.scope(mount, org_id)
+
+    case principal_actor_id(mount, org_id) do
+      nil -> %Samen.Scope{actor: actor}
+      user_id -> %Samen.Scope{actor: Map.put(actor, :id, user_id)}
+    end
+  end
+
+  @doc """
+  The authenticated principal's `Identity.User` id in `org_id`, or `nil` when the host cannot
+  resolve one (no stashed principal, no reachable Identity spine, no membership row).
+
+  This is the identity behind `identity_scope/2`, exposed so a surface can answer "was this ME?"
+  about an audit row WITHOUT ever showing an opaque id: `nil` here means "we do not know who you
+  are", which must never be compared against a recorded actor and read as a match.
+  """
+  @spec principal_actor_id(Mount.t(), String.t() | nil) :: String.t() | nil
+  def principal_actor_id(%Mount{} = mount, org_id) do
+    case CurrentOrg.resolve_actor(mount, stashed_principal(mount), org_id) do
+      %{id: user_id} when is_binary(user_id) -> user_id
+      _ -> nil
+    end
+  end
+
+  def principal_actor_id(_mount, _org_id), do: nil
+
+  @doc """
   The tenant-plane ADMIN write scope for `org_id` (the `write_scope/2` replacement). PRESERVES
   every plane marker (`plane`, `kind`, `impersonation`) from `Mount.scope/2` — the elevation
   raises RBAC rank only, never the masking plane, so `Samen.Pii.WriteGuard` still refuses a

@@ -60,6 +60,19 @@ defmodule Samen.Web.Notes.PageLive do
 
   ## Copy (R6's clipboard half)
 
+  ## Deleting the page
+
+  "Delete page" in the editor's action row is the SAME write the Pages index's row ✕ performs —
+  `Samen.Web.Notes.Writes.archive_page/3`, a SOFT delete — and it asks the same one question first,
+  with the confirm state on the socket rather than in the DOM. It is offered on the tenant plane
+  only (`editable?/2`, this page's own posture for every write control); the model is what refuses.
+  On success the editor leaves for the index, carrying `?deleted=<id>` so the page that was just
+  removed is offered an UNDO there (`Notes.Live.deleted_href/3`) — the delete stays one click from
+  being reversed. An id-only structure broadcast tells anyone else viewing this page that it is
+  gone.
+
+  ## Copy (R6's clipboard half)
+
   "Copy page" is the third export ADR-053 §5 D5 names, and the shortest path out of the app: the
   server renders `Samen.Web.Notes.Export.copy_text/3` (the same `Reads` seam, so the same plane
   decision) and PUSHES it to the requesting socket, where the `CopyText` hook hands it to
@@ -71,8 +84,16 @@ defmodule Samen.Web.Notes.PageLive do
   use Samen.Web.Tenant.Live
 
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
+
   import Samen.Web.Notes.Live,
-    only: [assign_mount: 2, export_href: 4, notes_sidebar: 1, page_href: 3, writable?: 1]
+    only: [
+      assign_mount: 2,
+      deleted_href: 3,
+      export_href: 4,
+      notes_sidebar: 1,
+      page_href: 3,
+      writable?: 1
+    ]
 
   alias Samen.Web.{Crumbs, CurrentOrg, Mount, TenantRole}
   alias Samen.Web.Notes.{Export, PubSub, Reads, Writes}
@@ -101,6 +122,7 @@ defmodule Samen.Web.Notes.PageLive do
        declassify_allowed?: false,
        focus_request: nil,
        copy_state: nil,
+       confirm_delete: false,
        backlinks: [],
        unresolved: []
      )}
@@ -120,7 +142,8 @@ defmodule Samen.Web.Notes.PageLive do
        error: nil,
        declassify_for: nil,
        focus_request: nil,
-       copy_state: nil
+       copy_state: nil,
+       confirm_delete: false
      )
      |> subscribe(doc_id)
      |> load(org_id, doc_id)}
@@ -187,9 +210,14 @@ defmodule Samen.Web.Notes.PageLive do
            |> publish_block(block)
            |> reload(conflict: nil, error: nil)}
 
-        {:error, :stale} -> {:noreply, assign(socket, conflict: id, error: nil)}
-        {:error, :masked} -> {:noreply, assign(socket, error: masked_message())}
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, :stale} ->
+          {:noreply, assign(socket, conflict: id, error: nil)}
+
+        {:error, :masked} ->
+          {:noreply, assign(socket, error: masked_message())}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -212,8 +240,11 @@ defmodule Samen.Web.Notes.PageLive do
         {:ok, _other} ->
           {:noreply, socket |> reload(error: nil) |> publish_structure()}
 
-        {:error, :stale} -> {:noreply, assign(socket, conflict: id)}
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, :stale} ->
+          {:noreply, assign(socket, conflict: id)}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -233,9 +264,14 @@ defmodule Samen.Web.Notes.PageLive do
         {:ok, _noop} ->
           {:noreply, socket}
 
-        {:error, :stale} -> {:noreply, assign(socket, conflict: id)}
-        {:error, :masked} -> {:noreply, assign(socket, error: masked_message())}
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, :stale} ->
+          {:noreply, assign(socket, conflict: id)}
+
+        {:error, :masked} ->
+          {:noreply, assign(socket, error: masked_message())}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -245,7 +281,8 @@ defmodule Samen.Web.Notes.PageLive do
 
     with_scope(socket, fn mount, scope ->
       case Writes.indent(mount, scope, id, direction) do
-        {:ok, :noop} -> {:noreply, socket}
+        {:ok, :noop} ->
+          {:noreply, socket}
 
         {:ok, block} ->
           {:noreply,
@@ -256,8 +293,11 @@ defmodule Samen.Web.Notes.PageLive do
 
         # A non-list block: the hook only reports indent for list types, so this is the server
         # refusing to widen what the client may ask for. Not a user-facing error.
-        {:error, :not_indentable} -> {:noreply, socket}
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, :not_indentable} ->
+          {:noreply, socket}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -267,7 +307,8 @@ defmodule Samen.Web.Notes.PageLive do
 
     with_scope(socket, fn mount, scope ->
       case Writes.move(mount, scope, id, direction) do
-        {:ok, :noop} -> {:noreply, socket}
+        {:ok, :noop} ->
+          {:noreply, socket}
 
         {:ok, block} ->
           {:noreply,
@@ -276,7 +317,8 @@ defmodule Samen.Web.Notes.PageLive do
            |> reload(error: nil)
            |> publish_structure()}
 
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -291,9 +333,14 @@ defmodule Samen.Web.Notes.PageLive do
            |> reload(error: nil)
            |> publish_structure()}
 
-        {:error, :not_checkable} -> {:noreply, socket}
-        {:error, :stale} -> {:noreply, assign(socket, conflict: id)}
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, :not_checkable} ->
+          {:noreply, socket}
+
+        {:error, :stale} ->
+          {:noreply, assign(socket, conflict: id)}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -304,7 +351,8 @@ defmodule Samen.Web.Notes.PageLive do
         {:ok, _block} ->
           {:noreply, socket |> reload(error: nil) |> publish_structure()}
 
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -335,7 +383,8 @@ defmodule Samen.Web.Notes.PageLive do
 
           {:noreply, focus(socket, block.id)}
 
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason), palette_for: nil)}
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason), palette_for: nil)}
       end
     end)
   end
@@ -384,9 +433,14 @@ defmodule Samen.Web.Notes.PageLive do
            |> publish_block(block)
            |> reload(error: nil)}
 
-        {:error, :forbidden} -> {:noreply, assign(socket, error: declassify_forbidden_message())}
-        {:error, :no_reason} -> {:noreply, assign(socket, error: declassify_reason_message())}
-        {:error, reason} -> {:noreply, assign(socket, error: write_error(reason))}
+        {:error, :forbidden} ->
+          {:noreply, assign(socket, error: declassify_forbidden_message())}
+
+        {:error, :no_reason} ->
+          {:noreply, assign(socket, error: declassify_reason_message())}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: write_error(reason))}
       end
     end)
   end
@@ -432,7 +486,8 @@ defmodule Samen.Web.Notes.PageLive do
            |> assign(copy_state: nil)
            |> push_event("copy_text", %{text: text})}
 
-        {:error, _reason} -> {:noreply, assign(socket, copy_state: :unavailable)}
+        {:error, _reason} ->
+          {:noreply, assign(socket, copy_state: :unavailable)}
       end
     end)
   end
@@ -441,6 +496,54 @@ defmodule Samen.Web.Notes.PageLive do
   # its own: with no JS, no permission or no `navigator.clipboard` there is no ack, and the row
   # stays quiet rather than lying (the fail-honest posture, applied to an affordance).
   def handle_event("copied", _params, socket), do: {:noreply, assign(socket, copy_state: :copied)}
+
+  # ── deleting the page (the index row's ✕, from the editor) ────────────────
+
+  # Two-step, server-side, exactly like the index: the button only NAMES the page it would remove,
+  # so the confirmation works with no JavaScript and a mis-click removes nothing.
+  def handle_event("confirm_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: true, error: nil)}
+  end
+
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: false)}
+  end
+
+  def handle_event("delete_page", _params, socket) do
+    with_identity_scope(socket, fn mount, scope ->
+      case Writes.archive_page(mount, scope, socket.assigns.doc_id) do
+        {:ok, doc} ->
+          # Anyone else viewing this page learns it is gone the way every structural change
+          # travels: an id-only envelope their own read answers with `:not_found`.
+          PubSub.broadcast_page_structure_changed(
+            mount,
+            to_string(doc.id),
+            doc.id,
+            Map.get(doc, :revision)
+          )
+
+          # Leave for the index WITH the undo carrier: the page the user just removed is the one
+          # the notice offers back, and nothing about that needs a second state store.
+          {:noreply,
+           push_navigate(
+             socket,
+             to: deleted_href(mount, socket.assigns.org_id, doc.id)
+           )}
+
+        {:error, :not_found} ->
+          # Already gone (another tab, or an operator): say so rather than claim a delete that
+          # did not happen here.
+          {:noreply,
+           assign(socket,
+             confirm_delete: false,
+             error: "This page is already gone — it was deleted or archived elsewhere."
+           )}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, confirm_delete: false, error: write_error(reason))}
+      end
+    end)
+  end
 
   def handle_event("copy_unavailable", _params, socket),
     do: {:noreply, assign(socket, copy_state: :unavailable)}
@@ -712,8 +815,7 @@ defmodule Samen.Web.Notes.PageLive do
 
               <span :if={@copy_state == :copied} id="note-copy-status" class="note-copy-status">
                 Copied
-              </span>
-              <span
+              </span>              <span
                 :if={@copy_state == :unavailable}
                 id="note-copy-status"
                 class="note-copy-status"
@@ -721,6 +823,47 @@ defmodule Samen.Web.Notes.PageLive do
               >
                 Copy is unavailable in this browser — use Download Markdown.
               </span>
+
+              <%!-- The editor's page delete: the SAME seam (and the same one-question confirm) as
+                   the Pages index row's ✕. Tenant-plane posture only; the model's `OrgScope` +
+                   `RoleAtLeast :member` decide, and the write is a SOFT delete. --%>
+              <%= if editable?(@samen_mount, @org_id) do %>
+                <%= if @confirm_delete do %>
+                  <div
+                    id="note-delete-page-confirm"
+                    class="note-confirm"
+                    role="group"
+                    aria-label="Delete page"
+                  >
+                    <span class="note-confirm-question">Delete “{page_title(@page)}”?</span>
+                    <%!-- The delete takes the subtree too (`CascadeArchive`), and this editor does
+                         not load a child count, so the copy states the RULE rather than a number
+                         it does not have. --%>
+                    <span class="note-confirm-detail">Its subpages are deleted with it.</span>
+                    <button
+                      type="button"
+                      id="note-delete-page-yes"
+                      class="note-confirm-yes"
+                      phx-click="delete_page"
+                    >Delete page</button>
+                    <button
+                      type="button"
+                      id="note-delete-page-cancel"
+                      class="note-control"
+                      phx-click="cancel_delete"
+                      aria-label="Keep the page"
+                    >Cancel</button>
+                  </div>
+                <% else %>
+                  <button
+                    type="button"
+                    id="note-delete-page"
+                    class="btn"
+                    phx-click="confirm_delete"
+                    aria-label={"Delete " <> page_title(@page)}
+                  >✕ Delete page</button>
+                <% end %>
+              <% end %>
             </div>
           </div>
       <% end %>
@@ -732,12 +875,25 @@ defmodule Samen.Web.Notes.PageLive do
 
   # Every mutating handler runs through here: no org ⇒ no scope ⇒ no write, and the page answers
   # exactly as it does on a read (nothing happened, nothing is claimed).
+  #
   defp with_scope(%{assigns: %{samen_mount: %Mount{} = mount, org_id: org_id}}, fun)
        when is_binary(org_id) do
     fun.(mount, Mount.scope(mount, org_id))
   end
 
   defp with_scope(socket, _fun), do: {:noreply, socket}
+
+  # The DELETE (and only the delete) runs on `TenantRole.identity_scope/2` — `Mount.scope/2`'s
+  # authority with the acting principal's id when the host can resolve one. Its governance row is
+  # the one the Trash view reads back as "who deleted this page", so it is the one write that must
+  # name a person; the block writes above keep the plain scope (attribution is not what they are
+  # for, and they run on every keystroke).
+  defp with_identity_scope(%{assigns: %{samen_mount: %Mount{} = mount, org_id: org_id}}, fun)
+       when is_binary(org_id) do
+    fun.(mount, TenantRole.identity_scope(mount, org_id))
+  end
+
+  defp with_identity_scope(socket, _fun), do: {:noreply, socket}
 
   # Reload the CURRENT document, preserving the navigation assigns; callers pass the transient
   # assigns this write settled (a cleared conflict, a fresh error).
@@ -782,7 +938,13 @@ defmodule Samen.Web.Notes.PageLive do
   end
 
   defp replace_block(%{blocks: blocks} = page, block) do
-    %{page | blocks: Enum.map(blocks, fn existing -> if existing.id == block.id, do: block, else: existing end)}
+    %{
+      page
+      | blocks:
+          Enum.map(blocks, fn existing ->
+            if existing.id == block.id, do: block, else: existing
+          end)
+    }
   end
 
   defp editing?(socket, block_id) do
@@ -900,6 +1062,7 @@ defmodule Samen.Web.Notes.PageLive do
     |> assign_new(:backlinks, fn -> [] end)
     |> assign_new(:unresolved, fn -> [] end)
     |> assign_new(:copy_state, fn -> nil end)
+    |> assign_new(:confirm_delete, fn -> false end)
   end
 
   defp no_org?(socket), do: CurrentOrg.no_org?(socket.assigns[:samen_mount], nil)

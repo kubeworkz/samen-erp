@@ -1,0 +1,28 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.13 — THE PURGE DESTROYS A PAGE NOBODY DELETED
+# A purge may only end pages that have already been deleted, and the subtree walk can reach a LIVE
+# one (a page created under an already-trashed parent, or a row from before the cascade shipped).
+# The seam refuses the whole purge in that case. This patch makes the refusal a no-op, so the walk
+# carries on and the terminal delete takes a page whose owner never deleted it — no trash stop, no
+# `record_archived` before the `record_purged`, unrecoverable.
+#
+# Silent in every ordinary case (the cascade keeps trashed subtrees archived), which is exactly why
+# the live-descendant red path exists: it is the only state that tells the refusal apart from a
+# purge that assumed its input.
+#
+# Aimed at the REFUSAL only. The subtree walk, the block cascade, the policy and the audit are
+# untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_tree_cascade_test.exs
+# MUST_FAIL: a purge refuses rather than destroy a LIVE subpage
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -832,7 +832,7 @@
+   # so nothing sanctioned a hard delete of it. The trash shows the page and the user deletes the
+   # live child first (which lands it in the trash, where emptying can reach it).
+   defp refuse_live_descendants([]), do: :ok
+-  defp refuse_live_descendants(_live), do: {:error, :live_descendants}
++  defp refuse_live_descendants(_live), do: :ok
+ 
+   defp purge_each(mount, scope, docs) do
+     Enum.reduce_while(docs, {:ok, []}, fn doc, {:ok, acc} ->

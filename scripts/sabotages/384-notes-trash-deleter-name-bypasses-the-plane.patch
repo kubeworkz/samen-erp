@@ -1,0 +1,31 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.10 — THE DELETER'S NAME IS RESOLVED OUTSIDE THE PLANE GATE
+# `Reads.trash/2` resolves the deleter's `Identity.User.full_name` on the ACTING plane, so a tenant
+# reads its own member's name clear while an operator without a reveal grant gets a `%Samen.Masked{}`
+# (`••••`). This patch resolves that read on a FORCED tenant actor instead — the shape of the classic
+# "it renders on the tenant plane, so just decrypt it" fix, which is exactly the leak: name
+# resolution is not a rendering detail, it is a PII plane decision.
+#
+# The defect is silent on the tenant plane (still clear, still correct) and silent in every
+# non-masking assertion: the row still lists, still restores, still says who. Only the operator-plane
+# red path distinguishes a masked name from a leaked one — which is what the failing assertion reads.
+#
+# Aimed at the RESOLVER'S PLANE only. The org filter on the identity read, the audit read, the label
+# fallbacks and the row projection are all untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: the operator plane without a grant renders
+--- a/samen_web/lib/samen/web/notes/reads.ex
++++ b/samen_web/lib/samen/web/notes/reads.ex
+@@ -267,7 +267,11 @@
+         |> Ash.read!(authorize?: false)
+ 
+       users
+-      |> resolve(mount, scope, user_resource)
++      |> resolve(
++        mount,
++        %Samen.Scope{actor: Map.put(actor_of(scope), :plane, :tenant)},
++        user_resource
++      )
+       |> Enum.reduce(%{}, fn user, acc ->
+         case display_name(user) do
+           nil -> acc

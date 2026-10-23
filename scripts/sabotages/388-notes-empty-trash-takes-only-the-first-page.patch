@@ -1,0 +1,26 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.12 — THE BULK EMPTY EMPTIES ONE PAGE AND REPORTS SUCCESS
+# "Empty the trash" is the same governed write applied to EVERY page the trash holds, inside one
+# transaction. This patch keeps only the first row it found (`Enum.take(1)`) — the shape of a
+# "the loop is slow, just take one" change — so the button reports "1 page deleted permanently"
+# while the rest of the trash is still there, and nothing in the audit trail says a page the user
+# asked to destroy was kept.
+#
+# Silent everywhere else: the per-page guard, the cascade, the audit and the transaction are
+# untouched; the survivor set is simply never read. Only the "every trashed page" assertion
+# distinguishes an empty from a one-page delete.
+#
+# Aimed at the SET the bulk write acts on. The single-page purge is untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: an admin empties EVERY trashed page in one write
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -793,6 +793,7 @@
+         # pass from asking for a page the first one destroyed (which would be `:not_found` and would
+         # roll the whole empty back for no reason).
+         docs
++        |> Enum.take(1)
+         |> Enum.reduce_while({:ok, [], MapSet.new()}, fn doc, {:ok, acc, done} ->
+           if MapSet.member?(done, doc.id) do
+             {:cont, {:ok, acc, done}}

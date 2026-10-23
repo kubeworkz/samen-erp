@@ -1,0 +1,28 @@
+# SABOTAGE: WS-NOTES/ADR-040 §5.9 — DELETING A PAGE SHREDS IT INSTEAD OF ARCHIVING IT
+# `Writes.archive_page/3` is the page-delete seam the Pages index drives. It soft-destroys the
+# `Doc` through the `:archive` action — the substrate's archivable path, which stamps `archived_at`
+# and writes the `record_archived` governance audit row. This patch swaps that action for the plain
+# `:destroy`, so "delete" becomes a HARD delete: the row (and the audit line that names who removed
+# it) is gone, the page is not in the `:archived` read, and no restore can ever bring it back.
+#
+# The defect is silent: the surface reports success, the row leaves the tree exactly as a delete
+# should, and every other page-level test stays green. Only the recoverability half — the trash
+# read plus the audit line — distinguishes "archived" from "shredded", which is what the failing
+# assertion reads.
+#
+# Aimed at the ACTION only. `OrgScope`, `RoleAtLeast :member`, the link-graph teardown, the
+# transaction and the surface's two-step confirm are all untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_surface_test.exs
+# MUST_FAIL: is RECOVERABLE, not shredded
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -551,7 +551,7 @@
+            {:ok, _links} <- destroy_page_links(mount, scope, doc_id),
+            {:ok, archived} <-
+              doc
+-             |> Ash.Changeset.for_destroy(:archive, %{}, scope: scope)
++             |> Ash.Changeset.for_destroy(:destroy, %{}, scope: scope)
+              |> destroy() do
+         {:ok, archived}
+       end

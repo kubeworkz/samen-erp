@@ -92,6 +92,24 @@ defmodule Samenerp.NotesSurfaceMountTest do
            "the \\\"New page\\\" form is missing (the index cannot create a page)"
   end
 
+  # The literal segment vs the param: the trash is a SIBLING route declared before `/pages/:id`, and
+  # only a real request through the router proves Phoenix matches it that way — a route table read
+  # in order would pass even if the mount emitted them the other way round.
+  test "GET /pages/trash reaches the TRASH, not the editor with id=trash" do
+    org = create_org!("Notes Trash QA")
+
+    html = get_page!("/pages/trash?org=#{org.id}")
+
+    assert html =~ ~s(id="notes-trash"),
+           "the literal /pages/trash route did not win over /pages/:id"
+
+    assert html =~ "The trash is empty.",
+           "the trash rendered without its own empty state"
+
+    refute html =~ "Page not found",
+           "the editor answered with id=\"trash\" — the route order sent the URL to the wrong page"
+  end
+
   test "GET /pages/:id renders the block editor with the page's blocks" do
     org = create_org!("Notes Editor QA")
     page = create_page!(org, "Release checklist")

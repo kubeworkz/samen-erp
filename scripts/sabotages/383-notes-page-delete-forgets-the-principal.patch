@@ -1,0 +1,27 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.9 — THE PAGE DELETE IS ATTRIBUTED TO THE WORKSPACE AGAIN
+# `TenantRole.identity_scope/2` is `Mount.scope/2`'s AUTHORITY with the acting principal's
+# `Identity.User` id, so the `record_archived` governance row the Trash reads names a person. This
+# patch makes it return `Mount.scope/2` verbatim — the fabricated `broker:<org>` pseudo-principal —
+# which is exactly the attribution hole the feature closes: the delete still succeeds, still audits,
+# still restores, and the trash still lists the page, but every deletion now reads "a workspace
+# member" and a member's own delete can no longer be recognized as theirs.
+#
+# Aimed at the ATTRIBUTION only. Plane, kind and role are identical either way, so masking and RBAC
+# are untouched (this is a sabotage of the identity, not of the authority).
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: the signed-in member's own deletion reads as 'you'
+--- a/samen_web/lib/samen/web/tenant_role.ex
++++ b/samen_web/lib/samen/web/tenant_role.ex
+@@ -85,10 +85,7 @@
+   def identity_scope(%Mount{} = mount, org_id) do
+     %Samen.Scope{actor: actor} = Mount.scope(mount, org_id)
+ 
+-    case principal_actor_id(mount, org_id) do
+-      nil -> %Samen.Scope{actor: actor}
+-      user_id -> %Samen.Scope{actor: Map.put(actor, :id, user_id)}
+-    end
++    %Samen.Scope{actor: actor}
+   end
+ 
+   @doc """

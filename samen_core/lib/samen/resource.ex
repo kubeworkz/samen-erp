@@ -69,6 +69,13 @@ defmodule Samen.Resource do
   defmacro __using__(opts) do
     {abbrev, opts} = Keyword.pop(opts, :abbrev)
     {archivable, opts} = Keyword.pop(opts, :archivable, false)
+
+    # E6 + WS-Notes (ADR-053 §2 D4): destroy actions on an ARCHIVABLE resource are made SOFT by
+    # ash_archival (that is how the primary `:destroy` deletes into the trash). A resource that
+    # needs a dedicated TERMINAL destroy — one that really removes the row, audited and guarded by
+    # its own policy — names it here, and ash_archival leaves it alone. Only meaningful with
+    # `archivable: true`; the default adds nothing.
+    {hard_destroy_actions, opts} = Keyword.pop(opts, :hard_destroy_actions, [])
     {versioned_opt, opts} = Keyword.pop(opts, :versioned, false)
     # D3/T67 (ADR-043 §7.2): the DENY-BY-DEFAULT embeddable-field declaration. A list of
     # logical attribute names whose plain-text values may enter vector space. Refused at
@@ -108,7 +115,7 @@ defmodule Samen.Resource do
       end)
       |> maybe_put_fragments(base)
 
-    archival_dsl = archival_dsl(archivable)
+    archival_dsl = archival_dsl(archivable, List.wrap(hard_destroy_actions))
     # The generated version resource module name (ADR-040 §6.1/§6.2), matching
     # ash_paper_trail's default (`SourceResource.Version`). Its allocator-owned abbrev
     # is injected by Samen.Versioning.VersionMixin at the version module's compile.
@@ -302,9 +309,9 @@ defmodule Samen.Resource do
   # injects the archive/restore/archived/destroy_permanently actions plus the
   # ash_archival `archive` config that scopes the `is_nil(archived_at)` default
   # read filter. `archivable: false` (the default) injects nothing.
-  defp archival_dsl(false), do: nil
+  defp archival_dsl(false, _hard_destroy_actions), do: nil
 
-  defp archival_dsl(true) do
+  defp archival_dsl(true, hard_destroy_actions) do
     quote do
       actions do
         # Soft destroy: ash_archival's SetupArchival stamps archived_at; the
@@ -337,9 +344,11 @@ defmodule Samen.Resource do
       archive do
         # Preparation variant (ADR-037 §5.3): base_filter? stays the package default
         # (false) so :restore is possible. The trash read shows archived rows; the
-        # terminal destroy stays a real hard delete.
+        # terminal destroy stays a real hard delete — as does any action the resource
+        # declared in `hard_destroy_actions:`, which ash_archival would otherwise turn
+        # into another soft delete (setting `archived_at` instead of removing the row).
         exclude_read_actions([:archived])
-        exclude_destroy_actions([:destroy_permanently])
+        exclude_destroy_actions([:destroy_permanently] ++ unquote(hard_destroy_actions))
       end
     end
   end

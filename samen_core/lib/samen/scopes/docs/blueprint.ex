@@ -95,6 +95,16 @@ defmodule Samen.Scopes.Docs.Blueprint do
         renders `body`, a doc with one block ignores it (ADR-053 §8 O3). That decision
         lives in ONE read seam, not here.
 
+        ## The tree cascade (WS-Notes Phase 3 unit 3.13)
+
+        `parent_doc_id` makes a subtree, and a subtree's liveness is ONE fact: **a page is
+        live iff its ancestors are live**. `Samen.Scopes.Docs.CascadeArchive` retires the
+        whole subtree when a page is deleted (stamping one instant on all of it, so each
+        child still gets its own `record_archived` row), and
+        `Samen.Scopes.Docs.CascadeRestore` brings back exactly the pages that went down
+        with the parent — a subpage deleted on its own instant stays in the trash, and a
+        restore under a still-trashed parent is refused.
+
         Archivable (ADR-040 §5.9). Distinct from CMS `Page`/`Post` — own table
         (`#{unquote(abbrev)}_doc`), no publish workflow, no shared storage.
         """
@@ -104,7 +114,12 @@ defmodule Samen.Scopes.Docs.Blueprint do
           data_layer: AshPostgres.DataLayer,
           authorizers: [Ash.Policy.Authorizer],
           abbrev: unquote(abbrev),
-          archivable: true
+          archivable: true,
+          # `:purge` is the page's TERMINAL destroy (WS-Notes Phase 3 unit 3.11): a real row delete,
+          # not another soft one. Without this, ash_archival rewrites every destroy action into an
+          # archive, so "delete forever" would quietly stamp `archived_at` and leave the page in
+          # the trash it was supposed to empty.
+          hard_destroy_actions: [:purge]
 
         postgres do
           table("#{unquote(abbrev)}_doc")
@@ -163,6 +178,20 @@ defmodule Samen.Scopes.Docs.Blueprint do
           change({Samen.Pii.FreeTextScan, fields: [:body]})
           # R4: a page's parent must be same-org (no cross-org tree graft).
           change({Samen.Policy.SameOrgFk, relationships: [:parent_doc]})
+          # The tree cascade (WS-Notes Phase 3 unit 3.13): a page is live iff its ancestors are
+          # live. Archiving retires the whole subtree at the SAME instant, restoring brings back
+          # exactly the pages that went down with it, and a restore under a still-trashed parent is
+          # refused — so a delete can never leave a live page pointing at an ancestor no read can
+          # see. Both self-guard on the action NAME (`:archive` / `:restore`); the plain `:update`,
+          # `:destroy` and the terminal `:purge` pass through untouched.
+          #
+          # `on:` defaults to `[:create, :update]` (Ash omits `:destroy` — "most changes don't make
+          # sense for a destroy"), and `:archive` IS a `:destroy`-type action, so the archive half
+          # needs `on: [:destroy]` explicitly or it silently never runs (`Cms`/`Support` say the
+          # same at their own attachment). It then also reaches the plain `:destroy` and
+          # `:destroy_permanently`, which the name guard skips.
+          change(Samen.Scopes.Docs.CascadeArchive, on: [:destroy])
+          change(Samen.Scopes.Docs.CascadeRestore)
         end
 
         actions do
@@ -191,6 +220,18 @@ defmodule Samen.Scopes.Docs.Blueprint do
               end
             end)
           end
+
+          # PURGE — the TERMINAL delete of a page (WS-Notes Phase 3 unit 3.11): "delete forever",
+          # reachable only from the trash. A separate action (not `:destroy_permanently`) so the
+          # substrate's generic hard delete stays generic: this one refuses a LIVE page in the model
+          # and writes a `record_purged` governance event in the same transaction
+          # (`Samen.Scopes.Docs.PagePurge`). ADMIN-only — see the policy below.
+          destroy :purge do
+            primary?(false)
+            accept([])
+            require_atomic?(false)
+            change(Samen.Scopes.Docs.PagePurge)
+          end
         end
 
         policies do
@@ -207,6 +248,17 @@ defmodule Samen.Scopes.Docs.Blueprint do
           # The grant is the gate (the action consults `Samen.Reveal.grant_checker/0`); this
           # policy mirrors the shipped Primitive reveals.
           policy action(:reveal_secure_body) do
+            authorize_if(always())
+          end
+
+          # Emptying the trash is ADMIN-only. Additive to — ANDed with — the broad destroy policy
+          # above, the `DocBlock.:declassify_text` precedent: a `member` who may delete a page INTO
+          # the trash (recoverable, audited, reversible) still cannot DESTROY it. The gate is here,
+          # in the model, not in the surface that offers the control, so a crafted `purge_page`
+          # event reaches exactly the same refusal.
+          policy action(:purge) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
             authorize_if(always())
           end
         end
@@ -368,6 +420,7 @@ defmodule Samen.Scopes.Docs.Blueprint do
             public?: true,
             constraints: [trim?: false, allow_empty?: true]
           )
+
           # `to_do` only; refused on every other type by BlockShape.
           attribute(:checked, :boolean, public?: true)
           # Bounded per type by BlockShape — never a free-form bag.

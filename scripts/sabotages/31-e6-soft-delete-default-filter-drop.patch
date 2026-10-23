@@ -11,14 +11,14 @@
 diff --git a/samen_core/lib/samen/resource.ex b/samen_core/lib/samen/resource.ex
 --- a/samen_core/lib/samen/resource.ex
 +++ b/samen_core/lib/samen/resource.ex
-@@ -159,7 +159,9 @@ defmodule Samen.Resource do
-         # Preparation variant (ADR-037 §5.3): base_filter? stays the package default
-         # (false) so :restore is possible. The trash read shows archived rows; the
-         # terminal destroy stays a real hard delete.
+@@ -347,7 +347,9 @@
+         # terminal destroy stays a real hard delete — as does any action the resource
+         # declared in `hard_destroy_actions:`, which ash_archival would otherwise turn
+         # into another soft delete (setting `archived_at` instead of removing the row).
 -        exclude_read_actions([:archived])
 +        # SABOTAGE (T36 E6): the default :read is excluded from ash_archival's
 +        # FilterArchived, so archived rows LEAK into default reads/list. Named tests MUST fail.
 +        exclude_read_actions([:archived, :read])
-         exclude_destroy_actions([:destroy_permanently])
+         exclude_destroy_actions([:destroy_permanently] ++ unquote(hard_destroy_actions))
        end
      end

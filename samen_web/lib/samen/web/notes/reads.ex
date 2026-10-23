@@ -49,7 +49,7 @@ defmodule Samen.Web.Notes.Reads do
 
   require Ash.Query
 
-  alias Samen.Web.Mount
+  alias Samen.Web.{CurrentOrg, Mount}
 
   # AC-G1-5 (A3 read-bounding): a page's block list is a SINGLE-PARENT fan-out, so it carries
   # an explicit limit instead of being paginated — the chat reads' `@detail_limit` idiom. This is
@@ -57,6 +57,10 @@ defmodule Samen.Web.Notes.Reads do
   # edits in one page, and hitting it is a signal to split the page (M2 nesting), not to stream
   # an unbounded result set into a render.
   @block_limit 2_000
+
+  # The governance event `Samen.Archival.Archive` writes on the live → archived transition. The
+  # trash reads it back to answer "who deleted this" (see `trash/2`).
+  @delete_event "record_archived"
 
   # The INDEX fan-out (WS-Notes Phase 3): the pages list is a bounded first screen, not a
   # paginated list. A tree of 200 pages is a workspace; a thousand is a search problem, which is
@@ -172,6 +176,144 @@ defmodule Samen.Web.Notes.Reads do
       |> Ash.read!(scope: scope)
 
     {:ok, Enum.map(rows, &project_doc/1)}
+  end
+
+  @doc """
+  The org's TRASH — the pages a soft delete removed (WS-Notes Phase 3 unit 3.7).
+
+  The same seam as `index/2`, on the SAME `Doc` resource: this is the `:archived` read
+  (`Samen.Archival.OnlyArchived`, injected by `archivable: true`), so it returns archived rows
+  ONLY — never a union with the live set. A page in another org is simply absent (R1), and an
+  empty trash is `{:ok, []}` rather than an error.
+
+  Sorted newest-deleted first, bounded by `@index_limit` like the live list. Titles are non-PII
+  by construction (only `body`/`secure_body`/`block.text` are vault-routed), so nothing here is
+  resolved — which is also why the trash shows a page's TITLE and never its content: the row a
+  restore names is metadata, and restoring is how the content comes back.
+
+  ## "Who deleted this?" comes from the governance trail, not from the row
+
+  Each result carries the page's most recent `record_archived` event (`Samen.Archival.Audit`
+  writes it inside the delete's own transaction, so the trail and the row cannot disagree about
+  whether a delete happened):
+
+    * `deleted_by` — the `aud_actor_id`, an opaque id (never rendered);
+    * `deleted_by_name` — that actor's `Identity.User.full_name`, resolved through
+      `Samen.Api.PiiResolution` ON THE ACTING PLANE, exactly as this module resolves block text.
+      So the tenant plane reads the name CLEAR and an operator plane without a grant gets a
+      `%Samen.Masked{}` (`••••`, present-but-masked — the impersonation posture), never plaintext
+      and never a `vt_*` token. The name is shaped by `Samen.Web.ObjectRef.FieldValue.full_name/2`
+      (the shared formatter that decodes the revealed `{"first":…,"last":…}` form and passes a
+      `%Masked{}` through untouched), so this seam never invents its own PII rendering.
+
+  A name is read ONLY for an actor id inside the ACTING org (`id in … and org_id == acting org`,
+  `authorize?: false` with that explicit filter — the `Samen.Auth.OrgActor` posture): an audit row
+  is an opaque string, and one that named a different org's user must never produce a name here.
+
+  `nil` in either key means the trail has no such event (a page archived by a seed or by a host
+  that does not write the audit tier) — the surface then says WHEN and stays silent about WHO,
+  rather than guessing. `deleted_by_name` is also `nil` when the host has no Identity seam to
+  resolve against; the surface falls back to the coarse identity label it already renders.
+
+  Both reads are BOUNDED (the page ids this call already returned; the actor ids those events
+  named — never a table scan), and fail-soft in the one place that is safe: an unreadable audit or
+  identity tier costs the "who" column, never the trash itself — the pages are what the user came
+  for.
+
+  Returns `{:ok, [%{id: id, title: title, icon: icon, parent_doc_id: parent, position: position,
+  revision: revision, archived_at: deleted_at, deleted_by: actor_id | nil,
+  deleted_by_name: String.t() | Samen.Masked.t() | nil}]}`.
+  """
+  @spec trash(Mount.t(), Samen.Scope.t()) :: {:ok, [map()]}
+  def trash(mount, scope) do
+    rows =
+      doc_resource(mount)
+      |> Ash.Query.for_read(:archived)
+      |> Ash.Query.ensure_selected([:id, :title, :icon, :parent_doc_id, :position, :revision, :archived_at])
+      |> Ash.Query.sort(archived_at: :desc)
+      |> Ash.Query.limit(@index_limit)
+      |> Ash.read!(scope: scope)
+
+    deleters = deletion_actors(mount.repo, Enum.map(rows, &to_string(&1.id)))
+    names = deleter_names(mount, scope, Map.values(deleters))
+
+    {:ok,
+     Enum.map(rows, fn row ->
+       actor = Map.get(deleters, to_string(row.id))
+       project_trashed(row, actor, Map.get(names, actor))
+     end)}
+  end
+
+  # The DELETER's display name per actor id, resolved on the acting plane. `org_id` comes from the
+  # ACTOR (the governed scope), never from a record, and the read is filtered by it — an audit row
+  # is an opaque string, so the filter is what keeps a foreign id from naming a foreign user.
+  defp deleter_names(_mount, _scope, []), do: %{}
+
+  defp deleter_names(mount, scope, actor_ids) do
+    ids = actor_ids |> Enum.reject(&is_nil/1) |> Enum.uniq()
+    org_id = Map.get(actor_of(scope), :org_id)
+
+    if ids == [] or is_nil(org_id) do
+      %{}
+    else
+      identity = CurrentOrg.identity_mount(mount)
+      user_resource = Mount.resource(identity, :User)
+
+      users =
+        user_resource
+        |> Ash.Query.ensure_selected([:id, :full_name])
+        |> Ash.Query.filter(id in ^ids and org_id == ^org_id)
+        |> Ash.Query.limit(length(ids))
+        |> Ash.read!(authorize?: false)
+
+      users
+      |> resolve(mount, scope, user_resource)
+      |> Enum.reduce(%{}, fn user, acc ->
+        case display_name(user) do
+          nil -> acc
+          name -> Map.put(acc, user.id, name)
+        end
+      end)
+    end
+  rescue
+    # No Identity seam (a module mount with no `:identity_namespace`), an unmigrated Identity
+    # spine, or a failed decrypt: the row falls back to the coarse identity label, never to a
+    # guessed name.
+    _ -> %{}
+  end
+
+  # `FieldValue.full_name/2` decodes the revealed JSON and passes a `%Masked{}` through — the ONE
+  # shared formatter, so this surface cannot invent its own (or a leaking) rendering.
+  defp display_name(user) do
+    case Samen.Web.ObjectRef.FieldValue.full_name(Map.get(user, :full_name)) do
+      "—" -> nil
+      "" -> nil
+      name -> name
+    end
+  end
+
+  # The latest `record_archived` event per page id → its actor id. Newest first, first row wins, so
+  # a page that was deleted, restored and deleted again reports the delete that produced the row in
+  # the trash rather than the oldest opinion about it.
+  defp deletion_actors(_repo, []), do: %{}
+
+  defp deletion_actors(repo, doc_ids) do
+    import Ecto.Query, only: [from: 2]
+
+    rows =
+      repo.all(
+        from(a in Samen.AuditEvent,
+          where: a.subject_id in ^doc_ids and a.event_type == ^@delete_event,
+          order_by: [desc: a.occurred_at],
+          select: %{subject_id: a.subject_id, actor_id: a.actor_id}
+        )
+      )
+
+    Enum.reduce(rows, %{}, fn row, acc -> Map.put_new(acc, row.subject_id, row.actor_id) end)
+  rescue
+    # Fail-soft on the AUDIT tier only (a host that has not migrated `aud_event`): the trash still
+    # lists, and a row without a deleter says so by omission instead of inventing one.
+    _ -> %{}
   end
 
   @doc """
@@ -318,6 +460,14 @@ defmodule Samen.Web.Notes.Reads do
       revision: Map.get(doc, :revision),
       updated_at: Map.get(doc, :updated_at)
     }
+  end
+
+  defp project_trashed(doc, deleted_by, deleted_by_name) do
+    doc
+    |> project_doc()
+    |> Map.put(:archived_at, Map.get(doc, :archived_at))
+    |> Map.put(:deleted_by, deleted_by)
+    |> Map.put(:deleted_by_name, deleted_by_name)
   end
 
   defp project(block) do

@@ -1,0 +1,28 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.13 — A PAGE COMES BACK UNDER A PARENT NOTHING CAN SEE
+# Restoring a page whose parent is still in the trash re-creates the orphan from the other side: a
+# LIVE row pointing at an ancestor every read filters out, so the page exists, is counted, and
+# cannot be navigated to. `CascadeRestore` refuses it in the model. This patch makes its
+# `live_parent?/1` answer true for any loaded id, so the guard is inert and a direct governed
+# `:restore` — one issued by a caller the write seam has never heard of — puts the page back.
+#
+# The surface still refuses (its own pre-check reads the same `Tree` question), which is the point:
+# the guarantee is the model's, and this patch removes it while the convenience layer still looks
+# right.
+#
+# Aimed at the MODEL guard only. The restore cascade, the same-instant match and the purge are
+# untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_tree_cascade_test.exs
+# MUST_FAIL: a page cannot be restored under a parent that is still in the trash
+--- a/samen_core/lib/samen/scopes/docs/cascade_restore.ex
++++ b/samen_core/lib/samen/scopes/docs/cascade_restore.ex
+@@ -100,7 +100,7 @@
+         true
+ 
+       id ->
+-        Samen.Scopes.Docs.Tree.live_parent?(changeset.resource, id)
++        is_binary(id)
+     end
+   end
+ 

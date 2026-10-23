@@ -1,0 +1,26 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.13 — THE PAGE IS DELETED AND ITS SUBPAGES ARE NOT
+# `Doc` attaches `CascadeArchive` so deleting a page retires its whole subtree (one instant, one
+# `record_archived` row per page). This patch un-attaches the change: the page leaves the tree, its
+# `record_archived` row lands, the parent's content survives, and every subpage is still LIVE —
+# pointing at a parent no read can see. That is the orphan: the child cannot be reached from its
+# ancestor, and it is not in the trash either, so nobody can find it to delete or restore it.
+#
+# Silent everywhere the tree is one level deep: the list renders, the trash lists, the purge works.
+# Only a delete of a page that HAS children distinguishes the two.
+#
+# Aimed at the MODEL attachment only. `CascadeRestore`, the purge's subtree walk and the surfaces
+# are untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_tree_cascade_test.exs
+# MUST_FAIL: the whole subtree leaves the tree, each page audited, all at one instant
+--- a/samen_core/lib/samen/scopes/docs/blueprint.ex
++++ b/samen_core/lib/samen/scopes/docs/blueprint.ex
+@@ -190,7 +190,6 @@
+           # needs `on: [:destroy]` explicitly or it silently never runs (`Cms`/`Support` say the
+           # same at their own attachment). It then also reaches the plain `:destroy` and
+           # `:destroy_permanently`, which the name guard skips.
+-          change(Samen.Scopes.Docs.CascadeArchive, on: [:destroy])
+           change(Samen.Scopes.Docs.CascadeRestore)
+         end
+ 

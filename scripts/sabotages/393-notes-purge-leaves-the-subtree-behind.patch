@@ -1,0 +1,27 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.13 — THE PAGE IS DESTROYED AND ITS SUBPAGES ARE LEFT POINTING AT NOTHING
+# A purge destroys the trashed page AND the trashed pages under it: rows, blocks, links and one
+# `record_purged` row each, so nothing is left in the trash under a parent that no longer exists.
+# This patch skips the subtree — the walk still happens (it is the same `Tree.subtree/2` read), the
+# collection is simply discarded before the loop — so the page and its blocks vanish, every visible
+# assertion about THAT page passes, and its children stay behind with a dangling `parent_doc_id`.
+#
+# The residue is invisible: the child's row is in the trash, its blocks are at rest, and restoring
+# it would put a live page under a parent that was destroyed — the orphan, one click later.
+#
+# Aimed at the SUBTREE only. The block cascade, the archive-first guard, the policy and the audit
+# are untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_tree_cascade_test.exs
+# MUST_FAIL: every page, its blocks and its own record_purged row, attributed to the admin
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -822,7 +822,7 @@
+   defp purge_one(mount, scope, doc) do
+     with {:ok, %{live: live, archived: archived}} <- Tree.subtree(doc_resource(mount), doc.id),
+          :ok <- refuse_live_descendants(live),
+-         {:ok, descendants} <- purge_each(mount, scope, Enum.reverse(archived)),
++         {:ok, descendants} <- purge_each(mount, scope, []),
+          {:ok, [purged]} <- purge_each(mount, scope, [doc]) do
+       {:ok, [purged | Enum.reverse(descendants)]}
+     end

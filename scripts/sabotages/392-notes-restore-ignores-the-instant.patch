@@ -1,0 +1,30 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.13 — UNDO RESURRECTS A DELETE IT DID NOT DO
+# A restore brings back exactly the pages archived at the page's OWN instant (the same-instant
+# match). This patch drops that half of the filter, so restoring a parent restores EVERY trashed
+# subpage under it — including one a colleague deleted on its own, at its own instant, before or
+# after. Nobody is asked; the delete they made is silently undone by somebody else's undo.
+#
+# Every visible assertion still passes: the subtree comes back, the page counts are right, the
+# audit rows are written. Only a subpage that was deleted on its own distinguishes the two.
+#
+# Aimed at the DISCRIMINATOR only. The cascade attachment, the orphan guard and the purge are
+# untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_tree_cascade_test.exs
+# MUST_FAIL: the same-instant match brings the subtree back and leaves an earlier delete alone
+--- a/samen_core/lib/samen/scopes/docs/tree.ex
++++ b/samen_core/lib/samen/scopes/docs/tree.ex
+@@ -70,10 +70,10 @@
+   """
+   @spec archived_children(module(), term(), DateTime.t()) ::
+           {:ok, [struct()]} | {:error, term()}
+-  def archived_children(resource, parent_id, %DateTime{} = instant) do
++  def archived_children(resource, parent_id, %DateTime{} = _instant) do
+     resource
+     |> Ash.Query.for_read(:archived)
+-    |> Ash.Query.filter(parent_doc_id == ^parent_id and archived_at == ^instant)
++    |> Ash.Query.filter(parent_doc_id == ^parent_id)
+     |> Ash.Query.ensure_selected(@select)
+     # authz-scope: FK-pinned cascade read — the trashed children of ONE already-authorized page,
+     # inside that page's own restore; ids/timestamps only, never content.

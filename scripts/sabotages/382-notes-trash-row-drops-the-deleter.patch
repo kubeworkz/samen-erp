@@ -1,0 +1,24 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.9 — THE TRASH ROW STOPS CARRYING WHO DELETED IT
+# `Reads.trash/2` reads the governance trail (`aud_event.record_archived`) for each trashed page and
+# puts its `aud_actor_id` on the row as `deleted_by` (from which the surface derives "you" / the
+# member's name / "a workspace member"). Dropping the projection leaves the row with no deleter at
+# all, so the view renders WHEN and silently omits WHO — the exact regression a "who deleted this?"
+# affordance exists to prevent. The trash still lists, still restores, and every other assertion in
+# the suite stays green.
+#
+# Aimed at the ROW projection only: the audit read, the scope attribution, the name resolution, the
+# restore path and the label rules are untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: a workspace-scope deletion reads as 'a workspace member'
+--- a/samen_web/lib/samen/web/notes/reads.ex
++++ b/samen_web/lib/samen/web/notes/reads.ex
+@@ -465,8 +465,7 @@
+   defp project_trashed(doc, deleted_by, deleted_by_name) do
+     doc
+     |> project_doc()
+     |> Map.put(:archived_at, Map.get(doc, :archived_at))
+-    |> Map.put(:deleted_by, deleted_by)
+     |> Map.put(:deleted_by_name, deleted_by_name)
+   end
+ 

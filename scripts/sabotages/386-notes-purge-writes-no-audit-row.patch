@@ -1,0 +1,23 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.11 — THE TERMINAL DELETE IS NOT RECORDED
+# `Samen.Scopes.Docs.PagePurge` writes `record_purged` in the destroy's own transaction, so the trail
+# names the irreversible delete the way it named the archive that preceded it. This patch drops that
+# write: the page still disappears and the guard still holds — a SILENT destroy, which is exactly the
+# state a "who removed this?" question must never be able to reach.
+#
+# Aimed at the AUDIT CALL only. The archive-first refusal, the action body, the policy and the
+# cascade are untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: an admin empties a page
+--- a/samen_core/lib/samen/scopes/docs/page_purge.ex
++++ b/samen_core/lib/samen/scopes/docs/page_purge.ex
+@@ -39,8 +39,7 @@
+   def change(changeset, _opts, _context) do
+     case archived_state(changeset) do
+       :archived ->
+-        Ash.Changeset.after_action(changeset, fn cs, record ->
+-          Samen.Archival.Audit.write(cs, record, "record_purged")
++        Ash.Changeset.after_action(changeset, fn _cs, record ->
+           {:ok, record}
+         end)
+ 

@@ -80,6 +80,39 @@ defmodule Samen.Web.Notes.Live do
     end
   end
 
+  @doc """
+  The TRASH view's href — `/pages/trash` under this mount (WS-Notes Phase 3 unit 3.7).
+
+  A SIBLING route of the index, not a query param on it: the trash is a different read (`Reads`'
+  `:archived`) and a different set of actions, so it gets its own URL. The route macro declares it
+  BEFORE `/pages/:id`, so "trash" is never parsed as a page id.
+  """
+  @spec trash_href(Mount.t(), String.t() | nil) :: String.t()
+  def trash_href(mount, org_id) do
+    base = "#{Mount.label(mount, :pages_path, "/pages")}/trash"
+
+    case org_id do
+      org_id when is_binary(org_id) and org_id != "" -> "#{base}?org=#{org_id}"
+      _ -> base
+    end
+  end
+
+  @doc """
+  The index href carrying the page that was JUST deleted — `/pages?org=…&deleted=<id>`.
+
+  This is the editor's way of handing the "Page deleted — Undo" notice to the index after a
+  delete, without a second state store: the param names the page, the index offers the undo, and
+  an undo patches the URL back to `index_href/2` so a reload cannot re-offer it. It is a NOTICE,
+  never an action: nothing is restored by following the link, and the undo itself is a governed
+  write (`Writes.restore_page/3`).
+  """
+  @spec deleted_href(Mount.t(), String.t() | nil, term()) :: String.t()
+  def deleted_href(mount, org_id, doc_id) do
+    base = index_href(mount, org_id)
+    separator = if String.contains?(base, "?"), do: "&", else: "?"
+    base <> separator <> "deleted=" <> to_string(doc_id)
+  end
+
   attr :mount, Mount, required: true
   attr :org_id, :string, default: nil
   attr :active, :atom, default: :pages

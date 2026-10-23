@@ -1,0 +1,23 @@
+# SABOTAGE: WS-NOTES/ADR-040 §5.9 — THE TRASH READS THE LIVE SET
+# `Reads.trash/2` is the trash view's ONLY read seam, and the one line that makes it a trash is
+# `for_read(:archived)` — the `OnlyArchived` read `archivable: true` injects. Dropping it leaves an
+# ordinary `Doc` read, which is archive-FILTERED: the deleted page is absent and every live page is
+# listed instead. The surface looks healthy — a list renders, each row has a Restore — and only the
+# "is the deleted page actually here?" assertion separates a trash from a second index.
+#
+# Aimed at the READ only. `Writes.restore_page/3` (the `:restore` action, the audit row and the
+# link re-derivation), the org scope, the plane posture and the route are all untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: a deleted page is here, a live page is not
+--- a/samen_web/lib/samen/web/notes/reads.ex
++++ b/samen_web/lib/samen/web/notes/reads.ex
+@@ -194,8 +194,7 @@
+   def trash(mount, scope) do
+     rows =
+       doc_resource(mount)
+-      |> Ash.Query.for_read(:archived)
+       |> Ash.Query.ensure_selected([:id, :title, :icon, :parent_doc_id, :position, :revision, :archived_at])
+       |> Ash.Query.sort(archived_at: :desc)
+       |> Ash.Query.limit(@index_limit)
+       |> Ash.read!(scope: scope)

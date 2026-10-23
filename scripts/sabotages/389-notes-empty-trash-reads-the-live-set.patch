@@ -1,0 +1,25 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.12 — THE BULK EMPTY IS AIMED AT THE LIVE PAGES TOO
+# The bulk empty reads its candidates through the `:archived` read — the SAME trash the view lists
+# — so a live page can never be a candidate for the terminal delete. This patch drops the
+# `for_read(:archived)`, leaving the ordinary (archive-filtered, but LIVE-inclusive) read: the
+# terminal delete is now pointed at pages nobody deleted, and `Doc.:purge`'s archive-first guard is
+# the only thing left standing between a click and the workspace's live content.
+#
+# The refusal is what makes this survivable — which is the point: the model catches what the seam
+# stopped enforcing, and the bulk empty fails whole instead of emptying the trash at all.
+#
+# Aimed at the CANDIDATE READ only. The guard, the policy, the cascade and the audit are untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: a live page is never dragged in
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -772,7 +772,7 @@
+     query =
+       mount
+       |> doc_resource()
+-      |> Ash.Query.for_read(:archived)
++      |> Ash.Query.for_read(:read)
+       |> Ash.Query.ensure_selected([:id, :revision, :archived_at])
+       |> Ash.Query.sort(archived_at: :desc)
+       |> Ash.Query.limit(@purge_trash_limit)

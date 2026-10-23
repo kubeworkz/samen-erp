@@ -2442,6 +2442,10 @@ defmodule Samen.Web.Router do
   def __routes__(:notes, path) do
     [
       {"#{path}", Samen.Web.Notes.IndexLive},
+      # The TRASH view (WS-Notes Phase 3 unit 3.7) — declared BEFORE `/pages/:id`, because a
+      # literal segment wins only in declaration order: `/pages/trash` must reach the trash, not
+      # the editor with `id = "trash"`.
+      {"#{path}/trash", Samen.Web.Notes.TrashLive},
       {"#{path}/:id", Samen.Web.Notes.PageLive}
     ]
   end

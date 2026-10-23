@@ -1,0 +1,25 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.11 — THE TERMINAL DELETE IS OFFERED TO A MEMBER
+# Emptying the trash is an ADMIN write: `Doc.:purge` carries a `RoleAtLeast :admin` policy, so a
+# `member` who may delete a page INTO the trash still cannot DESTROY it. This patch lowers that gate
+# to `:member` — the shape of a "the ✕ is right there, why not let them" convenience, which turns
+# every member of a workspace into someone who can irreversibly erase its content.
+#
+# Silent everywhere else: an admin still purges, the archive-first guard still refuses a live page,
+# the audit row is still written, the blocks still go with it. Only the ROLE red path (and the
+# armed-host affordance that mirrors it) distinguishes an admin-only destroy from an open one.
+#
+# Aimed at the POLICY only. The action, its guard, its audit and the surface gate are untouched.
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: trashing a page is a MEMBER write
+--- a/samen_core/lib/samen/scopes/docs/blueprint.ex
++++ b/samen_core/lib/samen/scopes/docs/blueprint.ex
+@@ -234,7 +234,7 @@
+           # event reaches exactly the same refusal.
+           policy action(:purge) do
+             forbid_unless(Samen.Policy.OrgScope)
+-            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
++            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+             authorize_if(always())
+           end
+         end

@@ -346,6 +346,20 @@ defmodule Samen.Web.CurrentOrg do
     _ -> []
   end
 
+  @doc """
+  The mount that carries the IDENTITY spine for `mount` — the `:identity_namespace` sibling-mount
+  seam, public for READS that must reach `User`/`Membership` from a module surface.
+
+  A tenant MODULE mount (crm/flags/billing/notes/…) names the VERTICAL namespace, so
+  `<namespace>.User` does not exist; a host wires `labels: %{identity_namespace: MyApp.Identity}`
+  and this resolves to it. A mount already carrying the Identity namespace (a `:settings`/`:auth`
+  mount) is returned as-is. Absent the label, the mount is returned unchanged — and a caller that
+  then tries `<namespace>.User` fails closed on a non-existent module rather than silently reading
+  the wrong resource.
+  """
+  @spec identity_mount(Mount.t()) :: Mount.t()
+  def identity_mount(%Mount{} = mount), do: identity_ns_mount(mount)
+
   # ADR-045 §4.4 — the sibling mount carrying the Identity spine (`Session`/`User`/`Membership`).
   # A tenant MODULE mount (crm/flags/billing/…) has a VERTICAL namespace, so the host names the
   # Identity namespace with the `:identity_namespace` label — the `:kb_namespace` sibling-mount

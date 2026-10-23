@@ -1,0 +1,31 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.12 — THE BULK EMPTY CLAIMS A SUCCESS IT DID NOT HAVE
+# A per-page refusal (not an admin, a page the guard won't take) HALTS the bulk empty so the whole
+# transaction rolls back and the surface says so. This patch swallows it instead (`:cont`): the
+# classic best-effort bulk delete, which answers `{:ok, []}` — "nothing to do" — for work the model
+# refused. A member's crafted event then reads as a no-op success rather than a denial, and every
+# future failure in the loop disappears the same way.
+#
+# This is the fail-honest contract (ADR-014): an operation NEVER reports success for work it did
+# not do. The trash is untouched either way; what changes is that the surface now CONFIRMS a
+# refusal as if it were an empty trash.
+#
+# Aimed at the ERROR BRANCH only. The read, the cascade, the audit and the transaction are
+# untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: a member cannot empty the trash
+# MUST_FAIL: a crafted bulk event from a member empties nothing
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -801,8 +801,8 @@
+               {:ok, purged} ->
+                 {:cont, {:ok, acc ++ purged, Enum.reduce(purged, done, &MapSet.put(&2, &1.id))}}
+ 
+-              {:error, error} ->
+-                {:halt, {:error, error}}
++              {:error, _error} ->
++                {:cont, {:ok, acc, done}}
+             end
+           end
+         end)

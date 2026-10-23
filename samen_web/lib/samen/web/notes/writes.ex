@@ -4,8 +4,9 @@ defmodule Samen.Web.Notes.Writes do
 
   ## One writer, one ordering model
 
-  Every structural change to a page goes through this module: insert, split, merge, move, indent,
-  archive/restore. They all share the same two rules:
+  Every structural change to a page goes through this module: the page's own create and delete
+  (soft), and the block operations insert, split, merge, move, indent, archive/restore. They all
+  share the same two rules:
 
     * **`position` is an integer ordinal scoped to its PARENT** (ADR-053 §8 O2). M1 only ever
       writes the doc root (`parent_block_id` nil), but every clause is written against
@@ -26,6 +27,15 @@ defmodule Samen.Web.Notes.Writes do
   Omitting `:revision` is not "force": the write still CASes against the revision this function
   just read, so a concurrent write surfaces as `:stale` instead of silently losing an edit.
 
+  ## The page tree's cascade (Phase 3 unit 3.13)
+
+  A page is a NODE, so every write that changes its liveness changes its subtree's: deleting a page
+  retires its subpages, restoring it brings them back, purging it destroys them. The first two are
+  the MODEL's (`Samen.Scopes.Docs.CascadeArchive` / `CascadeRestore`, attached to `Doc`), which is
+  what makes them true for a delete issued from anywhere; the third is this seam's, because a purge
+  also destroys the CONTENT the model deliberately leaves alone (blocks) and that is the seam's job
+  already. `Samen.Scopes.Docs.Tree` is the one definition of "the subtree" both halves read.
+
   ## Masked blocks are write-refused
 
   A write has to READ the text it is changing (split/merge). The read goes through
@@ -40,6 +50,12 @@ defmodule Samen.Web.Notes.Writes do
       update_text/5    {:ok, block} | {:error, :stale | :not_found | term}
       split/5          {:ok, %{left: block, right: block}} | {:error, term}
       merge/3          {:ok, %{block: survivor, removed: id}} | {:ok, :noop} | {:error, term}
+      create_page/3    {:ok, doc} | {:error, term}
+      archive_page/3   {:ok, doc} | {:error, :not_found | term}
+      restore_page/3   {:ok, doc} | {:error, :not_found | :parent_in_trash | term}
+      purge_page/3     {:ok, doc} | {:error, :not_found | :forbidden | :too_many_blocks |
+                                             :live_descendants | term}
+      empty_trash/2    {:ok, [doc]} | {:error, :forbidden | :too_many_blocks | term}
       move/4           {:ok, block} | {:ok, :noop} | {:error, term}
       indent/4         {:ok, block} | {:ok, :noop} | {:error, :not_indentable | term}
       archive/3        {:ok, block} | {:error, term}
@@ -53,7 +69,7 @@ defmodule Samen.Web.Notes.Writes do
 
   require Ash.Query
 
-  alias Samen.Scopes.Docs.BlockShape
+  alias Samen.Scopes.Docs.{BlockShape, Tree}
   alias Samen.Web.Mount
   alias Samen.Web.Notes.{Links, Offset}
 
@@ -75,7 +91,22 @@ defmodule Samen.Web.Notes.Writes do
     :revision
   ]
 
-  @doc_select [:id, :title, :body, :secure_body, :revision]
+  # `:archived_at` is selected because the trash reads (`:archived`) and the purge's archive-first
+  # guard (`Samen.Scopes.Docs.PagePurge`) both decide off it; `:parent_doc_id` because the restore's
+  # orphan guard asks whether the page's parent is live before it brings a child back.
+  @doc_select [:id, :title, :body, :secure_body, :parent_doc_id, :revision, :archived_at]
+
+  # A page's block set is a single-parent fan-out, so the purge reads its ids in one bounded pass
+  # (the `@link_limit` posture). Unlike every other fan-out here this one may not truncate quietly:
+  # a hard delete that stopped at the cap would leave authored content — and its vault tokens — in
+  # rows nothing can reach, so hitting the bound REFUSES the purge instead (`:too_many_blocks`).
+  @purge_block_limit 5_000
+
+  # The bulk empty acts on the SAME bounded set the trash view renders (`Samen.Web.Notes.Reads.trash/2`
+  # is `@index_limit` = 200, newest-deleted first): one click empties what the user can see, and the
+  # reload shows anything older still in the trash. Bounding it keeps one governed write from
+  # becoming an unbounded table sweep.
+  @purge_trash_limit 200
 
   # ── insert ─────────────────────────────────────────────────────────────────
 
@@ -104,7 +135,14 @@ defmodule Samen.Web.Notes.Writes do
 
     attrs =
       attrs
-      |> Map.drop([:type, :metadata, :checked, :parent_block_id, :after_block_id, :before_block_id])
+      |> Map.drop([
+        :type,
+        :metadata,
+        :checked,
+        :parent_block_id,
+        :after_block_id,
+        :before_block_id
+      ])
 
     with :ok <- validate_shape(type, raw_type, metadata, checked),
          {:ok, _text_attrs} <- validate_text_attrs(attrs),
@@ -114,7 +152,17 @@ defmodule Samen.Web.Notes.Writes do
              {:ok, position} <-
                insert_position(mount, scope, doc_id, parent, siblings, after_id, before_id),
              {:ok, block} <-
-               create_block(mount, scope, doc_id, parent, position, type, metadata, checked, attrs) do
+               create_block(
+                 mount,
+                 scope,
+                 doc_id,
+                 parent,
+                 position,
+                 type,
+                 metadata,
+                 checked,
+                 attrs
+               ) do
           with {:ok, _doc} <- bump_doc!(mount, scope, doc),
                {:ok, _links} <- sync_links(mount, scope, doc_id) do
             {:ok, block}
@@ -243,10 +291,23 @@ defmodule Samen.Web.Notes.Writes do
         secure? = not is_nil(block.text_secure)
 
         with {:ok, updated} <-
-               cas_update(block, scope, text_attrs(left, secure?) |> Map.put(:revision, revision + 1), revision),
+               cas_update(
+                 block,
+                 scope,
+                 text_attrs(left, secure?) |> Map.put(:revision, revision + 1),
+                 revision
+               ),
              {:ok, siblings} <- siblings(mount, scope, block.doc_id, block.parent_block_id),
              {:ok, position} <-
-               insert_position(mount, scope, block.doc_id, block.parent_block_id, siblings, block.id, nil),
+               insert_position(
+                 mount,
+                 scope,
+                 block.doc_id,
+                 block.parent_block_id,
+                 siblings,
+                 block.id,
+                 nil
+               ),
              {:ok, new_block} <-
                create_block(
                  mount,
@@ -297,6 +358,7 @@ defmodule Samen.Web.Notes.Writes do
               # Merging must never DOWNGRADE classification: if either side is vaulted the
               # survivor stays vaulted (a plain target would ship classified text unclassified).
               secure? = not is_nil(previous.text_secure) or not is_nil(block.text_secure)
+
               merged_attrs =
                 text_attrs(left <> right, secure?)
                 |> Map.put(:revision, previous.revision + 1)
@@ -326,10 +388,14 @@ defmodule Samen.Web.Notes.Writes do
            {:ok, doc} <- fetch_doc(mount, scope, block.doc_id),
            {:ok, siblings} <- siblings(mount, scope, block.doc_id, block.parent_block_id) do
         index = Enum.find_index(siblings, &(&1.id == block.id))
-        target_index = if is_integer(index), do: (if direction == :up, do: index - 1, else: index + 1)
+
+        target_index =
+          if is_integer(index), do: if(direction == :up, do: index - 1, else: index + 1)
+
         # `Enum.at/2` wraps a NEGATIVE index around to the END of the list — `:up` on the first
         # block would swap with the last one. Bound the index explicitly instead.
-        target = if is_integer(target_index) and target_index >= 0, do: Enum.at(siblings, target_index)
+        target =
+          if is_integer(target_index) and target_index >= 0, do: Enum.at(siblings, target_index)
 
         if is_nil(target) do
           {:ok, :noop}
@@ -364,8 +430,13 @@ defmodule Samen.Web.Notes.Writes do
            {:ok, doc} <- fetch_doc(mount, scope, block.doc_id),
            {:ok, siblings} <- siblings(mount, scope, block.doc_id, block.parent_block_id) do
         index = Enum.find_index(siblings, &(&1.id == block.id))
-        target_index = if is_integer(index), do: (if direction == :in, do: index + 1, else: index - 1)
-        target = if is_integer(target_index) and target_index >= 0, do: Enum.at(siblings, target_index)
+
+        target_index =
+          if is_integer(index), do: if(direction == :in, do: index + 1, else: index - 1)
+
+        target =
+          if is_integer(target_index) and target_index >= 0, do: Enum.at(siblings, target_index)
+
         new_type = indented_type(block.type, direction)
 
         with {:ok, moved} <- swap_positions(block, target, scope, %{type: new_type}),
@@ -520,6 +591,339 @@ defmodule Samen.Web.Notes.Writes do
   end
 
   @doc """
+  Delete a PAGE from the tree — a SOFT delete, and the page-level sibling of `archive/3`.
+
+  The page's SUBTREE goes with it (WS-Notes Phase 3 unit 3.13): `Doc`'s model attaches
+  `Samen.Scopes.Docs.CascadeArchive`, so every subpage is retired at the same instant, each through
+  its own `:archive` action (its own `record_archived` row, naming the same actor). That is the
+  MODEL's guarantee, not this helper's — a delete issued from anywhere gets it. It is the invariant
+  the trash depends on: a live page never outlives its ancestor, so the tree has no rows pointing at
+  a parent no read can see.
+
+  Three things happen in ONE transaction:
+
+    * the page is soft-destroyed through the governed `:archive` action (`OrgScope` +
+      `RoleAtLeast :member`, ADR-053 §8 O6), which stamps `archived_at` and writes the
+      `record_archived` governance audit row — "who deleted this page" is an audited event,
+      not a UI detail;
+    * every `DocLink` edge touching the page is DESTROYED, both directions (`destroy_page_links/3`).
+      A `DocLink` is a pure edge row and is not archivable (ADR-053 §3.1); the ADR names exactly
+      this case — "a deleted page's links are destroyed with it";
+    * the page's BLOCKS are deliberately left LIVE. A page's blocks are not archived with it
+      (ADR-053 §3.1; WS-Notes build-plan finding 4): the tree, the search index and the backlink
+      list each join through an archive-filtered PAGE read, so an archived page's blocks are
+      unreachable through every surface without rewriting them — and restoring the page brings its
+      content back intact. The same is true of a cascaded subpage's blocks: `CascadeArchive` retires
+      rows, not content, and the purge is where content dies.
+
+  Returns `{:ok, archived_doc}`. `{:error, :not_found}` covers both "no such page" and "another
+  org's page": `OrgScope` filters the row out of the read rather than refusing it (`Reads`'
+  posture — R1, never an existence oracle).
+  """
+  @spec archive_page(Mount.t(), Samen.Scope.t(), term()) :: {:ok, struct()} | {:error, term()}
+  def archive_page(mount, scope, doc_id) do
+    in_tx(mount, fn ->
+      with {:ok, doc} <- fetch_doc(mount, scope, doc_id),
+           {:ok, _links} <- destroy_page_links(mount, scope, doc_id),
+           {:ok, archived} <-
+             doc
+             |> Ash.Changeset.for_destroy(:archive, %{}, scope: scope)
+             |> destroy() do
+        {:ok, archived}
+      end
+    end)
+  end
+
+  @doc """
+  Put a deleted page back — the Undo behind both delete surfaces.
+
+  The restore runs the model's `:restore` action, which clears `archived_at` and writes the
+  `record_restored` governance audit row (the counterpart of the `record_archived` the delete
+  wrote). It is IDEMPOTENT where that matters: a page that is already LIVE is `{:ok, doc}` with no
+  write and no audit row, so an Undo clicked twice — or clicked from a stale `?deleted=` URL —
+  settles instead of erroring on the user.
+
+  The page's SUBTREE comes back with it (WS-Notes Phase 3 unit 3.13): `Doc`'s model attaches
+  `Samen.Scopes.Docs.CascadeRestore`, which restores exactly the pages archived at the page's own
+  instant — the ones that went down with it. A subpage somebody deleted on its own, at its own
+  instant, STAYS in the trash: Undo restores what the action removed, not every deletion nearby.
+
+  A page whose PARENT is still in the trash cannot be restored (`{:error, :parent_in_trash}`):
+  bringing one child back would put a live page under an ancestor no read can see — the orphan the
+  delete cascade exists to prevent. The question is asked here AND enforced by the model
+  (`CascadeRestore`'s `before_action`), so a restore written by a caller this seam does not know
+  still cannot create one.
+
+  The page's OUTGOING `[[Title]]` edges are re-derived in the same transaction (`sync_links/3`),
+  because `archive_page/3` destroyed them and the source text that spells them survived. Incoming
+  edges are not re-derived: they belong to OTHER pages' text, and come back the next time one of
+  those pages saves. (A cascaded subpage's edges were never destroyed by the archive — the cascade
+  retires page rows — so there is nothing to re-derive for them.)
+
+  `{:error, :not_found}` means neither the live read nor the trash read knows the id — a page in
+  another org, or one that never existed (R1: this is not an existence oracle).
+  """
+  @spec restore_page(Mount.t(), Samen.Scope.t(), term()) ::
+          {:ok, struct()} | {:error, :not_found | :parent_in_trash | term()}
+  def restore_page(mount, scope, doc_id) do
+    in_tx(mount, fn ->
+      case fetch_doc(mount, scope, doc_id) do
+        # Already live: nothing to undo, and no second audit row to write.
+        {:ok, doc} ->
+          {:ok, doc}
+
+        {:error, :not_found} ->
+          with {:ok, doc} <- fetch_archived_doc(mount, scope, doc_id),
+               :ok <- parent_live(mount, doc),
+               {:ok, restored} <-
+                 doc
+                 |> Ash.Changeset.for_update(:restore, %{}, scope: scope)
+                 |> update(),
+               {:ok, _links} <- sync_links(mount, scope, doc_id) do
+            {:ok, restored}
+          end
+      end
+    end)
+  end
+
+  # The orphan guard, asked of the LIVE read: a parent that is in the trash (or gone) is not a place
+  # a page can come back to. Early, so the surface gets an atom it can render — the model asks the
+  # same question again and is what actually refuses (`CascadeRestore`).
+  defp parent_live(_mount, %{parent_doc_id: nil}), do: :ok
+
+  defp parent_live(mount, %{parent_doc_id: parent_id}) do
+    if Tree.parent_live?(doc_resource(mount), parent_id),
+      do: :ok,
+      else: {:error, :parent_in_trash}
+  end
+
+  @doc """
+  Delete a trashed page **permanently** — the trash's "delete forever" (Phase 3 unit 3.11).
+
+  ## Why this is not `archive_page/3`
+
+  A soft delete is recoverable and audited; this is neither. So it is a SEPARATE governed action,
+  `Doc.:purge` (`Samen.Scopes.Docs.PagePurge`), not a flag on the existing ones, and it carries
+  four invariants the soft path does not need:
+
+    * **trash-only** — the page is read through the `:archived` read (`fetch_archived_doc/3`), so a
+      LIVE page is `{:error, :not_found}` here (as is a page in another org, and one already
+      purged). The model refuses a live page too, even when called directly: `{:error, :not_found}`
+      is this seam's answer, never an existence oracle (R1);
+    * **content goes WITH the page** — `Doc`'s blocks are deliberately NOT archived with it
+      (ADR-053 §3.1), so a hard delete of the page alone would leave the authored text (and its
+      vault tokens) in rows no read can reach. Every block is hard-destroyed in the same
+      transaction, BEFORE the page, so a failure can never leave a page whose content outlived it;
+      the block set is bounded (`@purge_block_limit`) and a page past the bound is REFUSED whole
+      rather than deleted down to a leftover tail;
+    * **links, both directions, again** — `archive_page/3` already destroyed them; re-running that
+      reconcile closes the window where an archived page was re-linked while it sat in the trash;
+    * **the SUBTREE goes too** (WS-Notes Phase 3 unit 3.13) — the trash cascade means a trashed page's
+      children are in the trash with it; destroying the parent alone would leave them in the trash
+      under a parent that no longer exists, and restoring one of them later would be an orphan by
+      the back door. So `Tree.subtree/2` collects every descendant and each is purged the same way,
+      DEEPEST FIRST, with its own blocks and its own `record_purged` row. A descendant that is still
+      LIVE refuses the whole purge (`{:error, :live_descendants}`): a hard delete of a live page is
+      not something the trash may do on the way past.
+
+  ## The audit
+
+  `record_purged` (`Samen.Scopes.Docs.PagePurge`, in the action's transaction) — the terminal
+  counterpart of the `record_archived` the soft delete wrote. Nothing is written for the refused
+  cases.
+
+  ## Return shapes
+
+  `{:ok, purged_doc}` (the page named — its subtree is destroyed with it); `{:error, :not_found}`
+  (not in the trash / foreign / already gone); `{:error, :forbidden}` (the caller is not an admin of
+  this org — the model's policy decides, and the surface only decides whether to OFFER the control);
+  `{:error, :too_many_blocks}`; `{:error, :live_descendants}` (a subpage is still live, so the
+  subtree cannot be destroyed whole).
+  """
+  @spec purge_page(Mount.t(), Samen.Scope.t(), term()) ::
+          {:ok, struct()}
+          | {:error, :not_found | :forbidden | :too_many_blocks | :live_descendants | term()}
+  def purge_page(mount, scope, doc_id) do
+    mount
+    |> in_tx(fn ->
+      with {:ok, doc} <- fetch_archived_doc(mount, scope, doc_id),
+           {:ok, [purged | _]} <- purge_one(mount, scope, doc) do
+        {:ok, purged}
+      end
+    end)
+    |> classify_purge()
+  end
+
+  @doc """
+  Empty the WHOLE trash — the trash's "Empty the trash" (Phase 3 unit 3.12).
+
+  The same governed write as `purge_page/3`, applied to every page the trash holds: the pages are
+  read through the `:archived` read (`trashed_docs/2`, newest-deleted first, bounded at
+  `@purge_trash_limit` — the SAME 200 the view renders), and each is purged by `purge_one/3`
+  INSIDE ONE `in_tx`. So:
+
+    * **all or nothing** — a refusal anywhere (a member reaches this scope, a page past
+      `@purge_block_limit`) rolls the whole transaction back and leaves the trash exactly as it
+      was. There is no "emptied 3 of 7", which is the state a bulk delete must never leave behind;
+    * **one audit row PER PAGE** — the batch does not get a summary row: `Doc.:purge` writes
+      `record_purged` for each page in its own action, so the trail can still say WHICH pages were
+      destroyed (and by whom) rather than that "some pages were removed";
+    * **one page's reasons are unchanged** — the per-page guard (trash-only, admin-only,
+      archive-first) and the cascade (links, blocks, then the page) are `purge_page/3`'s, because
+      both paths reach them through the same `purge_one/3`.
+    * **an empty trash is `{:ok, []}`** — a no-op, not an error, and no audit row: an idempotent
+      click (or a stale tab) cannot invent a delete that never happened;
+    * **the subtree goes with each page** — `purge_one/3` takes the trashed pages under the page it
+      was given, and the loop SKIPS the ids that cascade already removed instead of asking for a
+      row that is gone (which would be `:not_found` and would roll the whole empty back).
+
+  The bound is a work bound, not a promise of emptiness: a trash older than 200 pages is emptied
+  over successive calls, and the view's reload shows the remainder rather than the surface claiming
+  a trash it did not empty.
+
+  Returns `{:ok, purged_docs}` — EVERY page destroyed, so a parent's cascaded subtree is in the
+  list too (each exactly once; the loop skips ids a parent's purge already took), newest-deleted
+  first; `{:error, :forbidden}` (not an admin — the model's policy decides, per page);
+  `{:error, :too_many_blocks}` (a page in the trash is past the block bound);
+  `{:error, :live_descendants}` (a page in the trash still has a live subpage, so its subtree
+  cannot be destroyed whole — nothing was destroyed).
+  """
+  @spec empty_trash(Mount.t(), Samen.Scope.t()) ::
+          {:ok, [struct()]}
+          | {:error, :forbidden | :too_many_blocks | :live_descendants | term()}
+  def empty_trash(mount, scope) do
+    mount
+    |> in_tx(fn ->
+      with {:ok, docs} <- trashed_docs(mount, scope) do
+        # A parent's purge takes its whole subtree with it, so the list this loop is walking can name
+        # rows that are already gone by the time it reaches them: `done` is what keeps the second
+        # pass from asking for a page the first one destroyed (which would be `:not_found` and would
+        # roll the whole empty back for no reason).
+        docs
+        |> Enum.reduce_while({:ok, [], MapSet.new()}, fn doc, {:ok, acc, done} ->
+          if MapSet.member?(done, doc.id) do
+            {:cont, {:ok, acc, done}}
+          else
+            case purge_one(mount, scope, doc) do
+              {:ok, purged} ->
+                {:cont, {:ok, acc ++ purged, Enum.reduce(purged, done, &MapSet.put(&2, &1.id))}}
+
+              {:error, error} ->
+                {:halt, {:error, error}}
+            end
+          end
+        end)
+        |> case do
+          {:ok, purged, _done} -> {:ok, purged}
+          {:error, error} -> {:error, error}
+        end
+      end
+    end)
+    |> classify_purge()
+  end
+
+  # ONE page's terminal delete AND everything under it, inside the CALLER's transaction — the caller
+  # decides the scope of that transaction (one page, or the whole trash). Children before the page
+  # they hang from, and blocks before the page they belong to, so a failure can never leave a page
+  # whose content (or whose subtree) outlived it. Returns the destroyed pages, ROOT FIRST.
+  defp purge_one(mount, scope, doc) do
+    with {:ok, %{live: live, archived: archived}} <- Tree.subtree(doc_resource(mount), doc.id),
+         :ok <- refuse_live_descendants(live),
+         {:ok, descendants} <- purge_each(mount, scope, Enum.reverse(archived)),
+         {:ok, [purged]} <- purge_each(mount, scope, [doc]) do
+      {:ok, [purged | Enum.reverse(descendants)]}
+    end
+  end
+
+  # A live page is not this seam's to destroy, even as part of a subtree: it has not been deleted,
+  # so nothing sanctioned a hard delete of it. The trash shows the page and the user deletes the
+  # live child first (which lands it in the trash, where emptying can reach it).
+  defp refuse_live_descendants([]), do: :ok
+  defp refuse_live_descendants(_live), do: {:error, :live_descendants}
+
+  defp purge_each(mount, scope, docs) do
+    Enum.reduce_while(docs, {:ok, []}, fn doc, {:ok, acc} ->
+      case purge_row(mount, scope, doc) do
+        {:ok, purged} -> {:cont, {:ok, [purged | acc]}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+    |> case do
+      {:ok, purged} -> {:ok, Enum.reverse(purged)}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  # One page's rows: both link directions, then its blocks, then the page itself.
+  defp purge_row(mount, scope, doc) do
+    with {:ok, _links} <- destroy_page_links(mount, scope, doc.id),
+         :ok <- purge_blocks(mount, scope, doc.id),
+         {:ok, purged} <-
+           doc
+           |> Ash.Changeset.for_destroy(:purge, %{}, scope: scope)
+           |> destroy() do
+      {:ok, purged}
+    end
+  end
+
+  # The pages the bulk empty acts on: the SAME `:archived` read the trash view lists, newest-deleted
+  # first and bounded, so the write and the list cannot disagree about what "the trash" is. Nothing
+  # about a page's CONTENT is selected — a purge reads ids (and the revision the structural
+  # broadcast carries), never a body.
+  defp trashed_docs(mount, scope) do
+    query =
+      mount
+      |> doc_resource()
+      |> Ash.Query.for_read(:archived)
+      |> Ash.Query.ensure_selected([:id, :revision, :archived_at])
+      |> Ash.Query.sort(archived_at: :desc)
+      |> Ash.Query.limit(@purge_trash_limit)
+
+    case Ash.read(query, scope: scope) do
+      {:ok, docs} -> {:ok, docs}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp classify_purge({:error, error}), do: {:error, purge_error(error)}
+  defp classify_purge(ok), do: ok
+
+  # A policy refusal arrives as `Ash.Error.Forbidden` (a single error) or wrapped in
+  # `Ash.Error.Invalid`; the surface shows ONE message for "not you", so it is classified here —
+  # the same shape `declassify/4` uses.
+  defp purge_error(:not_found), do: :not_found
+  defp purge_error(:too_many_blocks), do: :too_many_blocks
+  defp purge_error(:live_descendants), do: :live_descendants
+  defp purge_error(%Ash.Error.Forbidden{}), do: :forbidden
+  defp purge_error(error), do: if(forbidden_error?(error), do: :forbidden, else: error)
+
+  # The ids of the page's blocks, then one hard destroy each — `:destroy_permanently`, because an
+  # ARCHIVED block is still a block holding content, and the point of a purge is that the content is
+  # gone. Only `id` is selected: this path reads no text at all, vaulted or plain.
+  defp purge_blocks(mount, scope, doc_id) do
+    rows =
+      mount
+      |> block_resource()
+      |> Ash.Query.ensure_selected([:id, :org_id])
+      |> Ash.Query.filter(doc_id == ^doc_id)
+      |> Ash.Query.limit(@purge_block_limit)
+      |> Ash.read!(scope: scope)
+
+    if length(rows) >= @purge_block_limit do
+      {:error, :too_many_blocks}
+    else
+      Enum.reduce_while(rows, :ok, fn block, :ok ->
+        case block
+             |> Ash.Changeset.for_destroy(:destroy_permanently, %{}, scope: scope)
+             |> destroy() do
+          {:ok, _} -> {:cont, :ok}
+          {:error, error} -> {:halt, {:error, error}}
+        end
+      end)
+    end
+  end
+
+  @doc """
   Re-resolve this page's link graph (WS-Notes Phase 4 unit 4.3) — called inside the SAME
   transaction as every text/structure write, so a save can never leave the `DocLink` rows
   describing text the page no longer has.
@@ -613,12 +1017,69 @@ defmodule Samen.Web.Notes.Writes do
     |> destroy()
   end
 
+  # Deleting a page takes BOTH directions of its edge set with it (ADR-053 §3.1): the page's own
+  # `[[Title]]`s (source) and the pages that linked here (target). A `DocLink` row asserts "this
+  # page links to that LIVE page"; once the target is archived the row is stale by construction
+  # (every read seam already renders the text as unresolved), so destroying it keeps the edge
+  # table honest instead of leaving rows pointing at a page the workspace no longer has. Nothing
+  # is lost that a restore cannot re-derive: the link INTENT lives in the source block's text, and
+  # the next save of that page re-creates the edge.
+  #
+  # Each direction is bounded by @link_limit like every other fan-out in this module.
+  defp destroy_page_links(mount, scope, doc_id) do
+    base =
+      mount
+      |> link_resource()
+      |> Ash.Query.ensure_selected([:id, :source_doc_id, :target_doc_id, :anchor_text])
+      |> Ash.Query.limit(@link_limit)
+
+    with {:ok, outgoing} <- read_page_links(base, :source, doc_id, scope),
+         {:ok, incoming} <- read_page_links(base, :target, doc_id, scope) do
+      (outgoing ++ incoming)
+      |> Enum.uniq_by(& &1.id)
+      |> Enum.reduce_while({:ok, []}, fn link, {:ok, acc} ->
+        case destroy_link(link, scope) do
+          {:ok, destroyed} -> {:cont, {:ok, [destroyed | acc]}}
+          {:error, error} -> {:halt, {:error, error}}
+        end
+      end)
+    end
+  end
+
+  defp read_page_links(base, :source, doc_id, scope) do
+    base
+    |> Ash.Query.filter(source_doc_id == ^doc_id)
+    |> read_link_rows(scope)
+  end
+
+  defp read_page_links(base, :target, doc_id, scope) do
+    base
+    |> Ash.Query.filter(target_doc_id == ^doc_id)
+    |> read_link_rows(scope)
+  end
+
+  defp read_link_rows(query, scope) do
+    case Ash.read(query, scope: scope) do
+      {:ok, links} -> {:ok, links}
+      {:error, error} -> {:error, error}
+    end
+  end
+
   # ── positions ──────────────────────────────────────────────────────────────
 
   # Choose a position between the neighbours named by the hints, appending when there is no hint.
   # When the chosen slot has no room (adjacent ordinals), the parent's siblings are rebalanced to
   # fresh gaps and the choice is retried ONCE (`rebalanced?`), so this cannot loop.
-  defp insert_position(mount, scope, doc_id, parent, siblings, after_id, before_id, rebalanced? \\ false) do
+  defp insert_position(
+         mount,
+         scope,
+         doc_id,
+         parent,
+         siblings,
+         after_id,
+         before_id,
+         rebalanced? \\ false
+       ) do
     cond do
       not is_nil(after_id) ->
         case Enum.find_index(siblings, &(&1.id == after_id)) do
@@ -858,6 +1319,23 @@ defmodule Samen.Web.Notes.Writes do
 
     case Ash.read(query, scope: scope) do
       {:ok, [block | _]} -> {:ok, block}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  # A deleted page is readable only through the `:archived` read — the ordinary read is
+  # archive-filtered, which is exactly why "it is gone" and "it can be undone" are both true.
+  defp fetch_archived_doc(mount, scope, doc_id) do
+    query =
+      mount
+      |> doc_resource()
+      |> Ash.Query.for_read(:archived)
+      |> Ash.Query.ensure_selected(@doc_select)
+      |> Ash.Query.filter(id == ^doc_id)
+      |> Ash.Query.limit(1)
+
+    case Ash.read(query, scope: scope) do
+      {:ok, [doc | _]} -> {:ok, doc}
       _ -> {:error, :not_found}
     end
   end

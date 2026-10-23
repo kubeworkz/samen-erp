@@ -1,0 +1,22 @@
+# SABOTAGE: WS-NOTES Phase 3 unit 3.11 — THE PAGE IS DESTROYED AND ITS CONTENT IS NOT
+# A page's blocks are deliberately NOT archived with it (ADR-053 §3.1), so a hard delete of the page
+# row alone leaves the authored text — and its `vt_*` vault tokens — in rows no read can reach. The
+# purge destroys them in the SAME transaction. This patch skips that cascade: the trash empties, the
+# audit row is written, every visible assertion passes, and the tenant's content is still at rest.
+#
+# Aimed at the BLOCK CASCADE only. The archive-first guard, the policy, the audit, the page destroy
+# and the SUBTREE cascade (3.13) are untouched.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/notes_trash_test.exs
+# MUST_FAIL: an admin empties a page
+--- a/samen_web/lib/samen/web/notes/writes.ex
++++ b/samen_web/lib/samen/web/notes/writes.ex
+@@ -850,7 +850,6 @@
+   # One page's rows: both link directions, then its blocks, then the page itself.
+   defp purge_row(mount, scope, doc) do
+     with {:ok, _links} <- destroy_page_links(mount, scope, doc.id),
+-         :ok <- purge_blocks(mount, scope, doc.id),
+          {:ok, purged} <-
+            doc
+            |> Ash.Changeset.for_destroy(:purge, %{}, scope: scope)

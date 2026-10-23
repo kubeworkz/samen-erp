@@ -530,6 +530,71 @@ page id is `Page not found` with neither its title nor its block text in the bod
 `test/nav_reachability_test.exs` adds Pages to the reachable roster, so the dead-link leg covers
 it on every tenant page.
 
+### 3.4 As built — Phase 3 (2026-10-22): the page tree's cascade
+
+`parent_doc_id` (§3.1) makes a subtree, and a subtree's liveness had one hole: deleting a page
+retired the page and left every child LIVE, pointing at a row no read can see. The child could not
+be navigated to from its ancestor, the default read hid the parent that gave it its place, and
+restoring the parent later "found" children the user had never been given back in one action. This
+section fixes the invariant the rest of the ADR already assumed:
+
+> **A page is live iff its ancestors are live.**
+
+and enforces it at the MODEL, for every direction a page's liveness can change:
+
+* **Delete** — `Samen.Scopes.Docs.CascadeArchive` (on `Doc`, `on: [:destroy]`) archives every live
+  subpage at the PARENT'S instant, each through its own governed `:archive` action. Two details are
+  load-bearing and both are the reason not to use ash_archival's `archive_related` (the
+  `Chat.CascadeArchive` argument, which this tree needs even more): the instant is propagated with
+  `force_change_attribute/3` rather than re-read per child, which is what the restore pairs on
+  (ADR-040 §5.4); and each child is destroyed through the action that carries
+  `Samen.Archival.Audit`, so a five-page subtree leaves five `record_archived` rows naming the same
+  actor instead of one row saying "some pages". The walk recurses one level at a time — each
+  child's own `:archive` runs the same change — so there is no hand-rolled recursive query and no
+  depth cap; the LIVE-only read is the termination argument, because every step retires a row. A
+  children read that FAILS aborts the parent's archive: an archive that cannot see its children
+  must not proceed alone, since that is the orphan, shipped. (`on: [:destroy]` is not decoration:
+  Ash's global `on:` default is `[:create, :update]`, and `:archive` is a destroy-typed action, so
+  the change silently never ran until it was attached that way — the `Cms`/`Support` attachments
+  record the same trap.)
+* **Restore** — `CascadeRestore` restores exactly the pages archived at the page's OWN instant (the
+  same-instant match), so Undo restores what the action removed: a subpage somebody deleted on its
+  own, at its own instant, stays in the trash. It also REFUSES to restore a page whose parent is
+  still trashed (`field: :parent_doc_id`), because that re-creates the same orphan from the other
+  side; `Writes.restore_page/3` asks the same question early so the trash renders the atom
+  `:parent_in_trash` rather than an Ash changeset error (the model's refusal is the guarantee, the
+  seam's check is the message).
+* **Purge** — a purge is the one write that ends a page, and it ends the pages under it too:
+  `Writes.purge_one/3` destroys the trashed subtree DEEPEST FIRST via `Tree.subtree/2`, each page
+  with its links, its blocks and its own `record_purged` row, and refuses the whole purge
+  (`{:error, :live_descendants}`) rather than destroy a page that was never deleted. `empty_trash/2`
+  skips the ids a parent's purge already took, so one click does not trip over its own cascade. The
+  subtree walk lives in the seam, next to the block cascade, because a purge's job is to destroy
+  CONTENT — which the model deliberately does not see — not just rows.
+
+`Samen.Scopes.Docs.Tree` is the single definition of "the subtree" (and of "is this parent still
+live?") that the model changes and the seam both read; two filters would have meant two slightly
+different sets, and a delete that reached one and not the other is exactly the bug this closes.
+
+**Surfaces.** The index's confirm names the subpage count — computed from the list the socket
+already holds, so no second read — and its notice reports what actually went (the count is taken
+BEFORE the write, because afterwards those rows are gone and the notice could not know). The
+editor's confirm states the rule; the trash names the page to restore first, and says which page to
+delete before emptying a subtree that still has a live one.
+
+**Proof.** `samen_web/test/samen/web/notes_tree_cascade_test.exs` (10): the subtree leaving the tree
+with one instant and one audit row per page; the cascade happening through `Samen.Archival.archive/2`
+with `Writes` never involved (the model is the guarantee, the helper is the convenience); the
+same-instant restore discriminating an earlier own-instant delete; the orphan refusal at BOTH layers
+and its positive control; the purge taking rows, blocks and one `record_purged` per page attributed
+to the admin; the bulk empty not tripping over the ids its own cascade removed; the live-descendant
+refusal with a positive control, and the three surface copies.
+
+**Sabotage.** 391 (the cascade un-attached — delete the page, leave the subtree), 392 (the
+same-instant discriminator dropped — undo resurrects somebody else's own delete), 393 (the purge skips
+the subtree), 394 (the live-descendant refusal dropped — the purge destroys a page nobody deleted),
+395 (the restore orphan guard dropped).
+
 ## 4. Editor mechanics (M1)
 
 | Concern | Mechanism |
@@ -580,6 +645,7 @@ Each row ships with a committed sabotage patch (numbers assigned at build time f
 | R15 | Archived pages and their blocks leave the tree, the search index, and backlink results | the archive filter is dropped on one of the three |
 | R16 | A vaulted block stays vaulted: the model refuses a `text_secure` clear (or a plain `text` twin) on any governed write, and fails closed when the classification is not loaded | `BlockVault` reads the stored classification as plain (sabotage **375**) |
 | R17 | Leaving the vault is a NAMED, audited, admin-only action: a `member` cannot declassify (policy), the plaintext is the vault's own (no caller-supplied text), the plain column's `FreeTextScan` still applies, and an audit row lands in the same transaction; the editor offers the control only where that write could be admitted | the action's `RoleAtLeast :admin` gate is dropped (sabotage **376**); the audit writer is a no-op (sabotage **377**); the surface's role gate is dropped so every member is offered the control (sabotage **378**); the mount's compile-time identity-seam guard is neutered, so an armable host without the seam ships dead admin-rank capabilities (sabotage **379**) |
+| R18 | **A page is live iff its ancestors are live** (§3.4): deleting a page retires its subtree at one instant with one `record_archived` row per page; restoring it brings back exactly the pages that went down with it and refuses a page whose parent is still trashed; purging it destroys the trashed subtree with its content, and refuses rather than destroy a live subpage | the archive cascade is un-attached (sabotage **391**); the same-instant discriminator is dropped, so an undo resurrects a colleague's own delete (**392**); the purge destroys the page and leaves its subtree (**393**); the live-descendant refusal becomes a no-op, so a purge destroys a page nobody deleted (**394**); the restore orphan guard answers `true` (**395**) |
 
 ## 7. Consequences
 
