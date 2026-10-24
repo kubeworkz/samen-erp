@@ -75,6 +75,16 @@ defmodule Mix.Tasks.Samen.Verify.DbBootTest do
   # GREEN — the real tree, non-vacuously
   # ---------------------------------------------------------------------------
 
+  # The two real-tree proofs below walk the WHOLE checkout (5 apps' `priv/` probes and
+  # templates, every `test/support/` harness, every golden) — pure filesystem I/O with a warm
+  # cost of ~6 s, but >10x that on a memory-starved host, which killed this at the 60 s default
+  # under the root gate's concurrent tiers (2026-10-24: stuck in `File.regular?`, 872 MB free
+  # of 7.9 GB, inside the same window as `DROP DATABASE … command timed out`). The work is
+  # correct and the walk is bounded; only the clock was wrong, so these carry an explicit budget
+  # instead of inheriting the default. A genuine hang still fails — later, and once.
+  @monorepo_walk_timeout 180_000
+
+  @tag timeout: @monorepo_walk_timeout
   test "GREEN: the real monorepo satisfies its own gate, and the walk is NOT vacuous" do
     scan = V.scan(root: @repo_root)
 
@@ -93,6 +103,9 @@ defmodule Mix.Tasks.Samen.Verify.DbBootTest do
     assert V.violation_records(root: @repo_root) == []
   end
 
+  # Spawns a whole second `mix` VM over the same tree, so it is strictly heavier than the walk
+  # above and shares its budget for the same reason.
+  @tag timeout: @monorepo_walk_timeout
   test "END TO END (green): the real tree exits 0 through the task" do
     {output, status} =
       System.cmd(
