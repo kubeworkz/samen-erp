@@ -56,10 +56,20 @@ defmodule Samen.Fleet.LocalCredential do
 
     @name __MODULE__
 
+    # STARTED UNLINKED, deliberately. `start_link/2` links the agent to whichever process happens
+    # to call this first — harmless under `mix run`, but under ExUnit that is a TEST process: the
+    # agent died with the test that won the race, and any other test that had already looked it up
+    # (`whereis != nil`, so `ensure_started` returns `:ok`) then crashed on an update/get against a
+    # dead pid. Observed 2026-10-24 in the root gate: pawchart's `FleetWireTest` setup failed with
+    # `GenServer.call(Samen.Fleet.LocalCredential.Agent, …)` → `no process … not alive` while 126
+    # of its 127 tests passed, because a concurrent async module had created the agent moments
+    # earlier and finished. Nothing supervises this reference implementation on purpose (it is
+    # process-local test/probe scratch), so `start/2` — unlinked — is the lifetime that matches
+    # the contract: alive for the BEAM, never owned by a caller that comes and goes.
     defp ensure_started do
       case Process.whereis(@name) do
         nil ->
-          case Elixir.Agent.start_link(fn -> %{} end, name: @name) do
+          case Elixir.Agent.start(fn -> %{} end, name: @name) do
             {:ok, _pid} -> :ok
             {:error, {:already_started, _pid}} -> :ok
           end

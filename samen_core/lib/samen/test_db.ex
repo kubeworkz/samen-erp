@@ -22,7 +22,9 @@ defmodule Samen.TestDb do
   What every caller actually needs is a MIGRATED database, so:
 
     * the drop is BEST-EFFORT — it only converges the schema, and whatever survives is
-      re-migrated by the caller anyway;
+      re-migrated by the caller anyway — but a drop that did not COMPLETE is retried until it
+      does (see `drop_best_effort/2`: a `psql` timeout means the DROP is still running
+      server-side, and it must not land after the create);
     * the create is RETRIED (20 × 500ms by default) until the database verifiably reports
       `:up`, tolerating both "already up" answers;
     * everything else RAISES — an uncreatable database, an exhausted retry budget, or an
@@ -36,6 +38,7 @@ defmodule Samen.TestDb do
   @default_timeout 60_000
   @default_attempts 20
   @retry_interval 500
+  @drop_attempts 2
 
   @typedoc "A repo module (the emitted harnesses) or an explicit repo config (a scratch DB)."
   @type repo_or_config :: module() | keyword()
@@ -101,8 +104,15 @@ defmodule Samen.TestDb do
 
   # ── internals ──────────────────────────────────────────────────────────────
 
-  # A failed drop is only ever "the schema did not converge" — the caller re-migrates whatever
-  # database it finds, so this is a note, not a failure.
+  # A failed drop is usually "the schema did not converge" — the caller re-migrates whatever
+  # database it finds, so that is a note, not a failure. The exception is a drop that did not
+  # FINISH: `DROP DATABASE` that outlives Ecto's client timeout keeps running server-side, and it
+  # can land AFTER the `storage_up/1` that follows — the caller then migrates a database that no
+  # longer exists (observed 2026-10-24 in the root gate's concurrent tier: `drop skipped
+  # ("command timed out"); re-migrating the existing database`, then every pool connection
+  # `FATAL 3D000 database "pawchart_test" does not exist`). Re-issuing the (idempotent) drop is
+  # what makes the state deterministic: Postgres serialises the two DDLs on the same name, so the
+  # retry either performs the drop now or answers `:already_down` once the first one lands.
   defp drop_best_effort(adapter, config) do
     case adapter.storage_down(config) do
       :ok ->
@@ -112,8 +122,33 @@ defmodule Samen.TestDb do
         :ok
 
       {:error, reason} ->
-        log("drop skipped (#{inspect(reason)}); re-migrating the existing database")
+        retry_drop(adapter, config, reason, @drop_attempts)
     end
+  end
+
+  defp retry_drop(adapter, config, reason, attempts) when attempts > 0 do
+    log(
+      "drop did not complete (#{inspect(reason)}); retrying to settle the state " <>
+        "(#{attempts} attempt(s) left)"
+    )
+
+    Process.sleep(@retry_interval)
+
+    case adapter.storage_down(config) do
+      :ok ->
+        :ok
+
+      {:error, :already_down} ->
+        :ok
+
+      {:error, other} ->
+        retry_drop(adapter, config, other, attempts - 1)
+    end
+  end
+
+  defp retry_drop(_adapter, _config, reason, 0) do
+    log("drop still not completing (#{inspect(reason)}); re-migrating whatever database is there")
+    :ok
   end
 
   defp wait_until_up!(adapter, config, attempts, total) do

@@ -39,6 +39,13 @@ defmodule Samen.ChokepointTest do
   # ===================================================================
 
   describe "RED PATH — a second decrypt call site is caught" do
+    # BOTH tests COPY the whole `lib/` tree and then sweep it with `Path.wildcard/1`, which is
+    # filesystem-bound rather than slow by nature. Warm this is ~40 s of the file's runtime; on a
+    # memory-starved host inside the root gate it outran ExUnit's 60 s default (observed
+    # 2026-10-24: this test died in `:filelib.do_double_star/6` with 790 MB free of 8.1 GB, then
+    # passed 5/5 in 43 s alone). The same budget the real-tree walk proofs took in 3483570b.
+    @describetag timeout: 180_000
+
     setup do
       scratch =
         Path.join(System.tmp_dir!(), "samen_chokepoint_#{System.unique_integer([:positive])}")
