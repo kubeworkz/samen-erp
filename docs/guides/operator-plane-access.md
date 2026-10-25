@@ -124,6 +124,49 @@ Notes that matter in practice:
   role. It is a *statement of posture*, never authority: `authorize_write/1` is unchanged, and the
   posture bar is proven load-bearing by
   `scripts/sabotages/337-s14-dlq-posture-bar-dropped.patch`.
+- **The TENANT chrome offers the console to operators — and only to operators (P18).** A host's
+  tenant workspace runs on the operator org's own tenant plane, so an operator who signs in lands
+  on a TENANT page (`/crm/dashboard` in samenerp). The shared workspace switcher
+  (`Samen.Web.CurrentOrg.switcher/1`) ends with the console entry (`← <operator workspace> →
+  /operator/accounts`), and the SETTINGS sidebar — which carries no switcher at all — renders the
+  same entry directly, so an operator editing their profile never loses the path back. Two facts
+  decide whether it renders: the session's **seat** — the
+  operator role `Samen.Web.Operator.Authz.seat_role/2` resolves from the host seam (the mount's
+  `:operator_authority` label, else the app-env `config :<otp_app>, :operator_authority`, which
+  is what a tenant module mount has) — assigned by `Samen.Web.TenantAuthz` and stashed on the
+  mount as the `:operator_seat` label by `Samen.Web.Live.assign_mount/2`; and the workspace
+  directory, because the entry must survive an EMPTY list (samenerp seeds only its own operator
+  org, which `Samenerp.Directory` excludes, so this is its default state). A plain tenant session
+  gets no entry — the link would only dead-end at Gate 2 — and nothing about it grants access:
+  everything under `/operator` still runs both gates above. Proofs: `operator_seat_test.exs`,
+  `current_org_test.exs`, sabotage 396.
+- **A sign-in LANDS an operator on the console (P18).** Offering the entry is not enough when the
+  operator's own workspace is the console: `Samen.Web.Auth.SessionController.finish_login/5` now
+  picks the destination in this order — (1) an explicit, same-origin `return_to` always wins (a
+  deep link, the invite-accept flow's "sign in to continue" included, is the user's instruction);
+  (2) otherwise the **seat** decides, resolved through the SAME `Authz.seat_role/2` seam the
+  chrome gates the entry on, from the session the login just minted; (3) otherwise the host's
+  `:tenant_landing`. So an operator with nothing to return to arrives on
+  `Samen.Web.CurrentOrg.operator_console_path/0` (`/operator/accounts` — the one place the path
+  is named, used by the entry AND the landing) and a plain tenant sign-in is exactly where it
+  was. The open-redirect refusal still runs FIRST: a `//`/absolute `return_to` is dropped before
+  either destination is chosen, and an erroring host seam falls back to the tenant landing, never
+  to the console. This grants nothing — `/operator/*` still re-derives authority per request.
+  Proofs: `samen_web/test/samen/web/login_landing_test.exs` (operator green, tenant control, seat
+  keyed on the signer's own principal, `return_to` wins, both open-redirect refusals, and the
+  disarmed twin), the host twin `samenerp/test/auth_login_redirect_test.exs` (armed, so operator
+  vs tenant is a real roster decision, plus the disarmed dev posture), sabotage 397.
+  **A dev-only seat never PLACES anyone.** The seat answers two questions of very different
+  weight, so `Samen.Web.Operator.Authz.seat_provenance/1` names which answer it is: `:roster` on
+  an ARMED host (a real roster decision, the same one `/operator/*` re-derives) versus `:dev_only`
+  on a DISARMED one, where the usual resolver grants an operator role to *everyone*
+  (`Samenerp.OperatorAuthz`'s documented fallback, and the shape `dev_operator_role/2` names). The
+  chrome still OFFERS the console on a `:dev_only` seat — a developer browsing their own tenant
+  workspace wants the door — but the landing ignores it, so a tenant's dev sign-in is exactly
+  where it always was: on its tenant dashboard (`/crm/dashboard` in samenerp). Arm the host
+  (`config :<otp_app>, auth_required?: true`) to see the operator landing locally. The landing is
+  a *destination*, not an entitlement: a host whose seam says "not an operator" is never sent
+  there.
 - **The chrome names the resolved role.** Every operator page's sidebar footer
   (`Samen.Web.Operator.Live.operator_sidebar/1`) renders the session's `:samen_operator_role` as
   a human label — the *same* assign every write predicate reads — so an operator reading the
@@ -301,6 +344,7 @@ Samenerp.FleetAuthz` and `:fleet_products, [:samenerp]`. `Samenerp.FleetAuthz` *
 | Fleet-wide role seam (`roles[:fleet]`) | `samen_core/lib/samen/fleet/authz.ex` · `samen_web/lib/samen/web/operator/fleet.ex` |
 | Per-tenant drill-in gate (role + scope + session) | `samen_web/lib/samen/web/operator/impersonation.ex` |
 | The operator sidebar / `writable?/1` posture | `samen_web/lib/samen/web/operator/live.ex` |
+| The tenant chrome's operator SEAT (`seat_role/2`) | `samen_web/lib/samen/web/operator/authz.ex` |
 
 Proofs worth reading alongside this doc: `samen_web/test/samen/web/webhook_dlq_authz_test.exs`,
 `fleet_cockpit_authz_test.exs`, `operator_scope_gate_test.exs`,

@@ -781,6 +781,17 @@ td.right { text-align: right; }
 .ws-switcher-sep { height: 1px; background: var(--line); margin: 6px 4px; }
 .ws-switcher-ops { color: var(--muted); font-weight: 550; }
 
+/* P18 — the operator-console entry when there is NO workspace list to put it in (samenerp seeds
+   only its own operator org, which the directory deliberately excludes). It keeps the switcher
+   chevron's own look and its `margin-left: auto` seat, so the sidebar header is unchanged for
+   everyone else — a plain tenant session renders nothing here at all. */
+.ws-operator-entry { margin-left: auto; }
+.ws-operator-entry a {
+  display: block; color: var(--faint); font-size: 12px; padding: 3px 6px; border-radius: 7px;
+  border: 1px solid transparent; text-decoration: none; white-space: nowrap;
+}
+.ws-operator-entry a:hover { background: var(--card); border-color: var(--line2); color: var(--ink); }
+
 /* Operator sidebar "act as a tenant →" launcher (ADR-013 §5.1 — the down path). */
 .op-act-as { padding: 8px 10px 4px; }
 .op-act-as .grp {

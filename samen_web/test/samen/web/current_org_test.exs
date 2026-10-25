@@ -228,7 +228,7 @@ defmodule Samen.Web.CurrentOrgTest do
   # switcher/1 — lists the orgs + writes the session via the SessionController
   # ==========================================================================
 
-  test "switcher/1: renders a link per org to the session-write endpoint + the host's operator entry" do
+  test "switcher/1: renders a link per org to the session-write endpoint" do
     mount = crm_mount(%{org_directory: {__MODULE__, :dir_fixture, []}, operator_workspace: "Driftwood Ops"})
     html = render_switcher(%{mount: mount, org_id: "11111111-0000-4000-8000-000000000001", return_to: "/crm/contacts"})
 
@@ -237,7 +237,28 @@ defmodule Samen.Web.CurrentOrgTest do
     assert html =~ "/session/org/11111111-0000-4000-8000-000000000001?return_to=%2Fcrm%2Fcontacts"
     assert html =~ "/session/org/11111111-0000-4000-8000-000000000002?return_to=%2Fcrm%2Fcontacts"
     assert html =~ "Summit Freight Partners"
-    # The pinned "return to operator plane" entry — labelled from the MOUNT, not hardcoded.
+
+    # P18 RED — a PLAIN TENANT session (no operator seat on the mount) gets no console entry:
+    # the link would dead-end at the always-on operator gate. Positive control for this
+    # assertion is the next test, which renders the SAME mount with a seat.
+    refute html =~ "/operator/accounts"
+    refute html =~ "operator-console-entry"
+    refute html =~ "Driftwood Ops"
+  end
+
+  test "switcher/1: an operator SEAT gets the console entry, labelled from the MOUNT" do
+    mount =
+      crm_mount(%{
+        org_directory: {__MODULE__, :dir_fixture, []},
+        operator_workspace: "Driftwood Ops",
+        operator_seat: :operator_admin
+      })
+
+    html = render_switcher(%{mount: mount, org_id: "11111111-0000-4000-8000-000000000001", return_to: "/crm/contacts"})
+
+    # The rows are unchanged — the seat only ADDS the downward affordance.
+    assert html =~ "Summit Freight Partners"
+    assert html =~ ~s(id="operator-console-entry")
     assert html =~ "/operator/accounts"
     assert html =~ "Driftwood Ops"
   end
@@ -257,7 +278,11 @@ defmodule Samen.Web.CurrentOrgTest do
   test "switcher/1: a non-driftwood host's operator entry is NEUTRAL, never 'Driftwood Ops'" do
     html =
       render_switcher(%{
-        mount: crm_mount(%{org_directory: {__MODULE__, :dir_fixture, []}}),
+        mount:
+          crm_mount(%{
+            org_directory: {__MODULE__, :dir_fixture, []},
+            operator_seat: :operator_support
+          }),
         org_id: nil,
         return_to: nil
       })
@@ -310,9 +335,36 @@ defmodule Samen.Web.CurrentOrgTest do
     |> IO.iodata_to_binary()
   end
 
-  test "switcher/1: hides entirely when the directory is empty" do
+  test "switcher/1: hides entirely when the directory is empty (a plain tenant)" do
     html = render_switcher(%{mount: crm_mount(nil), org_id: nil, return_to: nil})
     refute html =~ "workspace-switcher"
+    refute html =~ "operator-console-entry"
+  end
+
+  # P18 (the samenerp shape: the seeded directory holds NO tenant orgs, because the operator
+  # seat is excluded from it) — an operator must still reach the console. The menu has nothing
+  # to hold, so the entry renders on its own; without this the operator has no in-product path.
+  test "switcher/1: an operator SEAT still gets the console entry when the directory is EMPTY" do
+    html =
+      render_switcher(%{
+        mount: crm_mount(%{operator_workspace: "Samenerp Ops", operator_seat: :operator_admin}),
+        org_id: nil,
+        return_to: nil
+      })
+
+    # No workspace list → no dropdown…
+    refute html =~ "workspace-switcher"
+    # …but the console entry is there, on its own, pointing at the operator plane.
+    assert html =~ ~s(id="operator-console-entry")
+    assert html =~ "/operator/accounts"
+    assert html =~ "Samenerp Ops"
+  end
+
+  test "switcher/1: an operator/aggregate MOUNT keeps its console entry with no session label" do
+    mount = build_operator_mount(Samen.WebTest.Operator.Seeds.seed_all(tenants: 1).operator_org_id)
+    html = render_switcher(%{mount: mount, org_id: nil, return_to: "/broker"})
+
+    assert html =~ "/operator/accounts"
   end
 
   # ==========================================================================

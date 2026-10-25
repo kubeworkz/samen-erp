@@ -106,6 +106,97 @@ defmodule Samen.Web.Operator.Authz do
 
   def resolve_role(_mount, _session), do: nil
 
+  @doc """
+  The operator role this SESSION's principal holds — the TENANT chrome's copy of the question
+  `resolve_role/2` answers for the operator gate.
+
+  ## Why the tenant chrome needs it (and the gate's answer is not enough)
+
+  `resolve_role/2` reads the host seam off the MOUNT (`:operator_authority`). That label is set
+  by `samen_operator_routes/2`, so it exists on an OPERATOR mount and nowhere else — every
+  tenant module mount (`:crm`, `:billing`, `:settings`, …) carries the host's shared tenant
+  labels instead. A tenant sidebar that wants to know "is the person reading this page also an
+  operator?" therefore cannot ask gate 2's resolver: it would answer `nil` for EVERYONE on a
+  tenant page, operator or not (the silent-invisibility bug this exists to close).
+
+  So this helper reads the SAME seam with ONE extra fallback: after the mount label it consults
+  the host's application env (`config :<otp_app>, :operator_authority`), which is where a host
+  that mounts its operator plane declares the authority once for the whole app (samenerp:
+  `{Samenerp.OperatorAuthz, :resolve_role, [:samenerp]}`). The `otp_app` comes from the mount
+  itself (`Samen.Web.Mount.otp_app/1` — the `:otp_app` label, else `repo.config()[:otp_app]`).
+
+  ## Fail-CLOSED, and display/affordance only
+
+  No seam, an erroring resolver, a `nil` or a non-role return ⇒ `nil` (not an operator). The
+  answer decides whether a TENANT surface OFFERS the operator-console link; it grants nothing —
+  every `/operator/*` request still passes gate 1 (`Samen.Web.AuthGate`) and gate 2
+  (`{Samen.Web.Operator.Authz, :require_operator}`), which re-derive from the session principal
+  and refuse independently. Showing the link to a non-operator would be a dead end, not an
+  escalation; hiding it from a real operator is the discoverability defect, and it is the one
+  this function exists to prevent.
+  """
+  @spec seat_role(Mount.t() | nil, map()) :: Actor.operator_role() | nil
+  def seat_role(%Mount{} = mount, session) when is_map(session) do
+    case authority_mfa(mount) || app_env_authority(mount) do
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        validate_role(apply(mod, fun, args ++ [principal_id(mount, session)]))
+
+      _ ->
+        nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  def seat_role(_mount, _session), do: nil
+
+  @doc """
+  WHICH KIND OF ANSWER `seat_role/2` gives on this mount — `:roster` or `:dev_only`.
+
+  The seat is asked two different questions, and they do not deserve the same trust:
+
+    * the tenant CHROME offers the console link from it — display only, so a dev-only seat is fine
+      (arguably the point: a developer browsing their own tenant workspace wants the door), and
+    * the login LANDING is decided from it — a real placement decision, where a dev-only seat is
+      actively wrong, because on a DISARMED host the usual resolver grants an operator role to
+      EVERYONE (`Samenerp.OperatorAuthz`'s documented fallback; the shape `dev_operator_role/2`
+      names). Sending every dev sign-in to the operator console is not "operators land on the
+      console", it is "nobody has a tenant dashboard".
+
+  So the provenance is the host's ARMING posture, resolved through the ONE seam every gate shares
+  (`Samen.Web.TenantGate.armed?/1` — an explicit `auth_required?`, else prod-armed /
+  dev-test-disarmed):
+
+    * `:roster` — ARMED: the seam's answer is a real roster decision (the same one `/operator/*`
+      re-derives per request), so it may PLACE a sign-in.
+    * `:dev_only` — DISARMED, or a mount with no host at all: the answer names no operator, so it
+      may OFFER the console but never PLACE anyone. A disarmed host keeps the tenant landing.
+
+  Nothing here weakens the gate: `:dev_only` only ever withholds a placement decision, and
+  `resolve_role/2` — the actual authorization — is untouched in both postures.
+  """
+  @type seat_provenance :: :roster | :dev_only
+
+  @spec seat_provenance(Mount.t() | nil) :: seat_provenance()
+  def seat_provenance(%Mount{} = mount) do
+    if Samen.Web.TenantGate.armed?(Mount.otp_app(mount)), do: :roster, else: :dev_only
+  end
+
+  def seat_provenance(_mount), do: :dev_only
+
+  # The host-declared authority seam from APPLICATION ENV — the same `{mod, fun, args}` shape as
+  # the mount label, for a host that declares it once instead of threading it into every mount.
+  # `nil` for a mount with no resolvable `otp_app` (a bare test mount) or a host that declares
+  # none, which keeps `seat_role/2` fail-closed.
+  defp app_env_authority(%Mount{} = mount) do
+    case Mount.otp_app(mount) do
+      nil -> nil
+      otp_app -> Application.get_env(otp_app, :operator_authority)
+    end
+  rescue
+    _ -> nil
+  end
+
   # ADR-035 §5 A4 — spine-aware principal. The session may carry ONLY
   # `samen_session_token` (the framework spine), not `samen_current_user`.
   # Prefer the legacy user_id when present (BYO-auth hosts), else resolve

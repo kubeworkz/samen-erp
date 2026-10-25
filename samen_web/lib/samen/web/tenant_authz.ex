@@ -78,7 +78,7 @@ defmodule Samen.Web.TenantAuthz do
       # The operator plane authorizes through T146/T150, which re-derive from the session
       # principal and re-check scope per write. Leave that path byte-for-byte unchanged.
       operator_plane?(mount) ->
-        {:cont, unconstrained(socket, mount, session)}
+        {:cont, socket |> unconstrained(mount, session) |> assign_seat(mount, session)}
 
       # The explicitly DISARMED dev/dogfood posture — the sanctioned ADR-031 `?org=` convenience.
       #
@@ -90,6 +90,7 @@ defmodule Samen.Web.TenantAuthz do
         {:cont,
          socket
          |> unconstrained(mount, session)
+         |> assign_seat(mount, session)
          |> Samen.Web.Replay.record_visit(CurrentOrg.declared_org(mount, params, session))}
 
       # ARMED + no authenticated principal → render NOTHING. This is the halt that closes the
@@ -107,6 +108,12 @@ defmodule Samen.Web.TenantAuthz do
          # `Identity.Membership` role on an armed host instead of self-elevating `:member` to
          # `:admin` (S1a).
          |> assign(:samen_tenant_principal, CurrentOrg.principal_id(mount, session))
+         # P18 — WHOSE session this is, one plane over: the operator role the principal holds
+         # (or nil), resolved through the host `:operator_authority` seam. The tenant chrome
+         # reads it to OFFER the operator console to operators only — it grants nothing (gate 2
+         # re-derives and refuses independently), and `Samen.Web.Live.assign_mount/2` stashes
+         # it onto the mount as the `:operator_seat` label so the shared sidebar can see it.
+         |> assign_seat(mount, session)
          # Session replay: ONE recorded step per visit, on the CONNECTED mount only (the dead
          # render mounts too — recording both would double every visit). The org + principal
          # this hook just pinned are exactly what the step carries; nothing is re-resolved.
@@ -131,6 +138,16 @@ defmodule Samen.Web.TenantAuthz do
     |> assign(:samen_authorized_orgs, :unconstrained)
     |> assign_new(:samen_tenant_org_id, fn -> nil end)
     |> assign_new(:samen_tenant_principal, fn -> CurrentOrg.principal_id(mount, session) end)
+  end
+
+  # P18 — the operator SEAT for THIS session (nil when the principal is not an operator), the
+  # fact the tenant chrome offers the console entry from. Resolved ONCE per mount (not per
+  # render) from the signed session principal via the host seam; every leg asks, because the
+  # disarmed/operator-plane legs are exactly where a host browses its own tenant workspace.
+  defp assign_seat(socket, mount, session) do
+    assign_new(socket, :samen_operator_seat, fn ->
+      Samen.Web.Operator.Authz.seat_role(mount, session)
+    end)
   end
 
   defp operator_plane?(%Mount{plane: %{kind: :operator}}), do: true

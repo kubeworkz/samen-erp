@@ -111,7 +111,9 @@ defmodule Samen.Web.Auth.SessionController do
   alias Samen.Web.Auth
   alias Samen.Web.Auth.Totp
   alias Samen.Web.Auth.TotpStepUp
+  alias Samen.Web.CurrentOrg
   alias Samen.Web.Mount
+  alias Samen.Web.Operator.Authz, as: OperatorAuthz
   alias Samen.Web.RateLimit
 
   @default_return "/"
@@ -426,15 +428,19 @@ defmodule Samen.Web.Auth.SessionController do
         # still handles it. Never fails the login on this lookup.
         legacy_user_id = legacy_principal_for(mount, credential_id)
 
-        conn
-        |> configure_session(renew: true)
-        |> Auth.put_session_token(raw_token)
-        |> maybe_put_legacy_user(legacy_user_id)
-        |> maybe_remember(remember?, raw_token)
-        |> Auth.clear_totp_pending_token()
-        |> delete_session(@pending_remember_key)
-        |> delete_session(@pending_return_key)
-        |> redirect(to: safe_return(return_to, mount))
+        conn =
+          conn
+          |> configure_session(renew: true)
+          |> Auth.put_session_token(raw_token)
+          |> maybe_put_legacy_user(legacy_user_id)
+          |> maybe_remember(remember?, raw_token)
+          |> Auth.clear_totp_pending_token()
+          |> delete_session(@pending_remember_key)
+          |> delete_session(@pending_return_key)
+
+        # P18 — the landing is decided AFTER the token is on the session: the operator SEAT is
+        # read off the session this login just minted, never off a param or a prior cookie.
+        redirect(conn, to: landing(conn, return_to, mount))
 
       {:error, _reason} ->
         redirect(conn, to: "#{login_path(conn)}?error=1")
@@ -742,11 +748,63 @@ defmodule Samen.Web.Auth.SessionController do
   # `"/"`, which on a host with no tenant-plane `/` route (driftwood) fell through to the
   # SaaS's own operator console (W3 BLOCKER-1). A host that wires nothing keeps the exact
   # previous behavior (`default_return/1` falls back to `@default_return` unchanged).
-  defp safe_return("/" <> rest = path, mount) when rest != "" do
-    if String.starts_with?(path, "//"), do: default_return(mount), else: path
+  defp safe_return(return_to, mount) do
+    case sanitized_return(return_to) do
+      {:ok, path} -> path
+      :none -> default_return(mount)
+    end
   end
 
-  defp safe_return(_, mount), do: default_return(mount)
+  # The sanitizer, separated from the fallback because the LOGIN landing (`landing/3`) needs to
+  # tell "the user asked for this deep link" apart from "there was nothing to honor" — the two
+  # cases a single `safe_return/2` collapses into one string. Every OTHER caller (logout, the
+  # stale-GET landing, the org switch) keeps `safe_return/2`'s exact behavior.
+  defp sanitized_return("/" <> rest = path) when rest != "" do
+    if String.starts_with?(path, "//"), do: :none, else: {:ok, path}
+  end
+
+  defp sanitized_return(_), do: :none
+
+  # P18 — WHERE A LOGIN LANDS (the sign-in twin of the tenant chrome's console entry).
+  #
+  #   1. An explicit, same-origin `return_to` ALWAYS wins: a deep link is the user's own
+  #      instruction, and silently overriding it would break every "sign in to continue"
+  #      flow (the invite-accept flow's `return_to` included).
+  #   2. Otherwise the operator SEAT decides, through the SAME seam the tenant chrome offers
+  #      the console link from (`Samen.Web.Operator.Authz.seat_role/2` — the session
+  #      principal, never a param). An operator with nothing to return to lands on the
+  #      console, because that is the surface an operator's job starts on; a plain tenant
+  #      keeps the unchanged `:tenant_landing` fallback.
+  #
+  # Reads the session this login JUST minted (the caller has already written the token), so the
+  # answer is about the person who signed in, not about whatever session the conn arrived with.
+  # It grants nothing: `/operator/*` still passes `Samen.Web.AuthGate` + `{Authz,
+  # :require_operator}`, both of which re-derive authority independently and refuse a
+  # non-operator — the landing only decides which of two doors is opened first.
+  #
+  # And it only PLACES a sign-in on an ARMED host. On a DISARMED one the seat is `:dev_only`
+  # (`Authz.seat_provenance/1`): the usual resolver there — samenerp's, `dev_operator_role/2`'s —
+  # answers "operator" for everybody while `auth_required?` is off, so trusting it here would
+  # send every developer's tenant account to the operator console. Dev keeps the tenant landing;
+  # the console stays one click away in the chrome, which reads the seat for the OFFER only.
+  defp landing(conn, return_to, mount) do
+    case sanitized_return(return_to) do
+      {:ok, path} -> path
+      :none ->
+        if operator_landing_seat?(conn, mount),
+          do: CurrentOrg.operator_console_path(),
+          else: default_return(mount)
+    end
+  end
+
+  defp operator_landing_seat?(conn, mount) do
+    OperatorAuthz.seat_provenance(mount) == :roster and
+      not is_nil(OperatorAuthz.seat_role(mount, get_session(conn)))
+  rescue
+    # A host seam that raises must not fail a SUCCESSFUL login — fall back to the tenant
+    # landing (the pre-P18 behavior), never to the operator console.
+    _ -> false
+  end
 
   defp default_return(mount), do: Mount.label(mount, :tenant_landing, @default_return)
 end

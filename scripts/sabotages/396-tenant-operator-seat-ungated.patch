@@ -1,0 +1,35 @@
+# SABOTAGE: P18 — THE TENANT CHROME TREATS EVERY SESSION AS AN OPERATOR
+# `Samen.Web.Operator.Authz.seat_role/2` is the ONE thing that tells a TENANT surface whether the
+# signed-in principal also holds operator authority, and its whole value is the FAIL-CLOSED
+# answer: no seam, a denying seam, or a role-shaped lie all mean "not an operator", so the shared
+# sidebar offers the operator console to operators and withholds it from plain tenants. This patch
+# makes a NIL answer default to `:operator_admin` — the shape of a "make the console easy to find
+# in dev" change — so every tenant session gets the `/operator/accounts` entry in its switcher,
+# and the click dead-ends at the always-on operator gate. That is exactly the dead-link class the
+# nav verifier exists to retire, and it is invisible from the operator plane.
+#
+# Deliberately NOT touched: the resolving branch's real answer (a genuine `:operator_support`
+# stays support), and the rescue leg (a RAISING seam still yields no seat). So the sabotage
+# discriminates: the four "denied" assertions flip, the raising-seam assertion stays green.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_seat_test.exs
+# MUST_FAIL: RED: no seam anywhere means no seat (a host that wires nothing exposes nothing)
+# MUST_FAIL: RED: a seam that DENIES means no seat
+# MUST_FAIL: RED: a role-shaped LIE (an atom outside roles/0) means no seat
+# MUST_FAIL: RED: a plain tenant session gets a NIL seat assigned (never a fabricated one)
+--- a/samen_web/lib/samen/web/operator/authz.ex
++++ b/samen_web/lib/samen/web/operator/authz.ex
+@@ -139,10 +139,10 @@
+   def seat_role(%Mount{} = mount, session) when is_map(session) do
+     case authority_mfa(mount) || app_env_authority(mount) do
+       {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+-        validate_role(apply(mod, fun, args ++ [principal_id(mount, session)]))
++        validate_role(apply(mod, fun, args ++ [principal_id(mount, session)])) || :operator_admin
+ 
+       _ ->
+-        nil
++        :operator_admin
+     end
+   rescue
+     _ -> nil

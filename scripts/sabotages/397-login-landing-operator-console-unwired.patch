@@ -1,0 +1,62 @@
+# SABOTAGE: P18 — THE LOGIN LANDING NEVER CONSULTS THE OPERATOR SEAT
+# An operator who signs in with no `return_to` (a bookmark, a fresh tab, the invite-accept
+# page's "sign in now" link) is supposed to land on the operator console — all tenant accounts,
+# plans and MRR — because that is the surface their job starts on. This patch is that wiring
+# REVERTED as if it had never been added: the seat branch, its `:roster` provenance check and
+# its resolver are gone, so `landing/3` is just `safe_return/2` and every sign-in falls through
+# to the host's `:tenant_landing`. Nothing errors, nothing logs; the operator simply arrives on a
+# tenant dashboard and has to find the console in the sidebar.
+#
+# Two behaviors ride on the same branch, so both regress: the ARMED operator no longer reaches
+# the console, and the dev-only rule (`Authz.seat_provenance/1` == :roster) disappears with it —
+# re-wiring the seat WITHOUT that check is the exact mistake this shape reverts to, where a
+# disarmed host's blanket `:operator_admin` sends every developer to the console.
+#
+# Why the dead code goes WITH the branch: leaving `operator_landing_seat?/2` (or its aliases)
+# behind would fail the build on an unused-function/unused-alias warning, and a COMPILE failure
+# is not a refutation — the tests have to run and fail. So the patch is a clean revert.
+#
+# Deliberately discriminating: the tenant CONTROLs, the `return_to`-wins test, the DISARMED twin
+# and the open-redirect REDs all stay green (they assert unchanged behavior); only the three
+# assertions about where an ARMED operator lands flip.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/login_landing_test.exs
+# MUST_FAIL: GREEN: an operator login with no return_to lands on the operator console
+# MUST_FAIL: GREEN: the seat is resolved from the principal THIS login minted
+# MUST_FAIL: RED: a protocol-relative return_to is dropped, then the operator landing applies
+--- a/samen_web/lib/samen/web/auth/session_controller.ex
++++ b/samen_web/lib/samen/web/auth/session_controller.ex
+@@ -111,9 +111,7 @@
+   alias Samen.Web.Auth
+   alias Samen.Web.Auth.Totp
+   alias Samen.Web.Auth.TotpStepUp
+-  alias Samen.Web.CurrentOrg
+   alias Samen.Web.Mount
+-  alias Samen.Web.Operator.Authz, as: OperatorAuthz
+   alias Samen.Web.RateLimit
+ 
+   @default_return "/"
+@@ -790,21 +788,10 @@
+   defp landing(conn, return_to, mount) do
+     case sanitized_return(return_to) do
+       {:ok, path} -> path
+-      :none ->
+-        if operator_landing_seat?(conn, mount),
+-          do: CurrentOrg.operator_console_path(),
+-          else: default_return(mount)
++      :none -> default_return(mount)
+     end
+   end
+ 
+-  defp operator_landing_seat?(conn, mount) do
+-    OperatorAuthz.seat_provenance(mount) == :roster and
+-      not is_nil(OperatorAuthz.seat_role(mount, get_session(conn)))
+-  rescue
+-    # A host seam that raises must not fail a SUCCESSFUL login — fall back to the tenant
+-    # landing (the pre-P18 behavior), never to the operator console.
+-    _ -> false
+-  end
+ 
+   defp default_return(mount), do: Mount.label(mount, :tenant_landing, @default_return)
+ end

@@ -314,6 +314,7 @@ defmodule Samen.Web.Mount do
     search_index
     docs_base
     __principal__
+    operator_seat
   )a
 
   @label_key_strings Map.new(@label_keys, fn k -> {Atom.to_string(k), k} end)

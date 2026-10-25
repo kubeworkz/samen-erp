@@ -612,6 +612,28 @@ defmodule Samen.Web.CurrentOrg do
 
   `compact: true` (the default in the CRM/Billing/Support sidebar header, where the `.who`
   block already prints the org name) renders just the chevron so the name is not duplicated.
+
+  ## The operator-console entry (P18) — OFFERED to operators, withheld from tenants
+
+  The menu ends with the ONE downward affordance the tenant chrome has: a link to the operator
+  console (`/operator/accounts` — every tenant account, its plan and its MRR). Two rules, both
+  load-bearing:
+
+    * **It renders for an operator SEAT only.** The seat is the `:operator_seat` mount label
+      `Samen.Web.Live.assign_mount/2` stashes from `Samen.Web.TenantAuthz`'s resolved
+      `:samen_operator_seat` (or, on an operator/aggregate MOUNT, the mount's own kind — the
+      operator workspace always keeps its own entry). A plain tenant session gets no such link: it
+      would only dead-end at the always-on operator gate, and a door that always refuses is a
+      mislink, not an affordance.
+    * **It survives an EMPTY workspace list.** The directory a host wires can legitimately be
+      empty (samenerp seeds only its own operator org, and `Samenerp.Directory` excludes that
+      seat) — and in exactly that state an operator has no other way to reach the console, since
+      the menu used to hide entirely. So with no orgs the entry renders on its own, outside the
+      `<details>`.
+
+  Surfacing it is ALL it does: `/operator/*` still passes `Samen.Web.AuthGate` and the
+  `{Samen.Web.Operator.Authz, :require_operator}` hook, which re-derive authority from the
+  session principal and refuse a non-operator independently.
   """
   def switcher(assigns) do
     assigns =
@@ -619,6 +641,7 @@ defmodule Samen.Web.CurrentOrg do
       |> assign(:orgs, switcher_orgs(assigns.mount))
       |> assign(:current_name, name(assigns.mount, assigns.org_id))
       |> assign(:operator_label, operator_label(assigns.mount))
+      |> assign(:operator_seat, operator_seat(assigns.mount))
       |> assign_new(:return_to, fn -> nil end)
       |> assign_new(:compact, fn -> false end)
 
@@ -649,12 +672,89 @@ defmodule Samen.Web.CurrentOrg do
             {oname}
           </button>
         </form>
-        <div class="ws-switcher-sep"></div>
-        <a class="ws-switcher-item ws-switcher-ops" href="/operator/accounts" role="menuitem">
-          ← {@operator_label} (operator)
-        </a>
+        <%= if @operator_seat do %>
+          <div class="ws-switcher-sep"></div>
+          <a
+            class="ws-switcher-item ws-switcher-ops"
+            id="operator-console-entry"
+            href={operator_console_path()}
+            role="menuitem"
+          >
+            ← {@operator_label} (operator)
+          </a>
+        <% end %>
       </div>
     </details>
+
+    <%!-- No workspace list, but an operator seat: the menu has nothing to hold, so the console
+          entry renders on its own instead of vanishing with it (samenerp's seeded state). --%>
+    <.operator_console_entry
+      :if={@orgs == [] and @operator_seat}
+      mount={@mount}
+      operator_label={@operator_label}
+    />
+    """
+  end
+
+  @doc """
+  The session's operator SEAT on this mount, or `nil` — the ONE predicate the tenant chrome
+  gates its console affordances on (`switcher/1` and `settings_sidebar/1` both read it).
+
+  Two sources, both structural:
+
+    * the `:operator_seat` runtime label `Samen.Web.Live.assign_mount/2` stashed (a tenant module
+      or settings mount — the ordinary case, resolved once by `Samen.Web.TenantAuthz`), and
+    * the MOUNT's own operator/aggregate kind (the operator workspace itself, where the entry is
+      the "back to the console" link the switcher has always carried — no session resolution is
+      involved and none is needed: reaching that mount already passed gate 2).
+
+  Display/affordance only: it decides whether a link is OFFERED, never what it may read or write.
+  """
+  @spec operator_seat(Mount.t() | nil) :: atom() | nil
+  def operator_seat(%Mount{} = mount) do
+    Mount.label(mount, :operator_seat, nil) || operator_scope_seat(mount)
+  end
+
+  def operator_seat(_), do: nil
+
+  defp operator_scope_seat(%Mount{plane: %{kind: :operator}}), do: :operator
+  defp operator_scope_seat(%Mount{scope_kind: k}) when k in [:operator, :aggregate], do: :operator
+  defp operator_scope_seat(_), do: nil
+
+  @doc """
+  The operator console's PATH — the ONE place the framework names where the console lives.
+
+  Two surfaces read it and must never disagree: the tenant chrome's `operator_console_entry/1`
+  (the link it renders) and `Samen.Web.Auth.SessionController`'s post-login landing (where an
+  operator credential with no explicit `return_to` is SENT). It is a framework-owned literal —
+  the `/operator/*` route table is emitted by `samen_operator_routes/2`, not by the host — so a
+  host has nothing to configure here.
+  """
+  @operator_console_path "/operator/accounts"
+
+  @spec operator_console_path() :: String.t()
+  def operator_console_path, do: @operator_console_path
+
+  @doc """
+  The operator-console ENTRY — the tenant chrome's one downward affordance, as a component so
+  every framework sidebar that offers it (`switcher/1` when the workspace list is empty, and
+  `Samen.Web.Settings.Live.settings_sidebar/1`, which carries no switcher) renders the SAME link.
+
+  It renders unconditionally; the CALLER gates it on `operator_seat/1` (a `:if` on the call, or
+  the surrounding `:if` in the switcher). `operator_label` defaults to the mount's
+  `:operator_workspace` label — the host's own name for its console, never a hardcoded brand.
+  """
+  attr :mount, Mount, default: nil
+  attr :operator_label, :string, default: nil
+
+  def operator_console_entry(assigns) do
+    assigns =
+      assign(assigns, :operator_label, assigns.operator_label || operator_label(assigns.mount))
+
+    ~H"""
+    <div class="ws-operator-entry">
+      <a id="operator-console-entry" href={operator_console_path()}>← {@operator_label} (operator)</a>
+    </div>
     """
   end
 

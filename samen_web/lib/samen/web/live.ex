@@ -20,8 +20,13 @@ defmodule Samen.Web.Live do
   def assign_mount(socket, %{"samen_mount" => raw} = session) when is_map(raw) do
     mount = Samen.Web.Mount.from_session(raw)
 
+    mount =
+      mount
+      |> stash_principal(socket.assigns[:samen_tenant_principal])
+      |> stash_seat(socket.assigns[:samen_operator_seat])
+
     socket
-    |> assign(:samen_mount, stash_principal(mount, socket.assigns[:samen_tenant_principal]))
+    |> assign(:samen_mount, mount)
     |> assign(:samen_acting_as, Samen.Web.CurrentOrg.acting_as?(session))
   end
 
@@ -35,6 +40,19 @@ defmodule Samen.Web.Live do
   # principal (the disarmed dev posture) leaves the write scope at its byte-identical `:admin`.
   defp stash_principal(%Samen.Web.Mount{} = mount, principal) do
     labels = Map.put(mount.labels || %{}, Samen.Web.TenantRole.principal_label(), principal)
+    %{mount | labels: labels}
+  end
+
+  # P18 — stash the SESSION's operator seat (resolved once by `Samen.Web.TenantAuthz`'s on_mount,
+  # which runs before this) onto the mount, the same runtime-only, never-re-serialized way the
+  # principal above is stashed. It is what lets the page's SIDEBAR — a component that only ever
+  # receives `mount` — offer the operator console to an operator and withhold it from a plain
+  # tenant, with no per-page threading. `nil` (the ordinary tenant session) leaves the mount
+  # byte-identical, so every existing sidebar renders exactly as before.
+  defp stash_seat(%Samen.Web.Mount{} = mount, nil), do: mount
+
+  defp stash_seat(%Samen.Web.Mount{} = mount, seat) do
+    labels = Map.put(mount.labels || %{}, :operator_seat, seat)
     %{mount | labels: labels}
   end
 

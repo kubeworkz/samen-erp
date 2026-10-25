@@ -29,6 +29,19 @@ defmodule Samen.Web.Settings.Live do
       subtitle="Settings"
       logo={Mount.label(@mount, :glyph, "S")}
     >
+      <%!-- P18 — an operator sitting on a SETTINGS page keeps the way back to the console. This
+            sidebar carries no workspace switcher (settings is single-org by construction), so the
+            entry is rendered directly, on the SAME `CurrentOrg.operator_seat/1` gate every other
+            tenant sidebar uses; a plain tenant session gets the header chevron it always had, and
+            no link. --%>
+      <:switcher>
+        <%= if CurrentOrg.operator_seat(@mount) do %>
+          <Samen.Web.CurrentOrg.operator_console_entry mount={@mount} />
+        <% else %>
+          <div class="col">⌄</div>
+        <% end %>
+      </:switcher>
+
       <div class="grp">Settings</div>
       <nav class="nav settings-nav" aria-label="Settings">
         <a href={href("/settings", @org_id, @user_id)} class={nav_class(@active, :profile)} id="settings-nav-profile">
