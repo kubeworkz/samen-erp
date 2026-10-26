@@ -20,13 +20,15 @@
 # TEST_FILES: test/fleet_cockpit_mount_test.exs
 # MUST_FAIL: the router mounts all four cockpit routes
 # MUST_FAIL: the router's compiled mount carries the cockpit labels
+diff --git a/samenerp/lib/samenerp_web/router.ex b/samenerp/lib/samenerp_web/router.ex
+index c1c98b75..7cbc7e60 100644
 --- a/samenerp/lib/samenerp_web/router.ex
 +++ b/samenerp/lib/samenerp_web/router.ex
-@@ -511,7 +511,6 @@
+@@ -555,7 +555,6 @@ defmodule SamenerpWeb.Router do
        # `:fleet_resolution` is deliberately LEFT UNWIRED (the driftwood posture): tenant
        # names therefore stay masked and the detail page says why, fail-closed, until a host
        # resolver is provisioned.
 -      fleet_cockpit: true,
        fleet_namespace: Samenerp.Fleet,
-       labels: %{
-         operator_workspace: "Samenerp Ops",
+       # The operator's PORTFOLIO page (`/operator/aggregate`) — the token-blind cross-tenant
+       # dashboard the sidebar's Portfolio item opens. `include_aggregate: true` declares the
