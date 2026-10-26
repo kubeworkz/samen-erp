@@ -106,8 +106,8 @@ defmodule Samenerp.OperatorPortfolioTest do
              "cohorts cannot be proven to withhold"
 
     accounts =
-      for(i <- 1..under, do: account("starter", 10_000, 2, :healthy)) ++
-        for(i <- 1..k, do: account("growth", 100_000, 4, :healthy))
+      List.duplicate(account("starter", 10_000, 2, :healthy), under) ++
+        List.duplicate(account("growth", 100_000, 4, :healthy), k)
 
     projection = OperatorAggregate.projection(accounts)
 
