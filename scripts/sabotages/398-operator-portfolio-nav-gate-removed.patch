@@ -1,0 +1,25 @@
+# SABOTAGE: the operator Portfolio nav gate (dead-link class).
+# Removes the `:if` gate from the Portfolio item in `Samen.Web.Operator.Live.operator_sidebar/1`,
+# restoring the exact defect a samenerp operator hit: the sidebar offers `/operator/aggregate`
+# on EVERY operator mount, but `samen_operator_routes/2` only declares that route under
+# `include_aggregate: true` (and hosts that mount it themselves only under their own
+# `live_session`), so the operator's first click answers Phoenix.Router.NoRouteError ("Not
+# Found"). The gate test's RED leg — a mount with no `aggregate_page` label must render NO
+# Portfolio item — has to FLIP; that is also what makes the `samen.verify.nav_links` operator
+# leg (added in the same change) load-bearing rather than a table of static hrefs.
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_portfolio_gate_test.exs
+# MUST_FAIL: RED: a mount without the label offers NO Portfolio item
+diff --git a/samen_web/lib/samen/web/operator/live.ex b/samen_web/lib/samen/web/operator/live.ex
+--- a/samen_web/lib/samen/web/operator/live.ex
++++ b/samen_web/lib/samen/web/operator/live.ex
+@@ -174,8 +174,8 @@ defmodule Samen.Web.Operator.Live do
+           so the item and the route can never drift apart again.
+         --%>
+         <.nav_item
+-          :if={Mount.label(@mount, :aggregate_page, false)}
++          :if={true}
+           label="Portfolio"
+           href="/operator/aggregate"
+           active={@nav_active == :aggregate}
+         >

@@ -162,7 +162,23 @@ defmodule Samen.Web.Operator.Live do
           `nav_active/1` above — the bar keeps the operator's place without inventing a
           top-level item that would mislink back to the same Accounts page.
         --%>
-        <.nav_item label="Portfolio" href="/operator/aggregate" active={@nav_active == :aggregate}>
+        <%!--
+          Portfolio is an OPT-IN surface, so the item is gated EXACTLY like Fleet above: the
+          `/operator/aggregate` route is declared only by `samen_operator_routes(...,
+          include_aggregate: true)` (or by a host that mounts the aggregate LiveView itself in
+          its own `live_session` and declares `labels: %{aggregate_page: true}`). Rendering the
+          item unconditionally is the dead-link bug this gate closes: the macro leaves
+          `include_aggregate` false BY DEFAULT, so a host that never mounted the page still
+          advertised it in the sidebar and Phoenix answered `NoRouteError` ("Not Found") on the
+          operator's first click. `samen.verify.nav_links` dead-link-checks operator mounts too,
+          so the item and the route can never drift apart again.
+        --%>
+        <.nav_item
+          :if={Mount.label(@mount, :aggregate_page, false)}
+          label="Portfolio"
+          href="/operator/aggregate"
+          active={@nav_active == :aggregate}
+        >
           <:icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9m6 10V5m6 14v-7" /></svg>
           </:icon>

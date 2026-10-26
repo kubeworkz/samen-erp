@@ -52,6 +52,13 @@ defmodule Samen.Web.Operator.AggregateLive do
   # Resolve the host aggregate data. A host wires `aggregate_loader: {M, F, A}` on the mount
   # labels; the loader returns the token-blind projection.
   #
+  # The loader MAY take the mount as a LEADING argument (arity `length(A) + 1`): a host whose
+  # projection is not a token-blind summary table but its OWN book of business (the operator's
+  # accounts / subscriptions / revenue, on the operator org's tenant plane — CLEAR, the SaaS owns
+  # that population) needs the mount to resolve that mount's plane + operator org. The 0-arity
+  # shape is unchanged, so a pure aggregate-domain loader (`{Driftwood.OperatorAggregate, :load,
+  # []}`) is untouched.
+  #
   # TWO failures are distinguished, because they are NOT the same fact (fail-honest):
   #
   #   * NO loader wired (`:not_configured`) — nothing was asked to read, so "no aggregate
@@ -60,9 +67,9 @@ defmodule Samen.Web.Operator.AggregateLive do
   #     and did not answer, so the surface must not report it as unwired or empty.
   defp load_aggregate(%Mount{} = mount) do
     case Mount.label(mount, :aggregate_loader, nil) do
-      {mod, fun, args} ->
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
         try do
-          case apply(mod, fun, args) do
+          case apply_loader(mod, fun, args, mount) do
             data when is_map(data) -> Map.put_new(data, :unread, nil)
             _ -> %{unread: :read_failed}
           end
@@ -76,6 +83,18 @@ defmodule Samen.Web.Operator.AggregateLive do
   end
 
   defp load_aggregate(_), do: %{unread: :not_configured}
+
+  # `{M, F, A}` calls `F` with `A`; a loader that DECLARES the extra arity gets the mount
+  # prepended. Decided by what the module actually exports, so an existing 0-arity loader keeps
+  # its exact meaning (`function_exported?/3` needs the module loaded — `Code.ensure_loaded?/1`
+  # first, since a host loader is rarely touched before this call).
+  defp apply_loader(mod, fun, args, mount) do
+    if Code.ensure_loaded?(mod) and function_exported?(mod, fun, length(args) + 1) do
+      apply(mod, fun, [mount | args])
+    else
+      apply(mod, fun, args)
+    end
+  end
 
   defp title(%Mount{} = mount), do: Mount.label(mount, :operator_title, "Portfolio")
   defp title(_), do: "Portfolio"

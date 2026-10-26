@@ -110,4 +110,18 @@ defmodule Samen.WebTest.NavLinksHost.Router do
       labels: @labels
     )
   end
+
+  # The OPERATOR plane — mounted here so the verifier's operator leg has a compiled route table to
+  # resolve against (the framework's own fixture must exercise every leg it ships, the same rule
+  # the tenant groups follow). `include_aggregate: true` declares `/operator/aggregate`; the red
+  # test in `nav_links_test.exs` pairs it with a source mount that declares the `aggregate_page`
+  # label while leaving the option OFF, which is exactly the surface-without-a-route bug.
+  scope "/" do
+    samen_operator_routes(Samen.WebTest.Operator,
+      repo: Samen.WebTest.Repo,
+      operator_org_id: "0f000000-0000-4000-8000-0000000000ff",
+      include_aggregate: true,
+      labels: %{operator_workspace: "Nav Links Ops"}
+    )
+  end
 end

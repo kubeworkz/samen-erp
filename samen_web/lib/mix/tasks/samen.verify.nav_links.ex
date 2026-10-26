@@ -245,24 +245,102 @@ defmodule Mix.Tasks.Samen.Verify.NavLinks do
     tenant_mounts = Enum.filter(mounts, &(&1.plane == :tenant))
     labelled = Enum.filter(tenant_mounts, &(gated_paths(&1.labels) != []))
 
-    cond do
-      tenant_mounts == [] ->
-        [
-          violation(:scan, app, "no TENANT-plane mount calls found — the scan found nothing to " <>
-            "certify (wrong --source-dir?)")
-        ]
+    tenant_violations =
+      cond do
+        tenant_mounts == [] ->
+          [
+            violation(:scan, app, "no TENANT-plane mount calls found — the scan found nothing to " <>
+              "certify (wrong --source-dir?)")
+          ]
 
-      labelled == [] ->
-        [
-          violation(:empty_emit, app, "no gated nav label is declared on any tenant mount " <>
-            "(checked: #{Enum.map_join(Map.keys(@gated_kinds), ", ", &to_string/1)}) — the " <>
-            "sidebar would render no module group, so this run certifies nothing")
-        ]
+        labelled == [] ->
+          [
+            violation(:empty_emit, app, "no gated nav label is declared on any tenant mount " <>
+              "(checked: #{Enum.map_join(Map.keys(@gated_kinds), ", ", &to_string/1)}) — the " <>
+              "sidebar would render no module group, so this run certifies nothing")
+          ]
 
-      true ->
-        links = labelled |> Enum.flat_map(&emitted_links/1) |> Enum.uniq_by(& &1.href)
-        dead_links(router, routes, links, labelled, app)
-    end
+        true ->
+          links = labelled |> Enum.flat_map(&emitted_links/1) |> Enum.uniq_by(& &1.href)
+          dead_links(router, routes, links, labelled, app)
+      end
+
+    tenant_violations ++ operator_dead_links(router, routes, mounts, app)
+  end
+
+  # ---- leg 1b: the OPERATOR sidebar's links resolve too ---------------------------------------
+
+  # The operator workspace has its OWN sidebar (`Samen.Web.Operator.Live.operator_sidebar/1`),
+  # not the tenant module groups, so it needs its own render. It used to be exempt from the
+  # dead-link leg entirely, and that hole is exactly how a host shipped a `Portfolio` item whose
+  # `/operator/aggregate` route only exists under `include_aggregate: true`: the operator's first
+  # click on the sidebar was `NoRouteError` ("Not Found") while every tier stayed green.
+  #
+  # The mount's EFFECTIVE labels are recomputed with the SAME helpers the router macro uses, so a
+  # label that the macro derives from an option (`include_aggregate`/`fleet_cockpit`) cannot drift
+  # from what the sidebar reads: an option that adds a route adds the nav item here too, and a
+  # mount that never declares the route never renders the item to check.
+  defp operator_dead_links(router, routes, mounts, app) do
+    mounts
+    |> Enum.filter(&(&1.plane == :operator))
+    |> Enum.flat_map(fn mount ->
+      case operator_links(mount) do
+        {:ok, hrefs} ->
+          Enum.flat_map(hrefs, fn href ->
+            if route_match?(routes, path_of(href)) do
+              []
+            else
+              [
+                violation(:dead_link, app, "the OPERATOR sidebar links #{href} " <>
+                  "(#{mount.file}:#{mount.line}) but #{inspect(router)} declares no matching GET " <>
+                  "route — Phoenix.Router.NoRouteError on the operator's first click. Mount that " <>
+                  "surface (`include_aggregate: true` for the aggregate page), or drop the nav " <>
+                  "item's label.")
+              ]
+            end
+          end)
+
+        :error ->
+          [
+            violation(:nav_render, app, "the operator sidebar for the mount at " <>
+              "#{mount.file}:#{mount.line} could not be rendered, so its links certify nothing")
+          ]
+      end
+    end)
+  end
+
+  # Render the REAL operator sidebar for the labels that mount carries (the artifact again) and
+  # collect its hrefs. `:error` — never a silent `[]` — when the render raises: an uncertifiable
+  # sidebar must fail the gate.
+  defp operator_links(mount) do
+    labels =
+      mount.labels
+      |> Samen.Web.Router.__fleet_cockpit_label__(mount.fleet_cockpit)
+      |> Samen.Web.Router.__aggregate_page_label__(mount.aggregate_page)
+
+    assigns = %{
+      mount: Samen.Web.Mount.new(:operator, nil, nil, labels: labels),
+      active: nil,
+      operator_role: nil,
+      __changed__: %{}
+    }
+
+    html =
+      Phoenix.LiveViewTest.__render_component__(
+        nil,
+        &Samen.Web.Operator.Live.operator_sidebar/1,
+        assigns,
+        []
+      )
+
+    hrefs =
+      ~r/href="([^"]+)"/
+      |> Regex.scan(html)
+      |> Enum.map(fn [_, href] -> href end)
+
+    {:ok, hrefs}
+  rescue
+    _ -> :error
   end
 
   defp dead_links(_router, _routes, [], labelled, app) do
@@ -532,7 +610,21 @@ defmodule Mix.Tasks.Samen.Verify.NavLinks do
 
     with {:ok, plane} <- resolve_plane(spec.plane, Keyword.get(opts, :plane)),
          {:ok, labels} <- resolve_labels(Keyword.get(opts, :labels), attrs) do
-      {:ok, %{kind: kind, plane: plane, labels: labels, macro: macro, file: file, line: line}}
+      {:ok,
+       %{
+         kind: kind,
+         plane: plane,
+         labels: labels,
+         macro: macro,
+         file: file,
+         line: line,
+         # The two OPTIONS that also add a ROUTE and therefore a nav item; the operator leg
+         # re-applies them with the macro's own label helpers. A non-literal opt resolves to
+         # `false` (never trusted), so an expression the scan cannot read can only HIDE an item
+         # from this leg, never invent one.
+         fleet_cockpit: literal_true?(Keyword.get(opts, :fleet_cockpit, false)),
+         aggregate_page: literal_true?(Keyword.get(opts, :include_aggregate, false))
+       }}
     else
       {:unresolved, what} ->
         {:error,
@@ -541,6 +633,8 @@ defmodule Mix.Tasks.Samen.Verify.NavLinks do
            "(pass a literal, a module-attribute literal, or a Map.put/Map.merge chain over one)")}
     end
   end
+
+  defp literal_true?(value), do: resolve_value(value, %{}) == true
 
   # The mount macros take their options as a keyword list (an empty list included).
   defp mount_opts?(arg) do

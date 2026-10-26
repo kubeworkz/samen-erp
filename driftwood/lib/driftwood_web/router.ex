@@ -484,6 +484,12 @@ defmodule DriftwoodWeb.Router do
       labels: %{
         operator_workspace: "Driftwood Ops",
         operator_glyph: "D",
+        # The Portfolio item in the operator sidebar is gated on this label (it is set
+        # automatically by `include_aggregate: true`). THIS host mounts the aggregate LiveView
+        # itself above — its own freight-shaped projection via `aggregate_loader:` — and leaves
+        # `include_aggregate: false` so the route is not declared twice, so it declares the label
+        # by hand. Without it the sidebar would hide a page that DOES exist here.
+        aggregate_page: true,
         tenant_landing: "/broker",
         impersonate_path: "/operator/impersonate",
         # T146 — the operator-ROLE authority seam. The `Samen.Web.Operator.Authz` on_mount

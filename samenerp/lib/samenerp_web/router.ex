@@ -557,7 +557,15 @@ defmodule SamenerpWeb.Router do
       # resolver is provisioned.
       fleet_cockpit: true,
       fleet_namespace: Samenerp.Fleet,
+      # The operator's PORTFOLIO page (`/operator/aggregate`) — the token-blind cross-tenant
+      # dashboard the sidebar's Portfolio item opens. `include_aggregate: true` declares the
+      # route AND puts the nav item in the sidebar (the two are the same label, so a host can
+      # never advertise a page it did not mount). SamenERP's projection is its OWN book of
+      # business, so the loader is host-supplied and takes the mount (the framework's optional
+      # leading-arity form) — see `Samenerp.OperatorAggregate`.
+      include_aggregate: true,
       labels: %{
+        aggregate_loader: {Samenerp.OperatorAggregate, :load, []},
         operator_workspace: "Samenerp Ops",
         # T146 — the operator-ROLE authority seam. `Samen.Web.Operator.Authz`'s on_mount derives
         # operator authority from the AUTHENTICATED SESSION PRINCIPAL via this MFA (fail CLOSED

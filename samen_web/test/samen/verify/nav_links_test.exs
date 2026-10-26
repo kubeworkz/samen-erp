@@ -22,6 +22,31 @@ defmodule Samen.Web.NavLinksVerifierTest do
   @router Samen.WebTest.NavLinksHost.Router
   @fixture_dir "test/support/nav_links_host"
 
+  # The SAME operator workspace, mounted WITHOUT the aggregate page. The dead-link cases for
+  # leg 1b run against THIS router, because `@router` (the reference host) deliberately DOES
+  # declare `/operator/aggregate` — certifying a dead link there would be impossible by
+  # construction, and a test that cannot fail is a bug.
+  defmodule NoAggregateRouter do
+    use Phoenix.Router
+    import Phoenix.LiveView.Router
+    import Samen.Web.Router
+
+    # The ONE tenant mount the dead-link trees declare, so this router satisfies leg 1 as well
+    # as leg 1b (a tree with no tenant mount is the verifier's own `:scan` refusal).
+    scope "/" do
+      samen_chat_routes(:chat, Samen.WebTest.Chat,
+        repo: Samen.WebTest.Repo,
+        labels: %{chat_path: "/chat"}
+      )
+
+      samen_operator_routes(Samen.WebTest.Operator,
+        repo: Samen.WebTest.Repo,
+        operator_org_id: "0f000000-0000-4000-8000-0000000000fe",
+        include_aggregate: false
+      )
+    end
+  end
+
   # The project dir the child process runs `mix` from — the task's documented invocation.
   @project_dir Path.expand("../../../", __DIR__)
 
@@ -269,6 +294,77 @@ defmodule Samen.Web.NavLinksVerifierTest do
         samen_files_routes(:files, Samen.WebTest.Primitives,
           repo: Samen.WebTest.Repo,
           labels: %{files_path: 42}
+        )
+      end
+    """
+  end
+
+  describe "the OPERATOR sidebar's links (leg 1b)" do
+    test "RED: a host advertising Portfolio without mounting the aggregate page is a dead link" do
+      dir =
+        tree!(
+          mounts(labels: %{chat_path: "/chat"}) <>
+            operator_mount("include_aggregate: false", "%{aggregate_page: true}")
+        )
+
+      assert [violation] = NavLinks.check(NoAggregateRouter, source_dirs: [dir], app: "test")
+      assert violation.kind == :dead_link
+      assert violation.message =~ "/operator/aggregate"
+      assert violation.message =~ "NoRouteError"
+      assert violation.message =~ "router.ex:"
+    end
+
+    test "positive control: the SAME tree against the reference router (which does mount it) is clean" do
+      dir =
+        tree!(
+          mounts(labels: %{chat_path: "/chat"}) <>
+            operator_mount("include_aggregate: false", "%{aggregate_page: true}")
+        )
+
+      assert NavLinks.check(@router, source_dirs: [dir], app: "test") == []
+    end
+
+    test "GREEN: the same host with include_aggregate: true certifies clean (the item AND the route)" do
+      dir =
+        tree!(
+          mounts(labels: %{chat_path: "/chat"}) <>
+            operator_mount("include_aggregate: true", "%{}")
+        )
+
+      assert NavLinks.check(@router, source_dirs: [dir], app: "test") == []
+    end
+
+    test "GREEN: no label and no option emits no Portfolio item, so there is nothing to resolve" do
+      dir =
+        tree!(
+          mounts(labels: %{chat_path: "/chat"}) <>
+            operator_mount("include_aggregate: false", "%{operator_workspace: \"Ops\"}")
+        )
+
+      assert NavLinks.check(NoAggregateRouter, source_dirs: [dir], app: "test") == []
+    end
+
+    test "RED: the same rule covers the fleet cockpit (an option with no route is a dead link)" do
+      dir =
+        tree!(
+          mounts(labels: %{chat_path: "/chat"}) <>
+            operator_mount("include_aggregate: false, fleet_cockpit: true", "%{}")
+        )
+
+      assert [violation] = NavLinks.check(@router, source_dirs: [dir], app: "test")
+      assert violation.kind == :dead_link
+      assert violation.message =~ "/operator/fleet"
+    end
+  end
+
+  # The operator mount a test declares, with the OPTIONS and LABELS under test spelled out.
+  defp operator_mount(opts, labels) do
+    """
+      def operator do
+        samen_operator_routes(NavLinksTmp.Operator,
+          repo: Samen.WebTest.Repo,
+          #{opts},
+          labels: #{labels}
         )
       end
     """

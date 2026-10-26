@@ -163,9 +163,12 @@ defmodule Samen.Web.Router do
     * `:path`            — the mount path prefix (default `/operator`).
     * `:labels`          — optional UI copy overrides (operator workspace title/glyph, etc.).
     * `:include_aggregate` — also mount the `aggregate` page on THIS operator mount (default
-      `false`). A host that already wires its own token-blind aggregate (a vertical-shaped
-      projection via `aggregate_loader:`) mounts it separately and leaves this `false`, so the
-      route is not declared twice.
+      `false`), and put the `Portfolio` item in the operator sidebar. A host that already wires
+      its own token-blind aggregate (a vertical-shaped projection via `aggregate_loader:`)
+      mounts it separately and leaves this `false`, so the route is not declared twice — but it
+      MUST declare `labels: %{aggregate_page: true}` on this mount, or its operator sidebar will
+      not offer the Portfolio entry (the nav item is gated on that label precisely so a host
+      without the route never advertises it).
     * `:fleet_cockpit` — mount the WS-J fleet cockpit (ADR-044 §5/§7/§9, T84b) on THIS operator
       mount (default `false`): `/fleet` (tier-1 platform aggregates + the merged T156 cross-
       tenant health surfaces), `/fleet/:app_id` (tier-2 cohort rows), `/fleet/directives` (J4
@@ -221,6 +224,7 @@ defmodule Samen.Web.Router do
         |> Samen.Web.Router.__operator_labels__(Keyword.get(opts, :operator_org_id))
         |> Samen.Web.Router.__fleet_namespace_label__(fleet_namespace)
         |> Samen.Web.Router.__fleet_cockpit_label__(fleet_cockpit)
+        |> Samen.Web.Router.__aggregate_page_label__(include_aggregate)
 
       mount =
         Samen.Web.Mount.new(
@@ -2177,6 +2181,17 @@ defmodule Samen.Web.Router do
   @doc false
   def __fleet_cockpit_label__(labels, false), do: labels
   def __fleet_cockpit_label__(labels, true), do: Map.put(labels, :fleet_cockpit, true)
+
+  @doc false
+  # `include_aggregate: true` is the ONLY thing that declares `/operator/aggregate` on this mount,
+  # so it is also the only thing that may put the Portfolio item in the sidebar. The label is the
+  # bridge (`Mount.label(mount, :aggregate_page, false)` gates the nav item), which is why a host
+  # that mounts the aggregate LiveView ITSELF — in its own `live_session`, over its own projection,
+  # as driftwood does — declares `labels: %{aggregate_page: true}` instead of an option this macro
+  # does not own. Without a label the item is absent, which is the honest chrome for a host with no
+  # such route: never a sidebar entry Phoenix answers with `NoRouteError` ("Not Found").
+  def __aggregate_page_label__(labels, false), do: labels
+  def __aggregate_page_label__(labels, true), do: Map.put(labels, :aggregate_page, true)
 
   # The armed tenant surfaces that carry an ADMIN-RANK capability: each one derives the caller's
   # role through `Samen.Web.TenantRole`, so without the seam the capability exists in the model

@@ -305,7 +305,7 @@ defmodule Samen.Web.Mount do
     login_path spine_sessions spine_totp
     settings_path plan_labels
     kb_namespace kb_path
-    fleet_namespace fleet_cockpit
+    fleet_namespace fleet_cockpit aggregate_page
     ai_path ai_crm_resource ai_aggregate_resource
     signup_path verify_path resend_path reset_path invite_path totp_path totp_issuer
     work_path work_logo_style
