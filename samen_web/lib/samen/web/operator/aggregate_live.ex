@@ -28,6 +28,7 @@ defmodule Samen.Web.Operator.AggregateLive do
   import Samen.UI
   import Samen.Web.Live, only: [assign_mount: 2]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
 
   @impl true
@@ -133,7 +134,7 @@ defmodule Samen.Web.Operator.AggregateLive do
           </.sidebar>
         </:sidebar>
 
-        <.topbar title={@title} crumbs={["Operator plane", "Aggregate", @title]} />
+        <.topbar title={@title} crumbs={[Crumbs.operator(), @title]} />
 
         <.token_blind_bar chip="no reveal path · k-anon suppressed">
           <b>Token-blind aggregate plane.</b>

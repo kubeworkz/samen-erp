@@ -17,6 +17,7 @@ defmodule Samen.Web.Operator.FleetRegisterLive do
     only: [assign_mount: 2, operator_sidebar: 1, role_help_note: 1]
 
   alias Samen.Fleet.{AdminActor, Registry}
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator.Fleet, as: FleetHelpers
 
   @impl true
@@ -87,7 +88,7 @@ defmodule Samen.Web.Operator.FleetRegisterLive do
           <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Register / enroll" crumbs={["Operator plane", "Fleet", "Register"]} />
+        <.topbar title="Register / enroll" crumbs={[Crumbs.operator(), Crumbs.operator_section(:fleet), "Register"]} />
 
         <div class="wrap">
           <%!-- The withheld controls here (both forms below) are gated by `with_admin/1`'s

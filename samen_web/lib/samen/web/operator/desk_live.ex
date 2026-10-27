@@ -28,6 +28,7 @@ defmodule Samen.Web.Operator.DeskLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Reads
@@ -140,7 +141,7 @@ defmodule Samen.Web.Operator.DeskLive do
           <.operator_sidebar mount={@samen_mount} active={:desk} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Desk" crumbs={["Operator plane", "Desk"]}>
+        <.topbar title="Desk" crumbs={[Crumbs.operator(), "Desk"]}>
           <:actions>
             <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_ticket" id="new-desk-ticket">
               <:icon>

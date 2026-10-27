@@ -19,6 +19,7 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Reads
 
@@ -52,7 +53,7 @@ defmodule Samen.Web.Operator.PlatformBillingLive do
           <.operator_sidebar mount={@samen_mount} active={:billing} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Platform billing" crumbs={["Operator plane", "Platform billing"]} />
+        <.topbar title="Platform billing" crumbs={[Crumbs.operator(), "Platform billing"]} />
 
         <%= if @no_org do %>
           <div class="wrap">

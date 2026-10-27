@@ -31,6 +31,17 @@ defmodule Samen.Web.Crumbs do
   Only sections whose root is a DISTINCT route are linked — a section whose
   root would equal the preceding crumb (e.g. CRM, whose landing IS the
   dashboard) stays a plain string at the call site.
+
+  ## The operator plane (ADR-010) rides the SAME topbar
+
+  `operator/0` and `operator_section/1` are the operator workspace's crumb seam. The operator
+  plane declares NO index route at its prefix: `samen_operator_routes/2` mounts
+  `\#{path}/accounts`, `…/billing`, `…/desk`, … but never `\#{path}` itself. So a crumb labelled
+  "Operator plane" had nowhere real to point, every operator page passed it as a PLAIN STRING,
+  and the plane's trails had no live crumb in them at all — an operator three screens deep had
+  no breadcrumb path back (the reported "breadcrumbs don't work"). `operator/0` links that
+  crumb at the plane's ENTRY, `/operator/accounts` — the first item of `operator_sidebar/1` and
+  the only top-level index the plane has.
   """
 
   alias Samen.Web.{CurrentOrg, Mount}
@@ -96,4 +107,42 @@ defmodule Samen.Web.Crumbs do
 
   defp threaded(path, org_id) when is_binary(org_id) and org_id != "", do: "#{path}?org=#{org_id}"
   defp threaded(path, _org_id), do: path
+
+  # ===========================================================================
+  # The OPERATOR plane (ADR-010)
+  # ===========================================================================
+
+  # The plane's ENTRY. Not `"/operator"` — the macro declares no route there (see the moduledoc),
+  # so linking the prefix would trade an inert crumb for a dead one. Accounts is where the
+  # operator workspace actually starts: the sidebar's first item, the only top-level index.
+  @operator_home "/operator/accounts"
+
+  @doc """
+  The operator plane's entry crumb — `{"Operator plane", "/operator/accounts"}`.
+
+  The first crumb of EVERY operator trail, and the plane's one way "back to the top": the
+  destination is the same href `operator_sidebar/1`'s Accounts item carries, so the crumb and
+  the nav item can never disagree about where the plane begins (and `samen.verify.nav_links`
+  already dead-link-checks that href against the host router).
+  """
+  @spec operator() :: {String.t(), String.t()}
+  def operator, do: {"Operator plane", @operator_home}
+
+  @doc """
+  A mid-trail operator SECTION crumb `{label, section index href}` for a top-level operator
+  index an operator can stand BETWEEN (`:desk`, `:fleet`) — the drill-in/detail pages have a
+  real index above them, so the step is a live link, not inert text.
+
+  Only sections whose index is a DISTINCT route from the plane entry are here, the same rule
+  the tenant `section/3` follows: `:accounts` is deliberately absent because it IS
+  `operator/0`'s destination — the trail already links there, twice would be noise.
+  """
+  @spec operator_section(:desk | :fleet) :: {String.t(), String.t()}
+  def operator_section(key), do: {operator_section_label(key), operator_section_path(key)}
+
+  defp operator_section_label(:desk), do: "Desk"
+  defp operator_section_label(:fleet), do: "Fleet"
+
+  defp operator_section_path(:desk), do: "/operator/desk"
+  defp operator_section_path(:fleet), do: "/operator/fleet"
 end

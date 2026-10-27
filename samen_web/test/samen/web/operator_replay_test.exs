@@ -629,6 +629,10 @@ defmodule Samen.Web.OperatorReplayTest do
   # The crumb is the ONLY place the operator reads "which tenant am I looking at?" — a raw
   # `tenant_org_id` UUID answers a question nobody asked. The account row is already resolved
   # for the back-link, so its non-PII `Org.name` is free to render.
+  #
+  # The trail's leading crumb is the plane marker EVERY operator page leads with, and it is LIVE:
+  # `Crumbs.operator/0` links Accounts — the way this drill-in was reached — so the trail reads
+  # "Operator plane / <tenant> / Replay" with the click still on the first step.
   test "the breadcrumb NAMES the tenant and links Accounts, instead of showing a raw drill-in id" do
     seed = Samen.WebTest.Operator.Seeds.seed_all(tenants: 1)
     account = hd(seed.accounts)
@@ -650,8 +654,7 @@ defmodule Samen.Web.OperatorReplayTest do
     html = socket |> ReplayLive.load(tenant, nil) |> then(&render_html(ReplayLive, &1.assigns))
     crumb = crumbs(html)
 
-    assert crumb =~ "Accounts"
-    assert crumb =~ ~s(href="/operator/accounts")
+    assert crumb =~ ~r/<a href="\/operator\/accounts">Operator plane<\/a>/
     assert crumb =~ name
     assert crumb =~ "Replay"
     refute crumb =~ tenant

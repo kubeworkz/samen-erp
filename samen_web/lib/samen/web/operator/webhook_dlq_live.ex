@@ -57,6 +57,7 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Webhook.Event
@@ -186,7 +187,7 @@ defmodule Samen.Web.Operator.WebhookDlqLive do
           <.operator_sidebar mount={@samen_mount} active={:webhooks} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Webhook DLQ" crumbs={["Operator plane", "Webhook DLQ"]} />
+        <.topbar title="Webhook DLQ" crumbs={[Crumbs.operator(), "Webhook DLQ"]} />
 
         <%= if @no_org do %>
           <div class="wrap">

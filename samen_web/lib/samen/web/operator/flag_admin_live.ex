@@ -35,6 +35,7 @@ defmodule Samen.Web.Operator.FlagAdminLive do
   import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1, writable?: 1]
   import Samen.Web.Flags.Live, only: [decision_pill: 1, rules_table: 1]
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Flags.Reads
   alias Samen.Web.Mount
   alias Samen.Web.Operator
@@ -264,7 +265,7 @@ defmodule Samen.Web.Operator.FlagAdminLive do
           <.operator_sidebar mount={@samen_mount} active={:flags} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Feature flags" crumbs={["Operator plane", "Flags"]} />
+        <.topbar title="Feature flags" crumbs={[Crumbs.operator(), "Flags"]} />
 
         <%= cond do %>
           <% @no_flags_ns -> %>

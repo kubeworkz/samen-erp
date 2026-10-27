@@ -34,6 +34,7 @@ defmodule Samen.Web.Operator.AccountsLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Reads
@@ -145,7 +146,7 @@ defmodule Samen.Web.Operator.AccountsLive do
           <.operator_sidebar mount={@samen_mount} active={:accounts} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Accounts" crumbs={["Operator plane", "Accounts"]}>
+        <.topbar title="Accounts" crumbs={[Crumbs.operator(), "Accounts"]}>
           <:actions>
             <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_account" id="new-account">
               <:icon>

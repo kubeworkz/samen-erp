@@ -29,6 +29,7 @@ defmodule Samen.Web.Operator.RevenueLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Web.Operator.RevenueReads
@@ -110,7 +111,7 @@ defmodule Samen.Web.Operator.RevenueLive do
           <.operator_sidebar mount={@samen_mount} active={:revenue} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Revenue" crumbs={["Operator plane", "Revenue"]} />
+        <.topbar title="Revenue" crumbs={[Crumbs.operator(), "Revenue"]} />
 
         <%= if @no_org do %>
           <div class="wrap">

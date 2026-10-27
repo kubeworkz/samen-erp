@@ -28,6 +28,7 @@ defmodule Samen.Web.Operator.FleetDirectivesLive do
   import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
 
   alias Samen.Fleet.{AdminActor, Registry}
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator.Fleet, as: FleetHelpers
 
   @impl true
@@ -113,7 +114,7 @@ defmodule Samen.Web.Operator.FleetDirectivesLive do
           <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Fleet directives" crumbs={["Operator plane", "Fleet", "Directives"]} />
+        <.topbar title="Fleet directives" crumbs={[Crumbs.operator(), Crumbs.operator_section(:fleet), "Directives"]} />
 
         <div class="wrap">
           <div :if={@publish_error} class="card form-error" id="publish-error" style="padding:10px 14px;color:var(--bad,#b91c1c)">

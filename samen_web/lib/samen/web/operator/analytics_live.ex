@@ -33,6 +33,7 @@ defmodule Samen.Web.Operator.AnalyticsLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator.AnalyticsReads
 
   @impl true
@@ -174,7 +175,7 @@ defmodule Samen.Web.Operator.AnalyticsLive do
           <.operator_sidebar mount={@samen_mount} active={:analytics} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Product analytics" crumbs={["Operator plane", "Analytics"]} />
+        <.topbar title="Product analytics" crumbs={[Crumbs.operator(), "Analytics"]} />
 
         <.token_blind_bar chip="no reveal path · k-anon suppressed">
           <b>Cross-tenant floored aggregate.</b>

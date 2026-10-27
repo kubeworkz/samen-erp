@@ -49,6 +49,7 @@ defmodule Samen.Web.Operator.ReplayLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Impersonation
   alias Samen.Web.Operator.ReplayReads
@@ -307,15 +308,16 @@ defmodule Samen.Web.Operator.ReplayLive do
           <.operator_sidebar mount={@samen_mount} active={:replay} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <%!-- "Operator plane" stays the leading crumb (the plane marker every operator page
-              carries); the way here was Accounts, so that crumb is a real link, and the tenant
-              is NAMED (Org.name, non-PII) instead of a raw UUID. Falls back to the drill-in id
-              when no account row resolves — never to a guessed name. --%>
+        <%!-- The plane marker every operator page leads with, and a LIVE one: `Crumbs.operator/0`
+              links it at the plane's entry (Accounts), which is exactly the way this drill-in was
+              reached — so "back to the accounts list" is one click from the trail, not only from
+              the `← Accounts` action above. The tenant is NAMED (Org.name, non-PII) instead of a
+              raw UUID, falling back to the drill-in id when no account row resolves — never to a
+              guessed name. --%>
         <.topbar
           title="Replay"
           crumbs={[
-            "Operator plane",
-            {"Accounts", "/operator/accounts"},
+            Crumbs.operator(),
             @tenant_name || @org_id || "—",
             "Replay"
           ]}

@@ -40,6 +40,7 @@ defmodule Samen.Web.Operator.DeskDetailLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Reads
 
@@ -170,7 +171,7 @@ defmodule Samen.Web.Operator.DeskDetailLive do
           <.operator_sidebar mount={@samen_mount} active={:desk} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Ticket" crumbs={["Operator plane", "Desk", "Ticket"]}>
+        <.topbar title="Ticket" crumbs={[Crumbs.operator(), Crumbs.operator_section(:desk), "Ticket"]}>
           <:actions>
             <a href="/operator/desk" id="back-to-desk" class="btn">Back to Desk</a>
           </:actions>

@@ -1,0 +1,29 @@
+# SABOTAGE: an INERT operator breadcrumb trail — the reported "breadcrumbs don't work".
+#
+# Reverts `Samen.Web.Operator.AccountsLive`'s trail to the plain-string form every operator page
+# used before `Crumbs.operator/0` existed. `Samen.UI.topbar/1` renders a plain string as INERT
+# text and only a `{label, href}` tuple as a link, so the trail keeps its exact SHAPE and loses
+# its live crumb: same crumbs, same labels, same order — only the click is gone. That is why the
+# defect went unnoticed across a whole plane: nothing looks missing, the marker simply is not a
+# link (and the plane declares no `/operator` index route, so there was nowhere to link it TO).
+#
+# The SWEEP leg of `operator_breadcrumbs_test.exs` is anchored on the LEADING crumb of every
+# operator trail, so it must FLIP. The other legs stay green — the rendered Portfolio trail and
+# the seam unit test are untouched by this patch — which is what attributes the flip to the CALL
+# SITE rather than to the topbar's rendering.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_breadcrumbs_test.exs
+# MUST_FAIL: SWEEP: every operator trail LEADS with that live crumb (no inert operator trail)
+diff --git a/samen_web/lib/samen/web/operator/accounts_live.ex b/samen_web/lib/samen/web/operator/accounts_live.ex
+--- a/samen_web/lib/samen/web/operator/accounts_live.ex
++++ b/samen_web/lib/samen/web/operator/accounts_live.ex
+@@ -146,7 +146,7 @@
+           <.operator_sidebar mount={@samen_mount} active={:accounts} operator_role={assigns[:samen_operator_role]} />
+         </:sidebar>
+ 
+-        <.topbar title="Accounts" crumbs={[Crumbs.operator(), "Accounts"]}>
++        <.topbar title="Accounts" crumbs={["Operator plane", "Accounts"]}>
+           <:actions>
+             <.button :if={writable?(@samen_mount) and not @no_org} variant="primary" phx-click="new_account" id="new-account">
+               <:icon>

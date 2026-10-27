@@ -59,6 +59,7 @@ defmodule Samen.Web.Operator.FleetDetailLive do
     only: [assign_mount: 2, operator_sidebar: 1, role_help_note: 1]
 
   alias Samen.Fleet.{AdminActor, Handle, PublicStatus, Registry, Resolution}
+  alias Samen.Web.Crumbs
   alias Samen.Web.Fleet.PublicStatus, as: PageStatus
   alias Samen.Web.Operator.Fleet, as: FleetHelpers
 
@@ -260,7 +261,7 @@ defmodule Samen.Web.Operator.FleetDetailLive do
           <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Fleet" crumbs={["Operator plane", "Fleet", @app_id]} />
+        <.topbar title="Fleet" crumbs={[Crumbs.operator(), Crumbs.operator_section(:fleet), @app_id]} />
 
         <div :if={assigns[:not_configured]} class="wrap">
           <.empty_state class="fleet-not-configured" icon="⛴" title="Fleet not configured." body={inspect(@not_configured)} />

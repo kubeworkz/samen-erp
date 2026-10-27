@@ -44,6 +44,7 @@ defmodule Samen.Web.Operator.DeliverabilityLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator.DeliverabilityReads
   alias Samen.Web.Operator.Impersonation
 
@@ -130,7 +131,7 @@ defmodule Samen.Web.Operator.DeliverabilityLive do
           <.operator_sidebar mount={@samen_mount} active={:deliverability} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Deliverability" crumbs={["Operator plane", "Deliverability", @org_id || "—"]}>
+        <.topbar title="Deliverability" crumbs={[Crumbs.operator(), "Deliverability", @org_id || "—"]}>
           <:actions>
             <a href="/operator/accounts" id="back-to-accounts" style="font-size:12px;color:#3B4CCA">← Accounts</a>
           </:actions>

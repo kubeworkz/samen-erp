@@ -31,6 +31,7 @@ defmodule Samen.Web.Operator.AccountDetailLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator
   alias Samen.Web.Operator.HealthScore
   alias Samen.Web.Operator.Reads
@@ -73,7 +74,7 @@ defmodule Samen.Web.Operator.AccountDetailLive do
 
         <.topbar
           title={(@detail && @detail.account.name) || "Account"}
-          crumbs={["Operator plane", "Accounts", (@detail && @detail.account.name) || "—"]}
+          crumbs={[Crumbs.operator(), "Accounts", (@detail && @detail.account.name) || "—"]}
         >
           <:actions>
             <%!-- TWO identifiers, never one: `/operator/accounts/:id` keys on the account Org's

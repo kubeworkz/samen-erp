@@ -50,6 +50,7 @@ defmodule Samen.Web.Operator.FleetLive do
   import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
 
   alias Samen.Fleet.Attention
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator.Fleet, as: FleetHelpers
 
   @impl true
@@ -189,7 +190,7 @@ defmodule Samen.Web.Operator.FleetLive do
           <.operator_sidebar mount={@samen_mount} active={:fleet} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Fleet" crumbs={["Operator plane", "Fleet"]} />
+        <.topbar title="Fleet" crumbs={[Crumbs.operator(), "Fleet"]} />
 
         <div :if={@not_configured} class="wrap">
           <.empty_state

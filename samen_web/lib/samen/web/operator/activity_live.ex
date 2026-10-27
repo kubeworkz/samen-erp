@@ -55,6 +55,7 @@ defmodule Samen.Web.Operator.ActivityLive do
   import Samen.UI
   import Samen.Web.Operator.Live
 
+  alias Samen.Web.Crumbs
   alias Samen.Web.Operator.ActivityReads
   alias Samen.Web.Operator.Impersonation
 
@@ -141,7 +142,7 @@ defmodule Samen.Web.Operator.ActivityLive do
           <.operator_sidebar mount={@samen_mount} active={:activity} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Activity" crumbs={["Operator plane", "Activity", @org_id || "—"]}>
+        <.topbar title="Activity" crumbs={[Crumbs.operator(), "Activity", @org_id || "—"]}>
           <:actions>
             <a href="/operator/accounts" id="back-to-accounts" style="font-size:12px;color:#3B4CCA">← Accounts</a>
           </:actions>

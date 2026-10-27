@@ -50,6 +50,7 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
 
   alias Samen.Automation.Health
   alias Samen.OperatorPlane.Actor
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Impersonation
@@ -316,7 +317,7 @@ defmodule Samen.Web.Operator.AutomationHealthLive do
           <.operator_sidebar mount={@samen_mount} active={:automation} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Automation health" crumbs={["Operator plane", "Automation"]}>
+        <.topbar title="Automation health" crumbs={[Crumbs.operator(), "Automation"]}>
           <:actions>
             <a
               :if={@target_org_id}

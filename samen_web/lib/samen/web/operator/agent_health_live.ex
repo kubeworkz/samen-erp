@@ -58,6 +58,7 @@ defmodule Samen.Web.Operator.AgentHealthLive do
 
   alias Samen.AI.Agent.Health
   alias Samen.OperatorPlane.Actor
+  alias Samen.Web.Crumbs
   alias Samen.Web.Mount
   alias Samen.Web.Operator
   alias Samen.Web.Operator.Impersonation
@@ -244,7 +245,7 @@ defmodule Samen.Web.Operator.AgentHealthLive do
           <.operator_sidebar mount={@samen_mount} active={:agents} operator_role={assigns[:samen_operator_role]} />
         </:sidebar>
 
-        <.topbar title="Agent health" crumbs={["Operator plane", "Agents"]}>
+        <.topbar title="Agent health" crumbs={[Crumbs.operator(), "Agents"]}>
           <:actions>
             <a :if={@target_org_id} href="/operator/accounts" id="back-to-accounts-from-agents" style="font-size:12px;color:#3B4CCA">
               ← Accounts
