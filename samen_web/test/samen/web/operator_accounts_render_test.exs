@@ -72,6 +72,23 @@ defmodule Samen.Web.OperatorAccountsRenderTest do
     assert html =~ "/operator/impersonate?org=#{seed.tenant_org_id}"
   end
 
+  test "the act-as landing is the mount's :tenant_landing label — never a hardcoded vertical path", %{
+    seed: seed
+  } do
+    # The RENDERED twin of the sidebar footer's "Act as a tenant →" switcher: both read
+    # `Samen.Web.Operator.act_as_landing/1`, so the two grades of entry cannot land in different
+    # places. It used to be the literal `/broker` (driftwood's console) — on any host that routes
+    # no such path, the POST switched the org and THEN redirected into "Not Found".
+    mount = build_operator_mount(seed.operator_org_id, labels: %{tenant_landing: "/crm/dashboard"})
+    html = render_live(Samen.Web.Operator.AccountsLive, mount, [])
+
+    expected =
+      "/session/org/#{seed.tenant_org_id}?return_to=#{URI.encode_www_form("/crm/dashboard")}"
+
+    assert html =~ expected
+    refute html =~ "broker"
+  end
+
   test "no operator org resolved → the empty-state renders (no crash)", %{} do
     mount = build_operator_mount(Ash.UUID.generate())
     html = render_live(Samen.Web.Operator.AccountsLive, mount, [])

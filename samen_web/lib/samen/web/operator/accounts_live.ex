@@ -343,11 +343,14 @@ defmodule Samen.Web.Operator.AccountsLive do
 
   # (1) Act-as / CLEAR — set the session current org via the framework SessionController and
   # land in the tenant's workspace on the TENANT plane. The tenant landing path is a mount
-  # label (`:tenant_landing`, default `/broker`) so a host lands you on its own home page.
+  # label (`:tenant_landing`) read through `Samen.Web.Operator.act_as_landing/1` — the ONE seam
+  # the sidebar's "Act as a tenant →" switcher reads too, so the two grades of entry cannot
+  # drift. It used to default to the literal `/broker` HERE (driftwood's console): on every
+  # other host the POST switched the org and then redirected into "Not Found".
   # Since S7 this is a POST form ACTION (the switch writes the session; CSRF-protected),
   # not a GET href — the query-string `return_to` merges into the POST params.
   defp open_account_href(mount, tenant_org_id) do
-    landing = Samen.Web.Mount.label(mount, :tenant_landing, "/broker")
+    landing = Operator.act_as_landing(mount)
     "/session/org/#{tenant_org_id}?return_to=#{URI.encode_www_form(landing)}"
   end
 

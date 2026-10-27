@@ -1,0 +1,42 @@
+# SABOTAGE: the operator act-as landing is driftwood's hardcoded `/broker` again (dead-link class).
+#
+# `Samen.Web.Operator.act_as_landing/1` is the ONE seam BOTH act-as affordances read — the
+# sidebar footer's "Act as a tenant →" switcher (`Samen.Web.Operator.Live`) and an account row's
+# "Open account →" (`Samen.Web.Operator.AccountsLive`) — and its whole value is that the OPERATOR
+# MOUNT's `:tenant_landing` label decides where the crossing lands, so no host can ever be handed
+# another host's path. This patch restores the literal: the label is ignored and `/broker`
+# (driftwood's freighter console) comes back for EVERY mount, labeled or not.
+#
+# Why this is worse than a dead link, and why it is the exact defect that was reported: the
+# affordance is a CSRF-protected `POST /session/org/<org_id>` (S7), so by the time the redirect
+# answers "Not Found" the session write has ALREADY switched the operator's current org. The
+# crossing half-happens — the operator's session holds a tenant org while the page denies the
+# crossing — and the two grades of entry can no longer be proven to agree.
+#
+# Deliberately NOT touched: the call sites. Both still call `act_as_landing/1`, so the sabotage
+# cannot be mistaken for a caller-local bug — what flips is the seam's own contract, which is what
+# makes the label (not the literal) the load-bearing part. Also untouched: the `@doc` above it,
+# which then describes a behavior the code no longer has.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_act_as_landing_test.exs test/samen/web/operator_accounts_render_test.exs
+# MUST_FAIL: UNIT: the mount's label decides, and the framework default is the neutral landing
+# MUST_FAIL: GREEN: a labeled mount's act-as forms carry THAT landing, with no vertical path leaking
+# MUST_FAIL: RED: an unlabeled mount lands NEUTRALLY — never driftwood's hardcoded /broker
+# MUST_FAIL: the act-as landing is the mount's :tenant_landing label — never a hardcoded vertical path
+diff --git a/samen_web/lib/samen/web/operator.ex b/samen_web/lib/samen/web/operator.ex
+--- a/samen_web/lib/samen/web/operator.ex
++++ b/samen_web/lib/samen/web/operator.ex
+@@ -96,10 +96,10 @@ defmodule Samen.Web.Operator do
+   `Samen.Web.Operator.Live`'s "Act as a tenant →" switcher both read THIS function, so the two
+   grades of entry can never land in different places.
+   """
+   @spec act_as_landing(Mount.t() | nil) :: String.t()
+-  def act_as_landing(%Mount{} = mount), do: Mount.label(mount, :tenant_landing, "/")
++  def act_as_landing(%Mount{} = _mount), do: "/broker"
+ 
+-  def act_as_landing(_), do: "/"
++  def act_as_landing(_), do: "/broker"
+ 
+   @doc """
+   The `Samen.Web.Plane.operator/3` plane for drilling INTO a tenant's downstream world from an

@@ -567,6 +567,17 @@ defmodule SamenerpWeb.Router do
       labels: %{
         aggregate_loader: {Samenerp.OperatorAggregate, :load, []},
         operator_workspace: "Samenerp Ops",
+        # ADR-013 §5.2 — WHERE the two act-as crossings LAND: the operator sidebar's
+        # "Act as a tenant →" switcher and an account row's "Open account →" both set the
+        # session current org, then redirect here (`Samen.Web.Operator.act_as_landing/1`).
+        # This is the SAME landing the tenant sign-in uses (`samen_auth_routes`'s own
+        # `tenant_landing:` above), so an operator who crosses down arrives exactly where a
+        # tenant of that org arrives. It MUST be a path THIS router serves: the framework's
+        # neutral default is `"/"`, and every host that names nothing used to fall through to
+        # `/broker` — driftwood's console, unrouted here — so the crossing 404'd AFTER the
+        # org had already switched. `auth_login_redirect_test.exs` pins the sibling label;
+        # `operator_act_as_landing_test.exs` pins THIS one against the compiled route table.
+        tenant_landing: "/crm/dashboard",
         # T146 — the operator-ROLE authority seam. `Samen.Web.Operator.Authz`'s on_mount derives
         # operator authority from the AUTHENTICATED SESSION PRINCIPAL via this MFA (fail CLOSED
         # for any non-operator), so a plain tenant-user session cannot reach `/operator/*`.

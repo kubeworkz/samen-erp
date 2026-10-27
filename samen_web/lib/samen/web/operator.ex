@@ -79,6 +79,29 @@ defmodule Samen.Web.Operator do
   def scope(%Mount{} = mount), do: Plane.scope(Plane.tenant(), org_id(mount))
 
   @doc """
+  WHERE an operator's act-as crossing LANDS — the `return_to` both operator act-as affordances
+  thread through the framework session write (`POST /session/org/<org_id>`, S7).
+
+  The operator mount's `:tenant_landing` label when the host names one, else the
+  framework-NEUTRAL `"/"` — the SAME posture `Samen.Web.Onboarding.WizardLive.tenant_landing_href/2`
+  takes (PP-7). The default is deliberately NOT a vertical's path. Both callers used to hardcode
+  driftwood's `"/broker"`, and the failure that produced is worse than a dead link: the org had
+  ALREADY been switched by the time the redirect answered "Not Found", so the operator's crossing
+  silently half-happened (their session now holds a tenant org) and the page they landed on lied
+  about where to go next.
+
+  A host that wants a landing of its own names it on its OPERATOR mount
+  (`labels: %{tenant_landing: "/its/own/path"}`) — driftwood (`"/broker"`) and samenerp
+  (`"/crm/dashboard"`) both do. `Samen.Web.Operator.AccountsLive`'s "Open account →" and
+  `Samen.Web.Operator.Live`'s "Act as a tenant →" switcher both read THIS function, so the two
+  grades of entry can never land in different places.
+  """
+  @spec act_as_landing(Mount.t() | nil) :: String.t()
+  def act_as_landing(%Mount{} = mount), do: Mount.label(mount, :tenant_landing, "/")
+
+  def act_as_landing(_), do: "/"
+
+  @doc """
   The `Samen.Web.Plane.operator/3` plane for drilling INTO a tenant's downstream world from an
   account (ADR-010 §3.3 — the impersonation bridge). Crossing from the clear account (this
   operator org's own row) to the masked tenant world is exactly this deliberate step; the

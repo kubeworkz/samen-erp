@@ -1,0 +1,32 @@
+# SABOTAGE: SamenERP's operator mount names an act-as landing its router does NOT serve.
+#
+# The host-side half of the same defect. `Samen.Web.Operator.act_as_landing/1` only resolves the
+# framework default (`"/"`, this host's MARKETING page) when a host names nothing, so what keeps an
+# operator's crossing INSIDE the tenant workspace is the operator mount's own `:tenant_landing`
+# label in `samenerp_web/router.ex`. This patch points that label at driftwood's `/broker` — the
+# exact copy-paste (another host's console path, unrouted here) that produced the originally
+# reported bug — so `POST /session/org/<org_id>` switches the operator's current org and THEN
+# redirects into `Phoenix.Router.NoRouteError`: the crossing half-happens, silently.
+#
+# Deliberately NOT touched: the SIBLING label of the same name on `samen_auth_routes/1` a hundred
+# lines up the file (the ordinary LOGIN landing, pinned by `auth_login_redirect_test.exs`). The
+# sabotage is that specific: the two `tenant_landing:` labels are separate seams with separate
+# proofs, so the login-redirect legs stay green while only the operator-crossing legs flip.
+#
+# APP: samenerp
+# TEST_FILES: test/operator_act_as_landing_test.exs
+# MUST_FAIL: the act-as landing is the host's own tenant landing, and a route this router serves
+# MUST_FAIL: the operator sidebar's act-as entries all post to that served landing
+diff --git a/samenerp/lib/samenerp_web/router.ex b/samenerp/lib/samenerp_web/router.ex
+--- a/samenerp/lib/samenerp_web/router.ex
++++ b/samenerp/lib/samenerp_web/router.ex
+@@ -576,8 +576,8 @@ defmodule SamenerpWeb.Router do
+         # neutral default is `"/"`, and every host that names nothing used to fall through to
+         # `/broker` — driftwood's console, unrouted here — so the crossing 404'd AFTER the
+         # org had already switched. `auth_login_redirect_test.exs` pins the sibling label;
+         # `operator_act_as_landing_test.exs` pins THIS one against the compiled route table.
+-        tenant_landing: "/crm/dashboard",
++        tenant_landing: "/broker",
+         # T146 — the operator-ROLE authority seam. `Samen.Web.Operator.Authz`'s on_mount derives
+         # operator authority from the AUTHENTICATED SESSION PRINCIPAL via this MFA (fail CLOSED
+         # for any non-operator), so a plain tenant-user session cannot reach `/operator/*`.

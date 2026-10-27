@@ -18,6 +18,7 @@ defmodule Samen.Web.Operator.Live do
   alias Samen.BreakGlass
   alias Samen.OperatorPlane.Actor
   alias Samen.Web.Mount
+  alias Samen.Web.Operator
 
   @doc "Read the mount out of the session (see `Samen.Web.Live.assign_mount/2`)."
   defdelegate assign_mount(socket, session), to: Samen.Web.Live
@@ -188,7 +189,13 @@ defmodule Samen.Web.Operator.Live do
       <:footer>
         <div class="op-act-as" id="operator-act-as">
           <div class="grp">Act as a tenant →</div>
-          <.switcher :if={@mount} mount={@mount} return_to="/broker" />
+          <%!--
+            The act-as landing is the mount's `:tenant_landing` label through the ONE framework
+            seam (`Samen.Web.Operator.act_as_landing/1`) — the SAME value the Accounts rows'
+            "Open account →" posts. It was a hardcoded `"/broker"` (driftwood's console) here:
+            on any other host the session write succeeded and the redirect answered "Not Found".
+          --%>
+          <.switcher :if={@mount} mount={@mount} return_to={Operator.act_as_landing(@mount)} />
         </div>
         <div class="foot">
           <div class="av" style="background:#DDE2F5;color:#3B4CCA">{label(@mount, :operator_initials, "OP")}</div>
