@@ -1,0 +1,92 @@
+# SABOTAGE: the Portfolio page goes back to its hand-rolled stub sidebar.
+#
+# `Samen.Web.Operator.AggregateLive` mounted the framework operator nav
+# (`Samen.Web.Operator.Live.operator_sidebar/1`) in the same change that made the plane's
+# breadcrumbs live. This patch puts the stub back: a local `<.sidebar>` with ONE item,
+# `label="Aggregate · portfolio" href="#"` marked active, and a hardcoded "admin role" caption.
+#
+# The defect is worse than a mislink, which is why it is worth a replay. This page is the surface
+# the operator reaches BY the operator nav, and the stub removed that nav FROM it: no Accounts, no
+# platform billing, no revenue — no way back to any other operator surface except the single
+# breadcrumb. The one item it did render pointed at `#`, so the page's only nav affordance was
+# inert. A nav the operator can only leave by the crumb they came in on is the "you are nowhere"
+# failure, just quieter.
+#
+# The flip is aimed at the CHROME, not at the page's data: the aggregate loader, the token-blind
+# banner, the ⊘ suppression row and the empty/unread states are untouched, so the sibling legs in
+# `operator_render_test.exs` (banner + projection, and the bare-stub render) stay green — which is
+# what attributes this flip to the sidebar slot rather than to the page.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/operator_render_test.exs
+# MUST_FAIL: the aggregate page wears the STANDARD operator nav, not a hand-rolled stub
+--- a/samen_web/lib/samen/web/operator/aggregate_live.ex
++++ b/samen_web/lib/samen/web/operator/aggregate_live.ex
+@@ -26,7 +26,7 @@
+   use Phoenix.LiveView
+ 
+   import Samen.UI
+-  import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
++  import Samen.Web.Live, only: [assign_mount: 2]
+ 
+   alias Samen.Web.Crumbs
+   alias Samen.Web.Mount
+@@ -105,22 +105,33 @@
+     ~H"""
+     <div id="operator-aggregate">
+       <.app_shell>
+-        <%!--
+-          The plane's OWN sidebar (`Samen.Web.Operator.Live.operator_sidebar/1`) — the same one
+-          every other operator page wears, with `active: :aggregate` lighting the Portfolio item.
+-          This page used to hand-roll a stub sidebar whose single item was `href="#"`: on the one
+-          surface the operator reaches BY that nav, the nav was gone (no Accounts, no billing, no
+-          way back except a crumb), and the item it did render linked nowhere. The gate on the
+-          Portfolio ITEM itself stays in the shared sidebar (`Mount.label(mount, :aggregate_page)`)
+-          — a host that mounts this page without declaring the label still gets the honest nav, it
+-          just does not advertise a route it did not declare.
+-        --%>
+         <:sidebar>
+-          <.operator_sidebar
+-            mount={@samen_mount}
+-            active={:aggregate}
+-            operator_role={assigns[:samen_operator_role]}
+-          />
++          <.sidebar title={sidebar_title(@samen_mount)} subtitle="Operator control plane">
++            <:search>
++              <div class="search">
++                <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
++                  <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
++                </svg>
++                Search tenants…
++                <span class="kbd">⌘K</span>
++              </div>
++            </:search>
++
++            <.nav_group label="Operator plane">
++              <.nav_item label="Aggregate · portfolio" href="#" active>
++                <:icon>
++                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9m6 10V5m6 14v-7" /></svg>
++                </:icon>
++              </.nav_item>
++            </.nav_group>
++
++            <:footer>
++              <div class="foot">
++                <div class="av">OP</div>
++                <div class="m"><b>Operator</b><span>admin role</span></div>
++              </div>
++            </:footer>
++          </.sidebar>
+         </:sidebar>
+ 
+         <.topbar title={@title} crumbs={[Crumbs.operator(), @title]} />
+@@ -185,6 +196,9 @@
+ 
+   # -- helpers -----------------------------------------------------------------
+ 
++  defp sidebar_title(%Mount{} = mount), do: Mount.label(mount, :operator_workspace, "Operator")
++  defp sidebar_title(_), do: "Operator"
++
+   # Token-blind cell rendering: a suppressed cohort or nil renders ⊘; the framework never
+   # un-suppresses. Money is rendered as dollars when tagged `{:money, cents}`.
+   defp cell(%Samen.Aggregate.Suppressed{}), do: "⊘"

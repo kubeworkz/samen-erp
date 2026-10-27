@@ -100,8 +100,9 @@ defmodule Samen.Web.OperatorBreadcrumbsTest do
     refute html =~ ~r/<a[^>]*>\s*Portfolio\s*<\/a>/
     assert html =~ "Portfolio"
 
-    # The stale mid-trail label — the page's OLD name, "Aggregate" — is gone from the trail; the
-    # sidebar's own item reads "Aggregate · portfolio", so an exact `>Aggregate<` cannot be that.
+    # The stale mid-trail label — the page's OLD name, "Aggregate" — is gone from the trail. The
+    # only chrome that could read exactly that is the wrapper's id (`operator-aggregate`) and the
+    # sidebar's own item, whose label is "Portfolio"; neither renders `>Aggregate<`.
     refute html =~ ~r/>\s*Aggregate\s*</
   end
 

@@ -26,7 +26,7 @@ defmodule Samen.Web.Operator.AggregateLive do
   use Phoenix.LiveView
 
   import Samen.UI
-  import Samen.Web.Live, only: [assign_mount: 2]
+  import Samen.Web.Operator.Live, only: [assign_mount: 2, operator_sidebar: 1]
 
   alias Samen.Web.Crumbs
   alias Samen.Web.Mount
@@ -105,33 +105,22 @@ defmodule Samen.Web.Operator.AggregateLive do
     ~H"""
     <div id="operator-aggregate">
       <.app_shell>
+        <%!--
+          The plane's OWN sidebar (`Samen.Web.Operator.Live.operator_sidebar/1`) — the same one
+          every other operator page wears, with `active: :aggregate` lighting the Portfolio item.
+          This page used to hand-roll a stub sidebar whose single item was `href="#"`: on the one
+          surface the operator reaches BY that nav, the nav was gone (no Accounts, no billing, no
+          way back except a crumb), and the item it did render linked nowhere. The gate on the
+          Portfolio ITEM itself stays in the shared sidebar (`Mount.label(mount, :aggregate_page)`)
+          — a host that mounts this page without declaring the label still gets the honest nav, it
+          just does not advertise a route it did not declare.
+        --%>
         <:sidebar>
-          <.sidebar title={sidebar_title(@samen_mount)} subtitle="Operator control plane">
-            <:search>
-              <div class="search">
-                <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-                </svg>
-                Search tenants…
-                <span class="kbd">⌘K</span>
-              </div>
-            </:search>
-
-            <.nav_group label="Operator plane">
-              <.nav_item label="Aggregate · portfolio" href="#" active>
-                <:icon>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9m6 10V5m6 14v-7" /></svg>
-                </:icon>
-              </.nav_item>
-            </.nav_group>
-
-            <:footer>
-              <div class="foot">
-                <div class="av">OP</div>
-                <div class="m"><b>Operator</b><span>admin role</span></div>
-              </div>
-            </:footer>
-          </.sidebar>
+          <.operator_sidebar
+            mount={@samen_mount}
+            active={:aggregate}
+            operator_role={assigns[:samen_operator_role]}
+          />
         </:sidebar>
 
         <.topbar title={@title} crumbs={[Crumbs.operator(), @title]} />
@@ -195,9 +184,6 @@ defmodule Samen.Web.Operator.AggregateLive do
   end
 
   # -- helpers -----------------------------------------------------------------
-
-  defp sidebar_title(%Mount{} = mount), do: Mount.label(mount, :operator_workspace, "Operator")
-  defp sidebar_title(_), do: "Operator"
 
   # Token-blind cell rendering: a suppressed cohort or nil renders ⊘; the framework never
   # un-suppresses. Money is rendered as dollars when tagged `{:money, cents}`.

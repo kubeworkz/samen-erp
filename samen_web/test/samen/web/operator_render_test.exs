@@ -77,6 +77,40 @@ defmodule Samen.Web.OperatorRenderTest do
     assert html =~ "No aggregate projection wired"
   end
 
+  # The Portfolio page wears the plane's OWN sidebar, like every other operator page. It used to
+  # hand-roll a stub whose ONE item was `href="#"`: the single surface an operator reaches
+  # THROUGH the operator nav had no nav on it at all — no Accounts, no billing, no way back
+  # except the breadcrumb — and the item it did render linked nowhere.
+  test "the aggregate page wears the STANDARD operator nav, not a hand-rolled stub" do
+    mount =
+      Mount.new(:aggregate, Some.Host.Aggregate, Some.Host.Repo,
+        plane: Plane.operator("op", "portfolio"),
+        labels: %{aggregate_page: true}
+      )
+
+    socket =
+      %Phoenix.LiveView.Socket{}
+      |> Phoenix.Component.assign(:samen_mount, mount)
+      |> Samen.Web.Operator.AggregateLive.load()
+
+    html = render_html(Samen.Web.Operator.AggregateLive, socket.assigns)
+
+    # The plane's real destinations are in the chrome this page is showing.
+    assert html =~ ~s(href="/operator/accounts")
+    assert html =~ ~s(href="/operator/billing")
+    assert html =~ ~s(href="/operator/revenue")
+    # …including this page's own item, which the shared sidebar lights from `active: :aggregate`
+    # (an inactive item renders with no `class` at all, so this cannot pass on a bare href).
+    assert html =~ ~r/<a href="\/operator\/aggregate" class="on">/
+    # The role disclosure is chrome only the SHARED sidebar carries — the stub had a hardcoded
+    # "admin role" caption instead.
+    assert html =~ ~s(id="operator-role-help")
+
+    # The stub is gone: nothing here navigates to "#", and its caption is not rendered.
+    refute html =~ ~s(href="#")
+    refute html =~ "Aggregate · portfolio"
+  end
+
   test "the /ui-kit living catalog renders every component group" do
     html = render_html(Samen.Web.UIKitLive, %{})
 
