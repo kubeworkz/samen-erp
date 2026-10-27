@@ -3,10 +3,11 @@
 # for deferral and amortization, grants as a fund dimension, and a bounded forecast — extending
 # the ADR-049 ERP base scopes to run one real company's books
 
-- **Status:** **PROPOSED (2026-10-27) — design filed with its build plan; build NOT STARTED
-  (phase 0 only: this ADR + the coverage ledger). No code authored, no abbrev rows reserved.**
-  The eighteen decisions below are the operator's to ratify; the ones that are genuinely operator
-  calls rather than engineering consequences are flagged in "Awaiting ratification" below.
+- **Status:** **ACCEPTED (2026-10-27) — all eighteen decisions TAKEN; phase 0 complete (this ADR +
+  the coverage ledger `docs/ws-acct/kubeworkz-books.md`); build NOT STARTED.** Ratification is a
+  decision, not code: no source file is touched and no abbrev row is reserved. The five
+  operator-facing calls were ruled the day this ADR was filed and are recorded with their
+  rationales in "Ratification" below.
 - **Date:** 2026-10-27
 - **Context:** the operator supplied `docs/chip_manufacturing_accounting_setup.md` (6,168 lines,
   18 workbooks) — the accounting policy and procedure manual for **Kubeworkz**, a fabless
@@ -24,8 +25,9 @@
   pool. Two smaller findings also bite: `PostingAccount.key` is a closed **four**-value enum where
   the doc's flows need ~two dozen meanings, and **Hr is not mounted in samenerp**, so payroll has
   nowhere to post from in-app.
-- **Deciders:** the operator (this design authored per the request; the 18 decisions are filed for
-  ratification — the workstream is not started until they are ruled on).
+- **Deciders:** the operator, who ratified all eighteen decisions on 2026-10-27 — the day this ADR
+  was filed — with the five operator-facing calls and their rationales recorded in "Ratification"
+  below.
 - **Consumes:** ADR-049 (the ERP base scopes this extends — its §2 event-sourcing discipline,
   §6.3 reconciliation spine and §7 honesty list all carry forward unamended), ADR-004 (scope
   packaging), ADR-014/024/026 (fail-honest adapters — the tax/payroll boundaries), ADR-018
@@ -52,9 +54,9 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
    (`code`/`name`/`kind ∈ {:project, :chip, :cost_pool, :fund}`), org-scoped, archivable, unique
    `code` per org. Rejected: four nullable FK columns per analysis axis (schema sprawl that grows
    with every axis and hard-couples Finance to four resource shapes); reusing `Work.Project` (a
-   GP180MCU lot or a grant fund is not a task project, and the kernel posture is plain-uuid
-   cross-scope references with no runtime coupling). **Every dimensional report is a `GROUP BY`
-   over the append-only lines — derived, never stored.**
+   GP180MCU lot or a grant fund is not a task project, and the kernel posture is   plain-uuid cross-scope references with no runtime coupling). **Every dimensional report is a
+   `GROUP BY` over the append-only lines — derived, never stored.** The four-key vocabulary is
+   **ratified as-is, with no reserved fifth axis** ("Ratification" 1).
 2. **`PostingAccount.key` widens in place and stays closed.** The enum grows from four meanings to
    the ~two dozen the doc's flows need (WIP by stage, finished goods, deferred revenue, grant
    deferral, accrued liabilities, inventory reserve, amortization + accumulated amortization,
@@ -75,8 +77,10 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
    (per item × cost element: standard qty, standard price, expected yield); the engine computes
    PPV, yield, labor-rate, labor-efficiency, overhead-spending, overhead-volume and BOM variance
    per period per cost object; variances post as **their own** journal entries into the variance
-   accounts under a declared disposition policy (write off vs capitalize); cost-of-yield is a
-   derived read. **A standard never revalues the stock ledger** — that would be the two-truths
+   accounts under the manual's **per-type disposition table, adopted verbatim** — yield and PDB BOM
+   variances absorb into inventory, PPV and overhead volume write off to COGS, labour and overhead
+   spending write off to R&D expense, and residual balances close at year-end ("Ratification" 2);
+   cost-of-yield is a derived read. **A standard never revalues the stock ledger** — that would be the two-truths
    failure the spine exists to prevent.
 5. **Deferred revenue and recognition schedules are one mechanism with two methods.**
    `RevenueSchedule` (anchored by ADR-041's `source_ref`) carries `total_cents`, `start_on`,
@@ -112,7 +116,7 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
    `{cost, life, method, start}` and a monthly run posts once per period behind a period-keyed
    anchor. This lifts ADR-049 §7.9's explicit deferral ("fixed-asset depreciation schedules —
    P2") for the one asset class the doc's books require: the photonics PDK licence and lab
-   equipment.
+   equipment. The PDK licence seeds at **36 months**, the manual's own JE-004 arithmetic.
 10. **Obsolescence is a policy row plus a gated write-down, never an automatic posting.**
     `InventoryReserve` (`basis ∈ {:age, :item}`, `age_months`, `pct`, `applies_to`); the quarterly
     assessment is a derived read that **drafts** a write-down entry, which a human clears through
@@ -147,8 +151,9 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
     scorecard and risk resources reference `vendor_id` and never re-declare the person).
 15. **Single functional currency (CAD), set by host config.** The doc's header reads "Currency:
     **CA**" while `Account.currency` defaults to `"USD"`. The default comes from host config and
-    Kubeworkz's org is seeded CAD. `ExchangeRate`/`FxConvert` serve converted *reporting*;
-    revaluation and FX gain/loss stay deferred (ADR-049 §7.3 unchanged).
+    Kubeworkz's org is seeded CAD — **ratified** ("Ratification" 4). `ExchangeRate`/`FxConvert`
+    serve converted *reporting*; revaluation and FX gain/loss stay deferred (ADR-049 §7.3
+    unchanged).
 16. **Consolidation stays dormant; single-entity is the default.** Kubeworkz is one legal entity.
     `samen_core/lib/samen/scopes/consolidation/*` (E24) is dormant and unwired, and is the
     documented path **when** a second entity exists — not a phase here. The doc's "multi-entity
@@ -158,9 +163,11 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
     The doc dimensions design-engineering labour by chip; the only truthful source for that split
     is timesheets, and `scopes/work/timesheet_{entry,guard,summary}.ex` (E15) are **dormant**. So
     this is *wiring* work, not a reuse: `Samen.Scopes.Work` grows the timesheet resources and a
-    cost-object dimension, and the payroll posting allocates `PayRun` cost by timesheet share. If
-    the operator declines, the fallback is a documented manual ratio per posting — stated, never
-    silently dropped.
+    cost-object dimension, and the payroll posting allocates `PayRun` cost by timesheet share.
+    **Authorized** ("Ratification" 5), because the manual's labour rate and efficiency variances
+    are not facts without actual hours and its grant revenue is recognized as allowable costs are
+    incurred — with the binding proviso that every labour-derived figure stays **labelled
+    ratio-based** until the driver lands.
 18. **The books are seeded under `Kubeworkz`, and the source manual's figures are placeholders.**
     The doc names a template entity ("Gridworkz") and carries an LLM-assembled manual's artefacts
     — `Currency: CA`, a self-corrected journal entry (JE-055 has a wrong original and a "Corrected
@@ -198,26 +205,98 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
   a deferral it is named and bounded — depreciation (decision 9) and driver-based forecasting
   (decision 12) — and neither is the full generality ADR-049 parked.
 
-## Awaiting ratification
+## Ratification (taken 2026-10-27, the day this ADR was filed)
 
-Filed for the operator; the workstream does not start until these are ruled on. Most of the eighteen
-are engineering consequences of the doc plus the existing architecture — the line needs an analysis
-seam (1), the posting map must be able to name the doc's pools (2), a foundry lot has to be stock
-somewhere (3), and a standard must not become a second valuation (4). The operator-facing calls are:
+Most of the eighteen decisions are engineering consequences of the manual plus the existing
+architecture — the line needs an analysis seam (1), the posting map must be able to name the
+manual's pools (2), a foundry lot has to be stock somewhere (3), and a standard must not become a
+second valuation (4). The five calls that were genuinely the operator's were ruled as follows.
 
-1. **Decision 1's axis vocabulary** — is the frozen four-key set (`project` · `lot` · `fund` ·
-   `cost_pool`) the whole analysis surface Kubeworkz needs, or should a fifth axis be reserved now
-   (a migration is cheaper than a vocabulary change later)?
-2. **Decision 4's disposition policy** — write off variances to the P&L, or capitalize them into
-   inventory? The doc names both as live options; the books cannot be closed until one is chosen.
-3. **Decision 10** — confirm that an NRV write-down must stay human-cleared (never scheduled).
-4. **Decision 15** — confirm CAD as the functional currency and the single-currency posture.
-5. **Decision 17** — authorize (or decline) the timesheet wiring into the Work scope, which is the
-   difference between labour cost per chip being a fact and being a stated ratio.
-Two further confirmations — scope questions rather than decisions:
+### 1 · The analysis-axis vocabulary — FOUR axes, no reserved fifth
 
-- **The source manual's §"E1–E5 Items Overview"** (doc line 5912: an MLPerf-style acceptance model,
-  ONNX quantization, golden vectors, power/energy measurement boundaries) is **not accounting** and
-  is excluded from this workstream pending confirmation that it came from a different conversation.
-- **The coverage ledger's completeness** — `docs/ws-acct/kubeworkz-books.md` accounts for all 18
-  workbooks; if a workbook is missing from it, the ledger is wrong, not the doc.
+`project` · `lot` · `fund` · `cost_pool` is the whole analysis surface. Every dimensional question
+the manual asks lands on one of them: cost by chip programme and by board (**project**), WIP and
+yield by foundry run (**lot**), restricted grant money (**fund**), and the foundry / photonics /
+assembly-and-test / board-BOM / R&D pools (**cost_pool**).
+
+The manual's *other* groupings are deliberately **not** GL axes. Its "responsibility centers", the
+close checklist's twelve roles, and the escalation matrix's managers are **owners and routing** —
+they belong to the Work and Automation layer, where they already live, and putting them on the
+ledger would make reporting a second org chart.
+
+A fifth key is **not** reserved, and the reason is a correction to this ADR's own earlier framing:
+because `dimension_refs` is jsonb keyed by name, widening the vocabulary later is **a code change,
+not a migration** — the guard's frozen list gains a key, reports opt in, and **no row needs a
+backfill** (an absent key simply means the axis did not apply). Reserving an axis nothing writes
+would weaken the fail-closed guard for no benefit. Reopen if a real axis appears — the plausible
+candidate is departmental cost centre, which has no GL footprint today.
+
+### 2 · The variance disposition policy — the manual's per-type table, adopted verbatim
+
+This was **not** the either/or this ADR first implied. The manual (Variance Playbook §10) assigns a
+disposition **per variance type**, and the books adopt its table as written:
+
+| Variance | Disposition (binding) | Rationale (the manual's) |
+|---|---|---|
+| PPV — foundry slots | write off to COGS, period incurred | non-recurring; not attributable to specific inventory |
+| Yield — chips | **absorb into inventory** cost of remaining good units | attributable to a specific production run |
+| Labour rate | write off to R&D expense, period incurred | period cost, not inventory-related |
+| Labour efficiency | write off to R&D expense, period incurred | period cost, not inventory-related |
+| BOM — PDB | **absorb into PDB finished-goods** cost | attributable to a specific board production |
+| Overhead volume | write off to COGS, period incurred | capacity-related; not product-specific |
+| Overhead spending | write off to R&D expense, period incurred | period cost |
+
+At year-end all remaining variance balances close to Retained Earnings, or to COGS where materiality
+warrants. **Consequence for R8:** the invariant is not merely "Σ variances == Σ(actual − standard)"
+but that **each variance reaches the account its row names** — so a sabotage that writes a yield
+variance off instead of absorbing it into inventory refutes the policy, not just the arithmetic.
+
+### 3 · NRV write-downs stay human-cleared — CONFIRMED
+
+The assessment read may draft; only a human clears it through the ADR-040 Gate. The manual's own
+controls demand documented NRV assumptions and a quarterly review of excess and obsolete stock,
+which is precisely what a gate leaves behind as evidence. Reserve-policy seed default: **age basis,
+24 months, quarterly** — the manual's "older than two or three years" as a reviewable config row
+rather than a hardcoded rule.
+
+### 4 · Functional currency — CAD, single currency, CONFIRMED
+
+The manual's grant landscape is entirely Canadian (NRC IRAP, NSERC, FABrIC, CFI, Ontario CTI) and
+its header's "Currency: CA" reads as CAD. `Account.currency` takes its default from host config;
+`ExchangeRate`/`FxConvert` remain for converted reporting only; revaluation and FX gain/loss stay
+deferred (ADR-049 §7.3 unamended).
+
+### 5 · The labour driver — AUTHORIZED, and it is load-bearing
+
+The timesheet resources are wired into the Work scope with a cost-object dimension, and payroll cost
+allocates by timesheet share. Authorized because **two of the manual's own commitments are not facts
+without actual hours**: its labour rate and efficiency variances, and grant revenue recognized "as
+allowable costs are incurred" — whose compliance package carries a first-class personnel report. A
+stated headcount ratio supports neither. The wiring is priced in the build plan (Phase 10).
+
+**Binding proviso:** until the driver lands, every labour-derived figure — labour variances, grant
+personnel cost, labour cost per chip — is **ratio-based and must be labelled so**, in the product and
+in any report. No phase may present one as a fact before then.
+
+### 6 · The two scope confirmations — both taken
+
+The manual's §"E1–E5 Items Overview" (line 5912: an MLPerf-style acceptance model, ONNX
+quantization, golden vectors, power/energy measurement boundaries) is **not accounting**: excluded
+from this workstream and carried in the ledger as out of scope rather than quietly dropped. And the
+coverage ledger's completeness is confirmed — `docs/ws-acct/kubeworkz-books.md` accounts for all
+eighteen workbooks; if a workbook were missing from it, the ledger would be wrong, not the manual.
+
+### 7 · The capitalization posture — the manual's, adopted
+
+Not one of the five calls, but it has to be settled before the chart of accounts is seeded, and the
+manual settles it (Key Accounting Policy Decisions 1 and 3). The books adopt it rather than
+re-deciding it: **new-technology development costs expense as incurred** — which is why the
+mask/reticle, EDA and prototype entries in the playbook's §1 are R&D expense, and why JE-005's own
+note ("no alternative future use → expense as R&D") is the **default posture rather than an
+exception**; **standard tooling and NRE may be capitalized** where the manual says so; and the
+**PDK licence capitalizes** as an intangible amortized over 36 months (decision 9).
+
+Consequence for Phase 2's seed, stated because it is the easy thing to get wrong: **no
+design-engineering cost enters inventory.** Only foundry, photonics, assembly-and-test and board-BOM
+costs flow into stock via the cost pools; engineering effort is a period expense dimensioned to a
+programme so it can still be reported per chip.

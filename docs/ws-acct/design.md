@@ -136,7 +136,11 @@ question the doc's reports ask. **It is Phase 1 and everything else waits on it.
 
 ## §1 Decisions
 
-Each is a numbered ADR-054 decision in phase 0.
+Each is a numbered ADR-054 decision, and **all are now TAKEN** — ADR-054 is ACCEPTED as of
+2026-10-27, with the five operator-facing calls ruled in its "Ratification" section. Note the two
+numberings: the ADR carries **eighteen** decisions (it promotes the allocation step and the PII
+posture to numbered decisions), while this spec lists **D1–D16**, which is what the build plan
+cites. ADR-054's Decisions section opens with the mapping; neither numbering is a typo.
 
 ### D1 — The cost-object seam lives on `JournalLine` as a bounded jsonb; cost objects are a Tier-0 row
 `JournalLine` gains `dimension_refs` (jsonb) validated by a new `DimensionGuard`: keys are drawn
@@ -181,8 +185,10 @@ change**.
 expected yield). The engine computes, per period per cost object: material **price** (PPV),
 material **usage/yield**, **labor rate**, **labor efficiency**, **overhead spending**,
 **overhead volume**, and **BOM** variance; variances post as **their own journal entries** into
-the `variance_*` accounts under a **disposition policy** (write off vs capitalize into
-inventory), and the cost-of-yield dashboard is a derived read. Standards **never** revalue the
+the `variance_*` accounts under the manual's **per-type disposition table, adopted verbatim**
+(ratified — ADR-054 Ratification 2: yield and PDB BOM absorb into inventory, PPV and overhead
+volume write off to COGS, labour and overhead spending write off to R&D expense, residual balances
+close at year-end), and the cost-of-yield dashboard is a derived read. Standards **never** revalue the
 stock ledger. **Why:** revaluing stock off standard is exactly the "two truths" failure the
 reconciliation spine exists to prevent.
 
@@ -259,9 +265,10 @@ do not need it yet.* The fleet/operator plane already covers portfolio-level vie
 JE-001/002/071 dimension design-engineering labor by chip. The only truthful source for that split
 is timesheets, and E15's `timesheet_{entry,guard,summary}` are **dormant** (§0.2). So this is a
 priced *wiring* task, not a reuse: `Samen.Scopes.Work` grows the timesheet resources and a
-`cost_object` dimension, and the payroll posting allocates `PayRun` cost by timesheet share. If
-the host declines, the fallback is a documented manual ratio per posting — **stated in the plan,
-not silently dropped.**
+`cost_object` dimension, and the payroll posting allocates `PayRun` cost by timesheet share.
+**Authorized** (ADR-054 Ratification 5), because the manual's labour variances and its grant
+cost-incurred recognition are not facts without actual hours — with the binding proviso that every
+labour-derived figure stays **labelled ratio-based** until the driver lands (build plan Phase 10.2).
 
 ### D15 — One functional currency (CAD), set by host config
 The doc's header reads "Currency: **CA**" (an evident truncation of CAD) while

@@ -1,7 +1,9 @@
 # WS-ACCT — the Kubeworkz books · Build Plan
 
-- **Status:** Buildable. Follows `docs/ws-acct/design.md` + **ADR-054** (write the ADR as
-  phase 0's deliverable — this plan is the ADR's build half).
+- **Status:** Buildable. **Phase 0 is COMPLETE (2026-10-27) and ADR-054 is ACCEPTED** — all
+  eighteen decisions taken, the five operator-facing calls ruled in the ADR's "Ratification"
+  section. Phases 1–16 are not started. Follows `docs/ws-acct/design.md` + ADR-054, whose build
+  half this plan is.
 - **Date:** 2026-10-27
 - **Sizing principle:** SMALL serialized units — each banks in ~15–30 min and each **PHASE** is
   independently committable + gate-able (WS-B/WS-ERP convention). Default fan-out concurrency 1.
@@ -38,7 +40,14 @@ Phases 8 ∥ 9 ∥ 11 are independent after Phase 1. Phases 12–15 need the cos
 
 ---
 
-## Phase 0 — ADR-054 + the coverage ledger · default · doc-only
+## Phase 0 — ADR-054 + the coverage ledger · default · doc-only — **DONE (2026-10-27)**
+
+Landed as commit `b55c5799`: the ADR (ACCEPTED, eighteen decisions, all ratified), the coverage
+ledger, the pair indexed in `docs/README.md`, and ADR-054's row in `docs/adr/README.md` (total
+54 → 55) — verified by `samen_core/test/adr_index_test.exs` (all four checks) +
+`doc_commands_test.exs` (18 passed) and `scripts/eol_preflight.sh` (exit 0).
+
+The original scope:
 
 Write `docs/adr/ADR-054-fabless-accounting-books.md` (design §1 D1–D16 as numbered decisions).
 Write `docs/ws-acct/kubeworkz-books.md`: the doc's 18 workbooks mapped to *ships-with* — the
@@ -46,8 +55,9 @@ permanent answer to "where is workbook N implemented?", so the source manual is 
 **Also (hygiene, 1 line each):** index the pair in `docs/README.md`'s workstream section.
 **Gate:** doc-only; claim-sweep clean; **no abbrev rows touched**; no code.
 
-**AC:** ADR-054 exists with all 16 decisions; the coverage ledger names every one of the 18
-workbooks with a verdict (reuse / alter / add / out-of-scope).
+**AC:** ADR-054 exists with all eighteen decisions and every operator-facing call ruled; the
+coverage ledger names every one of the 18 workbooks with a verdict (reuse / alter / add /
+reference / out-of-scope). **MET.**
 
 ---
 
@@ -148,9 +158,14 @@ never recognizes ahead of cost).
 `CostStandard` + `CostStandardLine` (per item × cost element: standard qty, standard price,
 expected yield). The engine (design D4) computes per period per cost object: **PPV**, **yield**,
 **labor rate**, **labor efficiency**, **overhead spending**, **overhead volume**, **BOM**
-variance; the **disposition policy** (write off vs capitalize) posts them into the variance
-accounts; the **cost-of-yield** and **COY dashboard** reads. **R8 + sabotage 407** — a variance
-posting that does not tie to its standard card.
+variance; the **disposition policy** posts them into the variance accounts under the manual's
+**per-type table, adopted verbatim** (ADR-054 D4 + Ratification 2): yield and PDB BOM variances
+**absorb into inventory**, PPV and overhead volume write off to **COGS**, labour rate/efficiency
+and overhead spending write off to **R&D expense**, and residual balances close at year-end.
+**R8 + sabotage 407** — a variance posting that does not tie to its standard card, and the
+disposition variant: a yield variance **written off instead of absorbed** must also flip, because
+R8 asserts each variance reaches the account its row names, not merely that the arithmetic nets.
+The **cost-of-yield** and **COY dashboard** reads.
 Standards **never** revalue stock (D4): a regression test asserts `Item.unit_cost`'s moving
 average is untouched by a standard-cost run.
 
@@ -181,14 +196,23 @@ reserve read flags age-eligible stock without mutating it.
 
 ---
 
-## Phase 10 — Cost allocation: the MPW mask/wafer invoice across chip designs · default · 1–2 sessions
+## Phase 10 — Cost allocation, and the labour driver · default · 2–3 sessions
 
-The doc's policy §3.3 ("define a methodology for allocating the cost of a single MPW shuttle
-across multiple chip designs"). Generalise the *pattern* from the E14 landed-cost allocator
-(`inventory/landed_cost_allocator.ex`) into a reusable allocation step: allocate one AP bill's
-cost across N cost objects by a declared basis (**die area share**, wafer share, or headcount for
-labor). NOTE (design §0.2): E14 itself is wired and reusable as a *pattern*, but this is a new
-Finance-side allocation — do not reach into the dormant sets.
+**Unit 10.1 — the allocation step.** The doc's policy §3.3 ("define a methodology for allocating
+the cost of a single MPW shuttle across multiple chip designs"). Generalise the *pattern* from the
+E14 landed-cost allocator (`inventory/landed_cost_allocator.ex`) into a reusable allocation step:
+allocate one AP bill's cost across N cost objects by a declared basis (**die area share**, wafer
+share, or effort share for labour). NOTE (design §0.2): E14 itself is wired and reusable as a
+*pattern*, but this is a new Finance-side allocation — do not reach into the dormant sets.
+
+**Unit 10.2 — the labour driver (ADR-054 D17, ratified).** Wire the dormant
+`scopes/work/timesheet_{entry,guard,summary}.ex` (E15) into the SHIPPED `Samen.Scopes.Work` scope
+properly — blueprint resources, migration, host mount, surfaces — with a `cost_object` dimension,
+so payroll cost allocates by **timesheet share** rather than a headcount ratio. This unit is
+load-bearing, not polish: Phase 7's labour rate/efficiency variances and Phase 11's grant
+cost-incurred recognition are **not facts** without actual hours. It therefore lands **before
+those legs are allowed to claim anything**, and every labour-derived figure stays labelled
+ratio-based until it does (the binding proviso in ADR-054 Ratification 5).
 
 **AC:** one mask invoice allocates across the RISC-V64/GPU/PTA programmes with the shares summing
 to exactly the invoice total (red path: rounding must not lose or invent a cent); the allocation
@@ -284,7 +308,7 @@ the coverage ledger (phase 0) has no workbook left without a verdict.
 | 404 | 3 | R10 — the period guard |
 | 405 | 4 | R7 — WIP ↔ lot |
 | 406 | 6 | R9 — recognition exactly-once |
-| 407 | 7 | R8 — variance ↔ standard card |
+| 407 | 7 | R8 — variance ↔ standard card, and the per-type disposition |
 | 408 | 11 | R11 — grant ↔ fund |
 
 Plus the masking trio's sabotage twin on the grant personnel report (Phase 11) and the
@@ -299,10 +323,10 @@ commit time.
 | Stage | Phases | Sessions |
 |---|---|---|
 | Foundations (ADR, seam, books, periods) | 0–3 | 5–8 |
-| The chip cost model (lots, accruals, recognition, variance, assets, NRV, allocation) | 4–10 | 10–15 |
+| The chip cost model (lots, accruals, recognition, variance, assets, NRV, allocation, labour driver) | 4–10 | 12–18 |
 | Compliance & reporting (grants, close, board pack, forecast, suppliers) | 11–15 | 8–12 |
 | Host proof + workstream gate | 16 | 2–3 |
-| **Total** | | **~25–38 sessions** (phases 12–15 are parallel-safe in pairs, so wall-clock is shorter) |
+| **Total** | | **~27–41 sessions** (phases 12–15 are parallel-safe in pairs, so wall-clock is shorter) |
 
 ---
 
@@ -327,7 +351,13 @@ commit time.
   hygiene question is a separate workstream, not a phase here.
 - **Standards never revalue stock** (D4). If a phase is tempted to write `Item.unit_cost` from a
   standard, that is R8's sabotage inverted.
+- **The disposition table is binding, per variance type** (ADR-054 Ratification 2). Yield and PDB
+  BOM variances absorb into inventory; PPV and overhead volume go to COGS; labour and overhead
+  spending go to R&D expense. "Variance" is not a single bucket and no phase may net them together.
+- **Labour-derived figures are ratio-based until Phase 10.2 lands** and must be labelled so
+  (ADR-054 Ratification 5). That covers Phase 7's labour rate/efficiency legs and Phase 11's
+  grant cost-incurred recognition — neither may claim a fact before the driver exists.
 - **The doc's figures are placeholders** — the *structure* ships; the numbers get reviewed by the
   operator before they are called Kubeworkz's policy (design §7).
-- **The doc's §E1–E5 appendix is not accounting** — confirm with the operator before treating it
-  as in-scope for anything.
+- **The doc's §E1–E5 appendix is not accounting** — the operator confirmed its exclusion
+  (ADR-054 Ratification 6); it stays out of scope in the ledger.

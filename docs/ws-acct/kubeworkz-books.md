@@ -49,7 +49,7 @@ requirement set. This is the section the books are actually built from.
 | The posting map binding each cost pool to a real account | `PostingAccount.key` is a closed **4**-value enum (`:ap_clearing`/`:ar_clearing`/`:cash`/`:income`) | **ALTER** (D2) | 1 |
 | MPW slot purchase is a prepayment/deposit until fabrication begins | `PurchaseOrder`/`PoLine` → AP → prepaid asset accounts | **REUSE** + posting keys | 1 / 4 |
 | Per-chip cost tracking (the COA can't answer "what did the GPU cost") | `JournalLine` has **no dimension seam** | **ALTER** — `dimension_refs` (D1) | 1 |
-| Capitalize-vs-expense policy (MPW cost into a board's inventory when the chips are for a product; R&D expense when internal) | `Item` + `WorkOrder`/`ProductionLog` cost roll-up; the disposition is a seeding/policy decision | **REUSE** + policy (`Budget`/standards) | 7 |
+| Capitalize-vs-expense policy (MPW cost into a board's inventory when the chips are for a product; R&D expense when internal) | `Item` + `WorkOrder`/`ProductionLog` cost roll-up; the posture is **ruled** — new-tech development expenses as incurred, the PDK licence capitalizes at 36 months, and no design-engineering cost enters inventory (ADR-054 Ratification 7) | **REUSE** + policy (`Budget`/standards) | 7 |
 | ASC-606-flavoured revenue recognition for university sales (point-in-time on control transfer; deferral when a support obligation exists) | `SalesOrder :fulfill` → stock `:sale` + Billing invoice (point-in-time, shipped) | **ADD** for the deferral leg (D5) | 6 |
 
 ### 3 · GlobalFoundries photonics fab (lines 171–205) — **REFERENCE**
@@ -123,7 +123,7 @@ reporting templates, disposition policy, KPIs and a reduction action plan.
 |---|---|---|---|
 | Standard cost cards (+ expected yield per element) | `Item.unit_cost` moving average only | **ADD** `CostStandard`/`CostStandardLine` (DATA per card) | 7 |
 | PPV · yield · labour rate/efficiency · OH volume/spending · BOM variance | — | **ADD** the engine (D4) | 7 |
-| Variance journal entries + **disposition policy** (write off vs capitalize) | — | **ADD**; the disposition is an **open operator decision** (ADR-054 ratification #2) | 7 |
+| Variance journal entries + **disposition policy** | — | **ADD**; the policy is **ruled** — the manual's per-type table adopted verbatim (yield and PDB BOM absorb into inventory; PPV and overhead volume to COGS; labour and overhead spending to R&D expense; residual to RE at year-end) | 7 |
 | Cost-of-yield / COY dashboard, variance investigation threshold, variance trend chart | `Samen.Rollup` + the aggregate plane | **ADD** reads | 7 / 13 |
 | Month-end variance workflow + investigation triggers | `CloseRun` tasks + Automation | **REUSE** (wk 11) + **ADD** reads | 12 |
 | **A standard never revalues stock** | — | **ADD** as a *regression guard*, not a feature | 7 |
@@ -278,7 +278,7 @@ A reference acceptance-model specification (version/source/hash, preprocessing a
 quantization, boundary shapes, reference semantics/rounding/golden vectors, quality/latency/power
 thresholds and measurement boundaries, a versioned spec and data manifest with content hashing).
 It is an MLPerf-style benchmark contract and has **nothing to do with accounting**. Excluded from
-this workstream pending the operator's confirmation (ADR-054 ratification #6) — most likely it
+this workstream — a scope confirmation the operator took (ADR-054 Ratification 6) — most likely it
 belongs to a different conversation about the chips themselves.
 
 ## The four alterations, in one place
