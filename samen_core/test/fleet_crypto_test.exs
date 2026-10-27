@@ -79,8 +79,18 @@ defmodule Samen.Fleet.CryptoTest do
     test "fresh timestamp passes, stale one fails" do
       now = System.os_time(:second)
       assert Crypto.fresh_timestamp?(now)
-      refute Crypto.fresh_timestamp?(now - 301)
-      refute Crypto.fresh_timestamp?(now + 301)
+
+      # The guard reads the wall clock AT CALL TIME (`fresh_timestamp?/2` → `System.os_time/1`),
+      # so these are compared against a clock that may have moved since `now` was captured — and
+      # a margin of exactly ONE second (301 against the 300s tolerance) cannot survive that. A
+      # test process descheduled for a second (this suite runs 24 concurrent cases on a loaded
+      # host) or a one-second clock step collapses 301 to the far side of the window, the guard
+      # answers `true` CORRECTLY, and the `refute` fails spuriously — the root gate lost a whole
+      # run to exactly this (4181/4182 in samen_core, `refute fresh_timestamp?(now + 301)`).
+      # 310s on BOTH sides keeps ten seconds of headroom in both directions while proving the
+      # same thing: a stamp ten seconds past the window is stale.
+      refute Crypto.fresh_timestamp?(now - 310)
+      refute Crypto.fresh_timestamp?(now + 310)
     end
   end
 end
