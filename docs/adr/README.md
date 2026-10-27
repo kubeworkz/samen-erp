@@ -6,7 +6,7 @@ decision in one clause. Read the ADR itself before changing anything it governs 
 
 Numbering is chronological, not thematic; the columns below group them by concern so you can
 scan for "everything about the vault" or "everything about the operator plane" without
-reading all 53.
+reading all 54.
 
 ## Vault, crypto-shred, audit
 
@@ -164,7 +164,15 @@ reading all 53.
 
 ---
 
-54 ADRs total. All are `Status: Accepted` except ADR-025 (`Proposed (deferred)`) and **ADR-048**
+## The Kubeworkz books (WS-ACCT)
+
+| # | Title | Decision |
+|---|---|---|
+| [054](ADR-054-fabless-accounting-books.md) | The fabless accounting books: a cost-object seam on the GL, fiscal periods and close control, lots as supplier-located stock, standard costing as a variance layer, schedules for deferral and amortization, grants as a fund dimension, and a bounded forecast | **PROPOSED (2026-10-27) — design + build plan filed; build NOT STARTED (phase 0 only: the ADR and the coverage ledger `docs/ws-acct/kubeworkz-books.md`); no code authored, no abbrev rows reserved, all eighteen decisions await the operator's ruling.** Extends the ADR-049 ERP base scopes to run one real company's (Kubeworkz, fabless semiconductor) books from `docs/chip_manufacturing_accounting_setup.md`, whose audit found that the chart of accounts is **DATA not code** (the doc's COA maps 1:1 onto the shipped `Account` resource, including its credit-normal contra account) and that only **four widenings of shipped structure** are unavoidable: `JournalLine` gains a bounded `dimension_refs` seam (a frozen four-key vocabulary — `project`/`lot`/`fund`/`cost_pool` — over same-org `CostObject` ids, **ids only, never a name**, so a cost-object join cannot become a de-anonymisation channel); `PostingAccount.key`'s closed enum grows from four meanings to the ~two dozen the doc's cost pools need, and stays closed and fail-honest; `Warehouse` gains `kind ∈ {:owned, :consignment, :supplier}` so **foundry WIP is stock at a supplier location** and "WIP – Foundry" is a GL presentation of the one quantity truth; and `PostGuard` gains a fiscal-period rule (`:closed` refuses any post dated inside it at the DB belt; `:soft_closed` refuses document-sourced posts while admitting close adjustments). Everything else is new resource or derived read, and **no new scope macro is added**: standards are a variance layer that never revalues stock, deferral/amortization are derived schedules behind exactly-once period anchors, accruals are posted pairs with linked automatic reversal (the doc's own "reverse on the first day of next month" control, mechanised), grants are a document plus a `fund` dimension (the grant budget reusing `Budget`), and forecasting is a bounded driver model with append-only immutable-published versions — never a formula engine, no generated narrative. Six invariants extend the ADR-049 §6.3 spine (R6 per-cost-object balance · R7 WIP↔lot · R8 standard↔actual · R9 recognition↔deferred · R10 close↔period · R11 grant↔fund), each shipping a green test, a red twin and a committed sabotage patch. The audit also records that **~26 WS-ERP module sets (E13–E38) are dormant** — no scope macro, no blueprint, no mount, no test — so grep-visible "consolidation"/"expenses"/timesheet code is **not a reuse**, and wiring any of it is priced work. Where it lifts an ADR-049 §7 deferral it is named and bounded (depreciation for one asset class; driver-based forecasting), and the honesty list otherwise carries forward and grows (no ASC 606 multi-element contracts, no tax filing, no FX revaluation, no serials, no MRP, no intercompany elimination). |
+
+---
+
+55 ADRs total. All are `Status: Accepted` except ADR-025 (`Proposed (deferred)`) and **ADR-048**
 (`PROPOSED` — draft only, no code authored, six decisions + six open questions all OPEN,
 awaiting operator ratification), **ADR-052** (`PROPOSED` — design complete and filed ahead of
 the build; Lane A's dev-only probe is BUILT, Lane B is NOT STARTED, §8 D1–D5 all OPEN), and
@@ -177,7 +185,10 @@ seven TAKEN as recommended) with build status
 `BUILT — A1–A7 all shipped`; ADR-046 was
 Accepted on 2026-08-13 and its build is COMPLETE (E1–E7), with §7 decisions #1–#4 taken and one
 new decision #5 carried OPEN (needs-operator-input) — the E7-named about-a-subject blob residual;
-ADR-045 was Accepted on 2026-08-12 once its §2 (V-F1) decision was made and shipped. If you add a new one, append a row here in the same pass
+ADR-045 was Accepted on 2026-08-12 once its §2 (V-F1) decision was made and shipped; and
+**ADR-054** is `PROPOSED` (2026-10-27) — filed with its build plan as phase 0's deliverable,
+**build NOT STARTED** (no code, no abbrev rows touched), with all eighteen decisions awaiting the
+operator's ruling, with the operator-facing calls recorded in its "Awaiting ratification" section. If you add a new one, append a row here in the same pass
 (`docs/guides/cookbook.md`'s claim-evidence discipline applies to this index too — keep it honest,
 not aspirational).
 

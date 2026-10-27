@@ -86,7 +86,10 @@ Each workstream folder has a `design.md` (the spec, ADR-grounded) and a `build-p
 serialized, session-sized execution plan). WS-A = "Product Reality" (ADR-014/015/016), WS-B =
 "Operator Cockpit v1" (ADR-017–021), WS-D = "Builder Joy" (ADR-022–024), WS-E = "Table Stakes
 UX" (ADR-026–030). Newer pairs that are **proposed, not built**: [WS-Masked-Replay](ws-masked-replay/design.md)
-(ADR-052) and [WS-Notes](ws-notes/design.md) (ADR-053 — block pages in the Docs scope).
+(ADR-052), [WS-Notes](ws-notes/design.md) (ADR-053 — block pages in the Docs scope), and
+[WS-ACCT](ws-acct/design.md) (ADR-054 — the Kubeworkz fabless books: opening a real set of
+accounting books in samenerp from the outline in
+[chip_manufacturing_accounting_setup.md](chip_manufacturing_accounting_setup.md)).
 
 ## Host adoption ledger
 
