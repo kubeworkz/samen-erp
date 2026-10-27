@@ -205,10 +205,13 @@ allocate one AP bill's cost across N cost objects by a declared basis (**die are
 share, or effort share for labour). NOTE (design §0.2): E14 itself is wired and reusable as a
 *pattern*, but this is a new Finance-side allocation — do not reach into the dormant sets.
 
-**Unit 10.2 — the labour driver (ADR-054 D17, ratified).** Wire the dormant
-`scopes/work/timesheet_{entry,guard,summary}.ex` (E15) into the SHIPPED `Samen.Scopes.Work` scope
-properly — blueprint resources, migration, host mount, surfaces — with a `cost_object` dimension,
-so payroll cost allocates by **timesheet share** rather than a headcount ratio. This unit is
+**Unit 10.2 — the labour driver (ADR-054 D17, ratified).** **Author** timesheet capture inside the
+SHIPPED `Samen.Scopes.Work` scope — blueprint resources, migration, host mount, surfaces, plus a
+`cost_object` dimension — so payroll cost allocates by **timesheet share** rather than a headcount
+ratio. NOTE (ADR-055 §6): the dormant `scopes/work/timesheet_{entry,guard,summary}.ex` (E15) stubs
+are **deleted** by that ruling rather than wired — no migration, no reference and no test, so
+"wiring" them meant auditing and re-shaping them first; authoring fresh is the cheaper and honest
+path, and the labour-driver decision is unaffected (only its starting point changes). This unit is
 load-bearing, not polish: Phase 7's labour rate/efficiency variances and Phase 11's grant
 cost-incurred recognition are **not facts** without actual hours. It therefore lands **before
 those legs are allowed to claim anything**, and every labour-derived figure stays labelled

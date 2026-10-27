@@ -78,8 +78,10 @@ tagged `WS-ERP E13…E38`. **They are not scopes.** Verified:
 doc's multi-entity consolidation, expense reports, supplier quality or timesheets, that is
 *wiring* work (scope macro + blueprint + migration + mount + tests per ADR-004), costed as such —
 not a reuse. Where a dormant set is *close* to a doc need, the plan says so and prices the wiring
-(§1 D13, D14). A separate hygiene question — whether ~26 dormant module sets should be deleted
-or completed — is **out of scope here** and raised as a carry (§7).
+(§1 D13, D14). The separate hygiene question — whether ~26 dormant module sets should be deleted
+or completed — was raised as a carry (§7) and is now **answered: DELETE** (ADR-055), which also
+establishes that the frontier is per **module**, not per directory or phase range (E13/E14 are live;
+E11 and E15 are not).
 
 ### 0.3 The chart of accounts is DATA, not code
 
@@ -261,11 +263,13 @@ documented path when a second entity exists — **not** a phase here. The doc's 
 Consolidation" ERP requirement is answered as: *the estate has the module set, unwired; the books
 do not need it yet.* The fleet/operator plane already covers portfolio-level views.
 
-### D14 — Labor cost is allocated by timesheet share, which means wiring E15 into Work
+### D14 — Labor cost is allocated by timesheet share, which means authoring timesheets into Work
 JE-001/002/071 dimension design-engineering labor by chip. The only truthful source for that split
-is timesheets, and E15's `timesheet_{entry,guard,summary}` are **dormant** (§0.2). So this is a
-priced *wiring* task, not a reuse: `Samen.Scopes.Work` grows the timesheet resources and a
-`cost_object` dimension, and the payroll posting allocates `PayRun` cost by timesheet share.
+is timesheets, and E15's `timesheet_{entry,guard,summary}` were **dormant** (§0.2) and are now
+**deleted** (ADR-055 §6 — unmigrated, unreferenced, untested, so they were not a head start). So
+this is a priced *authoring* task, neither a reuse nor a wiring: `Samen.Scopes.Work` grows the
+timesheet resources fresh, plus a `cost_object` dimension, and the payroll posting allocates
+`PayRun` cost by timesheet share.
 **Authorized** (ADR-054 Ratification 5), because the manual's labour variances and its grant
 cost-incurred recognition are not facts without actual hours — with the binding proviso that every
 labour-derived figure stays **labelled ratio-based** until the driver lands (build plan Phase 10.2).

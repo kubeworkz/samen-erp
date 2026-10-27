@@ -193,11 +193,16 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
 - **Abbrev budget:** ~25 new resources ≈ 25 registry rows, reserved per phase through the sanctioned
   allocator (ADR-023) and never hand-edited — the largest registry movement since WS-ERP, and
   therefore the most likely place to break a golden.
-- **Dormant code is not reuse.** E13–E38 have no scope macro, no blueprint, no mount and no test;
-  a reader who greps "consolidation" or "expenses" finds code that *looks* built. ADR-049 §1's
-  scope-count decision therefore stands unamended — this ADR adds no scope macro at all. Whether
-  the ~26 dormant sets should be deleted or completed is explicitly **out of scope here** and
-  carried as a separate hygiene item.
+- **Dormant code is not reuse, and the set has since been measured rather than approximated.**
+  The bulk of what the README presents as shipped "E9–E38" has no scope macro, no blueprint, no
+  mount and no test; a reader who greps "consolidation" or "expenses" finds code that *looks*
+  built. ADR-049 §1's scope-count decision therefore stands unamended — this ADR adds no scope
+  macro at all. The frontier is **module-level, not a phase range**: E13/E14 are **live** (mounted
+  by `samenerp`, tables migrated), while E11 and the E15 timesheets are **not**, despite living
+  inside mounted scope directories — so a phase-range shorthand over-includes and under-includes at
+  once. **The disposition is ruled in ADR-055: DELETE** (89 files, 87 never-created tables, 89
+  abbrev rows retired under proof), which closes the hygiene item this paragraph carried. Read this
+  paragraph as the finding whose remediation is ADR-055, not as an open question.
 - **The honesty list carries forward and grows.** ADR-049 §7 remains binding (payroll computation,
   tax filing, FX revaluation, serials/fractional UOM, scheduling, leave accrual), and this ADR adds
   its own refusals: no ASC 606 multi-element contracts, no formula engine, no generated narrative,
