@@ -249,13 +249,32 @@ try do
   # every mounted route + the JSON:API bounds over real HTTP.
   org = "00000000-0000-4000-8000-0000000000d6"
 
+  # KMS keystore for the boot+seed driver, OWNED BY THIS PROBE — the same T107 discipline the
+  # scratch dir follows (the creator owns it and removes exactly its own path). It lives inside
+  # `scratch_parent`, which `cleanup/0` already removes with one `rm_rf!` on EVERY exit path
+  # (success, `halt`, crash, and the ci.sh guard's outer trap), so it cannot outlive the run.
+  #
+  # It used to be minted by the CHILD driver in `System.tmp_dir!()` as
+  # `<otp_app>_flagship_kms_<nanosecond>`, released by nobody: 18 such dirs, every one holding a
+  # `master.key`, had accumulated on this host. An `at_exit` in the driver would NOT have been
+  # equivalent to the test helpers' cleanup, because the driver ends several failure paths with
+  # `System.halt/1` — which terminates the VM without running `at_exit` at all.
+  #
+  # The path is handed down through the ENVIRONMENT rather than interpolated into the emitted
+  # driver source, so a Windows path's backslashes never have to survive an Elixir string literal.
+  kms_dir = Path.join(scratch_parent, "flagship_kms")
+  File.rm_rf!(kms_dir)
+
   boot_script = """
   # D6 flagship boot+seed driver (scratch — written by the probe, NOT an emitted file).
   # Runs under `mix run --no-start` in MIX_ENV=test: forces repo + web ON, real pool,
   # serves the endpoint, SEEDS via the app's Seeds module (what `mix <app>.seed` wraps),
   # proves the seed is vault-routed, then asserts every route over HTTP.
 
-  kms = Path.join(System.tmp_dir!(), "#{otp_app}_flagship_kms_\#{System.system_time(:nanosecond)}")
+  # Supplied by the probe, which owns it and releases it with its scratch tree. Not minted
+  # here: `System.halt/1` (used on this driver's failure paths) skips `at_exit`, so a dir
+  # created in this process has no reliable releaser.
+  kms = System.fetch_env!("SAMEN_FLAGSHIP_KMS_DIR")
   File.rm_rf!(kms)
   Application.put_env(:samen_core, :kms_key_dir, kms)
 
@@ -881,7 +900,7 @@ try do
   {boot_out, boot_code} =
     System.cmd("mix", ["run", "--no-start", "_flagship_boot_probe.exs"],
       cd: app_dir,
-      env: [{"MIX_ENV", "test"}],
+      env: [{"MIX_ENV", "test"}, {"SAMEN_FLAGSHIP_KMS_DIR", kms_dir}],
       stderr_to_stdout: true
     )
 
