@@ -4,6 +4,7 @@ kms_key_dir =
 
 File.rm_rf!(kms_key_dir)
 Application.put_env(:samen_core, :kms_key_dir, kms_key_dir)
+System.at_exit(fn _ -> File.rm_rf!(kms_key_dir) end)
 
 alias Acme.Repo
 

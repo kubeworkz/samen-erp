@@ -289,4 +289,27 @@ defmodule Samen.Gen.TemplatesParityTest do
       end
     end
   end
+
+  # BORN-CLEAN guard (the temp-leak analogue of BORN ARMED above): EVERY generated app creates a
+  # per-run KMS keystore under `System.tmp_dir!()` and points the vault at it, so every one must
+  # also RELEASE it at exit. The leak this pins was measured, not hypothetical: the deploy probe
+  # runs a generated app's suite, and because only the hosts carried the `at_exit` line, eight
+  # `<otp_app>_keystore_test_*` directories — each holding a `master.key` — accumulated in `$TMPDIR`
+  # between 2026-10-20 and 2026-10-27, one per generated-suite run, with nothing failing.
+  #
+  # Asserted on the RENDERED output (not the golden), so a template edit that drops the line fails
+  # HERE even after a golden re-capture — which is exactly how the leak got in. The HEADLESS set is
+  # held to the same standard: both templates mint the dir, so both must release it.
+  test "every generated app RELEASES its per-run keystore dir at exit (no $TMPDIR accumulation)" do
+    for {set, files} <- render_all() do
+      helper = files["test/test_helper.exs"]
+
+      assert is_binary(helper), "#{set} emitted no test/test_helper.exs"
+
+      assert helper =~ "System.at_exit(fn _ -> File.rm_rf!(kms_key_dir) end)",
+             "#{set}/test_helper.exs never removes its per-run KMS keystore dir at exit — every " <>
+               "suite run leaves `#{set}_keystore_test_*` (containing `master.key`) in $TMPDIR " <>
+               "forever, and nothing fails while it accumulates."
+    end
+  end
 end
