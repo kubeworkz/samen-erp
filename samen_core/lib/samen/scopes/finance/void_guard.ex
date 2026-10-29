@@ -86,17 +86,24 @@ defmodule Samen.Scopes.Finance.VoidGuard do
     acct_source = attr_source(line_resource, :account_id)
     debit_source = attr_source(line_resource, :debit_cents)
     credit_source = attr_source(line_resource, :credit_cents)
+    dim_source = attr_source(line_resource, :dimension_refs)
 
     sql = """
-    SELECT #{id_source}, #{acct_source}, #{debit_source}, #{credit_source}
+    SELECT #{id_source}, #{acct_source}, #{debit_source}, #{credit_source}, #{dim_source}
     FROM #{table} WHERE #{entry_fk} = $1
     """
 
     case repo.query(sql, [dump_uuid(entry.id)]) do
       {:ok, %{rows: rows}} ->
         {:ok,
-         Enum.map(rows, fn [id, acct, debit, credit] ->
-           %{id: load_uuid(id), account_id: load_uuid(acct), debit: to_i(debit), credit: to_i(credit)}
+         Enum.map(rows, fn [id, acct, debit, credit, refs] ->
+           %{
+             id: load_uuid(id),
+             account_id: load_uuid(acct),
+             debit: to_i(debit),
+             credit: to_i(credit),
+             dimension_refs: refs || %{}
+           }
          end)}
 
       {:error, reason} ->
@@ -124,7 +131,11 @@ defmodule Samen.Scopes.Finance.VoidGuard do
         %{
           account_id: line.account_id,
           debit_cents: line.credit,
-          credit_cents: line.debit
+          credit_cents: line.debit,
+          # WS-ACCT Phase 1: the reversal mirrors the DIMENSION too — a voided
+          # dimensioned entry whose reversal dropped the dimensions would leave
+          # its cost object one-sided (and R6 would flag it).
+          dimension_refs: line.dimension_refs
         }
       end)
 

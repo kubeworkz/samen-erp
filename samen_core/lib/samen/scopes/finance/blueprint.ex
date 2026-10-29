@@ -236,6 +236,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
           change({Samen.Scopes.Finance.UnbalancedEntry,
            lines: :lines, debit: :debit_cents, credit: :credit_cents})
 
+          # R6 (WS-ACCT Phase 1): the DIMENSION-BALANCE twin of UnbalancedEntry
+          # — an entry is dimensioned as a whole or not at all, and every cost
+          # object it names must net to zero within it.
+          change({Samen.Scopes.Finance.DimensionBalance, lines: :lines})
+
           change(Samen.Scopes.Finance.EntryLines)
         end
 
@@ -261,7 +266,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
                     account_id: [type: :uuid, allow_nil?: false],
                     debit_cents: [type: :integer],
                     credit_cents: [type: :integer],
-                    memo: [type: :string]
+                    memo: [type: :string],
+                    dimension_refs: [type: :map]
                   ]
                 ]
               ]
@@ -283,7 +289,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
                     account_id: [type: :uuid, allow_nil?: false],
                     debit_cents: [type: :integer],
                     credit_cents: [type: :integer],
-                    memo: [type: :string]
+                    memo: [type: :string],
+                    dimension_refs: [type: :map]
                   ]
                 ]
               ]
@@ -301,6 +308,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
             accept([])
             require_atomic?(false)
             change(Samen.Scopes.Finance.PostBalance)
+            # R6 over the PERSISTED lines (PostBalance's twin): the stored rows,
+            # never a caller argument, decide whether the posting balances per
+            # cost object.
+            change(Samen.Scopes.Finance.DimensionBalance)
             change(Samen.Scopes.Finance.PostGuard)
           end
 
@@ -340,7 +351,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
                     account_id: [type: :uuid, allow_nil?: false],
                     debit_cents: [type: :integer],
                     credit_cents: [type: :integer],
-                    memo: [type: :string]
+                    memo: [type: :string],
+                    dimension_refs: [type: :map]
                   ]
                 ]
               ]
@@ -366,10 +378,87 @@ defmodule Samen.Scopes.Finance.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
+  # CostObject — the cost/analysis registry (WS-ACCT Phase 1; ADR-054 D1).
+  # Tier-0 config row: {code, name, kind}. The DIMENSION VALUES the ledger's
+  # `dimension_refs` may name; ids only, never names (PII-free by construction).
+  # ---------------------------------------------------------------------------
+  defmacro define_cost_object(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.CostObject — the cost/analysis registry (WS-ACCT Phase 1;
+        ADR-054 D1). A Tier-0 config row naming ONE thing cost can be
+        accumulated against: `{code, name, kind}` where `kind ∈ {:project,
+        :chip, :cost_pool, :fund}`. `code` is unique per org (the migration's
+        composite unique index, the `Account` discipline).
+
+        Why a registry instead of four nullable FK columns on every journal
+        line: the analysis axes are host DATA (Kubeworkz's four programmes and
+        its cost pools), and a column-per-axis schema grows with every new
+        axis. `JournalLine.dimension_refs` holds these ids;
+        `Samen.Scopes.Finance.DimensionGuard` refuses anything else.
+
+        Ids only, never names — a cost-object join must not become a
+        de-anonymisation channel (design §4). Archivable: a retired cost object
+        is never deleted (posted lines reference it forever). No PII (INV-1).
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev),
+          archivable: true
+
+        postgres do
+          table("#{unquote(abbrev)}_cost_object")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:code, :string, public?: true, allow_nil?: false)
+          attribute(:name, :string, public?: true, allow_nil?: false)
+
+          attribute(:kind, :atom,
+            public?: true,
+            allow_nil?: false,
+            constraints: [one_of: [:project, :chip, :cost_pool, :fund]]
+          )
+        end
+
+        actions do
+          defaults([:read, create: :*, update: :*])
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # JournalLine — the posting. Unsigned integer cents; exactly one of
   # debit_cents/credit_cents non-zero (LineAmounts). No update action exists.
   # ---------------------------------------------------------------------------
-  defmacro define_journal_line(module, otp_app, domain, repo, abbrev, account_mod, entry_mod) do
+  defmacro define_journal_line(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             account_mod,
+             entry_mod,
+             cost_object_mod
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -386,6 +475,17 @@ defmodule Samen.Scopes.Finance.Blueprint do
         written: NO update action exists, and the migration's trigger refuses
         UPDATE/DELETE outright on the line table (the aud_event append-only
         posture). No PII (INV-1).
+
+        ## `dimension_refs` — the cost-object seam (WS-ACCT Phase 1)
+
+        A bounded jsonb map from the FROZEN four-key vocabulary (`project`,
+        `lot`, `fund`, `cost_pool`) to same-org `CostObject` ids. It carries
+        **ids only** — never a name, never free text — so a cost-by-chip or
+        cost-by-grant read can join without ever reaching PII
+        (`Samen.Scopes.Finance.DimensionGuard` refuses every other shape,
+        fail-closed). The dimension SET is a balancing segment: an entry is
+        either dimensioned as a whole or not at all, and each cost object's
+        debits equal its credits (`Samen.Scopes.Finance.DimensionBalance`, R6).
         """
         use Samen.Resource,
           otp_app: unquote(otp_app),
@@ -403,6 +503,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
           attribute(:debit_cents, :integer, public?: true, allow_nil?: false, default: 0)
           attribute(:credit_cents, :integer, public?: true, allow_nil?: false, default: 0)
           attribute(:memo, :string, public?: true)
+
+          # WS-ACCT Phase 1 (ADR-054 D1): the cost-object seam. Bounded keys,
+          # same-org CostObject ids as values, never free text.
+          attribute(:dimension_refs, :map, public?: true, allow_nil?: false, default: %{})
         end
 
         relationships do
@@ -422,6 +526,9 @@ defmodule Samen.Scopes.Finance.Blueprint do
         changes do
           change(Samen.Policy.SameOrgFk)
           change(Samen.Scopes.Finance.LineAmounts)
+
+          change({Samen.Scopes.Finance.DimensionGuard,
+           cost_object: unquote(cost_object_mod)})
         end
 
         actions do
@@ -433,7 +540,15 @@ defmodule Samen.Scopes.Finance.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :entry_id, :account_id, :debit_cents, :credit_cents, :memo])
+            accept([
+              :org_id,
+              :entry_id,
+              :account_id,
+              :debit_cents,
+              :credit_cents,
+              :memo,
+              :dimension_refs
+            ])
           end
         end
 
@@ -481,10 +596,47 @@ defmodule Samen.Scopes.Finance.Blueprint do
         end
 
         attributes do
+          # WS-ACCT Phase 1 (ADR-054 D2): the posting map widens IN PLACE from
+          # the base four meanings to the ones the Kubeworkz books' flows need.
+          # The enum stays CLOSED and fail-honest — an unmapped meaning refuses
+          # the posting (accounts are a host decision, never invented here).
           attribute(:key, :atom,
             public?: true,
             allow_nil?: false,
-            constraints: [one_of: [:ap_clearing, :ar_clearing, :cash, :income]]
+            constraints: [
+              one_of: [
+                # base four (WS-ERP E2)
+                :ap_clearing,
+                :ar_clearing,
+                :cash,
+                :income,
+                # WIP and finished goods (fabless foundry/photonics/assembly legs)
+                :wip_foundry,
+                :wip_photonics,
+                :wip_assembly,
+                :finished_goods_chip,
+                :finished_goods_board,
+                # revenue and restricted funds
+                :deferred_revenue,
+                :grant_deferred,
+                # liabilities and reserves
+                :accrued_liabilities,
+                :inventory_reserve,
+                # amortization / depreciation / write-down
+                :amortization_expense,
+                :accumulated_amortization,
+                :depreciation_expense,
+                :write_down_expense,
+                # the standard-cost variance layer (Phase 7)
+                :variance_ppv,
+                :variance_yield,
+                :variance_labor,
+                :variance_overhead,
+                # R&D intangibles and services
+                :mask_expense,
+                :eda_expense
+              ]
+            ]
           )
         end
 

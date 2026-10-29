@@ -87,7 +87,11 @@ defmodule Samen.Scopes.Finance.EntryLines do
         account_id: Map.fetch!(line, :account_id),
         debit_cents: Map.get(line, :debit_cents) || Map.get(line, "debit_cents") || 0,
         credit_cents: Map.get(line, :credit_cents) || Map.get(line, "credit_cents") || 0,
-        memo: Map.get(line, :memo) || Map.get(line, "memo")
+        memo: Map.get(line, :memo) || Map.get(line, "memo"),
+        # WS-ACCT Phase 1: the dimension map rides the line map through to the
+        # row, where the line's own DimensionGuard validates it (vocabulary,
+        # ids-only, same-org) inside this same transaction.
+        dimension_refs: Map.get(line, :dimension_refs) || Map.get(line, "dimension_refs") || %{}
       }
 
       case line_resource

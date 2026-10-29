@@ -296,8 +296,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # samen_core/samen_web, plus the samenerp host's first Docs mount:
       # Doc/Note/DocBlock/DocLink),
       # allocator-reserved: 34_575 bytes, 749 flat.
-      assert byte_size(committed) == 34575
-      assert map_size(R.load()) == 749
+      # +3 WS-ACCT Phase 1 (ADR-054 D1) — the Finance `CostObject` in the three hosts
+      # that mount Finance (samen_core fixture `cob`, samen_web `fco`, samenerp `eco`),
+      # every row written by the allocator,
+      # allocator-reserved: 34_720 bytes, 752 flat.
+      assert byte_size(committed) == 34720
+      assert map_size(R.load()) == 752
     end
   end
 

@@ -38,7 +38,8 @@ defmodule Samenerp.Erp do
       budget: "ecb",
       budget_line: "ecd",
       exchange_rate: "efx",
-      org_fx_settings: "efs"
+      org_fx_settings: "efs",
+      cost_object: "eco"
     }
 
   use Samen.Scopes.Inventory,
@@ -98,5 +99,6 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.OrgFxSettings)
     resource(Samenerp.Erp.TransferOrder)
     resource(Samenerp.Erp.LandedCost)
+    resource(Samenerp.Erp.CostObject)
   end
 end

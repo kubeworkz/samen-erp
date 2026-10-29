@@ -128,7 +128,7 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 23, driftwood 25, pawchart 42,
-      # samen_core 88, samen_web 72, samenerp 94 (the WS-ERP E8 host proof —
+      # samen_core 89, samen_web 73, samenerp 95 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst, the
       # Phase-2 Chat mount cth/chp/cmg/cds, the Phase-5 CMS mount scg/sct/scb/
       # scd/scn/scf + spv/stv/sbv, the Phase-6 Calendar mount `evt`, and the
@@ -142,10 +142,15 @@ defmodule Samen.AbbrevRegistryTest do
       # target host's first Docs mount (`edd`/`edn` + `edb`/`edl` — four rows, since
       # samenerp never carried Doc/Note) — every row written by
       # `mix samen.abbrev.reserve`, never by hand.
-      # = 344 host entries across six hosts.
+      # +3 in WS-ACCT Phase 1 (ADR-054 D1): the Finance `CostObject` the cost-object
+      # seam names, in the three hosts that mount Finance — samen_core fixture `cob`
+      # (`SamenCore.Support.FinanceFixture.CostObject`), samen_web `fco`
+      # (`Samen.WebTest.Erp.CostObject`) and samenerp `eco` (`Samenerp.Erp.CostObject`)
+      # — every row written by the allocator, never by hand.
+      # = 347 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 94
-      assert map_size(hosts["samen_core"]) == 88
+      assert map_size(hosts["samenerp"]) == 95
+      assert map_size(hosts["samen_core"]) == 89
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -414,6 +419,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # reserved with the sanctioned allocator (--host samen_core).
                  "sdb" => "SamenCore.Support.DocsFixture.DocBlock",
                  "sdl" => "SamenCore.Support.DocsFixture.DocLink",
+                 # WS-ACCT Phase 1 (ADR-054 D1): the in-tree Finance fixture's
+                 # cost/analysis registry, reserved with the sanctioned allocator
+                 # (--host samen_core) — the seam's own test fixture.
+                 "cob" => "SamenCore.Support.FinanceFixture.CostObject",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -527,6 +536,9 @@ defmodule Samen.AbbrevRegistryTest do
                  # abbrevs, reserved with the sanctioned allocator (--host samen_web).
                  "wdb" => "Samen.WebTest.Docs.DocBlock",
                  "wdl" => "Samen.WebTest.Docs.DocLink",
+                 # WS-ACCT Phase 1 (ADR-054 D1): the test host's Finance
+                 # cost/analysis registry, allocator-proposed (--host samen_web).
+                 "fco" => "Samen.WebTest.Erp.CostObject",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -756,7 +768,10 @@ defmodule Samen.AbbrevRegistryTest do
                "edd" => "Samenerp.Docs.Doc",
                "edn" => "Samenerp.Docs.Note",
                "edb" => "Samenerp.Docs.DocBlock",
-               "edl" => "Samenerp.Docs.DocLink"
+               "edl" => "Samenerp.Docs.DocLink",
+               # WS-ACCT Phase 1 (ADR-054 D1): the Kubeworkz host's Finance
+               # cost/analysis registry — the registry the books' cost objects live in.
+               "eco" => "Samenerp.Erp.CostObject"
              }
              }
 
@@ -864,7 +879,10 @@ defmodule Samen.AbbrevRegistryTest do
       # the five existing Docs hosts + the samenerp host's first Docs mount
       # (Doc/Note/DocBlock/DocLink), reserved with `mix samen.abbrev.reserve`
       # = 405 + 344 = 749 flat.)
-      assert map_size(Reg.load()) == 749
+      # (+3 WS-ACCT Phase 1 (ADR-054 D1): the Finance `CostObject` in the three hosts
+      # that mount Finance (samen_core fixture `cob`, samen_web `fco`, samenerp `eco`),
+      # reserved by the allocator = 405 + 347 = 752 flat.)
+      assert map_size(Reg.load()) == 752
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -1,0 +1,36 @@
+# SABOTAGE: R6b checks the axis, not the cost object — every dimensioned line lands in one bucket.
+#
+# WS-ACCT Phase 1 (ADR-054 D1) added the R6 guard pair: `DimensionBalance` refuses an entry whose
+# per-cost-object debits and credits differ (R6b), and `DimensionReconcile` independently re-reads
+# the ledger to catch rows forced in below it. This patch keeps the loop, the sums and the error
+# message — and changes ONE line: the grouping key. Instead of grouping the tagged lines by the
+# cost object they name (`Map.get(refs, key)`), it groups them all under `:all`.
+#
+# That is the plausible regression, not a strawman: the guard still filters to lines carrying the
+# axis, still sums debits against credits, and still refuses when the totals differ. What it no
+# longer notices is WHICH cost object the money moved between — so an entry that balances org-wide
+# (R1) while moving 100 out of project A and only 60 back passes. That is exactly the hole R6b
+# exists to close (a fabless books model: WIP leaves the RISCV64 chip program and half of it lands
+# on the GPU program, and the program-level margin becomes a fiction while the trial balance stays
+# perfect).
+#
+# Why the flip is attributable: the READ mirror (`DimensionReconcile`) is untouched, and the
+# anti-tautology leg (`d5`) forces an imbalanced row in BELOW both guards with raw SQL — so `d5`
+# stays green under this patch, as do the R6a partial-set refusal and the balanced/unbalanced
+# controls. Only the R6b leg reds, which is what says the flip landed on the guard rather than on
+# the test file or the read.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_dimensions_test.exs
+# MUST_FAIL: an entry that balances ORG-WIDE but not per cost object is refused (R6b RED)
+--- a/samen_core/lib/samen/scopes/finance/dimension_balance.ex
++++ b/samen_core/lib/samen/scopes/finance/dimension_balance.ex
+@@ -158,7 +158,7 @@
+   defp tagged_pairs(rows, key) do
+     rows
+     |> Enum.filter(fn {refs, _d, _c} -> Map.has_key?(refs, key) end)
+-    |> Enum.group_by(fn {refs, _d, _c} -> Map.get(refs, key) end, fn {_refs, d, c} -> {d, c} end)
++    |> Enum.group_by(fn {_refs, _d, _c} -> :all end, fn {_refs, d, c} -> {d, c} end)
+   end
+ 
+   defp add_error(changeset, message) do

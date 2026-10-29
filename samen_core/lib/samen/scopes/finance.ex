@@ -37,8 +37,32 @@ defmodule Samen.Scopes.Finance do
     anchored JournalEntry (`source_key: "billing_payment"`) in ONE transaction.
     Exactly-once per anchor (`prc_anchor_unique`).
   - **`PostingAccount`** — the host's named GL posting accounts (Tier-0 config
-    row; one per org): `key ∈ {ap_clearing, ar_clearing, cash, income}` + the
-    same-org `account_id` FK. The default set every posting action resolves.
+    row; one per org): a CLOSED `key` enum + the same-org `account_id` FK. The
+    base four meanings are `{ap_clearing, ar_clearing, cash, income}`; WS-ACCT
+    Phase 1 widened the enum in place to the meanings the Kubeworkz books' flows
+    need (`wip_foundry`, `finished_goods_chip`, `deferred_revenue`, `grant_deferred`,
+    `variance_*`, `mask_expense`, …) — ADR-054 D2. The enum stays closed and
+    fail-honest: an unmapped meaning refuses the posting.
+  - **`CostObject`** — the cost/analysis registry (WS-ACCT Phase 1; ADR-054 D1):
+    `{code, name, kind ∈ {project, chip, cost_pool, fund}}`, org-scoped, unique
+    code per org, archivable. The ids the ledger's dimension seam may name.
+
+  ## R6 — the dimension invariant (LOAD-BEARING)
+
+  `JournalLine.dimension_refs` is a bounded jsonb map from the frozen
+  vocabulary (`project`/`lot`/`fund`/`cost_pool`) to same-org `CostObject` ids
+  — **ids only, never names**. Three guards, all fail-closed:
+
+  * WRITE (line): `Samen.Scopes.Finance.DimensionGuard` refuses an unknown key,
+    a non-id value (which is what keeps the axis from becoming a
+    de-anonymisation channel), and a cross-org/absent cost object.
+  * ENTRY: `Samen.Scopes.Finance.DimensionBalance` refuses a partially
+    dimensioned entry (R6a) and a cost object whose debits ≠ credits (R6b),
+    both over the `lines` argument and over the persisted rows at `:post`.
+  * READ: `Samen.Scopes.Finance.DimensionReconcile` reports the per-cost-object
+    balances and the R6a violations as bare SQL sums over posted lines.
+
+  An undimensioned entry — every base-system posting — passes vacuously.
 
   ## R1 — the double-entry invariant (LOAD-BEARING)
 
@@ -87,6 +111,7 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.ApInvoice`
     * `Demo.FinanceScope.PaymentReceipt`
     * `Demo.FinanceScope.PostingAccount`
+    * `Demo.FinanceScope.CostObject`
 
   ## Posting accounts (`posting_accounts:`)
 
@@ -107,6 +132,7 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.ApInvoice`     → `fai` (demo default)
     * `Demo.FinanceScope.PaymentReceipt` → `frr` (demo default)
     * `Demo.FinanceScope.PostingAccount` → `fpa` (demo default)
+    * `Demo.FinanceScope.CostObject`     → `fco` (demo default; WS-ACCT Phase 1)
 
   Other hosts pass `abbrevs:` overrides (mirroring `Samen.Scopes.Work`'s
   `abbrevs:` plumbing) when the defaults are already claimed.
@@ -127,7 +153,11 @@ defmodule Samen.Scopes.Finance do
     budget: "fbg",
     budget_line: "fbl",
     exchange_rate: "fxr",
-    org_fx_settings: "fxf"
+    org_fx_settings: "fxf",
+    # WS-ACCT Phase 1 (ADR-054 D1): the cost/analysis registry the dimension
+    # seam names. Reserved by the allocator under the `samen_web` host (whose
+    # mount takes the scope defaults).
+    cost_object: "fco"
   }
 
   @doc false
@@ -154,6 +184,7 @@ defmodule Samen.Scopes.Finance do
     budget_line_mod = Module.concat(namespace, BudgetLine)
     exchange_rate_mod = Module.concat(namespace, ExchangeRate)
     org_fx_settings_mod = Module.concat(namespace, OrgFxSettings)
+    cost_object_mod = Module.concat(namespace, CostObject)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -171,7 +202,16 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(budget_line_mod))
         resource(unquote(exchange_rate_mod))
         resource(unquote(org_fx_settings_mod))
+        resource(unquote(cost_object_mod))
       end
+
+      Samen.Scopes.Finance.Blueprint.define_cost_object(
+        unquote(cost_object_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.cost_object)
+      )
 
       Samen.Scopes.Finance.Blueprint.define_account(
         unquote(account_mod),
@@ -197,7 +237,8 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.journal_line),
         unquote(account_mod),
-        unquote(entry_mod)
+        unquote(entry_mod),
+        unquote(cost_object_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_ap_invoice(

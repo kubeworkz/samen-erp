@@ -60,7 +60,8 @@ defmodule SamenCore.Support.FinanceFixture do
       payment_receipt: "prc",
       posting_account: "fav",
       budget: "sbg",
-      budget_line: "sbj"
+      budget_line: "sbj",
+      cost_object: "cob"
     }
 end
 
