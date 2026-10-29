@@ -1,10 +1,10 @@
 # WS-ACCT — the Kubeworkz books · Build Plan
 
-- **Status:** Buildable. **Phase 0 is COMPLETE (2026-10-27) and ADR-054 is ACCEPTED** — all
-  eighteen decisions taken, the five operator-facing calls ruled in the ADR's "Ratification"
-  section. Phases 1–16 are not started. Follows `docs/ws-acct/design.md` + ADR-054, whose build
-  half this plan is.
-- **Date:** 2026-10-27
+- **Status:** Buildable. **Phases 0–2 are COMPLETE and ADR-054 is ACCEPTED** — all eighteen
+  decisions taken, the five operator-facing calls ruled in the ADR's "Ratification" section.
+  Phases 3–16 are not started. Follows `docs/ws-acct/design.md` + ADR-054, whose build half this
+  plan is.
+- **Date:** 2026-10-27 (phases 1–2 landed 2026-10-28/29)
 - **Sizing principle:** SMALL serialized units — each banks in ~15–30 min and each **PHASE** is
   independently committable + gate-able (WS-B/WS-ERP convention). Default fan-out concurrency 1.
 - **Gate cadence:** adversarial phase-gate after each phase; workstream-wide re-gate at Phase 16.
@@ -61,7 +61,15 @@ reference / out-of-scope). **MET.**
 
 ---
 
-## Phase 1 — THE KEYSTONE: the cost-object seam + the posting map · opus · 2–3 sessions
+## Phase 1 — THE KEYSTONE: the cost-object seam + the posting map · opus · 2–3 sessions — **DONE (2026-10-28)**
+
+Landed as `83708539` (+ `1ef9b303`, the `samenerp/schema.dict.json` refresh the host needed once
+Finance grew a table — without it the host's drift baseline rejected the tree). `CostObject`
+(`eco_*`), `JournalLine.dimension_refs` (`ecl_dimension_refs`), the frozen four-key vocabulary,
+`DimensionGuard` (write) / `DimensionBalance` (R6a whole-entry + R6b per-cost-object, over both the
+lines argument and the persisted rows at `:post`) / `DimensionReconcile` (the independent READ
+mirror), the posting enum widened in place from four meanings to twenty-three, and **R6 + sabotage
+403**. Certified by the full root gate (`ROOT CI: ALL PASSED` on `1ef9b303`).
 
 1. **`CostObject`** (Finance Tier-0): `{code, name, kind ∈ {:project, :chip, :cost_pool, :fund}}`,
    org-scoped, `code` unique per org, archivable, no PII.
@@ -85,7 +93,33 @@ certified through `bash scripts/sabotage.sh --range 403-403`; abbrevs reserved v
 
 ---
 
-## Phase 2 — Open the Kubeworkz books · default · 1–2 sessions
+## Phase 2 — Open the Kubeworkz books · default · 1–2 sessions — **DONE (2026-10-29)**
+
+Landed as `Samenerp.Kubeworkz.Books` + `mix kubeworkz.books --org <slug|uuid>` +
+`samenerp/test/kubeworkz_books_test.exs` (10 tests). **Data only — no schema, no abbrev rows.**
+
+Four decisions the phase had to take, all recorded in the module's moduledoc:
+
+1. **The reference table wins.** The manual carries two conflicting COAs; the
+   `Chart of Accounts Reference` (`1000`…`8000`) is the one every JE in the playbook posts against,
+   so its numbering (WIP at `1300`/`1310`/`1320`, *prepaid* at `1200`/`1210`) is what opens. The
+   earlier summary's `1200 = WIP` / `1230 = FG` reading is not seeded.
+2. **The variance family opens too** (`5100`…`5190`) — the playbook posts to ten accounts, per type
+   and per chip. `1520 · Accumulated Depreciation – Lab Equipment` is the ONE row not in the
+   manual: JE-063 reuses `1510`, which is already the PDK contra, and `code` is unique per org.
+3. **Five meanings stay UNMAPPED on purpose** (`inventory_reserve` + the four `variance_*`): the
+   manual gives them no single account, and binding one anyway would post a silently wrong default
+   later. The closed enum refuses instead. `Books.pending_meanings/0` states each reason, and the
+   suite asserts they are absent from the map.
+4. **Drift is reported, never overwritten.** A row that exists but disagrees with the manual lands
+   in the summary's `:drifted` list; a re-seed never re-points an operator's edit.
+
+`verify/1` closes the AC honestly: it re-reads the org and fails a bare org with every gap named
+(the red path that keeps "the books are open" from being a tautology), then agrees after a seed.
+The mounted `:coa` surface renders the seeded chart — and an unopened org still shows the empty
+state, never a neighbour's chart.
+
+The original scope:
 
 **This phase is data, not schema** (design §0.3). A seed task
 (`samenerp/lib/mix/tasks/kubeworkz.books.ex`, or extending `samenerp.seed`):

@@ -6,8 +6,10 @@ never re-grepped to find out, and so a reviewer can see at a glance what is **sh
 what this workstream **adds or alters**, and what is **deliberately refused**.
 
 - **Status:** phase 0 deliverable of `docs/ws-acct/build-plan.md`; the ledger for **ADR-054**
-  (PROPOSED, build not started). Verdicts describe the *plan*; they are not claims of built work.
-- **Date:** 2026-10-27
+  (ACCEPTED; **phases 0–2 landed** as of 2026-10-29 — the seam, and the books themselves are now
+  opened by `Samenerp.Kubeworkz.Books`). Verdicts for phases 3+ still describe the *plan*; they are
+  not claims of built work. Phase 2's four transcription decisions are recorded in §2 below.
+- **Date:** 2026-10-27 (phase 2 notes added 2026-10-29)
 - **Source:** `docs/chip_manufacturing_accounting_setup.md` — 6,168 lines, 18 sections. Line
   ranges below are the source's own headings, so the mapping survives the file being edited above
   or below a section only if the range is re-checked (see §"Re-deriving this ledger").
@@ -51,6 +53,24 @@ requirement set. This is the section the books are actually built from.
 | Per-chip cost tracking (the COA can't answer "what did the GPU cost") | `JournalLine` has **no dimension seam** | **ALTER** — `dimension_refs` (D1) | 1 |
 | Capitalize-vs-expense policy (MPW cost into a board's inventory when the chips are for a product; R&D expense when internal) | `Item` + `WorkOrder`/`ProductionLog` cost roll-up; the posture is **ruled** — new-tech development expenses as incurred, the PDK licence capitalizes at 36 months, and no design-engineering cost enters inventory (ADR-054 Ratification 7) | **REUSE** + policy (`Budget`/standards) | 7 |
 | ASC-606-flavoured revenue recognition for university sales (point-in-time on control transfer; deferral when a support obligation exists) | `SalesOrder :fulfill` → stock `:sale` + Billing invoice (point-in-time, shipped) | **ADD** for the deferral leg (D5) | 6 |
+
+**What phase 2 actually opened (2026-10-29).** The manual carries TWO charts: this section's early
+summary (`1200` WIP-foundry · `1210` WIP-photonics · `1220` WIP-assembly · `1230` finished boards)
+and, later, the `Chart of Accounts Reference` table (`1200`/`1210` = **prepaid**, WIP at
+`1300`/`1310`/`1320`). The **reference table is what is seeded**, because that is the table every
+JE in the playbook posts against (ADR-054 D16's *corrected forms* rule):
+`samenerp/lib/samenerp/kubeworkz/books.ex`. Three consequences a reader of this ledger needs:
+
+1. the early summary's `1230`/`1220` numbering is **not** in the books — per-programme finished
+goods are `1400`–`1430`;
+2. the **variance family** (`5100`–`5190`, §7's playbook) is seeded alongside it, because JE-003…
+   JE-081 need those accounts to exist;
+3. `1520 · Accumulated Depreciation – Lab Equipment` is the one row the manual does **not** have:
+   JE-063 reuses `1510`, already the PDK contra, and `Account.code` is unique per org.
+
+Five posting meanings are deliberately left **unmapped** (`inventory_reserve` + the four
+`variance_*`) — the manual gives them no single account and the closed enum refuses rather than
+posting to an invented default. `Books.pending_meanings/0` carries each reason.
 
 ### 3 · GlobalFoundries photonics fab (lines 171–205) — **REFERENCE**
 
