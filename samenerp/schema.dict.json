@@ -1641,6 +1641,12 @@
           "type": "Integer"
         },
         {
+          "column_name": "ecl_dimension_refs",
+          "logical_name": "dimension_refs",
+          "pii": false,
+          "type": "Map"
+        },
+        {
           "column_name": "ecl_entry_id",
           "logical_name": "entry_id",
           "pii": false,
@@ -1679,6 +1685,60 @@
       ],
       "resource": "Samenerp.Erp.JournalLine",
       "table_name": "ecl_journal_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eco_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "eco_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eco_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eco_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eco_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eco_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eco_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eco_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CostObject",
+      "table_name": "eco_cost_object"
     },
     {
       "fields": [
