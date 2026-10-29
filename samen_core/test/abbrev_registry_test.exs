@@ -147,10 +147,13 @@ defmodule Samen.AbbrevRegistryTest do
       # (`SamenCore.Support.FinanceFixture.CostObject`), samen_web `fco`
       # (`Samen.WebTest.Erp.CostObject`) and samenerp `eco` (`Samenerp.Erp.CostObject`)
       # — every row written by the allocator, never by hand.
-      # = 347 host entries across six hosts.
+      # +6 in WS-ACCT Phase 3 (ADR-054 D7): the close control, in the same three hosts —
+      # `FiscalPeriod` + `CloseRun` as samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`
+      # and samenerp `efp`/`efq`, every row allocator-reserved.
+      # = 353 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 95
-      assert map_size(hosts["samen_core"]) == 89
+      assert map_size(hosts["samenerp"]) == 97
+      assert map_size(hosts["samen_core"]) == 91
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -423,6 +426,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # cost/analysis registry, reserved with the sanctioned allocator
                  # (--host samen_core) — the seam's own test fixture.
                  "cob" => "SamenCore.Support.FinanceFixture.CostObject",
+                 # WS-ACCT Phase 3 (ADR-054 D7): the fixture's close control — the
+                 # fiscal month and its ten-phase close run, allocator-reserved.
+                 "cfp" => "SamenCore.Support.FinanceFixture.FiscalPeriod",
+                 "clr" => "SamenCore.Support.FinanceFixture.CloseRun",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -539,6 +546,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 1 (ADR-054 D1): the test host's Finance
                  # cost/analysis registry, allocator-proposed (--host samen_web).
                  "fco" => "Samen.WebTest.Erp.CostObject",
+                 # WS-ACCT Phase 3 (ADR-054 D7): the test host's close control,
+                 # allocator-proposed (--host samen_web).
+                 "fpe" => "Samen.WebTest.Erp.FiscalPeriod",
+                 "fcr" => "Samen.WebTest.Erp.CloseRun",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -771,7 +782,11 @@ defmodule Samen.AbbrevRegistryTest do
                "edl" => "Samenerp.Docs.DocLink",
                # WS-ACCT Phase 1 (ADR-054 D1): the Kubeworkz host's Finance
                # cost/analysis registry — the registry the books' cost objects live in.
-               "eco" => "Samenerp.Erp.CostObject"
+               "eco" => "Samenerp.Erp.CostObject",
+               # WS-ACCT Phase 3 (ADR-054 D7): the host's close control — the fiscal
+               # month the Kubeworkz books close against, and its close run.
+               "efp" => "Samenerp.Erp.FiscalPeriod",
+               "efq" => "Samenerp.Erp.CloseRun"
              }
              }
 
@@ -882,7 +897,10 @@ defmodule Samen.AbbrevRegistryTest do
       # (+3 WS-ACCT Phase 1 (ADR-054 D1): the Finance `CostObject` in the three hosts
       # that mount Finance (samen_core fixture `cob`, samen_web `fco`, samenerp `eco`),
       # reserved by the allocator = 405 + 347 = 752 flat.)
-      assert map_size(Reg.load()) == 752
+      # (+6 WS-ACCT Phase 3 (ADR-054 D7): `FiscalPeriod` + `CloseRun` in the same three
+      # hosts (samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`, samenerp `efp`/`efq`),
+      # allocator-reserved = 405 + 353 = 758 flat.)
+      assert map_size(Reg.load()) == 758
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

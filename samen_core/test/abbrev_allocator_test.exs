@@ -300,8 +300,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # that mount Finance (samen_core fixture `cob`, samen_web `fco`, samenerp `eco`),
       # every row written by the allocator,
       # allocator-reserved: 34_720 bytes, 752 flat.
-      assert byte_size(committed) == 34720
-      assert map_size(R.load()) == 752
+      # +6 WS-ACCT Phase 3 (ADR-054 D7) — `FiscalPeriod` + `CloseRun` in the same three
+      # hosts (samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`, samenerp `efp`/`efq`),
+      # every row written by the allocator,
+      # allocator-reserved: 35_010 bytes, 758 flat.
+      assert byte_size(committed) == 35010
+      assert map_size(R.load()) == 758
     end
   end
 

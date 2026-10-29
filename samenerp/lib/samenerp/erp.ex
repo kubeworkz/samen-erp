@@ -39,7 +39,9 @@ defmodule Samenerp.Erp do
       budget_line: "ecd",
       exchange_rate: "efx",
       org_fx_settings: "efs",
-      cost_object: "eco"
+      cost_object: "eco",
+      fiscal_period: "efp",
+      close_run: "efq"
     }
 
   use Samen.Scopes.Inventory,

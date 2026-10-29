@@ -59,6 +59,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
       the PERSISTED lines (never an argument — the fact that posts is the fact
       that is stored), then `PostGuard` flips `status: :posted` +
       `posted_at`. Drift between draft and post is structurally impossible.
+    * `:post` and `:create_reversal` (and `:void`) are also gated by
+      `Samen.Scopes.Finance.PeriodGuard` (WS-ACCT Phase 3, R10): an entry may not
+      be POSTED into a fiscal period that is closed, nor into a soft-closed one
+      if it carries a document source anchor.
     * `:void`   — no caller inputs. `PostBalance` first (a void IS a posting
       event: the original lands as `:void` with `posted_at` stamped), then
       `PostGuard` (the `:void` status write), then `VoidGuard` creates the
@@ -176,7 +180,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
   # JournalEntry — the event. Draft/posted/void; :post freezes (DB trigger
   # belt); :void posts a linked reversing entry. R1-checked on every write.
   # ---------------------------------------------------------------------------
-  defmacro define_journal_entry(module, otp_app, domain, repo, abbrev, line_mod) do
+  defmacro define_journal_entry(module, otp_app, domain, repo, abbrev, line_mod, period_mod) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -307,6 +311,9 @@ defmodule Samen.Scopes.Finance.Blueprint do
           update :post do
             accept([])
             require_atomic?(false)
+            # R10 (WS-ACCT Phase 3): the posting's DATE must land in a period
+            # that still admits it — a closed period refuses always.
+            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
             change(Samen.Scopes.Finance.PostBalance)
             # R6 over the PERSISTED lines (PostBalance's twin): the stored rows,
             # never a caller argument, decide whether the posting balances per
@@ -321,6 +328,9 @@ defmodule Samen.Scopes.Finance.Blueprint do
           update :void do
             accept([])
             require_atomic?(false)
+            # R10: the reversal is dated the ORIGINAL's date, so a closed period
+            # would refuse it mid-action — refuse up front, naming the period.
+            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
             change(Samen.Scopes.Finance.PostBalance)
             change(Samen.Scopes.Finance.PostGuard)
             change(Samen.Scopes.Finance.VoidGuard)
@@ -358,6 +368,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
               ]
             )
 
+            # R10 (WS-ACCT Phase 3): this is the posted-born factory every
+            # DOCUMENT posting rides (AP approval, the stock-receipt bridge, the
+            # sales bridge, a void's reversal), so one gate here covers them all.
+            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
             change(Samen.Scopes.Finance.PostGuard)
           end
         end

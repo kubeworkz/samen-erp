@@ -1,6 +1,6 @@
 # WS-ACCT — the Kubeworkz books · Build Plan
 
-- **Status:** Buildable. **Phases 0–2 are COMPLETE and ADR-054 is ACCEPTED** — all eighteen
+- **Status:** Buildable. **Phases 0–3 are COMPLETE and ADR-054 is ACCEPTED** — all eighteen
   decisions taken, the five operator-facing calls ruled in the ADR's "Ratification" section.
   Phases 3–16 are not started. Follows `docs/ws-acct/design.md` + ADR-054, whose build half this
   plan is.
@@ -138,7 +138,46 @@ surface renders the seeded chart.
 
 ---
 
-## Phase 3 — Fiscal periods + close control (R10) · opus · 1–2 sessions
+## Phase 3 — Fiscal periods + close control (R10) · opus · 1–2 sessions — **DONE (2026-10-29)**
+
+Landed as `Samen.Scopes.Finance.{FiscalPeriod,CloseRun}` (blueprint
+`samen_core/lib/samen/scopes/finance/period_blueprint.ex`), the posting gate
+`Samen.Scopes.Finance.PeriodGuard`, the one-way state machine
+`Samen.Scopes.Finance.PeriodTransition`, the close-checklist lifecycle
+`Samen.Scopes.Finance.CloseRunGuard` over `Samen.Scopes.Finance.ClosePhases`, and the R10 read
+mirror `Samen.Scopes.Finance.PeriodReconcile` — plus three migrations (fixture, `samen_web`,
+`samenerp`), `samen_core/test/finance_periods_test.exs` (18 tests) and sabotage **404**. Abbrevs
+`cfp`/`clr`, `fpe`/`fcr`, `efp`/`efq`, all allocator-reserved.
+
+Five decisions the phase had to take:
+
+1. **A missing period row is OPEN.** The guard adds no obligation to a host that never opens a
+   period, which is what keeps every existing AP/AR/stock/sales posting and every existing suite
+   byte-for-byte unaffected (the AC's regression clause). Protection is for what is DECLARED.
+2. **R10 is checkable only with two stamps, so the read pins them.** Read literally, "no posted
+   entry dated inside a closed period" would flag every period the moment it closed — its own
+   entries are dated inside it, and they were posted before it closed. The write side gates new
+   postings; the read mirror (`PeriodReconcile`) reports the real violation, `posted_at >
+   closed_at`, which is the one the write layers cannot see after the fact.
+3. **Soft-close lives in Ash only, deliberately.** The database belt implements `:closed` (R10's
+   absolute) and does NOT implement soft-close: telling a document anchor from a journal-only
+   adjustment is a policy decision that needs the row's source, and a belt that guessed would
+   either block the close's own adjustments or admit the supplier bill. That split is what makes
+   sabotage 404 attributable — the belt legs stay green while the two Ash-layer legs flip.
+4. **A reversal is not a document.** VoidGuard's reversal carries `source_key: "journal_entry"`;
+   soft-close admits it (the `@ledger_internal_sources` allowlist), because correcting a fact the
+   ledger already holds is exactly the adjustment window soft-close exists to leave open. Without
+   the distinction every void in a soft-closed month would be refused.
+5. **The gate fails CLOSED on a lookup error.** The first draft treated a period read failure as
+   "open"; the suite caught it the other way round — an unreadable period table is not permission.
+
+One pre-existing quirk surfaced and is documented rather than papered over: the posted-born factory
+`create_reversal` is only safe when its caller has already armed the `PostingMarker` (AP, stock,
+sales and VoidGuard all do). Called standalone its marker restore lands before `EntryLines`' inserts,
+so it refuses its own lines. Nothing in the tree calls it that way; the suite calls it the way the
+cascades do.
+
+The original scope:
 
 `FiscalPeriod` + the `PostGuard` extension (design D7): `:closed` refuses any post dated inside it
 (the DB belt as well as the Ash guard — a raw-SQL post into a closed period is refused);

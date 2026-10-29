@@ -336,7 +336,7 @@ Each ships a green test **+ a red-path twin + a committed sabotage patch**.
 | R7 | WIP: GL by lot == supplier-located stock by lot == lot stage costs | 4 |
 | R8 | Σ variance accounts == Σ (actual − standard) for the period | 7 |
 | R9 | Σ recognized == Σ deferred released (no double recognition) | 6 |
-| R10 | no posted entry dated inside a `:closed` period, including via raw SQL | 3 |
+| R10 | no posted entry dated inside a `:closed` period, including via raw SQL | 3 (**shipped**) |
 | R11 | Σ fund postings == Σ recognized grant revenue == Σ claimed allowable costs | 11 |
 
 ## Source-manual data-quality notes

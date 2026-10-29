@@ -2391,6 +2391,126 @@
     {
       "fields": [
         {
+          "column_name": "efp_closed_at",
+          "logical_name": "closed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efp_closed_by",
+          "logical_name": "closed_by",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efp_month",
+          "logical_name": "month",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "efp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efp_year",
+          "logical_name": "year",
+          "pii": false,
+          "type": "Integer"
+        }
+      ],
+      "resource": "Samenerp.Erp.FiscalPeriod",
+      "table_name": "efp_fiscal_period"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "efq_completed_at",
+          "logical_name": "completed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efq_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efq_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efq_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efq_period_id",
+          "logical_name": "period_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efq_phases",
+          "logical_name": "phases",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "efq_started_at",
+          "logical_name": "started_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efq_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efq_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CloseRun",
+      "table_name": "efq_close_run"
+    },
+    {
+      "fields": [
+        {
           "column_name": "efs_archived_at",
           "logical_name": "archived_at",
           "pii": false,

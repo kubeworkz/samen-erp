@@ -61,7 +61,9 @@ defmodule SamenCore.Support.FinanceFixture do
       posting_account: "fav",
       budget: "sbg",
       budget_line: "sbj",
-      cost_object: "cob"
+      cost_object: "cob",
+      fiscal_period: "cfp",
+      close_run: "clr"
     }
 end
 

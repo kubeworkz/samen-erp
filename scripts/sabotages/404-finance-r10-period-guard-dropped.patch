@@ -1,0 +1,53 @@
+# SABOTAGE: R10's period gate is dropped from every posting action — the database belt is left holding the door alone.
+#
+# WS-ACCT Phase 3 (ADR-054 D7) gates every action that lands a POSTED row with
+# `Samen.Scopes.Finance.PeriodGuard`: `:post`, `:void`, and `:create_reversal`
+# (the posted-born factory AP approval, the stock-receipt bridge, the sales
+# bridge and VoidGuard all ride). This patch keeps all three actions' other
+# guards — PostBalance, DimensionBalance, PostGuard, VoidGuard — and removes ONLY
+# the three `PeriodGuard` changes.
+#
+# That is the plausible regression, not a strawman: the migration's trigger also
+# refuses a posted row dated inside a CLOSED period, so a reviewer who reads only
+# the belt concludes the Ash gate is redundant and deletes it. What the belt
+# cannot do is tell a DOCUMENT from a journal-only adjustment, so SOFT-CLOSE
+# stops meaning anything: a supplier bill posts straight into a soft-closed month
+# while the close is still being prepared. And on a mount where the belt is off
+# (a restored database, a trigger disabled during an incident, the samen_web
+# subset mount) a closed period stops refusing anything at all.
+#
+# Why the flip is attributable: the raw-SQL belt legs stay GREEN under this patch
+# (the trigger is untouched), as do the one-way close transition, the read-mirror
+# anti-tautology leg and every control. Only the two Ash-layer legs red — which is
+# what says the flip landed on the period gate rather than on the belt, the
+# schema or the test file.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_periods_test.exs
+# MUST_FAIL: a SOFT-CLOSED period refuses a DOCUMENT post
+# MUST_FAIL: with the period trigger DISABLED, the closed-period post is still refused
+--- a/samen_core/lib/samen/scopes/finance/blueprint.ex
++++ b/samen_core/lib/samen/scopes/finance/blueprint.ex
+@@ -313,8 +313,7 @@
+             require_atomic?(false)
+             # R10 (WS-ACCT Phase 3): the posting's DATE must land in a period
+             # that still admits it — a closed period refuses always.
+-            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
+             change(Samen.Scopes.Finance.PostBalance)
+             # R6 over the PERSISTED lines (PostBalance's twin): the stored rows,
+             # never a caller argument, decide whether the posting balances per
+             # cost object.
+@@ -330,6 +329,5 @@
+             require_atomic?(false)
+             # R10: the reversal is dated the ORIGINAL's date, so a closed period
+             # would refuse it mid-action — refuse up front, naming the period.
+-            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
+             change(Samen.Scopes.Finance.PostBalance)
+             change(Samen.Scopes.Finance.PostGuard)
+@@ -371,6 +369,5 @@
+             # R10 (WS-ACCT Phase 3): this is the posted-born factory every
+             # DOCUMENT posting rides (AP approval, the stock-receipt bridge, the
+             # sales bridge, a void's reversal), so one gate here covers them all.
+-            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
+             change(Samen.Scopes.Finance.PostGuard)
+           end

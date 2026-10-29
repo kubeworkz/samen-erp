@@ -47,6 +47,29 @@ defmodule Samen.Scopes.Finance do
     `{code, name, kind ∈ {project, chip, cost_pool, fund}}`, org-scoped, unique
     code per org, archivable. The ids the ledger's dimension seam may name.
 
+  ## R10 — the close ↔ period invariant (LOAD-BEARING)
+
+  Two more resources carry the close control (WS-ACCT Phase 3; ADR-054 D7):
+
+  - **`FiscalPeriod`** — `{year, month, status ∈ {open, soft_closed, closed}}`,
+    unique per org and month. The state machine is ONE-WAY
+    (`Samen.Scopes.Finance.PeriodTransition`): open → soft_closed → closed, with
+    no reopen and no destroy route, so a published period stays published.
+  - **`CloseRun`** — one row per period, holding the source manual's ten close
+    phases (`Samen.Scopes.Finance.ClosePhases`) and the `:complete_phase` /
+    `:finish` lifecycle. A run cannot be completed with a phase outstanding and
+    a completed run is final.
+
+  `Samen.Scopes.Finance.PeriodGuard` gates every action that lands a POSTED
+  entry (`:post`, `:create_reversal` — the factory AP/stock/sales/reversal all
+  use — and `:void`): a closed period refuses always, a soft-closed one refuses
+  document-sourced posts and admits journal-only adjustments. A missing period
+  row is OPEN, which is what keeps every mount that never opens a period
+  behaving exactly as before. The database belt (the migrations' trigger)
+  refuses a posted row dated inside a closed period even below Ash, and
+  `Samen.Scopes.Finance.PeriodReconcile` is the independent read that detects a
+  violation either layer missed.
+
   ## R6 — the dimension invariant (LOAD-BEARING)
 
   `JournalLine.dimension_refs` is a bounded jsonb map from the frozen
@@ -112,6 +135,8 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.PaymentReceipt`
     * `Demo.FinanceScope.PostingAccount`
     * `Demo.FinanceScope.CostObject`
+    * `Demo.FinanceScope.FiscalPeriod`
+    * `Demo.FinanceScope.CloseRun`
 
   ## Posting accounts (`posting_accounts:`)
 
@@ -133,6 +158,8 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.PaymentReceipt` → `frr` (demo default)
     * `Demo.FinanceScope.PostingAccount` → `fpa` (demo default)
     * `Demo.FinanceScope.CostObject`     → `fco` (demo default; WS-ACCT Phase 1)
+    * `Demo.FinanceScope.FiscalPeriod`   → `fpe` (demo default; WS-ACCT Phase 3)
+    * `Demo.FinanceScope.CloseRun`       → `fcr` (demo default; WS-ACCT Phase 3)
 
   Other hosts pass `abbrevs:` overrides (mirroring `Samen.Scopes.Work`'s
   `abbrevs:` plumbing) when the defaults are already claimed.
@@ -157,7 +184,11 @@ defmodule Samen.Scopes.Finance do
     # WS-ACCT Phase 1 (ADR-054 D1): the cost/analysis registry the dimension
     # seam names. Reserved by the allocator under the `samen_web` host (whose
     # mount takes the scope defaults).
-    cost_object: "fco"
+    cost_object: "fco",
+    # WS-ACCT Phase 3 (ADR-054 D7): the close control — the fiscal month and its
+    # checklist. Also allocator-reserved under the `samen_web` host.
+    fiscal_period: "fpe",
+    close_run: "fcr"
   }
 
   @doc false
@@ -185,11 +216,15 @@ defmodule Samen.Scopes.Finance do
     exchange_rate_mod = Module.concat(namespace, ExchangeRate)
     org_fx_settings_mod = Module.concat(namespace, OrgFxSettings)
     cost_object_mod = Module.concat(namespace, CostObject)
+    fiscal_period_mod = Module.concat(namespace, FiscalPeriod)
+    close_run_mod = Module.concat(namespace, CloseRun)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
 
       require Samen.Scopes.Finance.BudgetBlueprint
+
+      require Samen.Scopes.Finance.PeriodBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -203,7 +238,26 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(exchange_rate_mod))
         resource(unquote(org_fx_settings_mod))
         resource(unquote(cost_object_mod))
+        resource(unquote(fiscal_period_mod))
+        resource(unquote(close_run_mod))
       end
+
+      Samen.Scopes.Finance.PeriodBlueprint.define_fiscal_period(
+        unquote(fiscal_period_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.fiscal_period)
+      )
+
+      Samen.Scopes.Finance.PeriodBlueprint.define_close_run(
+        unquote(close_run_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.close_run),
+        unquote(fiscal_period_mod)
+      )
 
       Samen.Scopes.Finance.Blueprint.define_cost_object(
         unquote(cost_object_mod),
@@ -227,7 +281,8 @@ defmodule Samen.Scopes.Finance do
         unquote(domain),
         unquote(repo),
         unquote(abbrevs.journal_entry),
-        unquote(line_mod)
+        unquote(line_mod),
+        unquote(fiscal_period_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_journal_line(
