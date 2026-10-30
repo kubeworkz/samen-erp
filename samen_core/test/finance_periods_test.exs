@@ -405,7 +405,7 @@ defmodule Samen.FinancePeriodsTest do
       org: org,
       admin: admin
     } do
-      _sept = period!(admin, org, 2026, 9) |> then(&close!(&1, admin))
+      closed = period!(admin, org, 2026, 9) |> then(&close!(&1, admin))
 
       # The belt is what would refuse this; disable it to prove the READ is a
       # detector rather than a decoration (the sabotage shape an operator's
@@ -413,7 +413,13 @@ defmodule Samen.FinancePeriodsTest do
       disable_belt()
 
       try do
-        assert {:ok, entry_id} = raw_posted_entry(org, ~D[2026-09-10])
+        # The leg states its OWN ordering — one second after the close — instead
+        # of reading `posted_at` off the database's `now()`. In the sandbox that
+        # is the test transaction's start, so the verdict would otherwise depend
+        # on whether the close happened to cross a wall-clock second.
+        after_close = DateTime.add(closed.closed_at, 1, :second)
+
+        assert {:ok, entry_id} = raw_posted_entry(org, ~D[2026-09-10], posted_at: after_close)
         assert {:ok, false} = r10(org)
 
         assert {:ok, [violation]} = r10_violations(org)
@@ -527,7 +533,15 @@ defmodule Samen.FinancePeriodsTest do
   # The PostGuard marker is armed the way any sanctioned posting writer arms it,
   # so the raw insert gets PAST the immutability belt and reaches the period belt
   # (the point of the leg: the period belt does not consult the marker at all).
-  defp raw_posted_entry(org, %Date{} = entry_date) do
+  # `posted_at` is a caller choice so a leg can state its ordering against a
+  # known close stamp rather than against the transaction's `now()`. The value
+  # goes over as a naive UTC datetime, matching the column.
+  defp raw_posted_entry(org, %Date{} = entry_date, opts \\ []) do
+    posted_at =
+      opts
+      |> Keyword.get(:posted_at, DateTime.utc_now())
+      |> DateTime.to_naive()
+
     Ecto.Adapters.SQL.query!(@repo, "SELECT set_config('samen.finance_posting', 'on', true)", [])
 
     %{rows: [[entry_bin]]} =
@@ -535,9 +549,9 @@ defmodule Samen.FinancePeriodsTest do
         @repo,
         "INSERT INTO sje_journal_entry (sje_id, sje_org_id, sje_entry_date, sje_memo, " <>
           "sje_status, sje_posted_at, sje_inserted_at, sje_updated_at) VALUES " <>
-          "(gen_random_uuid(), $1, $2, 'raw period leg', 'posted', timezone('utc', now()), " <>
+          "(gen_random_uuid(), $1, $2, 'raw period leg', 'posted', $3, " <>
           "timezone('utc', now()), timezone('utc', now())) RETURNING sje_id",
-        [Ecto.UUID.dump!(org), entry_date]
+        [Ecto.UUID.dump!(org), entry_date, posted_at]
       )
 
     {:ok, Ecto.UUID.load!(entry_bin)}

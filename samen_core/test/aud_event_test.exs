@@ -492,10 +492,14 @@ defmodule Samen.AuditEventTest do
 
   describe "PartitionManager.detach_partition/3 — erasure window gate" do
     test "refuses to detach a partition within the erasure window (red path)" do
-      # July 2026 is within the default 90-day erasure window.
-      july = Date.new!(2026, 7, 1)
+      # Anchored to today, not a fixed month: the gate compares the partition's
+      # END against `Date.utc_today() - 90 days`, so a hardcoded month is recent
+      # only until its window lapses. "July 2026" (ending 2026-08-01) stopped
+      # being inside the window on 2026-10-30 UTC, and the red path silently
+      # stopped refuting — it failed exactly there and nowhere else.
+      current = Date.utc_today()
 
-      result = PartitionManager.detach_partition(Repo, july)
+      result = PartitionManager.detach_partition(Repo, current)
       assert {:error, :erasure_window_active, detail} = result
       assert is_binary(detail)
       assert detail =~ "erasure window"

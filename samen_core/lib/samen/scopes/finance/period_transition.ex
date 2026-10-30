@@ -90,5 +90,8 @@ defmodule Samen.Scopes.Finance.PeriodTransition do
 
   defp actor_id(_context), do: nil
 
-  defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
+  # Not truncated here: `closed_at` is an `:utc_datetime` (second precision, the
+  # same as the entries' `posted_at`), so the type already fixes the granularity
+  # and a second truncate would only restate it.
+  defp now, do: DateTime.utc_now()
 end
