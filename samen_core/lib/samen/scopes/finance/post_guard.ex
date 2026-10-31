@@ -66,7 +66,16 @@ defmodule Samen.Scopes.Finance.PostGuard do
           _ -> true
         end
 
-      unless legal? do
+      # The refusal must be the VALUE the before_action returns. `add_error/2`
+      # returns a new changeset, so the old `unless … add_error … end` followed
+      # by a forced-status return DISCARDED it: a re-post moved `posted_at` on an
+      # immutable fact instead of refusing. (WS-ACCT Phase 5 found this while
+      # proving "a reversal cannot post twice".)
+      if legal? do
+        changeset
+        |> Ash.Changeset.force_change_attribute(:status, status)
+        |> Ash.Changeset.force_change_attribute(:posted_at, now)
+      else
         Ash.Changeset.add_error(changeset,
           field: :status,
           message:
@@ -74,10 +83,6 @@ defmodule Samen.Scopes.Finance.PostGuard do
               ":draft and :void on a :posted entry (one-way state machine)"
         )
       end
-
-      changeset
-      |> Ash.Changeset.force_change_attribute(:status, status)
-      |> Ash.Changeset.force_change_attribute(:posted_at, now)
     end)
   end
 end

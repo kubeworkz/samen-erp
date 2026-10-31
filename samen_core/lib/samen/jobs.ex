@@ -183,6 +183,10 @@ defmodule Samen.Jobs do
       re-embeds ONLY `aie_embedding` rows whose stamped model has drifted from the currently
       configured embedder — never a full-table re-embed. A no-op / self-discarding job on a
       host with no embedder wired (ADR-014 fail-honest: nothing to re-embed against).)
+    - `"20 0 * * *"` → `Samen.Scopes.Finance.AccrualReversalWorker` (WS-ACCT Phase 5,
+      ADR-054 D6: posts every DRAFT scheduled accrual reversal whose date has arrived,
+      through the governed `:post` action. Daily just past midnight UTC so a reversal dated
+      the 1st lands that morning; a host with no books wired is a no-op.)
   """
   @spec default_crontab() :: [{String.t(), module()}]
   def default_crontab do
@@ -196,7 +200,11 @@ defmodule Samen.Jobs do
       {"*/30 * * * *", Samen.AI.Embeddings.ReembedWorker},
       # HuggingFace BYOK key validation — daily at 02:00 UTC. Detects revoked/expired
       # keys and clears credentials so tenants see honest "Setup Required" UI.
-      {"0 2 * * *", Samen.Scopes.Ai.VerifyCredentialsWorker}
+      {"0 2 * * *", Samen.Scopes.Ai.VerifyCredentialsWorker},
+      # WS-ACCT Phase 5 (ADR-054 D6) — the scheduled half of every month-end accrual.
+      # Daily at 00:20 UTC so a reversal dated the 1st posts that morning; the worker
+      # itself selects only DRAFT reversals whose date has arrived.
+      {"20 0 * * *", Samen.Scopes.Finance.AccrualReversalWorker}
     ]
   end
 

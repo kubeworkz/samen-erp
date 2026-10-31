@@ -246,6 +246,14 @@ defmodule Samen.Scopes.Finance.Blueprint do
           change({Samen.Scopes.Finance.DimensionBalance, lines: :lines})
 
           change(Samen.Scopes.Finance.EntryLines)
+
+          # WS-ACCT Phase 5 (ADR-054 D6): `:post_accrual` adds the scheduled
+          # reversal and posts the accrual through the ORDINARY `:post` door.
+          # Registered AFTER EntryLines on purpose: after-action hooks run in
+          # registration order, so the accrual's lines exist by the time this
+          # posts it — which is also why the action cannot be create-born-posted
+          # (the posted-born factory's marker restore lands before EntryLines).
+          change(Samen.Scopes.Finance.AccrualGuard)
         end
 
         actions do
@@ -280,6 +288,35 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # A draft is born a draft — `status` is NOT an accepted input: the
             # only route to :posted is :post, the only route to :void is :void.
             change(set_attribute(:status, :draft))
+          end
+
+          # The manual's month-end accrual + its automatic reversal as ONE
+          # decision (WS-ACCT Phase 5; ADR-054 D6). The row is created as a
+          # draft (so its lines materialize under the draft belt), then
+          # `AccrualGuard` posts it through the ordinary `:post` action and
+          # schedules the linked DRAFT reversal, all in this action's
+          # transaction. That is why NO PostGuard/PeriodGuard sits here: the
+          # inner `:post` carries them, so R1 (PostBalance), R6 and R10 apply
+          # exactly as they would to a human posting it.
+          create :post_accrual do
+            accept([:org_id, :entry_date, :memo])
+
+            argument(:reversal_on, :date, allow_nil?: false)
+
+            argument(:lines, {:array, :map},
+              allow_nil?: false,
+              constraints: [
+                items: [
+                  fields: [
+                    account_id: [type: :uuid, allow_nil?: false],
+                    debit_cents: [type: :integer],
+                    credit_cents: [type: :integer],
+                    memo: [type: :string],
+                    dimension_refs: [type: :map]
+                  ]
+                ]
+              ]
+            )
           end
 
           update :update do
@@ -374,11 +411,51 @@ defmodule Samen.Scopes.Finance.Blueprint do
             change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
             change(Samen.Scopes.Finance.PostGuard)
           end
+
+          # The SCHEDULED-reversal factory (AccrualGuard's system cascade,
+          # `authorize?: false`, the `create_reversal` posture). Born DRAFT on
+          # purpose: the reversal posts on its own date through the ordinary
+          # `:post` action, so PeriodGuard/PostBalance/DimensionBalance run on
+          # it exactly as they would for a human posting it. Internal only —
+          # the policy below forbids calling it; the cascade bypasses policies
+          # the same way every other system path does.
+          create :create_accrual_reversal do
+            accept([
+              :org_id,
+              :entry_date,
+              :memo,
+              :source_key,
+              :source_id,
+              :voided_entry_id
+            ])
+
+            argument(:lines, {:array, :map},
+              allow_nil?: false,
+              constraints: [
+                items: [
+                  fields: [
+                    account_id: [type: :uuid, allow_nil?: false],
+                    debit_cents: [type: :integer],
+                    credit_cents: [type: :integer],
+                    memo: [type: :string],
+                    dimension_refs: [type: :map]
+                  ]
+                ]
+              ]
+            )
+          end
         end
 
         policies do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
+          end
+
+          # The scheduled-reversal factory is system-only: `AccrualGuard` reaches
+          # it with `authorize?: false`, and no caller can mint a draft reversal
+          # naming an arbitrary `voided_entry_id` through the API.
+          policy action(:create_accrual_reversal) do
+            forbid_if(always())
           end
 
           policy action_type([:create, :update, :destroy]) do

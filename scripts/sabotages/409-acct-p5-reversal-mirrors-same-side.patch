@@ -1,0 +1,47 @@
+# SABOTAGE: the scheduled reversal no longer MIRRORS the accrual — it repeats it.
+#
+# WS-ACCT Phase 5 (ADR-054 D6) makes the automatic reversal one action with the
+# accrual: `:post_accrual` lands the posted accrual AND a linked DRAFT reversal
+# dated in the next period. The reversal is the exact flip (Dr ↔ Cr) of every
+# line plus its dimension_refs, which is what makes the pair net to zero across
+# the period boundary. This patch removes ONLY the swap in `mirror_line/1` —
+# `debit_cents` reads the DEBIT, `credit_cents` reads the CREDIT, the line's
+# account, memo and dimensions are copied unchanged.
+#
+# That is the plausible regression, not a strawman: `debit_cents:
+# fetch(line, :debit_cents)` is what anyone writing "a copy of the line" touches
+# first, and the result still LOOKS right. The reversal is internally balanced,
+# so R1 (`PostBalance`) passes; it carries a cost object, so R6
+# (`DimensionBalance`) sees nothing odd; it is dated in the right period, so
+# `PeriodGuard` admits it and the soft-close allowlist is untouched. Every
+# structural check is green while the books are wrong: February's "reversal"
+# charges the expense a second time instead of releasing it, the liability
+# never clears, and the trial balance closes at 2× instead of zero.
+#
+# Why the flip is attributable: the two red-path tests that catch it are the
+# ones that quantify the NET-OUT (the mirrored-line assertion and the
+# per-account/organisation balance returning to zero), not the ones that assert
+# a row exists or a date is honoured. Those stay green under this patch — the
+# reversal is still created, still linked, still draft, still dated — which is
+# exactly what says the flip landed on the accounting semantics rather than on
+# the plumbing.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_accruals_test.exs
+# MUST_FAIL: the accrual posts and a DRAFT reversal is linked, mirrored and dated
+# MUST_FAIL: January carries the expense, February the flip, and the books close at zero
+--- a/samen_core/lib/samen/scopes/finance/accrual_guard.ex
++++ b/samen_core/lib/samen/scopes/finance/accrual_guard.ex
+@@ -139,10 +139,10 @@
+ 
+   # debit ↔ credit, dimensions copied verbatim (see the moduledoc).
+   defp mirror_line(line) do
+     %{
+       account_id: fetch(line, :account_id),
+-      debit_cents: fetch(line, :credit_cents) || 0,
+-      credit_cents: fetch(line, :debit_cents) || 0,
++      debit_cents: fetch(line, :debit_cents) || 0,
++      credit_cents: fetch(line, :credit_cents) || 0,
+       memo: fetch(line, :memo),
+       dimension_refs: fetch(line, :dimension_refs) || %{}
+     }

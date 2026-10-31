@@ -93,6 +93,12 @@ config :samen_core, Samen.Automation,
 # T3.6 — the SlaBreachWorker's ticket resource (the scope's documented wire).
 config :samen_core, :support_sla_breach_ticket_resource, Samenerp.Support.Ticket
 
+# WS-ACCT Phase 5 (ADR-054 D6) — the scheduled accrual reversal posts through
+# THIS host's entry resource. The cron runs on every host; a host that does not
+# wire it has no books to reverse and is an honest no-op.
+config :samen_core, Samen.Scopes.Finance.AccrualReversal,
+  entry_module: Samenerp.Erp.JournalEntry
+
 config :ash, disable_async?: true
 config :ash, :missed_notifications, :ignore
 

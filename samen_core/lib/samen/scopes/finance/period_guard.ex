@@ -22,11 +22,14 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
 
   `source_key`/`source_id` is the ADR-041 object-ref seam: `"ap_invoice"`,
   `"goods_receipt"`, `"billing_payment"`, … — an upstream DOCUMENT that is
-  landing in the ledger. The ledger's own reversal anchor (`"journal_entry"`,
-  written by `Samen.Scopes.Finance.VoidGuard`) is **not** a document: it
-  corrects an entry the ledger already holds, which is exactly the "journal-only
-  adjustment" soft-close exists to admit. Without that distinction a void of any
-  soft-closed entry would be refused even though nothing new is arriving.
+  landing in the ledger. The ledger's own reversal anchors — `"journal_entry"`
+  (`Samen.Scopes.Finance.VoidGuard`) and `"accrual_reversal"`
+  (`Samen.Scopes.Finance.AccrualReversal`, the scheduled half of a month-end
+  accrual) — are **not** documents: they correct a fact the ledger already
+  holds, which is exactly the "journal-only adjustment" soft-close exists to
+  admit. Without that distinction a void of any soft-closed entry would be
+  refused even though nothing new is arriving, and the automatic reversal whose
+  purpose is to prevent double-counting could not land in the month it must.
 
   ## Where it runs
 
@@ -55,9 +58,12 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
 
   use Ash.Resource.Change
 
-  # The ledger's own reversal anchor: an adjustment to a fact already held, not
-  # a document landing in the book (see the moduledoc).
-  @ledger_internal_sources ["journal_entry"]
+  # The ledger's own reversal anchors: adjustments to a fact already held, not
+  # documents landing in the book (see the moduledoc). `journal_entry` is a
+  # void's reversal; `accrual_reversal` is the scheduled half of a month-end
+  # accrual — the mechanism that PREVENTS double-counting must not itself be
+  # locked out when the document window shuts.
+  @ledger_internal_sources ["journal_entry", "accrual_reversal"]
 
   @doc "Source anchors that are ledger adjustments rather than upstream documents."
   def ledger_internal_sources, do: @ledger_internal_sources
