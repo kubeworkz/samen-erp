@@ -2763,6 +2763,90 @@
     {
       "fields": [
         {
+          "column_name": "elt_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "elt_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "elt_die_actual",
+          "logical_name": "die_actual",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "elt_die_expected",
+          "logical_name": "die_expected",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "elt_fab_order_id",
+          "logical_name": "fab_order_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "elt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "elt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "elt_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "elt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "elt_stage",
+          "logical_name": "stage",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "elt_supplier_id",
+          "logical_name": "supplier_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "elt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "elt_wafer_count",
+          "logical_name": "wafer_count",
+          "pii": false,
+          "type": "Integer"
+        }
+      ],
+      "resource": "Samenerp.Erp.Lot",
+      "table_name": "elt_lot"
+    },
+    {
+      "fields": [
+        {
           "column_name": "eni_default_expense_account_id",
           "logical_name": "default_expense_account_id",
           "pii": false,
@@ -3175,6 +3259,12 @@
           "logical_name": "is_sellable",
           "pii": false,
           "type": "Boolean"
+        },
+        {
+          "column_name": "enw_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
         },
         {
           "column_name": "enw_name",

@@ -50,7 +50,9 @@ defmodule SamenCore.Support.InventoryFixture do
     namespace: SamenCore.Support.InventoryFixture,
     finance: [
       entry: SamenCore.Support.FinanceFixture.JournalEntry,
-      posting_account: SamenCore.Support.FinanceFixture.PostingAccount
+      posting_account: SamenCore.Support.FinanceFixture.PostingAccount,
+      # WS-ACCT Phase 4: a Lot's GL side names a Finance cost object.
+      cost_object: SamenCore.Support.FinanceFixture.CostObject
     ],
     billing: [
       invoice: SamenCore.Support.FinanceFixture.InvoiceMirror
@@ -69,6 +71,7 @@ defmodule SamenCore.Support.InventoryFixture do
       bom: "sbm",
       bom_line: "sbl",
       work_order: "swk",
-      production_log: "spg"
+      production_log: "spg",
+      lot: "slt"
     }
 end

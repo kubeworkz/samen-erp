@@ -21,7 +21,9 @@ defmodule Samen.Abbrev.AllocatorTest do
 
   # A scratch COPY of the committed registry — never the committed file itself.
   defp scratch! do
-    path = Path.join(System.tmp_dir!(), "alloc_scratch_#{System.unique_integer([:positive])}.json")
+    path =
+      Path.join(System.tmp_dir!(), "alloc_scratch_#{System.unique_integer([:positive])}.json")
+
     File.cp!(R.path(), path)
     path
   end
@@ -42,7 +44,8 @@ defmodule Samen.Abbrev.AllocatorTest do
         %{global: g, hosts: h} = R.load_namespaced(path)
 
         assert get_in(h, ["widgetco", "wid"]) == "Widgetco.Vertical.Widget"
-        # global net unchanged (still the committed 405 rows).
+        # global net unchanged (still the committed 405 rows; host rows are
+        # namespaced — Phase 4's three Lot rows land under their hosts).
         assert map_size(g) == 405
       after
         File.rm(path)
@@ -85,9 +88,11 @@ defmodule Samen.Abbrev.AllocatorTest do
 
         # T123: an accidental different-owner cross-host reservation is REFUSED by default
         # (it would persist the T47 orphan that trips flatten_conflicts/1 at compile).
-        assert_raise ArgumentError, ~r/already owned by Widgetco.Vertical.Widget in host "widgetco".*DELIBERATE ADR-025 Option-B/s, fn ->
-          A.reserve!("acme", "wid", "Acme.Vertical.Gadget", path)
-        end
+        assert_raise ArgumentError,
+                     ~r/already owned by Widgetco.Vertical.Widget in host "widgetco".*DELIBERATE ADR-025 Option-B/s,
+                     fn ->
+                       A.reserve!("acme", "wid", "Acme.Vertical.Gadget", path)
+                     end
 
         # A DELIBERATE Option-B reuse is still possible behind the explicit override.
         A.reserve!("acme", "wid", "Acme.Vertical.Gadget", path, allow_cross_host_reuse: true)
@@ -304,8 +309,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # hosts (samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`, samenerp `efp`/`efq`),
       # every row written by the allocator,
       # allocator-reserved: 35_010 bytes, 758 flat.
-      assert byte_size(committed) == 35010
-      assert map_size(R.load()) == 758
+      # +3 WS-ACCT Phase 4 (ADR-054 D3) — `Lot` in the three Inventory hosts
+      # (samen_core `slt`, samen_web `ilt`, samenerp `elt`), every row written by
+      # the allocator,
+      # allocator-reserved: 35_136 bytes, 761 flat.
+      assert byte_size(committed) == 35136
+      assert map_size(R.load()) == 761
     end
   end
 

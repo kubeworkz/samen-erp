@@ -103,25 +103,41 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # (+6 WS-ACCT Phase 3 (ADR-054 D7): `FiscalPeriod` + `CloseRun` per Finance host —
       # samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`, samenerp `efp`/`efq`
       # = 405 + 353 = 758 flat.)
-      assert map_size(flat) == 758
+      # (+3 WS-ACCT Phase 4 (ADR-054 D3): `Lot` per Inventory host — samen_core
+      # `slt`, samen_web `ilt`, samenerp `elt` = 405 + 356 = 761 flat.)
+      assert map_size(flat) == 761
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"
     end
 
     test "the allocator can still reserve a fresh non-conflicting abbrev (tripwire is flatten-only)" do
-      path = Path.join(System.tmp_dir!(), "tripwire_scratch_#{System.unique_integer([:positive])}.json")
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "tripwire_scratch_#{System.unique_integer([:positive])}.json"
+        )
+
       File.cp!(Reg.path(), path)
 
       try do
         # propose/reserve read the NAMESPACED shape, never the flattened view — unaffected.
-        assert {:ok, abbrev} = Alloc.propose("widgetco", "Widgetco.Vertical.Sprocket", Reg.load_namespaced(path))
+        assert {:ok, abbrev} =
+                 Alloc.propose(
+                   "widgetco",
+                   "Widgetco.Vertical.Sprocket",
+                   Reg.load_namespaced(path)
+                 )
+
         assert :ok = Alloc.reserve!("widgetco", abbrev, "Widgetco.Vertical.Sprocket", path)
 
         # The scratch now has a host entry but STILL zero flatten-conflicts (distinct abbrev),
         # so its flattened load also stays clean.
         assert Reg.flatten_conflicts(Reg.load_namespaced(path)) == []
-        assert get_in(Reg.load_namespaced(path), [:hosts, "widgetco", abbrev]) == "Widgetco.Vertical.Sprocket"
+
+        assert get_in(Reg.load_namespaced(path), [:hosts, "widgetco", abbrev]) ==
+                 "Widgetco.Vertical.Sprocket"
+
         refute_raise(fn -> Reg.load(path) end)
       after
         File.rm(path)
@@ -232,7 +248,9 @@ defmodule Samen.AbbrevFlattenConflictTest do
   # --- helpers --------------------------------------------------------------------------
 
   defp write!(%{global: global, hosts: hosts}) do
-    path = Path.join(System.tmp_dir!(), "flatten_conflict_#{System.unique_integer([:positive])}.json")
+    path =
+      Path.join(System.tmp_dir!(), "flatten_conflict_#{System.unique_integer([:positive])}.json")
+
     File.write!(path, Jason.encode!(%{"abbrevs" => global, "hosts" => hosts}))
     path
   end

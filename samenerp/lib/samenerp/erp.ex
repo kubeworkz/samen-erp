@@ -64,11 +64,14 @@ defmodule Samenerp.Erp do
       work_order: "ewo",
       production_log: "epg",
       transfer_order: "etn",
-      landed_cost: "eld"
+      landed_cost: "eld",
+      lot: "elt"
     },
     finance: [
       entry: Samenerp.Erp.JournalEntry,
-      posting_account: Samenerp.Erp.PostingAccount
+      posting_account: Samenerp.Erp.PostingAccount,
+      # WS-ACCT Phase 4 (ADR-054 D3): the lot's GL side names a cost object.
+      cost_object: Samenerp.Erp.CostObject
     ],
     billing: [
       invoice: Samenerp.Billing.Invoice
@@ -102,5 +105,6 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.TransferOrder)
     resource(Samenerp.Erp.LandedCost)
     resource(Samenerp.Erp.CostObject)
+    resource(Samenerp.Erp.Lot)
   end
 end

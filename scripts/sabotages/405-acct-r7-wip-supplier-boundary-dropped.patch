@@ -1,0 +1,39 @@
+# SABOTAGE: R7's WIP boundary is dropped — every location's stock counts as WIP.
+#
+# WS-ACCT Phase 4 (ADR-054 D3) makes "WIP – Foundry" a GL PRESENTATION of stock
+# held at a `kind: :supplier` warehouse, never a second register. R7
+# (`Samen.Scopes.Inventory.ReconcileLot`) reads exactly that boundary: supplier-
+# location stock value per lot == the WIP balance the journal carries for the
+# lot. This patch removes ONLY the `AND w.<kind> = 'supplier'` predicate from the
+# stock side, keeping the lot anchor (`source_key = 'lot'`), the WIP-account
+# join, the posted-entry join and every other leg.
+#
+# That is the plausible regression, not a strawman: a reviewer reading the read
+# sees a ledger sum grouped by lot and a GL sum grouped by lot's cost object and
+# concludes the warehouse kind is a detail. It is not — it is the whole WIP
+# definition. With it gone, stock the company already OWNS (a delivered lot, or
+# wafers a partner holds on consignment where title moved at shipment) is
+# reported as work-in-progress, and the books claim WIP that no supplier holds.
+#
+# Why the flip is attributable: the two red-path tests (supplier stock with no
+# GL leg, and a WIP balance with no stock) STILL fail under this patch — the
+# predicate was never what made a real disagreement visible. Only the two
+# boundary controls red, which is what says the flip landed on the WIP
+# definition rather than on the ledger, the GL or the test file.
+#
+# APP: samen_core
+# TEST_FILES: test/inventory_lots_test.exs
+# MUST_FAIL: owned stock is NOT WIP — a delivered lot reconciles clean
+# MUST_FAIL: consignment stock is NOT supplier WIP — it reconciles clean
+--- a/samen_core/lib/samen/scopes/inventory/reconcile_lot.ex
++++ b/samen_core/lib/samen/scopes/inventory/reconcile_lot.ex
+@@ -113,9 +113,8 @@
+       JOIN #{ctx.warehouse_table} w
+         ON w.#{ctx.warehouse_id} = sl.#{ctx.ledger_warehouse}
+        AND w.#{ctx.warehouse_org} = sl.#{ctx.ledger_org}
+       WHERE sl.#{ctx.ledger_org} = $1
+         AND sl.#{ctx.ledger_source_key} = 'lot'
+-        AND w.#{ctx.warehouse_kind} = 'supplier'
+       GROUP BY sl.#{ctx.ledger_source_id}
+     ) stock ON stock.lot_id = l.#{ctx.lot_id}
+     """

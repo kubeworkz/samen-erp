@@ -144,6 +144,19 @@ defmodule Samen.Scopes.Inventory.Blueprint do
         posture verbatim), `is_sellable`, and `allow_negative` — the
         per-warehouse NegativeStock opt-out (cycle-count realities;
         FAIL-CLOSED default `false`).
+
+        ## `kind` — where the stock physically is (WS-ACCT Phase 4, ADR-054 D3)
+
+        `:owned` (the default), `:consignment`, or `:supplier`.
+
+        A **fabless** company's most valuable inventory is not in its own
+        building: wafers sit at the foundry, photonics at the PDK partner,
+        boards at assembly-and-test. `:supplier` makes that a real stock
+        LOCATION, so those wafers are ordinary stock-ledger movements at a
+        supplier warehouse — *"WIP – Foundry"* is then a GL PRESENTATION of
+        that stock (valued by the one moving-average ledger), never a parallel
+        WIP register that could disagree with it (ADR-049 §4). R7
+        (`Samen.Scopes.Inventory.ReconcileLot`) reads exactly this boundary.
         """
         use Samen.Resource,
           otp_app: unquote(otp_app),
@@ -185,6 +198,17 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             allow_nil?: false,
             default: true
           )
+
+          # WS-ACCT Phase 4 (ADR-054 D3): whether the stock is at a location
+          # the company owns, holds on consignment, or a SUPPLIER holds (the
+          # foundry / assembly-and-test case). Default `:owned` keeps every
+          # pre-Phase-4 warehouse exactly where it was.
+          attribute(:kind, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :owned,
+            constraints: [one_of: [:owned, :consignment, :supplier]]
+          )
         end
 
         pii do
@@ -199,11 +223,188 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :code, :name, :address, :allow_negative, :is_sellable])
+            accept([
+              :org_id,
+              :code,
+              :name,
+              :address,
+              :allow_negative,
+              :is_sellable,
+              :kind
+            ])
           end
 
           update :update do
-            accept([:name, :address, :allow_negative, :is_sellable])
+            accept([:name, :address, :allow_negative, :is_sellable, :kind])
+            require_atomic?(false)
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Lot — one physical production lot (WS-ACCT Phase 4; ADR-054 D3)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  `Lot` — the physical production unit a fabless company tracks (WS-ACCT
+  Phase 4; ADR-054 D3): `code`, the `item` it produces, the `supplier` holding
+  it, its `stage`, wafer and die counts, and its Finance `cost_object`.
+
+  Defined ONLY when the mount wires `finance:` (with `cost_object:`), because
+  a lot's whole reason to exist in the books is the GL side of R7.
+  """
+  defmacro define_lot(module, otp_app, domain, repo, abbrev, item_mod, cost_object_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Inventory.Lot — ONE physical production lot (WS-ACCT Phase 4;
+        ADR-054 D3): `code` (unique per org), `item_id`, `supplier_id`, `stage
+        ∈ {:design, :mask, :fab, :dice, :assembly, :test, :delivered}`,
+        `wafer_count`, `die_expected`, `die_actual`, `fab_order_id`, and the
+        Finance `cost_object_id` its ledger lines are dimensioned by.
+
+        ## Why a lot is NOT a second WIP register
+
+        ADR-049 §4 makes stock a LEDGER. A lot therefore owns no balance of
+        its own: its cost accumulates as `StockLedger` events whose object-ref
+        names it (`source_key: "lot"`, `source_id: <lot id>`), and the wafers
+        "at the foundry" are stock at a warehouse with `kind: :supplier`.
+        "WIP – Foundry" is a GL presentation of that stock, not a parallel
+        truth (D3). R7 (`Samen.Scopes.Inventory.ReconcileLot`) is the standing
+        read: supplier-location stock value per lot == the GL balance of the
+        lines dimensioned by that lot's cost object.
+
+        ## Why the cost object is a real link
+
+        `JournalLine.dimension_refs` may only carry same-org `CostObject` ids
+        (`Samen.Scopes.Finance.DimensionGuard`), so the lot's GL side has to
+        name one. `cost_object_id` is that link, `SameOrgFk`-checked, and
+        immutable once written (posted lines reference it forever). Without it
+        a lot's GL cost could only be found by matching a code string — a fuzzy
+        join, which is exactly what the ids-only rule exists to avoid.
+
+        `supplier_id` and `fab_order_id` are PLAIN uuid cross-scope references
+        (ADR-049 §8: no runtime coupling): the supplier is a `SalesOps.Vendor`
+        row and the fab order extension lands separately. No PII (INV-1) — a
+        vendor id is not a person, and the contacts stay vaulted in SalesOps.
+        """
+
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_lot")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:code, :string, public?: true, allow_nil?: false)
+
+          attribute(:stage, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :design,
+            constraints: [
+              one_of: [:design, :mask, :fab, :dice, :assembly, :test, :delivered]
+            ]
+          )
+
+          # Integer base-UOM stays binding: wafers and dies are countable
+          # (ADR-049 §7.4 — fractional quantities are a documented non-goal).
+          attribute(:wafer_count, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0,
+            constraints: [min: 0]
+          )
+
+          attribute(:die_expected, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0,
+            constraints: [min: 0]
+          )
+
+          attribute(:die_actual, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0,
+            constraints: [min: 0]
+          )
+
+          # Plain cross-scope ids (ADR-049 §8): the supplier is a
+          # SalesOps.Vendor row; the fab order extension is not this scope's.
+          attribute(:supplier_id, :uuid, public?: true)
+          attribute(:fab_order_id, :uuid, public?: true)
+        end
+
+        relationships do
+          belongs_to :item, unquote(item_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          # The Finance cost object the lot's GL lines name. Immutable after
+          # create: it anchors posted lines.
+          belongs_to :cost_object, unquote(cost_object_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        changes do
+          change({Samen.Policy.SameOrgFk, relationships: [:item, :cost_object]})
+        end
+
+        identities do
+          identity(:unique_lot_code, [:org_id, :code])
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([
+              :org_id,
+              :code,
+              :stage,
+              :wafer_count,
+              :die_expected,
+              :die_actual,
+              :supplier_id,
+              :fab_order_id,
+              :item_id,
+              :cost_object_id
+            ])
+          end
+
+          # The lifecycle moves forward through stages and records actual
+          # yield; the code and the cost-object link are not editable.
+          update :update do
+            accept([:stage, :wafer_count, :die_expected, :die_actual, :fab_order_id])
             require_atomic?(false)
           end
         end
@@ -227,7 +428,16 @@ defmodule Samen.Scopes.Inventory.Blueprint do
   # StockLedger — THE append-only movement event
   # ---------------------------------------------------------------------------
 
-  defmacro define_stock_ledger(module, otp_app, domain, repo, abbrev, item_mod, warehouse_mod, level_mod) do
+  defmacro define_stock_ledger(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             item_mod,
+             warehouse_mod,
+             level_mod
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -325,9 +535,10 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           # ONLY write action — stock events are born once, never edited. The
           # warehouse resource is a compile-time module param (design §8 —
           # never runtime coupling between scope files).
-          change({Samen.Scopes.Inventory.NegativeStock,
-            warehouse: unquote(warehouse_mod),
-            ledger: unquote(module)})
+          change(
+            {Samen.Scopes.Inventory.NegativeStock,
+             warehouse: unquote(warehouse_mod), ledger: unquote(module)}
+          )
 
           # The rollup writer: rebuilds the (org, item, warehouse) level row
           # from the ledger tail in AFTER_ACTION — inside the SAME Ecto
@@ -382,7 +593,15 @@ defmodule Samen.Scopes.Inventory.Blueprint do
   # chokepoint (GoodsPosting); ReceiptLine is R5's received-quantity fact.
   # ---------------------------------------------------------------------------
 
-  defmacro define_purchase_order(module, otp_app, domain, repo, abbrev, po_line_mod, warehouse_mod) do
+  defmacro define_purchase_order(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             po_line_mod,
+             warehouse_mod
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -515,8 +734,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             accept([])
             require_atomic?(false)
 
-            change({Samen.Approvals.Gate,
-             kind: unquote(Atom.to_string(module)) <> ":approve"})
+            change({Samen.Approvals.Gate, kind: unquote(Atom.to_string(module)) <> ":approve"})
 
             change(Samen.Scopes.Finance.PostingMarker)
 
@@ -601,6 +819,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
 
         attributes do
           attribute(:qty, :integer, public?: true, allow_nil?: false)
+
           attribute(:unit_cost_cents, :integer,
             public?: true,
             allow_nil?: false,
@@ -769,12 +988,14 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             # The belt marker for the receipt's own flip + the PO's stamp.
             change(Samen.Scopes.Finance.PostingMarker)
 
-            change({Samen.Scopes.Inventory.GoodsPosting,
-              po_line: unquote(po_line_mod),
-              receipt_line: unquote(receipt_line_mod),
-              ledger: unquote(ledger_mod),
-              entry: unquote(finance_entry_mod),
-              posting_account: unquote(finance_posting_account_mod)})
+            change(
+              {Samen.Scopes.Inventory.GoodsPosting,
+               po_line: unquote(po_line_mod),
+               receipt_line: unquote(receipt_line_mod),
+               ledger: unquote(ledger_mod),
+               entry: unquote(finance_entry_mod),
+               posting_account: unquote(finance_posting_account_mod)}
+            )
           end
         end
 
@@ -819,6 +1040,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
 
         attributes do
           attribute(:qty, :integer, public?: true, allow_nil?: false)
+
           attribute(:unit_cost_cents, :integer,
             public?: true,
             allow_nil?: false,
@@ -1047,11 +1269,13 @@ defmodule Samen.Scopes.Inventory.Blueprint do
 
             change(Samen.Scopes.Finance.PostingMarker)
 
-            change({Samen.Scopes.Inventory.FulfillOrder,
-              so_line: unquote(so_line_mod),
-              ledger: unquote(ledger_mod),
-              level: unquote(level_mod),
-              invoice: unquote(billing_invoice_mod)})
+            change(
+              {Samen.Scopes.Inventory.FulfillOrder,
+               so_line: unquote(so_line_mod),
+               ledger: unquote(ledger_mod),
+               level: unquote(level_mod),
+               invoice: unquote(billing_invoice_mod)}
+            )
           end
 
           update :cancel do
@@ -1105,6 +1329,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
 
         attributes do
           attribute(:qty, :integer, public?: true, allow_nil?: false)
+
           attribute(:unit_price_cents, :integer,
             public?: true,
             allow_nil?: false,
@@ -1321,17 +1546,25 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           attribute(:source_warehouse_id, :uuid, public?: true, allow_nil?: false)
           attribute(:dest_warehouse_id, :uuid, public?: true, allow_nil?: false)
           attribute(:qty, :integer, public?: true, allow_nil?: false)
-          attribute(:status, :atom, public?: true, allow_nil?: false, default: :draft,
-            constraints: [one_of: [:draft, :posted]])
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :posted]]
+          )
+
           attribute(:note, :string, public?: true)
           attribute(:posted_at, :utc_datetime, public?: true)
         end
 
         actions do
           defaults([:read])
+
           create :create do
             accept([:org_id, :item_id, :source_warehouse_id, :dest_warehouse_id, :qty, :note])
           end
+
           update :post do
             accept([])
           end
@@ -1341,6 +1574,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
           end
+
           policy action_type([:create, :update, :destroy]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
@@ -1377,19 +1611,39 @@ defmodule Samen.Scopes.Inventory.Blueprint do
         attributes do
           attribute(:bill_id, :uuid, public?: true, allow_nil?: false)
           attribute(:amount_cents, :integer, public?: true, allow_nil?: false)
-          attribute(:allocation_method, :atom, public?: true, allow_nil?: false, default: :value,
-            constraints: [one_of: [:value, :quantity]])
-          attribute(:status, :atom, public?: true, allow_nil?: false, default: :draft,
-            constraints: [one_of: [:draft, :allocated]])
+
+          attribute(:allocation_method, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :value,
+            constraints: [one_of: [:value, :quantity]]
+          )
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :allocated]]
+          )
+
           attribute(:cost_account_id, :uuid, public?: true, allow_nil?: false)
           attribute(:description, :string, public?: true)
         end
 
         actions do
           defaults([:read])
+
           create :create do
-            accept([:org_id, :bill_id, :amount_cents, :allocation_method, :cost_account_id, :description])
+            accept([
+              :org_id,
+              :bill_id,
+              :amount_cents,
+              :allocation_method,
+              :cost_account_id,
+              :description
+            ])
           end
+
           update :allocate do
             accept([])
           end
@@ -1399,6 +1653,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
           end
+
           policy action_type([:create, :update, :destroy]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})

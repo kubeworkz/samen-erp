@@ -52,8 +52,11 @@ defmodule Samen.AuditEventTest do
       t1 = ~U[2026-07-04 10:00:00Z]
       t2 = ~U[2026-07-04 11:00:00Z]
 
-      {:ok, _} = AuditEvent.insert(Repo, %{event_type: "erasure", subject_id: subject_id, occurred_at: t1})
-      {:ok, _} = AuditEvent.insert(Repo, %{event_type: "erasure", subject_id: subject_id, occurred_at: t2})
+      {:ok, _} =
+        AuditEvent.insert(Repo, %{event_type: "erasure", subject_id: subject_id, occurred_at: t1})
+
+      {:ok, _} =
+        AuditEvent.insert(Repo, %{event_type: "erasure", subject_id: subject_id, occurred_at: t2})
 
       rows = AuditEvent.for_subject(Repo, subject_id)
       assert length(rows) == 2
@@ -65,16 +68,21 @@ defmodule Samen.AuditEventTest do
       # Verify the row is stored in the July partition by querying the child
       # partition table directly.
       subject_id = "route-test-#{System.unique_integer([:positive])}"
-      {:ok, row} = AuditEvent.insert(Repo, %{
-        event_type: "system",
-        subject_id: subject_id,
-        occurred_at: ~U[2026-07-15 12:00:00Z]
-      })
+
+      {:ok, row} =
+        AuditEvent.insert(Repo, %{
+          event_type: "system",
+          subject_id: subject_id,
+          occurred_at: ~U[2026-07-15 12:00:00Z]
+        })
 
       # Query the child partition directly — should find the row there.
       %{rows: [[count]]} =
-        Repo.query!("SELECT COUNT(*) FROM aud_event_y2026m07 WHERE aud_subject_id = $1",
-          [subject_id])
+        Repo.query!(
+          "SELECT COUNT(*) FROM aud_event_y2026m07 WHERE aud_subject_id = $1",
+          [subject_id]
+        )
+
       assert count == 1
 
       # The parent query also finds it.
@@ -89,12 +97,13 @@ defmodule Samen.AuditEventTest do
 
   describe "UPDATE on aud_event — red path (append-only enforcement)" do
     test "UPDATE via repo.query raises a DB exception (trigger layer)" do
-      {:ok, row} = AuditEvent.insert(Repo, %{
-        event_type: "grant_lifecycle",
-        subject_id: "upd-subj",
-        detail: "original",
-        occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
-      })
+      {:ok, row} =
+        AuditEvent.insert(Repo, %{
+          event_type: "grant_lifecycle",
+          subject_id: "upd-subj",
+          detail: "original",
+          occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+        })
 
       # The trigger fires on BEFORE UPDATE — raises 'aud_event is append-only'.
       assert_raise Postgrex.Error, ~r/append-only/i, fn ->
@@ -106,11 +115,12 @@ defmodule Samen.AuditEventTest do
     end
 
     test "UPDATE via Ecto schema raises (trigger layer, belt)" do
-      {:ok, row} = AuditEvent.insert(Repo, %{
-        event_type: "grant_lifecycle",
-        subject_id: "upd-ecto",
-        occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
-      })
+      {:ok, row} =
+        AuditEvent.insert(Repo, %{
+          event_type: "grant_lifecycle",
+          subject_id: "upd-ecto",
+          occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+        })
 
       # Attempt via Ecto.Changeset.change + repo.update.
       cs = Ecto.Changeset.change(row, detail: "mutated")
@@ -127,11 +137,12 @@ defmodule Samen.AuditEventTest do
 
   describe "DELETE on aud_event — red path (append-only enforcement)" do
     test "DELETE via repo.query raises a DB exception (trigger layer)" do
-      {:ok, row} = AuditEvent.insert(Repo, %{
-        event_type: "erasure",
-        subject_id: "del-subj",
-        occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
-      })
+      {:ok, row} =
+        AuditEvent.insert(Repo, %{
+          event_type: "erasure",
+          subject_id: "del-subj",
+          occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+        })
 
       assert_raise Postgrex.Error, ~r/append-only/i, fn ->
         Repo.query!(
@@ -142,11 +153,12 @@ defmodule Samen.AuditEventTest do
     end
 
     test "DELETE via Ecto repo.delete raises (trigger layer)" do
-      {:ok, row} = AuditEvent.insert(Repo, %{
-        event_type: "erasure",
-        subject_id: "del-ecto",
-        occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
-      })
+      {:ok, row} =
+        AuditEvent.insert(Repo, %{
+          event_type: "erasure",
+          subject_id: "del-ecto",
+          occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+        })
 
       assert_raise Postgrex.Error, ~r/append-only/i, fn ->
         Repo.delete!(row)
@@ -301,7 +313,8 @@ defmodule Samen.AuditEventTest do
           Ecto.UUID.dump!(row.id)
         ])
 
-      assert count_after == 1, "idempotent re-run must NOT drop/rewrite the existing partition/data"
+      assert count_after == 1,
+             "idempotent re-run must NOT drop/rewrite the existing partition/data"
 
       assert {:ok, _} =
                AuditEvent.insert(Repo, %{
@@ -324,7 +337,10 @@ defmodule Samen.AuditEventTest do
       backdated = DateTime.utc_now() |> DateTime.add(-25 * 3600, :second)
 
       prev_name =
-        backdated |> DateTime.to_date() |> Date.beginning_of_month() |> PartitionManager.partition_name()
+        backdated
+        |> DateTime.to_date()
+        |> Date.beginning_of_month()
+        |> PartitionManager.partition_name()
 
       Repo.query("ALTER TABLE aud_event DETACH PARTITION #{prev_name}")
       Repo.query("DROP TABLE IF EXISTS #{prev_name}")
@@ -464,7 +480,11 @@ defmodule Samen.AuditEventTest do
       # Drop the +2-month partition, run the worker, and prove it was recreated — a stub
       # returning :ok without doing the work would leave it absent.
       months_ahead = 2
-      plus_two = Date.add(Date.utc_today(), months_ahead * 31)
+      # Anchor to the FIRST of the month before stepping: `today + 62` overshoots
+      # into the THIRD month whenever today is late in a 31-day month (Oct 31 +
+      # 62 = Jan 1), so the probe asked for a partition the worker was never
+      # asked to create. From day 1, +62 always lands in calendar month +2.
+      plus_two = Date.add(Date.beginning_of_month(Date.utc_today()), months_ahead * 31)
       target_name = PartitionManager.partition_name(plus_two)
 
       Repo.query("ALTER TABLE aud_event DETACH PARTITION #{target_name}")
@@ -476,11 +496,13 @@ defmodule Samen.AuditEventTest do
       Application.put_env(:samen_core, :aud_event_repo, Repo)
 
       on_exit(fn ->
-        if prev, do: Application.put_env(:samen_core, :aud_event_repo, prev),
+        if prev,
+          do: Application.put_env(:samen_core, :aud_event_repo, prev),
           else: Application.delete_env(:samen_core, :aud_event_repo)
       end)
 
       assert :ok = PartitionManager.perform(%Oban.Job{args: %{"months_ahead" => months_ahead}})
+
       assert aud_partition_exists?(target_name),
              "worker perform/1 must call ensure_upcoming_partitions and create the partition"
     end
@@ -510,11 +532,12 @@ defmodule Samen.AuditEventTest do
       yesterday = Date.add(Date.utc_today(), -1)
       {_name, _from, to_ts} = PartitionManager.partition_spec(yesterday)
 
-      result = DefaultErasureWindowPolicy.still_relevant?(%{
-        partition_name: "aud_event_test",
-        from_ts: "2026-07-01 00:00:00+00",
-        to_ts: to_ts
-      })
+      result =
+        DefaultErasureWindowPolicy.still_relevant?(%{
+          partition_name: "aud_event_test",
+          from_ts: "2026-07-01 00:00:00+00",
+          to_ts: to_ts
+        })
 
       assert {:relevant, detail} = result
       assert is_binary(detail)
@@ -525,11 +548,12 @@ defmodule Samen.AuditEventTest do
       old_date = Date.new!(2016, 1, 1)
       {_name, _from, to_ts} = PartitionManager.partition_spec(old_date)
 
-      result = DefaultErasureWindowPolicy.still_relevant?(%{
-        partition_name: "aud_event_old",
-        from_ts: "2016-01-01 00:00:00+00",
-        to_ts: to_ts
-      })
+      result =
+        DefaultErasureWindowPolicy.still_relevant?(%{
+          partition_name: "aud_event_old",
+          from_ts: "2016-01-01 00:00:00+00",
+          to_ts: to_ts
+        })
 
       assert :not_relevant = result
     end
@@ -617,7 +641,8 @@ defmodule Samen.AuditEventTest do
       assert erasure_row.actor_id == "erasure-actor"
       # Detail carries outcome tokens, no plaintext PII.
       assert erasure_row.detail =~ "outcome="
-      refute erasure_row.detail =~ "@"  # no email-like content
+      # no email-like content
+      refute erasure_row.detail =~ "@"
     end
   end
 
@@ -689,6 +714,7 @@ defmodule Samen.AuditEventTest do
 
       # No violations from the aud_event tier.
       aud_violations = Enum.filter(violations, &(&1.tier == :aud_event))
+
       assert aud_violations == [],
              "expected no aud_event tier violations, got: #{inspect(aud_violations)}"
     end

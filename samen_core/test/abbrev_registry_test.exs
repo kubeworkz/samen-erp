@@ -80,7 +80,9 @@ defmodule Samen.AbbrevRegistryTest do
   end
 
   test "load/1 raises fail-closed when the abbrevs key is missing" do
-    path = Path.join(System.tmp_dir!(), "shape_registry_#{System.unique_integer([:positive])}.json")
+    path =
+      Path.join(System.tmp_dir!(), "shape_registry_#{System.unique_integer([:positive])}.json")
+
     File.write!(path, ~s({"other": {}}))
 
     try do
@@ -150,10 +152,14 @@ defmodule Samen.AbbrevRegistryTest do
       # +6 in WS-ACCT Phase 3 (ADR-054 D7): the close control, in the same three hosts —
       # `FiscalPeriod` + `CloseRun` as samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`
       # and samenerp `efp`/`efq`, every row allocator-reserved.
-      # = 353 host entries across six hosts.
+      # +3 in WS-ACCT Phase 4 (ADR-054 D3): the `Lot` the WIP ↔ lot read hangs
+      # off, in the three hosts that mount Inventory with the cost-object seam —
+      # samen_core fixture `slt`, samen_web `ilt`, samenerp `elt`, every row
+      # allocator-reserved. `global` is unchanged: these are host rows.
+      # = 356 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 97
-      assert map_size(hosts["samen_core"]) == 91
+      assert map_size(hosts["samenerp"]) == 98
+      assert map_size(hosts["samen_core"]) == 92
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -430,6 +436,9 @@ defmodule Samen.AbbrevRegistryTest do
                  # fiscal month and its ten-phase close run, allocator-reserved.
                  "cfp" => "SamenCore.Support.FinanceFixture.FiscalPeriod",
                  "clr" => "SamenCore.Support.FinanceFixture.CloseRun",
+                 # WS-ACCT Phase 4 (ADR-054 D3): the fixture's physical production
+                 # lot, allocator-reserved (--host samen_core).
+                 "slt" => "SamenCore.Support.InventoryFixture.Lot",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -550,6 +559,9 @@ defmodule Samen.AbbrevRegistryTest do
                  # allocator-proposed (--host samen_web).
                  "fpe" => "Samen.WebTest.Erp.FiscalPeriod",
                  "fcr" => "Samen.WebTest.Erp.CloseRun",
+                 # WS-ACCT Phase 4 (ADR-054 D3): the test host's physical lot,
+                 # allocator-proposed (--host samen_web).
+                 "ilt" => "Samen.WebTest.Erp.Lot",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -757,37 +769,40 @@ defmodule Samen.AbbrevRegistryTest do
                  "sbv" => "Samenerp.Cms.Block.Version",
                  "spv" => "Samenerp.Cms.Page.Version",
                  "stv" => "Samenerp.Cms.Post.Version",
-               # Samenerp.Calendar (1) — the Phase-6 Calendar & Scheduling mount
-               # (`evt_event`), allocator-reserved.
-               "evt" => "Samenerp.Calendar.Event",
-               # Samenerp.Fleet (5) — the ADR-050 fleet REGISTRY mount (the portfolio
-               # registry the public `/status` page projects), reserved through the
-               # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp`).
-               "efa" => "Samenerp.Fleet.App",
-               "efc" => "Samenerp.Fleet.Credential",
-               "efd" => "Samenerp.Fleet.Directive",
-               "efe" => "Samenerp.Fleet.EnrollmentToken",
-               "efr" => "Samenerp.Fleet.Report",
-               # Samenerp.Analytics (1) — the ADR-021 analytics mount's token-blind
-               # product-event ledger (`sae_product_event`), reserved through the
-               # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp
-               # --abbrev sae --owner Samenerp.Analytics.ProductEvent`).
-               "sae" => "Samenerp.Analytics.ProductEvent",
-               # WS-Notes Phase 1 (ADR-053): this host's FIRST Docs mount — Doc/Note
-               # plus the block model, all four reserved through the sanctioned
-               # allocator (`mix samen.abbrev.reserve --host samenerp`).
-               "edd" => "Samenerp.Docs.Doc",
-               "edn" => "Samenerp.Docs.Note",
-               "edb" => "Samenerp.Docs.DocBlock",
-               "edl" => "Samenerp.Docs.DocLink",
-               # WS-ACCT Phase 1 (ADR-054 D1): the Kubeworkz host's Finance
-               # cost/analysis registry — the registry the books' cost objects live in.
-               "eco" => "Samenerp.Erp.CostObject",
-               # WS-ACCT Phase 3 (ADR-054 D7): the host's close control — the fiscal
-               # month the Kubeworkz books close against, and its close run.
-               "efp" => "Samenerp.Erp.FiscalPeriod",
-               "efq" => "Samenerp.Erp.CloseRun"
-             }
+                 # Samenerp.Calendar (1) — the Phase-6 Calendar & Scheduling mount
+                 # (`evt_event`), allocator-reserved.
+                 "evt" => "Samenerp.Calendar.Event",
+                 # Samenerp.Fleet (5) — the ADR-050 fleet REGISTRY mount (the portfolio
+                 # registry the public `/status` page projects), reserved through the
+                 # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp`).
+                 "efa" => "Samenerp.Fleet.App",
+                 "efc" => "Samenerp.Fleet.Credential",
+                 "efd" => "Samenerp.Fleet.Directive",
+                 "efe" => "Samenerp.Fleet.EnrollmentToken",
+                 "efr" => "Samenerp.Fleet.Report",
+                 # Samenerp.Analytics (1) — the ADR-021 analytics mount's token-blind
+                 # product-event ledger (`sae_product_event`), reserved through the
+                 # sanctioned allocator (`mix samen.abbrev.reserve --host samenerp
+                 # --abbrev sae --owner Samenerp.Analytics.ProductEvent`).
+                 "sae" => "Samenerp.Analytics.ProductEvent",
+                 # WS-Notes Phase 1 (ADR-053): this host's FIRST Docs mount — Doc/Note
+                 # plus the block model, all four reserved through the sanctioned
+                 # allocator (`mix samen.abbrev.reserve --host samenerp`).
+                 "edd" => "Samenerp.Docs.Doc",
+                 "edn" => "Samenerp.Docs.Note",
+                 "edb" => "Samenerp.Docs.DocBlock",
+                 "edl" => "Samenerp.Docs.DocLink",
+                 # WS-ACCT Phase 1 (ADR-054 D1): the Kubeworkz host's Finance
+                 # cost/analysis registry — the registry the books' cost objects live in.
+                 "eco" => "Samenerp.Erp.CostObject",
+                 # WS-ACCT Phase 3 (ADR-054 D7): the host's close control — the fiscal
+                 # month the Kubeworkz books close against, and its close run.
+                 "efp" => "Samenerp.Erp.FiscalPeriod",
+                 "efq" => "Samenerp.Erp.CloseRun",
+                 # WS-ACCT Phase 4 (ADR-054 D3): the Kubeworkz physical production
+                 # lot — the row R7's WIP ↔ lot read is anchored on.
+                 "elt" => "Samenerp.Erp.Lot"
+               }
              }
 
       # The compat shim's flat view unions the global net with every host entry
@@ -870,7 +885,7 @@ defmodule Samen.AbbrevRegistryTest do
       # +22 WS-ERP E8 — the E8 report reservations (sbg/sbe/sea) + the samenerp
       # host proof (`mix samen.gen.app`, prefix `er`: the E1–E7 scope set + the
       # host's kernel/Identity/Operator/Billing/Aggregate allocations) = 543 (the final +73: the E8 report reservations sbg/sbe/sea + the
-#       68-entry samenerp host proof, prefix `er`) global
+      #       68-entry samenerp host proof, prefix `er`) global
       # +75 WS-ERP E28–E38 + HF BYOK + z-prefix re-nesting + the samenerp
       # Support/Settings/Automation mounts (c9d5272) = 410 global → 410 + 282
       # host = 692 flat… actual: 405 + 282 = 687 (403/683 pre-fpo+mrg fix).
@@ -900,7 +915,9 @@ defmodule Samen.AbbrevRegistryTest do
       # (+6 WS-ACCT Phase 3 (ADR-054 D7): `FiscalPeriod` + `CloseRun` in the same three
       # hosts (samen_core `cfp`/`clr`, samen_web `fpe`/`fcr`, samenerp `efp`/`efq`),
       # allocator-reserved = 405 + 353 = 758 flat.)
-      assert map_size(Reg.load()) == 758
+      # (+3 WS-ACCT Phase 4 (ADR-054 D3): `Lot` in the three Inventory hosts
+      # (samen_core `slt`, samen_web `ilt`, samenerp `elt`) = 405 + 356 = 761 flat.)
+      assert map_size(Reg.load()) == 761
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

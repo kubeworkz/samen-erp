@@ -7,7 +7,7 @@ defmodule Samen.Scopes.Inventory do
   namespace, each a normal `use Samen.Resource` with the host's `otp_app`,
   `repo`, and `domain`.
 
-  ## Resources — `item · warehouse · stock_ledger · stock_level`
+  ## Resources — `item · warehouse · stock_ledger · stock_level` (+ `lot`)
 
   - **`Item`** — the item master (Tier-0 config row): `sku` (unique per
     org), `name`, `kind ∈ {stocked, non_stocked, service}`, `uom` (bounded
@@ -39,6 +39,18 @@ defmodule Samen.Scopes.Inventory do
     rebuilds the row in the SAME transaction as the ledger event, and
     `Samen.Scopes.Inventory.ReconcileStock` recomputes both sums via bare
     SQL over the ledger for R3.
+  - **`Lot`** — one physical production lot (WS-ACCT Phase 4; ADR-054 D3),
+    present ONLY when the mount wires `finance: [cost_object: ...]`: `code`
+    (unique per org), `item_id`, `supplier_id`, `stage ∈ {design, mask, fab,
+    dice, assembly, test, delivered}`, `wafer_count`, `die_expected`,
+    `die_actual`, `fab_order_id`, and the Finance `cost_object_id` its GL lines
+    are dimensioned by. A lot owns NO balance: its cost is the Σ of
+    `StockLedger` events anchored `source_key: "lot"`, and `Warehouse.kind ∈
+    {owned, consignment, supplier}` makes the foundry a stock LOCATION, so
+    "WIP – Foundry" is a GL presentation of that stock (ADR-049 §4: never a
+    second quantity truth). `Samen.Scopes.Inventory.ReconcileLot` is the R7
+    read: supplier-location stock value per lot == the WIP balance the journal
+    carries for the lot.
 
   ## R3 — the Inventory↔Ledger reconciliation (LOAD-BEARING)
 
@@ -81,8 +93,10 @@ defmodule Samen.Scopes.Inventory do
   ## The Procurement documents (E4 — the Finance↔Inventory chokepoint)
 
   A mount that ALSO passes `finance:` (the host's Finance entry + posting-
-  account modules, compile-time — design §8's cross-scope posture) gets the
-  design §3.2 document pair, mounted as four more host resources:
+  account + cost-object modules, compile-time — design §8's cross-scope
+  posture) gets the design §3.2 document pair, mounted as four more host
+  resources, plus the WS-ACCT Phase 4 `Lot` (whose GL side names the cost
+  object):
 
     * **`PurchaseOrder`** — `vendor_id`, `number`, `order_date`, embedded-free
       real `PoLine` rows (`item_id`, `qty`, `unit_cost_cents`), `status ∈
@@ -120,6 +134,7 @@ defmodule Samen.Scopes.Inventory do
     * `Demo.InventoryScope.Warehouse`   → `inw` (demo default)
     * `Demo.InventoryScope.StockLedger` → `inl` (demo default)
     * `Demo.InventoryScope.StockLevel`  → `ins` (demo default)
+    * `Demo.InventoryScope.Lot`         → `ilt` (demo default, WS-ACCT Phase 4)
     * `Demo.InventoryScope.PurchaseOrder` → `ipo` (demo default, E4)
     * `Demo.InventoryScope.PoLine`      → `ipl` (demo default, E4)
     * `Demo.InventoryScope.GoodsReceipt` → `igr` (demo default, E4)
@@ -150,7 +165,8 @@ defmodule Samen.Scopes.Inventory do
     work_order: "iwo",
     production_log: "ipg",
     transfer_order: "trn",
-    landed_cost: "lcd"
+    landed_cost: "lcd",
+    lot: "ilt"
   }
 
   @doc false
@@ -201,9 +217,11 @@ defmodule Samen.Scopes.Inventory do
         po_line_mod = Module.concat(namespace, PoLine)
         goods_receipt_mod = Module.concat(namespace, GoodsReceipt)
         receipt_line_mod = Module.concat(namespace, ReceiptLine)
+        lot_mod = Module.concat(namespace, Lot)
 
         finance_entry = Keyword.fetch!(finance_opts, :entry)
         finance_posting_account = Keyword.fetch!(finance_opts, :posting_account)
+        finance_cost_object = Keyword.fetch!(finance_opts, :cost_object)
 
         quote do
           resources do
@@ -211,7 +229,21 @@ defmodule Samen.Scopes.Inventory do
             resource(unquote(po_line_mod))
             resource(unquote(goods_receipt_mod))
             resource(unquote(receipt_line_mod))
+            resource(unquote(lot_mod))
           end
+
+          # WS-ACCT Phase 4 (ADR-054 D3): a LOT exists on a mount precisely
+          # because the cost-object seam does — its GL side is dimensioned by
+          # `cost_object_id`, so `finance: [cost_object: ...]` is required.
+          Samen.Scopes.Inventory.Blueprint.define_lot(
+            unquote(lot_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.lot),
+            unquote(item_mod),
+            unquote(finance_cost_object)
+          )
 
           Samen.Scopes.Inventory.Blueprint.define_purchase_order(
             unquote(purchase_order_mod),

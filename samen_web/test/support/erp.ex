@@ -36,7 +36,8 @@ defmodule Samen.WebTest.Erp do
     },
     finance: [
       entry: Samen.WebTest.Erp.JournalEntry,
-      posting_account: Samen.WebTest.Erp.PostingAccount
+      posting_account: Samen.WebTest.Erp.PostingAccount,
+      cost_object: Samen.WebTest.Erp.CostObject
     ],
     billing: [
       invoice: Samen.WebTest.Billing.Invoice
