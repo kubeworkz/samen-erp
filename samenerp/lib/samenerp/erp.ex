@@ -46,7 +46,9 @@ defmodule Samenerp.Erp do
       revenue_recognition: "esg",
       cost_standard: "esc",
       cost_standard_line: "esm",
-      cost_variance: "esv"
+      cost_variance: "esv",
+      asset: "eas",
+      asset_posting: "ead"
     }
 
   use Samen.Scopes.Inventory,
@@ -116,5 +118,7 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.CostStandard)
     resource(Samenerp.Erp.CostStandardLine)
     resource(Samenerp.Erp.CostVariance)
+    resource(Samenerp.Erp.Asset)
+    resource(Samenerp.Erp.AssetPosting)
   end
 end

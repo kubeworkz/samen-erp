@@ -105,8 +105,10 @@ defmodule Samenerp.KubeworkzBooksTest do
     # unearned grant awards (JE-072 credits 2200).
     assert bound[:deferred_revenue] == "2200"
     assert bound[:grant_deferred] == "2200"
-    # JE-063 books lab-equipment depreciation straight to R&D prototype/test.
+    # JE-063 books lab-equipment depreciation straight to R&D prototype/test,
+    # and credits the separate `1520` contra the reference table names.
     assert bound[:depreciation_expense] == "6030"
+    assert bound[:accumulated_depreciation] == "1520"
 
     # The fail-honest posture: no row exists for a meaning the manual gives no
     # single account, so a posting that needs one REFUSES rather than posting to
@@ -118,6 +120,46 @@ defmodule Samenerp.KubeworkzBooksTest do
       assert is_binary(reason) and String.length(reason) > 20,
              "#{key} needs a stated reason, not a silent omission"
     end
+  end
+
+  test "opens the asset register, with the PDK licence on its derived 36-month schedule" do
+    org = create_org!("Kubeworkz Books Assets")
+    Books.seed!(org.id)
+
+    id = to_string(org.id)
+
+    assets =
+      Erp.Asset
+      |> Ash.Query.filter(org_id == ^id)
+      |> Ash.Query.sort(code: :asc)
+      |> Ash.read!(authorize?: false)
+
+    assert length(assets) == length(Books.assets())
+
+    pdk = Enum.find(assets, &(&1.code == "PDK-PHOTONICS"))
+    equipment = Enum.find(assets, &(&1.code == "LAB-EQUIPMENT"))
+
+    assert pdk.kind == :intangible
+    assert pdk.cost_cents == 60_000_000
+    assert pdk.life_months == 36
+    assert pdk.status == :active
+
+    assert equipment.kind == :equipment
+    assert equipment.life_months == 48
+
+    # The manual's JE-004 arithmetic, derived from the contract: 35 slices of
+    # 16 666.66 and a final 16 666.90, summing to 600 000.00 exactly.
+    slices = Samen.Scopes.Finance.AssetSchedule.slices(pdk)
+
+    assert length(slices) == 36
+    assert hd(slices).amount_cents == 1_666_666
+    assert List.last(slices).amount_cents == 1_666_690
+    assert Enum.sum(Enum.map(slices, & &1.amount_cents)) == 60_000_000
+    assert List.last(slices).period_key == "2028-12"
+
+    equipment_slices = Samen.Scopes.Finance.AssetSchedule.slices(equipment)
+    assert length(equipment_slices) == 48
+    assert Enum.all?(equipment_slices, &(&1.amount_cents == 100_000))
   end
 
   test "opens the four programmes, the four cost pools and the grant fund" do
@@ -182,6 +224,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert first.accounts.created == length(Books.chart_of_accounts())
     assert first.posting_accounts.created == map_size(Books.posting_map())
     assert first.cost_objects.created == length(Books.cost_objects())
+    assert first.assets.created == length(Books.assets())
     assert first.budget.created
 
     accounts_before = length(accounts(org.id))
@@ -192,6 +235,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert count == length(Books.chart_of_accounts())
     assert %{created: 0} = second.posting_accounts
     assert %{created: 0} = second.cost_objects
+    assert %{created: 0} = second.assets
     refute second.budget.created
 
     # No duplicate rows, and the budget lines were not doubled.
@@ -239,6 +283,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert Enum.any?(gaps, &String.contains?(&1, "account 1000"))
     assert Enum.any?(gaps, &String.contains?(&1, "posting meaning cash"))
     assert Enum.any?(gaps, &String.contains?(&1, "cost object gpu"))
+    assert Enum.any?(gaps, &String.contains?(&1, "asset PDK-PHOTONICS"))
     assert Enum.any?(gaps, &String.contains?(&1, "budget"))
     # The whole chart plus the whole map plus the objects plus the six lines.
     assert length(gaps) > length(Books.chart_of_accounts())

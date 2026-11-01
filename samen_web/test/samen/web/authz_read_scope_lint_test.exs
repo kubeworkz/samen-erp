@@ -168,20 +168,22 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     assert files >= 800
     assert governed >= 140
 
-    # The sanctioned reads are a KNOWN, per-site-justified set (now 61 — pre-auth
+    # The sanctioned reads are a KNOWN, per-site-justified set (now 62 — pre-auth
     # boot-path/unique-key lookups, webhook-ingest provider-ref lookups, FK cascades,
     # the system-plane sweeps, the operator activity rollup, the R3/R4 addendum's
     # three authorization-boundary reads: the two session-cap credential enumerations
-    # and the mcp generic read helper, and WS-ACCT Phase 6's revenue-recognition sweep
-    # (every org's due schedule, each release still governed by `:recognize`) — each
-    # carrying a `# authz-scope:` reason at the read SITE, bound to exactly that read).
+    # and the mcp generic read helper, WS-ACCT Phase 6's revenue-recognition sweep
+    # (every org's due schedule, each release still governed by `:recognize`), and
+    # WS-ACCT Phase 8's depreciation sweep (every org's due asset slice, each posting
+    # still governed by `:depreciate`) — each carrying a `# authz-scope:` reason at the
+    # read SITE, bound to exactly that read).
     # A regression that started silently swallowing violations as sanctions would blow
     # this ceiling; a lost marker (or a lost pin downgraded to a sanction) would move
     # it. Lower bound 47 leaves headroom for a couple marker→genuine-pin conversions
     # before a conscious band update — shrinking the sanctioned set further is a
     # deliberate posture change and SHOULD re-open this test. (At S15 this set was 49;
-    # the R3/R4 addendum added 3; Phase 6 added 1.)
-    assert sanctioned in 47..61
+    # the R3/R4 addendum added 3; Phase 6 added 1; Phase 8 added 1.)
+    assert sanctioned in 47..62
   end
 
   test "COMPLETENESS ROLL-CALL: the sweep covers both kernels AND the vertical trees, and skips the seed/fixture harnesses" do

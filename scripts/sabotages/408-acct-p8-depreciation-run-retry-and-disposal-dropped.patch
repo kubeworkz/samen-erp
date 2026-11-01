@@ -1,0 +1,91 @@
+# SABOTAGE: two plausible depreciation-run shortcuts — the sweep drops its
+# exactly-once read ("the unique index is the belt") and a disposal stops
+# nothing (the retired asset keeps depreciating).
+#
+# WS-ACCT Phase 8 (ADR-054 D9) posts one slice per {asset, period}, and that
+# guarantee has two layers. The caller-facing no-op is the run's
+# `already_posted?` read; the table's unique index is the belt. Removing the
+# read leaves the belt to refuse the duplicate — the sweep then FAILS LOUDLY
+# instead of skipping, so a retried cron becomes a dead-letter storm for a month
+# that is already correct. Every number stays exact; only the retry contract
+# breaks, which is why the exactly-once test (not the arithmetic or the audit)
+# reds.
+#
+# The disposal leg is the same shape: `AssetSchedule.stopped?/2` is a POLICY
+# the run applies, while `slice_amount` is the contract's arithmetic. Dropping
+# the check keeps every entry balanced and every slice exact — the retired asset
+# simply keeps posting into months nobody reviews. Only the disposal test sees
+# it, because the register and the audit have no way to know the posting was
+# unwanted.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_assets_test.exs
+# MUST_FAIL: a second run in the same period is a clean no-op; the anchor is append-only
+# MUST_FAIL: a disposal stops the schedule from its month and leaves the past posted
+--- a/samen_core/lib/samen/scopes/finance/depreciation_run.ex
++++ b/samen_core/lib/samen/scopes/finance/depreciation_run.ex
+@@ -154,9 +154,6 @@
+ 
+         {:skip, reason}
+ 
+-      AssetSchedule.stopped?(asset, period) ->
+-        {:skip, :disposed}
+-
+       true ->
+         {:post, AssetSchedule.slice_amount(asset, period)}
+     end
+@@ -169,39 +166,22 @@
+   # ── posting ────────────────────────────────────────────────────────────────
+ 
+   defp post(mods, asset, key, period, amount) do
+-    if already_posted?(mods.posting, asset, key) do
+-      {:skip, {asset.id, :already_posted}}
+-    else
+-      mods.posting
+-      |> Ash.Changeset.for_create(
+-        :depreciate,
+-        %{
+-          org_id: asset.org_id,
+-          asset_id: asset.id,
+-          period_key: key,
+-          amount_cents: amount,
+-          depreciated_on: AssetSchedule.period_end(period)
+-        },
+-        authorize?: false
+-      )
+-      |> Ash.create(authorize?: false)
+-      |> case do
+-        {:ok, posting} -> {:posted, posting.id}
+-        {:error, reason} -> {:error, {asset.id, reason}}
+-      end
+-    end
+-  end
+-
+-  # Org-pinned and period-pinned: this is the no-op read that makes a repeated
+-  # sweep silent (the unique index behind it is the belt).
+-  defp already_posted?(posting_mod, asset, key) do
+-    posting_mod
+-    |> Ash.Query.filter(org_id == ^asset.org_id and asset_id == ^asset.id and period_key == ^key)
+-    |> Ash.read_one(authorize?: false)
++    mods.posting
++    |> Ash.Changeset.for_create(
++      :depreciate,
++      %{
++        org_id: asset.org_id,
++        asset_id: asset.id,
++        period_key: key,
++        amount_cents: amount,
++        depreciated_on: AssetSchedule.period_end(period)
++      },
++      authorize?: false
++    )
++    |> Ash.create(authorize?: false)
+     |> case do
+-      {:ok, nil} -> false
+-      {:ok, _row} -> true
+-      {:error, _reason} -> false
++      {:ok, posting} -> {:posted, posting.id}
++      {:error, reason} -> {:error, {asset.id, reason}}
+     end
+   end
+ end

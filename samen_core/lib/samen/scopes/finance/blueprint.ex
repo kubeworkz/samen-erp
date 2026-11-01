@@ -717,6 +717,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 :amortization_expense,
                 :accumulated_amortization,
                 :depreciation_expense,
+                # WS-ACCT Phase 8 (ADR-054 D9): equipment's contra pair. The
+                # manual reuses 1510, but `Account.code` is unique per org and
+                # the reference table names 1520 for lab equipment (D16's
+                # corrected form), so the asset run needs its own meaning.
+                :accumulated_depreciation,
                 :write_down_expense,
                 # the standard-cost variance layer (Phase 7). The four family
                 # accounts hold the variances; the per-type disposition

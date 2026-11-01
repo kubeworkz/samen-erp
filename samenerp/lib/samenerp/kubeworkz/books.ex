@@ -40,6 +40,12 @@ defmodule Samenerp.Kubeworkz.Books do
     * **The FY budget** — the manual's R&D budget dashboard (§5.2) as one
       `Budget` + `BudgetLine` per category, in cents.
 
+    * **The asset register** — the PDK licence (an intangible over 36 months:
+      the manual's JE-003/004) and the lab equipment (JE-063) as `Asset` rows.
+      The schedule is DERIVED from each contract; the monthly
+      `DepreciationRun` posts the slice, and the posting map binds
+      `accumulated_depreciation` to `1520`.
+
     * **Functional currency CAD** (ADR-054 D15) on every account row.
 
   ## Idempotence and honesty
@@ -138,8 +144,9 @@ defmodule Samenerp.Kubeworkz.Books do
   # `:depreciation_expense` maps to `6030` because that is where the manual
   # books lab-equipment depreciation (JE-063: Dr 6030 / Cr accumulated
   # depreciation) — the manual carries no separate 70xx depreciation expense.
-  # The credit leg's account is `1520`; the posting map has no key for it
-  # because the asset run (Phase 8) posts the pair, not a document flow.
+  # WS-ACCT Phase 8 (ADR-054 D9) added the `:accumulated_depreciation` meaning
+  # so the asset run resolves the credit leg fail-honest too, like every other
+  # posting, rather than hard-coding `1520`.
   #
   # WS-ACCT Phase 7 (ADR-054 D4) resolves the variance family the manual carries
   # ten of (5100–5190, per type AND per chip) into the four FAMILY meanings the
@@ -167,6 +174,7 @@ defmodule Samenerp.Kubeworkz.Books do
     amortization_expense: "7000",
     accumulated_amortization: "1510",
     depreciation_expense: "6030",
+    accumulated_depreciation: "1520",
     write_down_expense: "8000",
     mask_expense: "6000",
     eda_expense: "6010",
@@ -219,6 +227,44 @@ defmodule Samenerp.Kubeworkz.Books do
   ]
   @budget_total 1_142_667_00
 
+  # ---------------------------------------------------------------------------
+  # The asset register — JE-003/004 (the PDK licence) and JE-063 (lab gear)
+  #
+  # The PDK licence capitalizes at 36 months (ADR-054 Ratification 7). Its
+  # monthly slice is DERIVED, not stored: 600 000.00 / 36 = 16 666.666…, so the
+  # schedule carries 16 666.66 for 35 months and 16 666.90 for the last — the
+  # manual's 16 666.67 is the average, and the last month absorbs the remainder
+  # so the term releases exactly 600 000.00.
+  #
+  # The lab equipment is the JE-063 asset; its cost is a placeholder (design §7)
+  # like the manual's other figures. What the phase proves is the PAIR
+  # (6030 / 1520) and the derived schedule, not the number.
+  # ---------------------------------------------------------------------------
+  @assets [
+    %{
+      code: "PDK-PHOTONICS",
+      name: "Photonics PDK License",
+      kind: :intangible,
+      cost_cents: 60_000_000,
+      acquired_on: ~D[2026-01-01],
+      life_months: 36,
+      salvage_cents: 0,
+      cost_object: "pta",
+      memo: "JE-003/004 — capitalized at 36 months, the manual's own term"
+    },
+    %{
+      code: "LAB-EQUIPMENT",
+      name: "Lab Equipment",
+      kind: :equipment,
+      cost_cents: 4_800_000,
+      acquired_on: ~D[2026-01-01],
+      life_months: 48,
+      salvage_cents: 0,
+      cost_object: nil,
+      memo: "JE-063 — lab-equipment depreciation, booked to 6030 / 1520"
+    }
+  ]
+
   # -- reads the rest of the workstream cites ---------------------------------
 
   @doc "The chart of accounts this seed opens: `[{code, name, kind, normal_side}]`."
@@ -246,6 +292,9 @@ defmodule Samenerp.Kubeworkz.Books do
   @doc "The budget's planned total in cents."
   def budget_total_cents, do: @budget_total
 
+  @doc "The asset register this seed opens: `[%{code, name, kind, cost_cents, ...}]`."
+  def assets, do: @assets
+
   @doc "The functional currency every account is opened in (ADR-054 D15)."
   def currency, do: @currency
 
@@ -268,6 +317,7 @@ defmodule Samenerp.Kubeworkz.Books do
         accounts: %{created: n, existing: n, drifted: [String.t()]},
         posting_accounts: %{created: n, existing: n, drifted: [String.t()]},
         cost_objects: %{created: n, existing: n, drifted: [String.t()]},
+        assets: %{created: n, existing: n, drifted: [String.t()]},
         budget: %{id: String.t(), year: integer, created: boolean},
         unmapped: [atom()]
       }
@@ -279,6 +329,7 @@ defmodule Samenerp.Kubeworkz.Books do
     accounts = seed_accounts(org_id)
     posting = seed_posting_accounts(org_id)
     objects = seed_cost_objects(org_id)
+    assets = seed_assets(org_id)
     budget = seed_budget(org_id)
 
     %{
@@ -286,6 +337,7 @@ defmodule Samenerp.Kubeworkz.Books do
       accounts: accounts,
       posting_accounts: posting,
       cost_objects: objects,
+      assets: assets,
       budget: budget,
       unmapped: @pending_meanings |> Map.keys() |> Enum.sort()
     }
@@ -394,6 +446,63 @@ defmodule Samenerp.Kubeworkz.Books do
     %{created: created, existing: existing, drifted: drifted}
   end
 
+  defp seed_assets(org_id) do
+    {created, existing, drifted} =
+      Enum.reduce(@assets, {0, 0, []}, fn spec, {created, existing, drifted} ->
+        case asset_by_code(org_id, spec.code) do
+          nil ->
+            cost_object =
+              case spec.cost_object do
+                nil -> nil
+                code -> cost_object_by_code(org_id, code) || raise "missing cost object #{code}"
+              end
+
+            Erp.Asset
+            |> Ash.Changeset.for_create(
+              :create,
+              %{
+                org_id: org_id,
+                code: spec.code,
+                name: spec.name,
+                memo: spec.memo,
+                kind: spec.kind,
+                cost_cents: spec.cost_cents,
+                acquired_on: spec.acquired_on,
+                life_months: spec.life_months,
+                salvage_cents: spec.salvage_cents,
+                cost_object_id: cost_object && cost_object.id
+              },
+              authorize?: false
+            )
+            |> Ash.create!(authorize?: false)
+
+            {created + 1, existing, drifted}
+
+          asset ->
+            drift =
+              [
+                asset.name != spec.name &&
+                  "#{spec.code} name #{inspect(asset.name)} ≠ #{inspect(spec.name)}",
+                asset.kind != spec.kind &&
+                  "#{spec.code} kind #{inspect(asset.kind)} ≠ #{inspect(spec.kind)}",
+                asset.cost_cents != spec.cost_cents &&
+                  "#{spec.code} cost #{asset.cost_cents} ≠ #{spec.cost_cents}",
+                asset.acquired_on != spec.acquired_on &&
+                  "#{spec.code} acquired_on #{asset.acquired_on} ≠ #{spec.acquired_on}",
+                asset.life_months != spec.life_months &&
+                  "#{spec.code} life #{asset.life_months} ≠ #{spec.life_months}",
+                asset.salvage_cents != spec.salvage_cents &&
+                  "#{spec.code} salvage #{asset.salvage_cents} ≠ #{spec.salvage_cents}"
+              ]
+              |> Enum.filter(&is_binary/1)
+
+            {created, existing + 1, drifted ++ drift}
+        end
+      end)
+
+    %{created: created, existing: existing, drifted: drifted}
+  end
+
   defp seed_budget(org_id) do
     year = fiscal_year()
 
@@ -438,7 +547,8 @@ defmodule Samenerp.Kubeworkz.Books do
     missing =
       missing_accounts(org_id) ++
         missing_posting_accounts(org_id) ++
-        missing_cost_objects(org_id) ++ missing_budget(org_id)
+        missing_cost_objects(org_id) ++
+        missing_assets(org_id) ++ missing_budget(org_id)
 
     case missing do
       [] ->
@@ -447,6 +557,7 @@ defmodule Samenerp.Kubeworkz.Books do
            accounts: length(@coa),
            posting_accounts: map_size(@posting_map),
            cost_objects: length(@cost_objects),
+           assets: length(@assets),
            budget_id: budget_by_name(org_id, fiscal_year()).id
          }}
 
@@ -488,6 +599,23 @@ defmodule Samenerp.Kubeworkz.Books do
     end)
   end
 
+  defp missing_assets(org_id) do
+    Enum.flat_map(@assets, fn spec ->
+      case asset_by_code(org_id, spec.code) do
+        %{name: name, kind: kind, cost_cents: cost, life_months: life, salvage_cents: salvage}
+        when name == spec.name and kind == spec.kind and cost == spec.cost_cents and
+               life == spec.life_months and salvage == spec.salvage_cents ->
+          []
+
+        nil ->
+          ["asset #{spec.code} · #{spec.name} is missing"]
+
+        _other ->
+          ["asset #{spec.code} does not match the manual (#{spec.name})"]
+      end
+    end)
+  end
+
   defp missing_budget(org_id) do
     year = fiscal_year()
 
@@ -522,6 +650,12 @@ defmodule Samenerp.Kubeworkz.Books do
 
   defp cost_object_by_code(org_id, code) do
     Erp.CostObject
+    |> Ash.Query.filter(org_id == ^org_id and code == ^code)
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp asset_by_code(org_id, code) do
+    Erp.Asset
     |> Ash.Query.filter(org_id == ^org_id and code == ^code)
     |> Ash.read_one!(authorize?: false)
   end

@@ -213,7 +213,11 @@ defmodule Samen.Jobs do
       # WS-ACCT Phase 6 (ADR-054 D5) — revenue recognition, on the 1st at 00:30 UTC.
       # The run defaults to the month that just ended, so February's releases land on
       # 1 March once February's activity is complete.
-      {"30 0 1 * *", Samen.Scopes.Finance.RevenueRecognitionWorker}
+      {"30 0 1 * *", Samen.Scopes.Finance.RevenueRecognitionWorker},
+      # WS-ACCT Phase 8 (ADR-054 D9) — the monthly depreciation sweep, on the 1st
+      # at 00:45 UTC. The run defaults to the month that just ended, and its
+      # per-{asset, period} anchor makes a retry a clean no-op.
+      {"45 0 1 * *", Samen.Scopes.Finance.DepreciationWorker}
     ]
   end
 

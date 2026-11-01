@@ -89,6 +89,27 @@ defmodule Samen.Scopes.Finance do
   stock ledger's moving average (`StockLevel.avg_unit_cost_cents`) — the
   variance prices the difference, it never revalues inventory.
 
+  ## D9 — the asset register: derived schedules, an exactly-once run
+
+  `Asset` (intangible/equipment) stores a contract, never a schedule:
+  `{cost_cents, salvage_cents, life_months, acquired_on}` is the whole rule,
+  and `Samen.Scopes.Finance.AssetSchedule` derives every period's slice from
+  it, giving the LAST month the division remainder so the term releases
+  `cost − salvage` exactly. `AssetPosting` is the only persisted per-period
+  fact — one append-only row per `{asset, period}`, naming the expense and
+  contra accounts it paid and anchored to its entry (`source_key:
+  "asset_posting"`).
+
+  `Samen.Scopes.Finance.DepreciationRun` posts the due month through the
+  governed `:depreciate` action, exactly-once in two layers (the run's
+  `already_posted?` read; the table's unique index). A disposal is one-way and
+  stops the schedule from that month — no catch-up, no write-off. The cascade
+  re-derives the slice and refuses any other amount, so the posting and the
+  contract cannot disagree. `AssetRegister` is the derived read (schedule,
+  accumulated, NBV); `ReconcileAssets` is the independent audit — amount, term,
+  disposal, backing entry, the two named legs, and Σ slices == the contra
+  account's GL movement.
+
   ## R6 — the dimension invariant (LOAD-BEARING)
 
   `JournalLine.dimension_refs` is a bounded jsonb map from the frozen
@@ -161,6 +182,8 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.CostStandard`
     * `Demo.FinanceScope.CostStandardLine`
     * `Demo.FinanceScope.CostVariance`
+    * `Demo.FinanceScope.Asset`
+    * `Demo.FinanceScope.AssetPosting`
 
   ## Posting accounts (`posting_accounts:`)
 
@@ -222,7 +245,11 @@ defmodule Samen.Scopes.Finance do
     # posted variance. Allocator-reserved under the `samen_web` host.
     cost_standard: "fst",
     cost_standard_line: "fsu",
-    cost_variance: "fsw"
+    cost_variance: "fsw",
+    # WS-ACCT Phase 8 (ADR-054 D9): the asset register and its per-period
+    # postings. Allocator-reserved under the `samen_web` host.
+    asset: "fas",
+    asset_posting: "fad"
   }
 
   @doc false
@@ -257,6 +284,8 @@ defmodule Samen.Scopes.Finance do
     cost_standard_mod = Module.concat(namespace, CostStandard)
     cost_standard_line_mod = Module.concat(namespace, CostStandardLine)
     cost_variance_mod = Module.concat(namespace, CostVariance)
+    asset_mod = Module.concat(namespace, Asset)
+    asset_posting_mod = Module.concat(namespace, AssetPosting)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -268,6 +297,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.RevenueBlueprint
 
       require Samen.Scopes.Finance.VarianceBlueprint
+
+      require Samen.Scopes.Finance.AssetBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -288,7 +319,34 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(cost_standard_mod))
         resource(unquote(cost_standard_line_mod))
         resource(unquote(cost_variance_mod))
+        resource(unquote(asset_mod))
+        resource(unquote(asset_posting_mod))
       end
+
+      # WS-ACCT Phase 8 (ADR-054 D9) — the asset register and its exactly-once
+      # per-period postings. The schedule is derived; the posting cascade posts
+      # through this host's entry + posting-account resources.
+      Samen.Scopes.Finance.AssetBlueprint.define_asset(
+        unquote(asset_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.asset),
+        unquote(asset_posting_mod),
+        unquote(cost_object_mod)
+      )
+
+      Samen.Scopes.Finance.AssetBlueprint.define_asset_posting(
+        unquote(asset_posting_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.asset_posting),
+        unquote(asset_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod),
+        unquote(account_mod)
+      )
 
       # WS-ACCT Phase 7 (ADR-054 D4) — standard costing and the variance layer.
       # The card is append-only; the only update action is the period run, whose

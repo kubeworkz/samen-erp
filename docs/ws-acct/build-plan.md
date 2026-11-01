@@ -294,7 +294,55 @@ average is untouched by a standard-cost run.
 
 ---
 
-## Phase 8 — Asset register (intangibles + equipment) · default · 1–2 sessions
+## Phase 8 — Asset register (intangibles + equipment) · default · 1–2 sessions — **DONE (2026-11-01)**
+
+Landed as `Samen.Scopes.Finance.{Asset,AssetPosting}` (blueprint
+`samen_core/lib/samen/scopes/finance/asset_blueprint.ex`), the pure derived schedule
+`AssetSchedule`, the posting cascade `DepreciationPosting`, the run `DepreciationRun`, the
+monthly `DepreciationWorker`, the register read `AssetRegister`, the independent audit
+`ReconcileAssets`, and the two guards `AssetShape`/`AssetDisposal` — plus three migrations
+(fixture `fsf`/`fsp`, web `fas`/`fad`, erp `eas`/`ead`), six allocator-reserved abbrevs,
+`samen_core/test/finance_assets_test.exs` (13 tests), the Kubeworkz asset seed + host test, and
+sabotage **408**.
+
+Seven decisions the phase had to take:
+
+1. **The schedule is the CONTRACT, never a table.** `{cost, salvage, life, acquired_on}`
+   derives every month; the only persisted per-period fact is the posting. A stored schedule
+   would be a second truth that a re-seeded life or a rolled-back post could contradict, and no
+   read could say which was right. `AssetRegister` re-derives the whole register from the row
+   plus Σ postings.
+2. **The last month absorbs the division remainder.** 600 000.00 / 36 is not an integer number
+   of cents. The schedule carries 16 666.66 for 35 months and 16 666.90 for the last, so the
+   term releases the cost exactly; the manual's 16 666.67 is the average, not a slice. This is
+   what makes JE-004 reproducible in a ledger that may not lose or invent a cent.
+3. **The cascade re-derives the amount and refuses any other.** A caller holding a posting id
+   cannot choose what a period costs: `DepreciationPosting` computes the slice from the asset
+   and requires the posting to match, requires the period's last day as the entry date, and
+   requires the period to be inside the term. That is the safety that makes the no-schedule-table
+   discipline hold — the persisted fact cannot disagree with the contract.
+4. **Exactly-once is two layers, and the read is the contract.** A retried sweep must be a clean
+   no-op, so the run reads `{asset, period}` first; the unique index is the belt for a racing or
+   regressed caller. Removing the read turns a retry into a loud failure (the belt refuses), which
+   is exactly what sabotage 408's first leg demonstrates — the belt alone is not the caller-facing
+   guarantee.
+5. **A disposal is prospective and posts nothing.** It records the date, is one-way, and stops
+   the schedule from that month; the months already posted stay. There is no catch-up and no
+   write-off: proceeds/scrap/remaining NBV are a human's disposal entry, not an estimate the run
+   invents. Sabotage 408's second leg removes the stop and every number stays exact — only the
+   future months nobody wanted keep posting.
+6. **Equipment needed its own contra meaning.** The manual reuses `1510`, but `Account.code` is
+   unique per org and the reference table names `1520` for lab equipment (D16's corrected form),
+   so the `PostingAccount` enum widened with `:accumulated_depreciation` and the books bind it to
+   `1520`. The pairing is by kind: intangible → `amortization_expense`/`accumulated_amortization`
+   (7000/1510), equipment → `depreciation_expense`/`accumulated_depreciation` (6030/1520).
+7. **The audit checks the NAMED legs, not a re-resolved policy.** Each posting row names the two
+   accounts it paid. `ReconcileAssets` follows the anchor and compares the entry's persisted lines
+   to those names, then checks the amount against the derived schedule, the term, the disposal
+   date, the cap, the posting's backing entry, and Σ slices against the contra account's GL
+   movement. A hand-inserted unbacked row and an orphaned anchored entry are the red paths.
+
+The original scope:
 
 `Asset` + **derived** schedules + the monthly `DepreciationRun` (design D9), exactly-once per
 period behind a period-keyed anchor. Covers JE-003/004 (PDK license over 36 months) and JE-063
@@ -432,7 +480,8 @@ the coverage ledger (phase 0) has no workbook left without a verdict.
 | 405 | 4 | R7 — WIP ↔ lot |
 | 406 | 6 | R9 — recognition exactly-once |
 | 407 | 7 | R8 — variance ↔ standard card, and the per-type disposition |
-| 408 | 11 | R11 — grant ↔ fund |
+| 408 | 8 | the exactly-once depreciation read, and a disposal that stops nothing |
+| 409 | 11 | R11 — grant ↔ fund |
 
 Plus the masking trio's sabotage twin on the grant personnel report (Phase 11) and the
 posting-map widening's own red path (an unmapped meaning must refuse) in Phase 1. Numbers are

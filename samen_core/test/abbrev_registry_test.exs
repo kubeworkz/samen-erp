@@ -160,10 +160,13 @@ defmodule Samen.AbbrevRegistryTest do
       # `RevenueRecognition` in the three hosts that mount Finance — samen_core
       # `fsd`/`frc`, samen_web `frs`/`frn`, samenerp `esd`/`esg`, every row
       # allocator-reserved.
-      # = 371 host entries across six hosts.
+      # +6 in WS-ACCT Phase 8 (ADR-054 D9): the asset register + its per-period
+      # postings in the same three hosts — samen_core `fsf`/`fsp`, samen_web
+      # `fas`/`fad`, samenerp `eas`/`ead`, every row allocator-reserved.
+      # = 377 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 103
-      assert map_size(hosts["samen_core"]) == 97
+      assert map_size(hosts["samenerp"]) == 105
+      assert map_size(hosts["samen_core"]) == 99
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -452,6 +455,10 @@ defmodule Samen.AbbrevRegistryTest do
                  "fsx" => "SamenCore.Support.FinanceFixture.CostStandard",
                  "fsy" => "SamenCore.Support.FinanceFixture.CostStandardLine",
                  "fsv" => "SamenCore.Support.FinanceFixture.CostVariance",
+                 # WS-ACCT Phase 8 (ADR-054 D9): the fixture's asset register and
+                 # its per-period postings, allocator-reserved.
+                 "fsf" => "SamenCore.Support.FinanceFixture.Asset",
+                 "fsp" => "SamenCore.Support.FinanceFixture.AssetPosting",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -584,6 +591,10 @@ defmodule Samen.AbbrevRegistryTest do
                  "fst" => "Samen.WebTest.Erp.CostStandard",
                  "fsu" => "Samen.WebTest.Erp.CostStandardLine",
                  "fsw" => "Samen.WebTest.Erp.CostVariance",
+                 # WS-ACCT Phase 8 (ADR-054 D9): the test host's asset register
+                 # and its per-period postings, allocator-reserved.
+                 "fas" => "Samen.WebTest.Erp.Asset",
+                 "fad" => "Samen.WebTest.Erp.AssetPosting",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -832,7 +843,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # its lines and the posted variance, allocator-reserved.
                  "esc" => "Samenerp.Erp.CostStandard",
                  "esm" => "Samenerp.Erp.CostStandardLine",
-                 "esv" => "Samenerp.Erp.CostVariance"
+                 "esv" => "Samenerp.Erp.CostVariance",
+                 # WS-ACCT Phase 8 (ADR-054 D9): the Kubeworkz asset register
+                 # (PDK licence + lab equipment) and its postings.
+                 "eas" => "Samenerp.Erp.Asset",
+                 "ead" => "Samenerp.Erp.AssetPosting"
                }
              }
 
@@ -954,7 +969,10 @@ defmodule Samen.AbbrevRegistryTest do
       # (+9 WS-ACCT Phase 7 (ADR-054 D4): the standard-cost card, its lines and
       # the posted variance in the same three hosts (samen_core `fsx`/`fsy`/`fsv`,
       # samen_web `fst`/`fsu`/`fsw`, samenerp `esc`/`esm`/`esv`) = 405 + 371 = 776 flat.)
-      assert map_size(Reg.load()) == 776
+      # (+6 WS-ACCT Phase 8 (ADR-054 D9): the asset register + its per-period
+      # postings in the same three hosts (samen_core `fsf`/`fsp`, samen_web
+      # `fas`/`fad`, samenerp `eas`/`ead`) = 405 + 377 = 782 flat.)
+      assert map_size(Reg.load()) == 782
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

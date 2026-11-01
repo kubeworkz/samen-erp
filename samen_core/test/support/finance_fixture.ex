@@ -68,7 +68,9 @@ defmodule SamenCore.Support.FinanceFixture do
       revenue_recognition: "frc",
       cost_standard: "fsx",
       cost_standard_line: "fsy",
-      cost_variance: "fsv"
+      cost_variance: "fsv",
+      asset: "fsf",
+      asset_posting: "fsp"
     }
 end
 

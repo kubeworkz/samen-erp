@@ -109,7 +109,9 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # in the same three hosts = 405 + 362 = 767 flat.)
       # (+9 WS-ACCT Phase 7 (ADR-054 D4): the standard-cost card, its lines and the
       # posted variance per Finance host = 405 + 371 = 776 flat.)
-      assert map_size(flat) == 776
+      # (+6 WS-ACCT Phase 8 (ADR-054 D9): the asset register + its postings per
+      # Finance host = 405 + 377 = 782 flat.)
+      assert map_size(flat) == 782
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

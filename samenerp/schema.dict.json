@@ -1221,6 +1221,180 @@
     {
       "fields": [
         {
+          "column_name": "ead_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ead_asset_id",
+          "logical_name": "asset_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ead_contra_account_id",
+          "logical_name": "contra_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ead_depreciated_on",
+          "logical_name": "depreciated_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ead_expense_account_id",
+          "logical_name": "expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ead_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ead_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ead_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ead_period_key",
+          "logical_name": "period_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ead_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.AssetPosting",
+      "table_name": "ead_asset_posting"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eas_acquired_on",
+          "logical_name": "acquired_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "eas_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eas_cost_cents",
+          "logical_name": "cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eas_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eas_dimension_key",
+          "logical_name": "dimension_key",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eas_disposed_on",
+          "logical_name": "disposed_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "eas_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eas_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eas_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eas_life_months",
+          "logical_name": "life_months",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eas_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eas_method",
+          "logical_name": "method",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eas_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eas_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eas_salvage_cents",
+          "logical_name": "salvage_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eas_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eas_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Asset",
+      "table_name": "eas_asset"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ebl_bom_id",
           "logical_name": "bom_id",
           "pii": false,
