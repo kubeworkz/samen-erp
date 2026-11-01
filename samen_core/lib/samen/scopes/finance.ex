@@ -188,7 +188,12 @@ defmodule Samen.Scopes.Finance do
     # WS-ACCT Phase 3 (ADR-054 D7): the close control — the fiscal month and its
     # checklist. Also allocator-reserved under the `samen_web` host.
     fiscal_period: "fpe",
-    close_run: "fcr"
+    close_run: "fcr",
+    # WS-ACCT Phase 6 (ADR-054 D5): deferred revenue's schedule and its
+    # per-period recognitions. Allocator-reserved under the `samen_web` host
+    # (the fixture and samenerp pass their own overrides).
+    revenue_schedule: "frs",
+    revenue_recognition: "frn"
   }
 
   @doc false
@@ -218,6 +223,8 @@ defmodule Samen.Scopes.Finance do
     cost_object_mod = Module.concat(namespace, CostObject)
     fiscal_period_mod = Module.concat(namespace, FiscalPeriod)
     close_run_mod = Module.concat(namespace, CloseRun)
+    revenue_schedule_mod = Module.concat(namespace, RevenueSchedule)
+    revenue_recognition_mod = Module.concat(namespace, RevenueRecognition)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -225,6 +232,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.BudgetBlueprint
 
       require Samen.Scopes.Finance.PeriodBlueprint
+
+      require Samen.Scopes.Finance.RevenueBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -240,7 +249,33 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(cost_object_mod))
         resource(unquote(fiscal_period_mod))
         resource(unquote(close_run_mod))
+        resource(unquote(revenue_schedule_mod))
+        resource(unquote(revenue_recognition_mod))
       end
+
+      # WS-ACCT Phase 6 (ADR-054 D5) — deferred revenue and its recognition
+      # schedule. The schedule aggregates its recognitions; the recognition
+      # cascade posts through this host's entry + posting-account resources.
+      Samen.Scopes.Finance.RevenueBlueprint.define_revenue_schedule(
+        unquote(revenue_schedule_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.revenue_schedule),
+        unquote(revenue_recognition_mod),
+        unquote(cost_object_mod)
+      )
+
+      Samen.Scopes.Finance.RevenueBlueprint.define_revenue_recognition(
+        unquote(revenue_recognition_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.revenue_recognition),
+        unquote(revenue_schedule_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod)
+      )
 
       Samen.Scopes.Finance.PeriodBlueprint.define_fiscal_period(
         unquote(fiscal_period_mod),

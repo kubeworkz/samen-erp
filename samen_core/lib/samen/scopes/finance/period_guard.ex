@@ -22,14 +22,18 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
 
   `source_key`/`source_id` is the ADR-041 object-ref seam: `"ap_invoice"`,
   `"goods_receipt"`, `"billing_payment"`, … — an upstream DOCUMENT that is
-  landing in the ledger. The ledger's own reversal anchors — `"journal_entry"`
-  (`Samen.Scopes.Finance.VoidGuard`) and `"accrual_reversal"`
+  landing in the ledger. The ledger's own reversal and release anchors —
+  `"journal_entry"` (`Samen.Scopes.Finance.VoidGuard`), `"accrual_reversal"`
   (`Samen.Scopes.Finance.AccrualReversal`, the scheduled half of a month-end
-  accrual) — are **not** documents: they correct a fact the ledger already
-  holds, which is exactly the "journal-only adjustment" soft-close exists to
-  admit. Without that distinction a void of any soft-closed entry would be
-  refused even though nothing new is arriving, and the automatic reversal whose
-  purpose is to prevent double-counting could not land in the month it must.
+  accrual) and `"revenue_recognition"`
+  (`Samen.Scopes.Finance.RecognitionRun`, a period's deferred-revenue release)
+  — are **not** documents: they close out a fact the ledger already holds,
+  which is exactly the "journal-only adjustment" soft-close exists to admit.
+  Without that distinction a void of any soft-closed entry would be refused
+  even though nothing new is arriving, the automatic reversal whose purpose is
+  to prevent double-counting could not land in the month it must, and the
+  recognition the close itself computes could not be booked into the month
+  being closed.
 
   ## Where it runs
 
@@ -58,12 +62,13 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
 
   use Ash.Resource.Change
 
-  # The ledger's own reversal anchors: adjustments to a fact already held, not
-  # documents landing in the book (see the moduledoc). `journal_entry` is a
-  # void's reversal; `accrual_reversal` is the scheduled half of a month-end
-  # accrual — the mechanism that PREVENTS double-counting must not itself be
-  # locked out when the document window shuts.
-  @ledger_internal_sources ["journal_entry", "accrual_reversal"]
+  # The ledger's own reversal/release anchors: adjustments to a fact already
+  # held, not documents landing in the book (see the moduledoc). `journal_entry`
+  # is a void's reversal; `accrual_reversal` is the scheduled half of a
+  # month-end accrual; `revenue_recognition` is the period's deferred-revenue
+  # release — the mechanisms that PREVENT double-counting must not themselves
+  # be locked out when the document window shuts.
+  @ledger_internal_sources ["journal_entry", "accrual_reversal", "revenue_recognition"]
 
   @doc "Source anchors that are ledger adjustments rather than upstream documents."
   def ledger_internal_sources, do: @ledger_internal_sources

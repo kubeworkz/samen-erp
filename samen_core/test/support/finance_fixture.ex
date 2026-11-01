@@ -63,7 +63,9 @@ defmodule SamenCore.Support.FinanceFixture do
       budget_line: "sbj",
       cost_object: "cob",
       fiscal_period: "cfp",
-      close_run: "clr"
+      close_run: "clr",
+      revenue_schedule: "fsd",
+      revenue_recognition: "frc"
     }
 end
 

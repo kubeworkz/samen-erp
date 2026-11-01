@@ -6453,6 +6453,144 @@
     {
       "fields": [
         {
+          "column_name": "esd_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esd_deferred_key",
+          "logical_name": "deferred_key",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esd_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esd_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esd_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esd_method",
+          "logical_name": "method",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esd_months",
+          "logical_name": "months",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esd_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esd_source_id",
+          "logical_name": "source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esd_source_key",
+          "logical_name": "source_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esd_start_on",
+          "logical_name": "start_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "esd_total_cents",
+          "logical_name": "total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esd_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.RevenueSchedule",
+      "table_name": "esd_revenue_schedule"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "esg_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esg_period_key",
+          "logical_name": "period_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esg_recognized_on",
+          "logical_name": "recognized_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "esg_schedule_id",
+          "logical_name": "schedule_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.RevenueRecognition",
+      "table_name": "esg_revenue_recognition"
+    },
+    {
+      "fields": [
+        {
           "column_name": "esh_description",
           "logical_name": "description",
           "pii": false,

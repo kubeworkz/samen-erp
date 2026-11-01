@@ -1,0 +1,59 @@
+# SABOTAGE: the recognition run loses its exactly-once READ guard — a retried
+# sweep stops being a clean no-op.
+#
+# WS-ACCT Phase 6 (ADR-054 D5, R9) releases each schedule's deferred revenue by
+# posting ONE recognition per `{schedule, period}`. The guard has two layers: the
+# run's `already_recognized?/3` read skips a period that is already recognized
+# (the brace), and the recognition table's UNIQUE `{org, schedule, period}` index
+# refuses a duplicate row (the belt). This patch deletes the BRACE only — the
+# `if already_recognized? … else … end` wrapper — on the plausible reasoning that
+# "the unique index already guarantees it, so the read is redundant."
+#
+# Why that reasoning is wrong: the two layers answer different questions. The
+# belt answers "may this row exist twice?" (no, ever); the brace answers "is a
+# repeated sweep a no-op or a failure?" A cron retries on any error, and a
+# monthly close runs the sweep for a period more than once in practice (a manual
+# re-run after a partial failure, a retry after a deploy). With the brace, the
+# second sweep returns `{:ok, posted: []}` and the period is untouched. Without
+# it, the sweep attempts the INSERT, the belt refuses, and the job fails — then
+# retries into the dead-letter bucket, where a real posting failure for a LATER
+# period is now buried among false ones. The exactly-once guarantee survives;
+# the operator's ability to tell "already done" from "broken" does not.
+#
+# Why the flip is attributable: the belt means this cannot manifest as a second
+# recognition row (nothing can), so the named test is the one that pins the
+# CALLER-FACING contract — a second run in the same period posts nothing and
+# says so. Under the patch it returns `{:error, {:recognition_failed, …}}`, and
+# that test reds while the first-run, amount, straight-line, incurred-cost, R9
+# and period-guard tests stay green: the sweep still recognizes correctly, it
+# just cannot tell "already recognized" from "refused".
+#
+# APP: samen_core
+# TEST_FILES: test/finance_recognition_test.exs
+# MUST_FAIL: a second run in the same period is a clean no-op; the row is append-only
+--- a/samen_core/lib/samen/scopes/finance/recognition_run.ex
++++ b/samen_core/lib/samen/scopes/finance/recognition_run.ex
+@@ -183,23 +183,19 @@
+   defp post(mods, schedule, key, period, amount) do
+-    if already_recognized?(mods.recognition, schedule, key) do
+-      {:skip, {schedule.id, :already_recognized}}
+-    else
+       mods.recognition
+       |> Ash.Changeset.for_create(
+         :recognize,
+         %{
+           org_id: schedule.org_id,
+           schedule_id: schedule.id,
+           period_key: key,
+           amount_cents: amount,
+           recognized_on: period_end(period)
+         },
+         authorize?: false
+       )
+       |> Ash.create(authorize?: false)
+       |> case do
+         {:ok, recognition} -> {:posted, recognition.id}
+         {:error, reason} -> {:error, {schedule.id, reason}}
+       end
+-    end
+   end

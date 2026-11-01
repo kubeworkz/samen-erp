@@ -41,7 +41,9 @@ defmodule Samenerp.Erp do
       org_fx_settings: "efs",
       cost_object: "eco",
       fiscal_period: "efp",
-      close_run: "efq"
+      close_run: "efq",
+      revenue_schedule: "esd",
+      revenue_recognition: "esg"
     }
 
   use Samen.Scopes.Inventory,
@@ -106,5 +108,7 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.LandedCost)
     resource(Samenerp.Erp.CostObject)
     resource(Samenerp.Erp.Lot)
+    resource(Samenerp.Erp.RevenueSchedule)
+    resource(Samenerp.Erp.RevenueRecognition)
   end
 end

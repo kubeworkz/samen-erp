@@ -105,7 +105,9 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # = 405 + 353 = 758 flat.)
       # (+3 WS-ACCT Phase 4 (ADR-054 D3): `Lot` per Inventory host — samen_core
       # `slt`, samen_web `ilt`, samenerp `elt` = 405 + 356 = 761 flat.)
-      assert map_size(flat) == 761
+      # (+6 WS-ACCT Phase 6 (ADR-054 D5): `RevenueSchedule` + `RevenueRecognition`
+      # in the same three hosts = 405 + 362 = 767 flat.)
+      assert map_size(flat) == 767
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

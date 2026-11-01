@@ -187,6 +187,11 @@ defmodule Samen.Jobs do
       ADR-054 D6: posts every DRAFT scheduled accrual reversal whose date has arrived,
       through the governed `:post` action. Daily just past midnight UTC so a reversal dated
       the 1st lands that morning; a host with no books wired is a no-op.)
+    - `"30 0 1 * *"` → `Samen.Scopes.Finance.RevenueRecognitionWorker` (WS-ACCT Phase 6,
+      ADR-054 D5: recognizes the month that just ended — straight-line slices and
+      incurred-cost releases — through the governed `:recognize` action. Monthly on the
+      1st at 00:30 UTC, after the month's activity is complete; a host with no books wired
+      is a no-op, and a schedule with nothing due posts nothing.)
   """
   @spec default_crontab() :: [{String.t(), module()}]
   def default_crontab do
@@ -204,7 +209,11 @@ defmodule Samen.Jobs do
       # WS-ACCT Phase 5 (ADR-054 D6) — the scheduled half of every month-end accrual.
       # Daily at 00:20 UTC so a reversal dated the 1st posts that morning; the worker
       # itself selects only DRAFT reversals whose date has arrived.
-      {"20 0 * * *", Samen.Scopes.Finance.AccrualReversalWorker}
+      {"20 0 * * *", Samen.Scopes.Finance.AccrualReversalWorker},
+      # WS-ACCT Phase 6 (ADR-054 D5) — revenue recognition, on the 1st at 00:30 UTC.
+      # The run defaults to the month that just ended, so February's releases land on
+      # 1 March once February's activity is complete.
+      {"30 0 1 * *", Samen.Scopes.Finance.RevenueRecognitionWorker}
     ]
   end
 

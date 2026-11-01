@@ -156,10 +156,14 @@ defmodule Samen.AbbrevRegistryTest do
       # off, in the three hosts that mount Inventory with the cost-object seam —
       # samen_core fixture `slt`, samen_web `ilt`, samenerp `elt`, every row
       # allocator-reserved. `global` is unchanged: these are host rows.
-      # = 356 host entries across six hosts.
+      # +6 in WS-ACCT Phase 6 (ADR-054 D5): deferred revenue `RevenueSchedule` +
+      # `RevenueRecognition` in the three hosts that mount Finance — samen_core
+      # `fsd`/`frc`, samen_web `frs`/`frn`, samenerp `esd`/`esg`, every row
+      # allocator-reserved.
+      # = 362 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 98
-      assert map_size(hosts["samen_core"]) == 92
+      assert map_size(hosts["samenerp"]) == 100
+      assert map_size(hosts["samen_core"]) == 94
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -439,6 +443,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 4 (ADR-054 D3): the fixture's physical production
                  # lot, allocator-reserved (--host samen_core).
                  "slt" => "SamenCore.Support.InventoryFixture.Lot",
+                 # WS-ACCT Phase 6 (ADR-054 D5): the fixture's deferred-revenue
+                 # schedule and its per-period recognitions, allocator-reserved.
+                 "fsd" => "SamenCore.Support.FinanceFixture.RevenueSchedule",
+                 "frc" => "SamenCore.Support.FinanceFixture.RevenueRecognition",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -562,6 +570,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 4 (ADR-054 D3): the test host's physical lot,
                  # allocator-proposed (--host samen_web).
                  "ilt" => "Samen.WebTest.Erp.Lot",
+                 # WS-ACCT Phase 6 (ADR-054 D5): the test host's deferred-revenue
+                 # schedule and recognitions, allocator-reserved (--host samen_web).
+                 "frs" => "Samen.WebTest.Erp.RevenueSchedule",
+                 "frn" => "Samen.WebTest.Erp.RevenueRecognition",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -801,7 +813,11 @@ defmodule Samen.AbbrevRegistryTest do
                  "efq" => "Samenerp.Erp.CloseRun",
                  # WS-ACCT Phase 4 (ADR-054 D3): the Kubeworkz physical production
                  # lot — the row R7's WIP ↔ lot read is anchored on.
-                 "elt" => "Samenerp.Erp.Lot"
+                 "elt" => "Samenerp.Erp.Lot",
+                 # WS-ACCT Phase 6 (ADR-054 D5): the Kubeworkz deferred-revenue
+                 # schedule and its recognitions.
+                 "esd" => "Samenerp.Erp.RevenueSchedule",
+                 "esg" => "Samenerp.Erp.RevenueRecognition"
                }
              }
 
@@ -917,7 +933,10 @@ defmodule Samen.AbbrevRegistryTest do
       # allocator-reserved = 405 + 353 = 758 flat.)
       # (+3 WS-ACCT Phase 4 (ADR-054 D3): `Lot` in the three Inventory hosts
       # (samen_core `slt`, samen_web `ilt`, samenerp `elt`) = 405 + 356 = 761 flat.)
-      assert map_size(Reg.load()) == 761
+      # (+6 WS-ACCT Phase 6 (ADR-054 D5): `RevenueSchedule` + `RevenueRecognition`
+      # in the same three hosts (samen_core `fsd`/`frc`, samen_web `frs`/`frn`,
+      # samenerp `esd`/`esg`) = 405 + 362 = 767 flat.)
+      assert map_size(Reg.load()) == 767
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

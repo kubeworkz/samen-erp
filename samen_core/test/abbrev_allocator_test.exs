@@ -313,8 +313,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # (samen_core `slt`, samen_web `ilt`, samenerp `elt`), every row written by
       # the allocator,
       # allocator-reserved: 35_136 bytes, 761 flat.
-      assert byte_size(committed) == 35136
-      assert map_size(R.load()) == 761
+      # +6 WS-ACCT Phase 6 (ADR-054 D5) — `RevenueSchedule` + `RevenueRecognition`
+      # in the same three hosts (samen_core `fsd`/`frc`, samen_web `frs`/`frn`,
+      # samenerp `esd`/`esg`), every row written by the allocator,
+      # allocator-reserved: 35_465 bytes, 767 flat.
+      assert byte_size(committed) == 35465
+      assert map_size(R.load()) == 767
     end
   end
 
