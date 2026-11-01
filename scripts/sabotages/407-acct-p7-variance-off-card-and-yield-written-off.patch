@@ -1,0 +1,81 @@
+# SABOTAGE: two plausible variance-layer shortcuts — the run stops re-checking
+# that its card is the one IN FORCE for the period, and a yield variance is
+# written off to COGS instead of absorbed into inventory.
+#
+# WS-ACCT Phase 7 (ADR-054 D4, R8) prices a period with the standard card
+# effective for that period, and disposes each variance by the manual's
+# per-type table. Both guarantees have a plausible deletion:
+#
+#   1. `VarianceEngine` resolves the in-force card (`StandardCard.in_force/4`)
+#      and refuses any other. A reviewer holding the card id concludes the
+#      re-resolution and its guard are redundant — "the caller passes the
+#      right card". With the guard gone, a caller holding the MARCH card can
+#      price JUNE with it: a revised standard silently reprices a period it
+#      does not govern. The run still posts, still balances, and its own row is
+#      internally consistent — only R8's independent re-resolution catches that
+#      the row's `standard_id` is not the in-force card (`{:off_card, …}`).
+#
+#   2. `VarianceDisposition` maps `:yield` to `:absorb_inventory` at the chip
+#      finished-goods account, because the manual says a yield loss is
+#      attributable to a specific production run. Re-pointing it to the COGS
+#      write-off family is a one-line "simplification" that leaves every entry
+#      balanced and R8's arithmetic exact: the only thing broken is WHERE the
+#      variance lands, which is precisely the clause Ratification 2 added —
+#      each variance must reach the account its row names.
+#
+# Why the flips are attributable: the seven-class arithmetic, the anchored
+# entries, exactly-once, the measured-zero marker and the ledger reads do not
+# touch either seam, so they stay GREEN. The disposition test reds on the yield
+# row's target (BOM, which shares `variance_yield` but not the disposition, is
+# asserted separately in the entry test and stays green), and the card test
+# reds on the refusal that no longer happens.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_variance_test.exs
+# MUST_FAIL: a revised card does not price a period it does not govern
+# MUST_FAIL: every variance reaches the account the manual's table names
+--- a/samen_core/lib/samen/scopes/finance/variance_engine.ex
++++ b/samen_core/lib/samen/scopes/finance/variance_engine.ex
+@@ -85,14 +85,13 @@
+ 
+   defp post(standard, org_id, period_key, actuals, line_mod, variance_mod) do
+     with {:ok, period_end} <- Samen.Scopes.Finance.StandardCard.period_end(period_key),
+-         {:ok, in_force} <-
++         {:ok, _in_force} <-
+            Samen.Scopes.Finance.StandardCard.in_force(
+              standard.__struct__,
+              org_id,
+              standard.cost_object_id,
+              period_end
+            ),
+-         :ok <- ensure_in_force(in_force, standard),
+          {:ok, posted?} <-
+            already_posted?(variance_mod, org_id, standard.cost_object_id, period_key) do
+       if posted? do
+@@ -110,13 +109,6 @@
+     end
+   end
+ 
+-  defp ensure_in_force(nil, standard),
+-    do: {:error, {:no_standard, standard.cost_object_id}}
+-
+-  defp ensure_in_force(%{id: id}, %{id: id}), do: :ok
+-
+-  defp ensure_in_force(in_force, standard),
+-    do: {:error, {:standard_not_in_force, standard.id, in_force.id}}
+ 
+   defp already_posted?(variance_mod, org_id, cost_object_id, period_key) do
+     require Ash.Query
+--- a/samen_core/lib/samen/scopes/finance/variance_disposition.ex
++++ b/samen_core/lib/samen/scopes/finance/variance_disposition.ex
+@@ -47,8 +47,8 @@
+       label: "Purchase price"
+     },
+     yield: %{
+-      disposition: :absorb_inventory,
+-      account_meaning: :finished_goods_chip,
++      disposition: :write_off_cogs,
++      account_meaning: :cogs,
+       variance_meaning: :variance_yield,
+       label: "Yield"
+     },

@@ -317,8 +317,13 @@ defmodule Samen.Abbrev.AllocatorTest do
       # in the same three hosts (samen_core `fsd`/`frc`, samen_web `frs`/`frn`,
       # samenerp `esd`/`esg`), every row written by the allocator,
       # allocator-reserved: 35_465 bytes, 767 flat.
-      assert byte_size(committed) == 35465
-      assert map_size(R.load()) == 767
+      # +9 WS-ACCT Phase 7 (ADR-054 D4) — the standard-cost card, its lines and
+      # the posted variance in the same three hosts (samen_core `fsx`/`fsy`/`fsv`,
+      # samen_web `fst`/`fsu`/`fsw`, samenerp `esc`/`esm`/`esv`), every row written
+      # by the allocator,
+      # allocator-reserved: 35_930 bytes, 776 flat.
+      assert byte_size(committed) == 35930
+      assert map_size(R.load()) == 776
     end
   end
 

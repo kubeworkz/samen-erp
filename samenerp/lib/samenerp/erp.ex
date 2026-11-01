@@ -43,7 +43,10 @@ defmodule Samenerp.Erp do
       fiscal_period: "efp",
       close_run: "efq",
       revenue_schedule: "esd",
-      revenue_recognition: "esg"
+      revenue_recognition: "esg",
+      cost_standard: "esc",
+      cost_standard_line: "esm",
+      cost_variance: "esv"
     }
 
   use Samen.Scopes.Inventory,
@@ -110,5 +113,8 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.Lot)
     resource(Samenerp.Erp.RevenueSchedule)
     resource(Samenerp.Erp.RevenueRecognition)
+    resource(Samenerp.Erp.CostStandard)
+    resource(Samenerp.Erp.CostStandardLine)
+    resource(Samenerp.Erp.CostVariance)
   end
 end

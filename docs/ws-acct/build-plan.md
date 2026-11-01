@@ -226,7 +226,54 @@ never recognizes ahead of cost).
 
 ---
 
-## Phase 7 — Standard costing + the variance engine (R8) · opus · 3–4 sessions ← the largest
+## Phase 7 — Standard costing + the variance engine (R8) · opus · 3–4 sessions ← the largest — **DONE (2026-11-01)**
+
+Landed as `Samen.Scopes.Finance.{CostStandard,CostStandardLine,CostVariance}` (blueprint
+`samen_core/lib/samen/scopes/finance/variance_blueprint.ex`), the pure arithmetic
+`VarianceMath`, the binding policy `VarianceDisposition`, the in-force resolver `StandardCard`,
+the run `VarianceEngine`, the posting cascade `VariancePosting`, the R8 read
+`ReconcileVariance`, and the two presentation reads `VarianceReport` + `CostOfYield` — plus
+three migrations (fixture `fsx`/`fsy`/`fsv`, web `fst`/`fsu`/`fsw`, erp `esc`/`esm`/`esv`),
+nine allocator-reserved abbrevs, `samen_core/test/finance_variance_test.exs` (12 tests),
+`samenerp/test/variance_standard_cost_test.exs`, and sabotage **407**.
+
+Seven decisions the phase had to take:
+
+1. **A measured zero IS a fact; an unmeasured class is not.** A class the card measures is
+   recorded even when its difference is exactly nil — "March's labour variance was nil" is a
+   real period-end finding, and the row is the run's marker, so a retry is a clean no-op even
+   after a zero-variance period. A class the card has no line for records nothing. Only a
+   non-zero row posts an entry; a measured-zero row names its accounts and posts none. This is
+   why the phase needs no separate `VarianceRun` header: the rows are the run.
+2. **The card in force is resolved TWICE, deliberately.** The engine resolves it and refuses
+   any other card (`:standard_not_in_force`); R8 re-resolves it independently and flags
+   `{:off_card, …}`. The sabotage removes the engine guard (the plausible "the caller passes
+   the right card" deletion); only R8's independent resolution then catches the retroactive
+   repricing.
+3. **Four family variance accounts, per-type + per-chip detail as a dimension.** The manual
+   carries ten variance rows (per type AND per chip); ADR-054 D2 carries four meanings. The
+   four families hold the postings, the variance ROW keeps the type, and the cost object rides
+   both entry legs (`dimension_key => cost_object_id`, which also keeps R6 exact). Phase 2's
+   five pending meanings resolved here: `variance_ppv/yield/labor/overhead` now bind to the
+   manual's family heads (5100/5120/5150/5180) and the two disposition targets arrived as
+   `:cogs` (5000) and `:rd_expense` (6020); `inventory_reserve` remains pending for Phase 9.
+4. **A variance row NAMES its accounts.** The posting cascade forces `variance_account_id`,
+   `disposition`, `disposition_account_id` and `entry_id` onto the row, so R8 compares the
+   posting to the row without re-deriving policy. The table itself is pinned by the suite's
+   policy assertion — a hand-inserted row and a row whose entry pays a different account are
+   the read's independent red paths.
+5. **Inputs are strict, fail-honest.** Every card line must carry an actual
+   (`:missing_actual_line`) and every actual must name a card line (`:unknown_actual_line`); a
+   cost the period did not report is not zero, it is unknown. An empty card is refused too.
+6. **Labour is labelled, per the ADR's binding proviso.** Until Phase 10's timesheet driver,
+   the report carries `labour_basis: :declared_pending_driver`; no surface presents a labour
+   variance as a fact before then.
+7. **Standards never revalue stock, and the host test proves it.** The samenerp regression
+   records a real receipt (moving average 300 000), runs a variance, and asserts
+   `StockLevel.avg_unit_cost_cents` / `stock_value_cents` / `qty_on_hand` are byte-identical.
+
+The original scope:
+
 
 `CostStandard` + `CostStandardLine` (per item × cost element: standard qty, standard price,
 expected yield). The engine (design D4) computes per period per cost object: **PPV**, **yield**,

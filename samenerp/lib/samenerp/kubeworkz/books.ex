@@ -140,6 +140,16 @@ defmodule Samenerp.Kubeworkz.Books do
   # depreciation) — the manual carries no separate 70xx depreciation expense.
   # The credit leg's account is `1520`; the posting map has no key for it
   # because the asset run (Phase 8) posts the pair, not a document flow.
+  #
+  # WS-ACCT Phase 7 (ADR-054 D4) resolves the variance family the manual carries
+  # ten of (5100–5190, per type AND per chip) into the four FAMILY meanings the
+  # enum carries: the family head account is bound here, and the cost object
+  # rides the entry's dimension, so "yield variance, GPU, March" is a GROUP BY
+  # over the append-only lines rather than a fifth key. `:cogs` and `:rd_expense`
+  # are the disposition targets the per-type table names (PPV/OH volume → 5000;
+  # labour and OH spending → 6020). The manual's separate 5110/5130/5140/5160/
+  # 5170/5190 rows stay open in the chart; the four families are what the
+  # engine posts, and per-chip/per-type detail is the dimension.
   # ---------------------------------------------------------------------------
   @posting_map %{
     ap_clearing: "2000",
@@ -159,7 +169,15 @@ defmodule Samenerp.Kubeworkz.Books do
     depreciation_expense: "6030",
     write_down_expense: "8000",
     mask_expense: "6000",
-    eda_expense: "6010"
+    eda_expense: "6010",
+    # WS-ACCT Phase 7 — the four variance families and the two disposition
+    # targets (see the comment above; D2's "at minimum" widened by two).
+    variance_ppv: "5100",
+    variance_yield: "5120",
+    variance_labor: "5150",
+    variance_overhead: "5180",
+    cogs: "5000",
+    rd_expense: "6020"
   }
 
   # Meanings this phase DELIBERATELY leaves unmapped, with the reason. The enum
@@ -170,13 +188,7 @@ defmodule Samenerp.Kubeworkz.Books do
     inventory_reserve:
       "the manual writes obsolescence straight off the inventory account " <>
         "(JE-062: Dr 8000 / Cr 1400·1410) and carries no reserve contra; " <>
-        "whether Kubeworkz keeps a reserve is Phase 9's call",
-    variance_ppv:
-      "the manual carries TEN variance accounts (5100–5190, per type and per chip); " <>
-        "Phase 7's engine dispatches over them — one key cannot stand for 5100 and 5110",
-    variance_yield: "as variance_ppv — 5120/5130/5140 are three accounts, not one",
-    variance_labor: "as variance_ppv — 5150 (rate) and 5160 (efficiency) are two accounts",
-    variance_overhead: "as variance_ppv — 5180 (volume) and 5190 (spending) are two accounts"
+        "whether Kubeworkz keeps a reserve is Phase 9's call"
   }
 
   # ---------------------------------------------------------------------------

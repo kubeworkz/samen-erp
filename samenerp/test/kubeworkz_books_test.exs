@@ -5,9 +5,11 @@ defmodule Samenerp.KubeworkzBooksTest do
 
     * the chart of accounts (`1000`…`8000` + the variance family), with the
       credit-normal contra `1510` and the `1520` correction;
-    * the posting map bound to those accounts, with the four variance meanings
-      and `inventory_reserve` DELIBERATELY unmapped (fail-honest — the manual
-      gives them no single account);
+    * the posting map bound to those accounts — including the four variance
+      family accounts and their two disposition targets, which Phase 7 resolved
+      from the manual's ten variance rows into four keys plus the cost-object
+      dimension — with `inventory_reserve` DELIBERATELY unmapped (fail-honest —
+      the manual gives it no single contra account);
     * the four programmes, the four cost pools and the grant fund;
     * the FY budget from the manual's R&D dashboard, in cents;
     * idempotence, and the drift REPORT (a re-seed never re-points an operator's

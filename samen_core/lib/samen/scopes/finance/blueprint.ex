@@ -718,11 +718,17 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 :accumulated_amortization,
                 :depreciation_expense,
                 :write_down_expense,
-                # the standard-cost variance layer (Phase 7)
+                # the standard-cost variance layer (Phase 7). The four family
+                # accounts hold the variances; the per-type disposition
+                # targets are `cogs` (PPV, overhead volume), `rd_expense`
+                # (labour, overhead spending) and the two finished-goods
+                # accounts (yield, BOM).
                 :variance_ppv,
                 :variance_yield,
                 :variance_labor,
                 :variance_overhead,
+                :cogs,
+                :rd_expense,
                 # R&D intangibles and services
                 :mask_expense,
                 :eda_expense

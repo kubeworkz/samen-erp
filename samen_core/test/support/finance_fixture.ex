@@ -65,7 +65,10 @@ defmodule SamenCore.Support.FinanceFixture do
       fiscal_period: "cfp",
       close_run: "clr",
       revenue_schedule: "fsd",
-      revenue_recognition: "frc"
+      revenue_recognition: "frc",
+      cost_standard: "fsx",
+      cost_standard_line: "fsy",
+      cost_variance: "fsv"
     }
 end
 

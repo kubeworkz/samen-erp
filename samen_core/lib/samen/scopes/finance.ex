@@ -70,6 +70,25 @@ defmodule Samen.Scopes.Finance do
   `Samen.Scopes.Finance.PeriodReconcile` is the independent read that detects a
   violation either layer missed.
 
+  ## R8 — the standard ↔ actual invariant (LOAD-BEARING)
+
+  Standard costing is a VARIANCE LAYER, never a second valuation (WS-ACCT
+  Phase 7; ADR-054 D4). `CostStandard` + `CostStandardLine` are effective-dated
+  cards; `CostVariance` is one posted variance fact per class, carrying the
+  accounts it names and the exact inputs it was computed from. The run
+  (`Samen.Scopes.Finance.VarianceEngine`) uses only the card IN FORCE for the
+  period and refuses any other; variances post through the manual's per-type
+  disposition table (`Samen.Scopes.Finance.VarianceDisposition`) — yield and
+  BOM absorb into inventory, PPV and overhead volume write off to COGS, labour
+  and overhead spending write off to R&D. `Samen.Scopes.Finance.ReconcileVariance`
+  is the independent R8 read: per row it checks the arithmetic, the in-force
+  card, the tie to that card's lines, and that the entry lands exactly on the
+  accounts the row names; per variance account it compares Σ rows with the
+  GL's Σ (credit − debit). `Samen.Scopes.Finance.CostOfYield` derives cost of
+  yield from the card and the absorbed variance. A standard never touches the
+  stock ledger's moving average (`StockLevel.avg_unit_cost_cents`) — the
+  variance prices the difference, it never revalues inventory.
+
   ## R6 — the dimension invariant (LOAD-BEARING)
 
   `JournalLine.dimension_refs` is a bounded jsonb map from the frozen
@@ -137,6 +156,11 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.CostObject`
     * `Demo.FinanceScope.FiscalPeriod`
     * `Demo.FinanceScope.CloseRun`
+    * `Demo.FinanceScope.RevenueSchedule`
+    * `Demo.FinanceScope.RevenueRecognition`
+    * `Demo.FinanceScope.CostStandard`
+    * `Demo.FinanceScope.CostStandardLine`
+    * `Demo.FinanceScope.CostVariance`
 
   ## Posting accounts (`posting_accounts:`)
 
@@ -193,7 +217,12 @@ defmodule Samen.Scopes.Finance do
     # per-period recognitions. Allocator-reserved under the `samen_web` host
     # (the fixture and samenerp pass their own overrides).
     revenue_schedule: "frs",
-    revenue_recognition: "frn"
+    revenue_recognition: "frn",
+    # WS-ACCT Phase 7 (ADR-054 D4): standard costing's card, its lines, and the
+    # posted variance. Allocator-reserved under the `samen_web` host.
+    cost_standard: "fst",
+    cost_standard_line: "fsu",
+    cost_variance: "fsw"
   }
 
   @doc false
@@ -225,6 +254,9 @@ defmodule Samen.Scopes.Finance do
     close_run_mod = Module.concat(namespace, CloseRun)
     revenue_schedule_mod = Module.concat(namespace, RevenueSchedule)
     revenue_recognition_mod = Module.concat(namespace, RevenueRecognition)
+    cost_standard_mod = Module.concat(namespace, CostStandard)
+    cost_standard_line_mod = Module.concat(namespace, CostStandardLine)
+    cost_variance_mod = Module.concat(namespace, CostVariance)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -234,6 +266,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.PeriodBlueprint
 
       require Samen.Scopes.Finance.RevenueBlueprint
+
+      require Samen.Scopes.Finance.VarianceBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -251,7 +285,46 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(close_run_mod))
         resource(unquote(revenue_schedule_mod))
         resource(unquote(revenue_recognition_mod))
+        resource(unquote(cost_standard_mod))
+        resource(unquote(cost_standard_line_mod))
+        resource(unquote(cost_variance_mod))
       end
+
+      # WS-ACCT Phase 7 (ADR-054 D4) — standard costing and the variance layer.
+      # The card is append-only; the only update action is the period run, whose
+      # cascade posts each variance through this host's entry + posting-account
+      # resources.
+      Samen.Scopes.Finance.VarianceBlueprint.define_cost_standard(
+        unquote(cost_standard_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.cost_standard),
+        unquote(cost_standard_line_mod),
+        unquote(cost_variance_mod),
+        unquote(cost_object_mod)
+      )
+
+      Samen.Scopes.Finance.VarianceBlueprint.define_cost_standard_line(
+        unquote(cost_standard_line_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.cost_standard_line),
+        unquote(cost_standard_mod)
+      )
+
+      Samen.Scopes.Finance.VarianceBlueprint.define_cost_variance(
+        unquote(cost_variance_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.cost_variance),
+        unquote(cost_standard_mod),
+        unquote(cost_object_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod)
+      )
 
       # WS-ACCT Phase 6 (ADR-054 D5) — deferred revenue and its recognition
       # schedule. The schedule aggregates its recognitions; the recognition

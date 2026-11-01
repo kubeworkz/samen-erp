@@ -6453,6 +6453,72 @@
     {
       "fields": [
         {
+          "column_name": "esc_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esc_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esc_dimension_key",
+          "logical_name": "dimension_key",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esc_effective_on",
+          "logical_name": "effective_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "esc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esc_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esc_output_item_id",
+          "logical_name": "output_item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CostStandard",
+      "table_name": "esc_cost_standard"
+    },
+    {
+      "fields": [
+        {
           "column_name": "esd_cost_object_id",
           "logical_name": "cost_object_id",
           "pii": false,
@@ -6711,6 +6777,78 @@
     {
       "fields": [
         {
+          "column_name": "esm_element",
+          "logical_name": "element",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esm_expected_yield_bp",
+          "logical_name": "expected_yield_bp",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esm_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esm_standard_id",
+          "logical_name": "standard_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esm_standard_qty",
+          "logical_name": "standard_qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esm_standard_unit_price_cents",
+          "logical_name": "standard_unit_price_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esm_usage_basis",
+          "logical_name": "usage_basis",
+          "pii": false,
+          "type": "Atom"
+        }
+      ],
+      "resource": "Samenerp.Erp.CostStandardLine",
+      "table_name": "esm_cost_standard_line"
+    },
+    {
+      "fields": [
+        {
           "column_name": "eso_customer_id",
           "logical_name": "customer_id",
           "pii": false,
@@ -6797,6 +6935,114 @@
       ],
       "resource": "Samenerp.Erp.SalesOrder",
       "table_name": "eso_sales_order"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "esv_actual_amount_cents",
+          "logical_name": "actual_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esv_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esv_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esv_disposition",
+          "logical_name": "disposition",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esv_disposition_account_id",
+          "logical_name": "disposition_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esv_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esv_inputs",
+          "logical_name": "inputs",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "esv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esv_period_key",
+          "logical_name": "period_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esv_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esv_standard_amount_cents",
+          "logical_name": "standard_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esv_standard_id",
+          "logical_name": "standard_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esv_type",
+          "logical_name": "type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esv_variance_account_id",
+          "logical_name": "variance_account_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.CostVariance",
+      "table_name": "esv_cost_variance"
     },
     {
       "fields": [
