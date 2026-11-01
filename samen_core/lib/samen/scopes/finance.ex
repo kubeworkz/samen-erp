@@ -110,6 +110,30 @@ defmodule Samen.Scopes.Finance do
   disposal, backing entry, the two named legs, and Σ slices == the contra
   account's GL movement.
 
+  ## D10 — obsolescence: a policy, an assessment, a gated write-down
+
+  `InventoryReserve` is a POLICY (basis `:age` or `:item`, a threshold, a
+  percentage, the item ids it covers), never a GL balance: the manual writes
+  obsolescence straight off inventory (`Dr 8000`), so no reserve contra account
+  is opened and the `:inventory_reserve` posting meaning stays unmapped.
+  `Samen.Scopes.Finance.ReserveAssessment` is the derived read — FIFO-aged
+  quantity from the append-only stock ledger, valued at each level's moving
+  average, net of every write-down already posted for the item. `:draft`
+  persists that assessment and posts nothing; `:post` carries the ADR-040 Gate,
+  re-derives the assessment inside the decision transaction, and refuses a
+  draft whose lines no longer match. One entry lands: debit
+  `write_down_expense`, credit each inventory account the lines name.
+
+  A host that wants reserve posting passes its Inventory resources at mount
+  time:
+
+      use Samen.Scopes.Finance,
+        inventory: [item: MyApp.Erp.Item, level: MyApp.Erp.StockLevel,
+                    ledger: MyApp.Erp.StockLedger]
+
+  Without that wiring the reserve actions refuse fail-honest
+  (`:inventory_not_wired`) rather than posting blind.
+
   ## R6 — the dimension invariant (LOAD-BEARING)
 
   `JournalLine.dimension_refs` is a bounded jsonb map from the frozen
@@ -184,6 +208,9 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.CostVariance`
     * `Demo.FinanceScope.Asset`
     * `Demo.FinanceScope.AssetPosting`
+    * `Demo.FinanceScope.InventoryReserve`
+    * `Demo.FinanceScope.ReserveWriteDown`
+    * `Demo.FinanceScope.ReserveWriteDownLine`
 
   ## Posting accounts (`posting_accounts:`)
 
@@ -249,7 +276,12 @@ defmodule Samen.Scopes.Finance do
     # WS-ACCT Phase 8 (ADR-054 D9): the asset register and its per-period
     # postings. Allocator-reserved under the `samen_web` host.
     asset: "fas",
-    asset_posting: "fad"
+    asset_posting: "fad",
+    # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence policy, its gated
+    # write-down and the assessed lines. Allocator-reserved under `samen_web`.
+    inventory_reserve: "fro",
+    reserve_write_down: "frv",
+    reserve_write_down_line: "frw"
   }
 
   @doc false
@@ -265,6 +297,7 @@ defmodule Samen.Scopes.Finance do
     # blueprint call receives a LITERAL abbrev string (mirrors Samen.Scopes.Work —
     # the base macro validates abbrevs caller-side and requires a compile-time literal).
     abbrevs = resolve_abbrevs(Keyword.get(opts, :abbrevs), __CALLER__)
+    inventory = resolve_inventory(Keyword.get(opts, :inventory), __CALLER__)
 
     account_mod = Module.concat(namespace, Account)
     entry_mod = Module.concat(namespace, JournalEntry)
@@ -286,6 +319,9 @@ defmodule Samen.Scopes.Finance do
     cost_variance_mod = Module.concat(namespace, CostVariance)
     asset_mod = Module.concat(namespace, Asset)
     asset_posting_mod = Module.concat(namespace, AssetPosting)
+    inventory_reserve_mod = Module.concat(namespace, InventoryReserve)
+    reserve_write_down_mod = Module.concat(namespace, ReserveWriteDown)
+    reserve_write_down_line_mod = Module.concat(namespace, ReserveWriteDownLine)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -299,6 +335,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.VarianceBlueprint
 
       require Samen.Scopes.Finance.AssetBlueprint
+
+      require Samen.Scopes.Finance.ReserveBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -321,7 +359,48 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(cost_variance_mod))
         resource(unquote(asset_mod))
         resource(unquote(asset_posting_mod))
+        resource(unquote(inventory_reserve_mod))
+        resource(unquote(reserve_write_down_mod))
+        resource(unquote(reserve_write_down_line_mod))
       end
+
+      # WS-ACCT Phase 9 (ADR-054 D10) — the obsolescence policy, its derived
+      # assessment and the gated write-down. The assessment reads the host's
+      # Inventory resources passed via `inventory:` (nil when unwired — the
+      # actions then refuse fail-honest rather than posting blind).
+      Samen.Scopes.Finance.ReserveBlueprint.define_inventory_reserve(
+        unquote(inventory_reserve_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.inventory_reserve)
+      )
+
+      Samen.Scopes.Finance.ReserveBlueprint.define_reserve_write_down(
+        unquote(reserve_write_down_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.reserve_write_down),
+        unquote(inventory_reserve_mod),
+        unquote(reserve_write_down_line_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod),
+        unquote(account_mod),
+        unquote(inventory[:item]),
+        unquote(inventory[:level]),
+        unquote(inventory[:ledger])
+      )
+
+      Samen.Scopes.Finance.ReserveBlueprint.define_reserve_write_down_line(
+        unquote(reserve_write_down_line_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.reserve_write_down_line),
+        unquote(reserve_write_down_mod),
+        unquote(account_mod)
+      )
 
       # WS-ACCT Phase 8 (ADR-054 D9) — the asset register and its exactly-once
       # per-period postings. The schedule is derived; the posting cascade posts
@@ -528,6 +607,19 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.org_fx_settings)
       )
     end
+  end
+
+  defp resolve_inventory(nil, _caller), do: %{}
+
+  defp resolve_inventory(opts, caller) when is_list(opts) do
+    Map.new(opts, fn {key, mod} -> {key, Macro.expand(mod, caller)} end)
+  end
+
+  defp resolve_inventory(other, _caller) do
+    raise ArgumentError,
+          "use Samen.Scopes.Finance, inventory: must be a keyword list of module " <>
+            "aliases ([item: MyApp.Item, level: MyApp.StockLevel, ledger: MyApp.StockLedger]). " <>
+            "Got: #{Macro.to_string(other)}"
   end
 
   defp resolve_abbrevs(nil, _caller), do: @default_abbrevs

@@ -163,10 +163,14 @@ defmodule Samen.AbbrevRegistryTest do
       # +6 in WS-ACCT Phase 8 (ADR-054 D9): the asset register + its per-period
       # postings in the same three hosts — samen_core `fsf`/`fsp`, samen_web
       # `fas`/`fad`, samenerp `eas`/`ead`, every row allocator-reserved.
-      # = 377 host entries across six hosts.
+      # +9 in WS-ACCT Phase 9 (ADR-054 D10): the reserve policy, its gated
+      # write-down and the assessed lines in the same three hosts —
+      # samen_core `fsr`/`fsq`/`fsz`, samen_web `fro`/`frv`/`frw`, samenerp
+      # `ear`/`eav`/`eaw`, every row allocator-reserved.
+      # = 386 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 105
-      assert map_size(hosts["samen_core"]) == 99
+      assert map_size(hosts["samenerp"]) == 108
+      assert map_size(hosts["samen_core"]) == 102
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -459,6 +463,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # its per-period postings, allocator-reserved.
                  "fsf" => "SamenCore.Support.FinanceFixture.Asset",
                  "fsp" => "SamenCore.Support.FinanceFixture.AssetPosting",
+                 # WS-ACCT Phase 9 (ADR-054 D10): the fixture's obsolescence
+                 # policy, its gated write-down and the assessed lines.
+                 "fsr" => "SamenCore.Support.FinanceFixture.InventoryReserve",
+                 "fsq" => "SamenCore.Support.FinanceFixture.ReserveWriteDown",
+                 "fsz" => "SamenCore.Support.FinanceFixture.ReserveWriteDownLine",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -595,6 +604,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # and its per-period postings, allocator-reserved.
                  "fas" => "Samen.WebTest.Erp.Asset",
                  "fad" => "Samen.WebTest.Erp.AssetPosting",
+                 # WS-ACCT Phase 9 (ADR-054 D10): the test host's reserve policy,
+                 # write-down and assessed lines.
+                 "fro" => "Samen.WebTest.Erp.InventoryReserve",
+                 "frv" => "Samen.WebTest.Erp.ReserveWriteDown",
+                 "frw" => "Samen.WebTest.Erp.ReserveWriteDownLine",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -847,7 +861,12 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 8 (ADR-054 D9): the Kubeworkz asset register
                  # (PDK licence + lab equipment) and its postings.
                  "eas" => "Samenerp.Erp.Asset",
-                 "ead" => "Samenerp.Erp.AssetPosting"
+                 "ead" => "Samenerp.Erp.AssetPosting",
+                 # WS-ACCT Phase 9 (ADR-054 D10): the Kubeworkz reserve policy,
+                 # its gated write-down and the assessed lines.
+                 "ear" => "Samenerp.Erp.InventoryReserve",
+                 "eav" => "Samenerp.Erp.ReserveWriteDown",
+                 "eaw" => "Samenerp.Erp.ReserveWriteDownLine"
                }
              }
 
@@ -972,7 +991,11 @@ defmodule Samen.AbbrevRegistryTest do
       # (+6 WS-ACCT Phase 8 (ADR-054 D9): the asset register + its per-period
       # postings in the same three hosts (samen_core `fsf`/`fsp`, samen_web
       # `fas`/`fad`, samenerp `eas`/`ead`) = 405 + 377 = 782 flat.)
-      assert map_size(Reg.load()) == 782
+      # (+9 WS-ACCT Phase 9 (ADR-054 D10): the reserve policy, its gated
+      # write-down and the assessed lines in the same three hosts (samen_core
+      # `fsr`/`fsq`/`fsz`, samen_web `fro`/`frv`/`frw`, samenerp
+      # `ear`/`eav`/`eaw`) = 405 + 386 = 791 flat.)
+      assert map_size(Reg.load()) == 791
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -24,7 +24,12 @@ defmodule Samen.WebTest.Erp do
     abbrevs: %{
       exchange_rate: "fex",
       org_fx_settings: "ofx"
-    }
+    },
+    inventory: [
+      item: Samen.WebTest.Erp.Item,
+      level: Samen.WebTest.Erp.StockLevel,
+      ledger: Samen.WebTest.Erp.StockLedger
+    ]
 
   use Samen.Scopes.Inventory,
     otp_app: :samen_web,

@@ -194,10 +194,32 @@ defmodule Samenerp.Kubeworkz.Books do
   # now would post a silently wrong default later.
   @pending_meanings %{
     inventory_reserve:
-      "the manual writes obsolescence straight off the inventory account " <>
-        "(JE-062: Dr 8000 / Cr 1400·1410) and carries no reserve contra; " <>
-        "whether Kubeworkz keeps a reserve is Phase 9's call"
+      "Phase 9 ruled: Kubeworkz keeps NO reserve contra. The manual writes " <>
+        "obsolescence straight off the inventory account (JE-034/062: Dr 8000 / " <>
+        "Cr 1400·1410·1430), and the reserve POLICY is an estimate rule, not a GL " <>
+        "balance — binding this meaning would let a caller park money in an " <>
+        "account the chart never opens"
   }
+
+  # ---------------------------------------------------------------------------
+  # The obsolescence policy — the manual's own stated rule (JE-062's memo:
+  # "chips older than 18 months with no expected sales are written down to
+  # NRV"). It is a POLICY row, not a reserve balance: nothing posts until an
+  # assessment drafts a write-down and a human clears it through the Gate.
+  #
+  # `applies_to: []` means every stocked item (the age basis). JE-034's
+  # failed-validation write-down is an EVENT, not a standing age rule; an
+  # operator authors an `:item` policy naming those items when it happens.
+  # ---------------------------------------------------------------------------
+  @reserve_policies [
+    %{
+      name: "Finished goods older than 18 months",
+      basis: :age,
+      age_months: 18,
+      pct: 100,
+      applies_to: []
+    }
+  ]
 
   # ---------------------------------------------------------------------------
   # The cost objects — the manual's four programmes, four cost pools, one fund
@@ -283,6 +305,9 @@ defmodule Samenerp.Kubeworkz.Books do
   @doc "The cost objects this seed opens: `[{code, name, kind}]`."
   def cost_objects, do: @cost_objects
 
+  @doc "The obsolescence policies this seed opens: `[%{name, basis, ...}]`."
+  def reserve_policies, do: @reserve_policies
+
   @doc "The budget's name and the fiscal year it covers."
   def budget_name, do: @budget_name
 
@@ -330,6 +355,7 @@ defmodule Samenerp.Kubeworkz.Books do
     posting = seed_posting_accounts(org_id)
     objects = seed_cost_objects(org_id)
     assets = seed_assets(org_id)
+    reserves = seed_reserve_policies(org_id)
     budget = seed_budget(org_id)
 
     %{
@@ -338,6 +364,7 @@ defmodule Samenerp.Kubeworkz.Books do
       posting_accounts: posting,
       cost_objects: objects,
       assets: assets,
+      reserve_policies: reserves,
       budget: budget,
       unmapped: @pending_meanings |> Map.keys() |> Enum.sort()
     }
@@ -503,6 +530,51 @@ defmodule Samenerp.Kubeworkz.Books do
     %{created: created, existing: existing, drifted: drifted}
   end
 
+  defp seed_reserve_policies(org_id) do
+    {created, existing, drifted} =
+      Enum.reduce(@reserve_policies, {0, 0, []}, fn spec, {created, existing, drifted} ->
+        case reserve_policy_by_name(org_id, spec.name) do
+          nil ->
+            Erp.InventoryReserve
+            |> Ash.Changeset.for_create(
+              :create,
+              %{
+                org_id: org_id,
+                name: spec.name,
+                basis: spec.basis,
+                age_months: spec.age_months,
+                pct: spec.pct,
+                applies_to: spec.applies_to
+              },
+              authorize?: false
+            )
+            |> Ash.create!(authorize?: false)
+
+            {created + 1, existing, drifted}
+
+          policy ->
+            drift =
+              [
+                policy.basis != spec.basis &&
+                  "#{spec.name} basis #{inspect(policy.basis)} ≠ #{inspect(spec.basis)}",
+                policy.age_months != spec.age_months &&
+                  "#{spec.name} age_months #{inspect(policy.age_months)} ≠ " <>
+                    "#{inspect(spec.age_months)}",
+                policy.pct != spec.pct &&
+                  "#{spec.name} pct #{policy.pct} ≠ #{spec.pct}",
+                policy.applies_to != spec.applies_to &&
+                  "#{spec.name} applies_to #{inspect(policy.applies_to)} ≠ " <>
+                    "#{inspect(spec.applies_to)}"
+              ]
+              |> Enum.filter(&is_binary/1)
+
+            {created, existing + 1, drifted ++ drift}
+        end
+      end)
+
+    %{created: created, existing: existing, drifted: drifted}
+  end
+
   defp seed_budget(org_id) do
     year = fiscal_year()
 
@@ -548,7 +620,8 @@ defmodule Samenerp.Kubeworkz.Books do
       missing_accounts(org_id) ++
         missing_posting_accounts(org_id) ++
         missing_cost_objects(org_id) ++
-        missing_assets(org_id) ++ missing_budget(org_id)
+        missing_assets(org_id) ++
+        missing_reserve_policies(org_id) ++ missing_budget(org_id)
 
     case missing do
       [] ->
@@ -558,6 +631,7 @@ defmodule Samenerp.Kubeworkz.Books do
            posting_accounts: map_size(@posting_map),
            cost_objects: length(@cost_objects),
            assets: length(@assets),
+           reserve_policies: length(@reserve_policies),
            budget_id: budget_by_name(org_id, fiscal_year()).id
          }}
 
@@ -616,6 +690,23 @@ defmodule Samenerp.Kubeworkz.Books do
     end)
   end
 
+  defp missing_reserve_policies(org_id) do
+    Enum.flat_map(@reserve_policies, fn spec ->
+      case reserve_policy_by_name(org_id, spec.name) do
+        %{basis: basis, age_months: age, pct: pct, applies_to: applies_to}
+        when basis == spec.basis and age == spec.age_months and pct == spec.pct and
+               applies_to == spec.applies_to ->
+          []
+
+        nil ->
+          ["reserve policy #{spec.name} is missing"]
+
+        _other ->
+          ["reserve policy #{spec.name} does not match the manual's 18-month rule"]
+      end
+    end)
+  end
+
   defp missing_budget(org_id) do
     year = fiscal_year()
 
@@ -657,6 +748,12 @@ defmodule Samenerp.Kubeworkz.Books do
   defp asset_by_code(org_id, code) do
     Erp.Asset
     |> Ash.Query.filter(org_id == ^org_id and code == ^code)
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp reserve_policy_by_name(org_id, name) do
+    Erp.InventoryReserve
+    |> Ash.Query.filter(org_id == ^org_id and name == ^name)
     |> Ash.read_one!(authorize?: false)
   end
 

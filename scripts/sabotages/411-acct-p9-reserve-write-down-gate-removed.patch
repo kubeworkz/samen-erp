@@ -1,0 +1,31 @@
+# SABOTAGE: the obsolescence write-down loses its ADR-040 Gate — an estimate can
+# be posted without a second party's consent.
+#
+# WS-ACCT Phase 9 (ADR-054 D10) makes `:post` a gated transition: the unwrapped
+# call is refused with ApprovalRequired and opens a pending approval; a DISTINCT
+# approver's decision re-invokes the action as the requester. This patch deletes
+# that one `change({Samen.Approvals.Gate, ...})` line, on the plausible reasoning
+# that "the cascade already re-derives the assessment, so a human review adds
+# nothing."
+#
+# Why that reasoning is wrong: the cascade proves the NUMBER is current, not that
+# a human agreed to expense it. NRV is an estimate; the whole point of D10 is
+# that an estimate never enters the GL on the machinery's own authority. Remove
+# the Gate and every other guarantee still holds — the drift check re-derives the
+# cents, the entry balances, the lines are append-only, a re-post is refused —
+# which is exactly why the arithmetic tests stay green and only the approval test
+# reds. A ledger that is arithmetically perfect and unauthorized is the failure.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_reserve_test.exs
+# MUST_FAIL: the Gate refuses an ungated write-down and a distinct approver lands it once
+--- a/samen_core/lib/samen/scopes/finance/reserve_blueprint.ex
++++ b/samen_core/lib/samen/scopes/finance/reserve_blueprint.ex
+@@ -282,7 +282,6 @@
+ 
+             validate(Samen.Scopes.Finance.ReserveDraftStatus)
+ 
+-            change({Samen.Approvals.Gate, kind: unquote(Atom.to_string(module)) <> ":post"})
+ 
+             # The outer arm: the posted-born entry's own PostGuard restores the
+             # marker BEFORE EntryLines inserts its rows, so the action that

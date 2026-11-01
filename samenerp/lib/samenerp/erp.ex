@@ -48,8 +48,16 @@ defmodule Samenerp.Erp do
       cost_standard_line: "esm",
       cost_variance: "esv",
       asset: "eas",
-      asset_posting: "ead"
-    }
+      asset_posting: "ead",
+      inventory_reserve: "ear",
+      reserve_write_down: "eav",
+      reserve_write_down_line: "eaw"
+    },
+    inventory: [
+      item: Samenerp.Erp.Item,
+      level: Samenerp.Erp.StockLevel,
+      ledger: Samenerp.Erp.StockLedger
+    ]
 
   use Samen.Scopes.Inventory,
     otp_app: :samenerp,
@@ -120,5 +128,8 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.CostVariance)
     resource(Samenerp.Erp.Asset)
     resource(Samenerp.Erp.AssetPosting)
+    resource(Samenerp.Erp.InventoryReserve)
+    resource(Samenerp.Erp.ReserveWriteDown)
+    resource(Samenerp.Erp.ReserveWriteDownLine)
   end
 end

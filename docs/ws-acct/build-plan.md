@@ -359,6 +359,45 @@ doc's JE-004 arithmetic exactly.
 `InventoryReserve` policy + the quarterly assessment read + a **gated** drafted write-down
 (design D10). Covers JE-034/062 into `8000`.
 
+> **DONE** (2026-11-01) — `samen_core/test/finance_reserve_test.exs` (13 tests),
+> `samenerp/test/kubeworkz_reserve_test.exs` (1), sabotage **411** certified through
+> the harness. Abbrevs `fsr`/`fsq`/`fsz` (fixture), `fro`/`frv`/`frw` (web),
+> `ear`/`eav`/`eaw` (samenerp), all allocator-reserved.
+
+1. **The policy is a rule, not a balance.** `InventoryReserve` stores basis, threshold,
+   percentage and the item ids it covers. The manual's JE-034/062 write `Dr 8000` straight off
+   inventory and carry no reserve contra, so `:inventory_reserve` stays **unmapped as a
+   decision** — binding it would let a caller park money in an account the chart never opens.
+2. **The assessment is a read with a date.** `ReserveAssessment` derives the candidates from the
+   stock levels and the append-only ledger, at an explicit `as_of`, and writes nothing — the
+   phase's first AC is proven by running it twice and comparing the level/ledger rows byte-for-byte.
+3. **FIFO layers, not an average age.** The age basis walks inbound/outbound ledger events as
+   layers: an outbound movement consumes the oldest layer, so "what is still here and how old"
+   is answerable. The pure `aged_quantity/3` is tested with stated layers and a cut; the DB test
+   changes only `as_of`, proving fresh stock is not flagged and aged stock is.
+4. **Net of every posted write-down.** The estimate applies to the item's REMAINING carrying
+   value (gross eligible cost minus all posted write-downs for that item, under any policy). A
+   second quarterly review therefore proposes only what is left; a fully written-down item drafts
+   nothing (`nothing to draft`) instead of repeating the same cents forever.
+5. **The draft is derived; the post re-derives it.** `:draft` accepts no amounts — it runs the
+   assessment, refuses an empty result or an item with no inventory account (naming the SKU), and
+   materializes the lines. `:post` re-runs the assessment inside the decision transaction and
+   refuses any line whose item, quantity, cents or account no longer match (`assessment_drift`),
+   so an approval consents to the stock that is there.
+6. **The Gate is the only route to the GL.** `:post` carries the ADR-040 Gate; an unwrapped call
+   is `ApprovalRequired` and opens a pending approval, and a distinct approver's decision
+   re-invokes it as the requester. The draft-only validation sits IN FRONT of the Gate, so a
+   re-post is refused as `already posted` instead of queueing an approval that can never execute.
+   Sabotage 411 removes exactly that Gate; every arithmetic test stays green and only the
+   approval test reds — which is the point.
+7. **The posting is one entry, two-legs-per-account.** Debit `write_down_expense` (8000) for the
+   total, credit each line's inventory account for its share (JE-062's 1400/1410 shape), anchored
+   `source_key: "reserve_write_down"`. Lines and posting columns are append-only in the DB, and
+   the belts are red-proven with raw SQL.
+8. **Host wiring is explicit and fail-honest.** Reserve posting needs the host's Inventory
+   resources, passed at mount time (`inventory: [item:, level:, ledger:]`); without it the
+   actions refuse `:inventory_not_wired` rather than assessing nothing.
+
 **AC:** an assessment drafts but never auto-posts; the Gate refuses an ungated write-down; the
 reserve read flags age-eligible stock without mutating it.
 
@@ -395,7 +434,7 @@ is dimension-only (it posts once, to N cost objects — never N posts).
 
 `Grant`, `GrantMilestone`/`GrantClaim`, the `fund` dimension end-to-end, `Budget` reuse for the
 grant budget, `GrantOpportunity` (the tracker). Recognition by `:cost_incurred` (Phase 6).
-Compliance reporting as a read. **R11 + sabotage 408.** **The grant personnel report is a masking
+Compliance reporting as a read. **R11 + sabotage 410.** **The grant personnel report is a masking
 watch-list surface** — full green/red/sabotage trio (design §4).
 
 **AC:** R11 green + red + sabotage; fund postings reconcile to recognized grant revenue and to
@@ -481,7 +520,9 @@ the coverage ledger (phase 0) has no workbook left without a verdict.
 | 406 | 6 | R9 — recognition exactly-once |
 | 407 | 7 | R8 — variance ↔ standard card, and the per-type disposition |
 | 408 | 8 | the exactly-once depreciation read, and a disposal that stops nothing |
-| 409 | 11 | R11 — grant ↔ fund |
+| 409 | 5 | the accrual's linked reversal mirrored on the same side |
+| 410 | 11 | R11 — grant ↔ fund |
+| 411 | 9 | the ADR-040 Gate on the obsolescence write-down |
 
 Plus the masking trio's sabotage twin on the grant personnel report (Phase 11) and the
 posting-map widening's own red path (an unmapped meaning must refuse) in Phase 1. Numbers are

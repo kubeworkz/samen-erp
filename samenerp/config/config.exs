@@ -96,8 +96,7 @@ config :samen_core, :support_sla_breach_ticket_resource, Samenerp.Support.Ticket
 # WS-ACCT Phase 5 (ADR-054 D6) — the scheduled accrual reversal posts through
 # THIS host's entry resource. The cron runs on every host; a host that does not
 # wire it has no books to reverse and is an honest no-op.
-config :samen_core, Samen.Scopes.Finance.AccrualReversal,
-  entry_module: Samenerp.Erp.JournalEntry
+config :samen_core, Samen.Scopes.Finance.AccrualReversal, entry_module: Samenerp.Erp.JournalEntry
 
 config :ash, disable_async?: true
 config :ash, :missed_notifications, :ignore
@@ -222,6 +221,8 @@ config :samen_core, Samen.Approvals.Registry,
     # fail-honest, but these actions are governed-approve by design.
     (Atom.to_string(Samenerp.Erp.ApInvoice) <> ":approve") => {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(Samenerp.Erp.PurchaseOrder) <> ":approve") => {:tenant, Samen.Approvals.Gate},
+    # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence write-down's gated post.
+    (Atom.to_string(Samenerp.Erp.ReserveWriteDown) <> ":post") => {:tenant, Samen.Approvals.Gate},
     # Phase 7 (ADR-043 §6.3 D5) — the AI support operator's human-gated send.
     # Operator plane; the requester (the AI service principal) is never the
     # decider (distinct-party by construction).

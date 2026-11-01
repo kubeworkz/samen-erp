@@ -324,9 +324,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +6 WS-ACCT Phase 8 (ADR-054 D9) — the asset register + its per-period
       # postings in the same three hosts (samen_core `fsf`/`fsp`, samen_web
       # `fas`/`fad`, samenerp `eas`/`ead`), every row written by the allocator,
-      # allocator-reserved: 36_211 bytes, 782 flat.
-      assert byte_size(committed) == 36211
-      assert map_size(R.load()) == 782
+      # allocator-reserved: 36_712 bytes, 791 flat (Phase 9 adds the reserve
+      # policy, its write-down and its lines to the same three hosts).
+      assert byte_size(committed) == 36712
+      assert map_size(R.load()) == 791
     end
   end
 

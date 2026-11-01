@@ -68,9 +68,18 @@ goods are `1400`–`1430`;
 3. `1520 · Accumulated Depreciation – Lab Equipment` is the one row the manual does **not** have:
    JE-063 reuses `1510`, already the PDK contra, and `Account.code` is unique per org.
 
-Five posting meanings are deliberately left **unmapped** (`inventory_reserve` + the four
-`variance_*`) — the manual gives them no single account and the closed enum refuses rather than
-posting to an invented default. `Books.pending_meanings/0` carries each reason.
+The four `variance_*` meanings resolved in Phase 7 (family heads `5100`/`5120`/`5150`/`5180`,
+with per-type/per-chip detail on the cost-object dimension). One meaning remains deliberately
+**unmapped**: `inventory_reserve`. Phase 9 ruled that Kubeworkz keeps **no reserve contra** —
+JE-034/062 write obsolescence straight off the inventory accounts (`Dr 8000` / `Cr 1400·1410·1430`)
+— and the `InventoryReserve` policy row is an estimate RULE, not a GL balance. The closed enum
+refuses rather than parking money in an account the chart never opens.
+`Books.pending_meanings/0` carries the reason.
+
+Phase 9 also opens the manual's own obsolescence rule (JE-062's memo: chips older than 18 months
+with no expected sales are written down to NRV) as an `InventoryReserve` policy. Nothing posts
+when it is created: an assessment drafts a write-down and a distinct approver clears it through
+the ADR-040 Gate.
 
 ### 3 · GlobalFoundries photonics fab (lines 171–205) — **REFERENCE**
 

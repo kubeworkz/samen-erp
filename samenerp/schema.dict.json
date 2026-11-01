@@ -1287,6 +1287,66 @@
     {
       "fields": [
         {
+          "column_name": "ear_age_months",
+          "logical_name": "age_months",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ear_applies_to",
+          "logical_name": "applies_to",
+          "pii": false,
+          "type": "{:array, Ash.Type.UUID}"
+        },
+        {
+          "column_name": "ear_basis",
+          "logical_name": "basis",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ear_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ear_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ear_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ear_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ear_pct",
+          "logical_name": "pct",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ear_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.InventoryReserve",
+      "table_name": "ear_inventory_reserve"
+    },
+    {
+      "fields": [
+        {
           "column_name": "eas_acquired_on",
           "logical_name": "acquired_on",
           "pii": false,
@@ -1391,6 +1451,138 @@
       ],
       "resource": "Samenerp.Erp.Asset",
       "table_name": "eas_asset"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eav_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eav_assessed_on",
+          "logical_name": "assessed_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "eav_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eav_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eav_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eav_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eav_policy_id",
+          "logical_name": "policy_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eav_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eav_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "eav_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ReserveWriteDown",
+      "table_name": "eav_reserve_write_down"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eaw_cost_cents",
+          "logical_name": "cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eaw_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaw_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eaw_inventory_account_id",
+          "logical_name": "inventory_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaw_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaw_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaw_quantity",
+          "logical_name": "quantity",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eaw_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eaw_write_down_cents",
+          "logical_name": "write_down_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eaw_write_down_id",
+          "logical_name": "write_down_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.ReserveWriteDownLine",
+      "table_name": "eaw_reserve_write_down_line"
     },
     {
       "fields": [

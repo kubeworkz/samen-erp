@@ -70,8 +70,18 @@ defmodule SamenCore.Support.FinanceFixture do
       cost_standard_line: "fsy",
       cost_variance: "fsv",
       asset: "fsf",
-      asset_posting: "fsp"
-    }
+      asset_posting: "fsp",
+      # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence policy, its gated
+      # write-down and the assessed lines.
+      inventory_reserve: "fsr",
+      reserve_write_down: "fsq",
+      reserve_write_down_line: "fsz"
+    },
+    inventory: [
+      item: SamenCore.Support.InventoryFixture.Item,
+      level: SamenCore.Support.InventoryFixture.StockLevel,
+      ledger: SamenCore.Support.InventoryFixture.StockLedger
+    ]
 end
 
 defmodule SamenCore.Support.FinanceFixture.PaymentMirror do
