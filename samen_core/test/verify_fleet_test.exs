@@ -208,6 +208,12 @@ defmodule Samen.VerifyFleetTest do
       assert message =~ "not a directory"
     end
 
+    # The roster is six tree-scoped verifiers, and the fleet runs each as its OWN OS process
+    # (`mix <task>`): six BEAM boots plus six tree walks. Measured on this Windows checkout
+    # 2026-11-02: pii_reads 33s, analytics_producer 22.5s, never_read_current 10s — ~2 minutes
+    # for the roster, against ExUnit's 60s default. The assertion is the aggregate document's
+    # content, never its latency, so the budget is what has to fit the workload.
+    @tag timeout: 240_000
     test "the whole roster over THIS project: ONE JSON document, status ok, exits 0" do
       {output, code} = run_fleet(["--format", "json", "--root", @project_dir])
 
