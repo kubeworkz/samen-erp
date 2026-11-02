@@ -38,6 +38,16 @@ defmodule Samen.TestDb do
   @default_timeout 60_000
   @default_attempts 20
   @retry_interval 500
+
+  # DBConnection's default `:ownership_timeout` is 120s, and `Ecto.Migrator` holds ONE
+  # checked-out connection — and the migration advisory lock on it — for the WHOLE run.
+  # A host with a long migration history (samen_web: 89 versions, samenerp: 41) can exceed
+  # that ceiling when the root gate's five app tiers migrate concurrently against one
+  # Postgres: observed 2026-11-02, `samen_web_test` and `samenerp_test` both died at
+  # 13:32:36 with `{:error, :rollback}` from `do_lock_for_migrations` after samenerp had
+  # spent 102s on 31 versions. The fix is headroom for a legitimate long migrate, not a
+  # weaker gate: every migration still runs, every assertion still fires.
+  @default_ownership_timeout 300_000
   @drop_attempts 2
 
   @typedoc "A repo module (the emitted harnesses) or an explicit repo config (a scratch DB)."
@@ -92,7 +102,10 @@ defmodule Samen.TestDb do
   def boot!(repo, opts \\ []) when is_atom(repo) do
     :ok = ensure_up!(repo, opts)
 
-    case repo.start_link() do
+    ownership_timeout =
+      Keyword.get(opts, :ownership_timeout, @default_ownership_timeout)
+
+    case repo.start_link(ownership_timeout: ownership_timeout) do
       {:ok, _pid} -> :ok
       {:error, {:already_started, _pid}} -> :ok
       other -> raise "could not start #{inspect(repo)}: #{inspect(other)}"

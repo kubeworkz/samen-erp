@@ -45,7 +45,13 @@ defmodule Mix.Tasks.SamenWeb.TestSetup do
 
     :ok = ensure_created(repo)
 
-    {:ok, _} = repo.start_link(pool_size: 2)
+    # `Ecto.Migrator` holds ONE checked-out connection (and the migration advisory lock)
+    # for the whole run, and DBConnection's default `:ownership_timeout` is 120s. This
+    # test DB has 89 migrations, and the root gate's five app tiers migrate concurrently
+    # against one Postgres — observed 2026-11-02: `do_lock_for_migrations` returned
+    # `{:error, :rollback}` at exactly 120s. Give a legitimate long migrate headroom;
+    # nothing about the migration or the tests is relaxed.
+    {:ok, _} = repo.start_link(pool_size: 2, ownership_timeout: 300_000)
 
     # Quiet the per-column catalog_sync INSERT logging during the one-time migration.
     prev_level = Logger.level()
