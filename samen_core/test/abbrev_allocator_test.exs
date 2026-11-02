@@ -326,8 +326,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # `fas`/`fad`, samenerp `eas`/`ead`), every row written by the allocator,
       # allocator-reserved: 36_712 bytes, 791 flat (Phase 9 adds the reserve
       # policy, its write-down and its lines to the same three hosts).
-      assert byte_size(committed) == 36712
-      assert map_size(R.load()) == 791
+      # +6 WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and its
+      # shares in the same three hosts -> 37_041 bytes, 797 flat.
+      # +10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
+      # allocation pair in the same three hosts -> 37_584 bytes, 807 flat.
+      assert byte_size(committed) == 37_584
+      assert map_size(R.load()) == 807
     end
   end
 

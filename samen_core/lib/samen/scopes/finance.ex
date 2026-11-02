@@ -134,6 +134,40 @@ defmodule Samen.Scopes.Finance do
   Without that wiring the reserve actions refuse fail-honest
   (`:inventory_not_wired`) rather than posting blind.
 
+  ## Allocation (ADR-054 decision 11): one reusable step, one entry
+
+  `CostAllocation` is ONE AP bill's cost on ONE expense account, split across N
+  cost objects by a declared basis (`:die_area`, `:wafer`, `:effort`).
+  `AllocationMath` does the split with largest remainder, so the shares sum to
+  the invoice amount EXACTLY — the phase's red path — and record each target's
+  driver alongside its cents. `:draft` derives the amount from the bill's own
+  line and materializes append-only `CostAllocationShare` rows; `:post` lands
+  ONE entry whose lines are a debit/credit pair per target, both tagged with
+  that target's cost object (so each nets to zero under R6b) and anchored
+  `source_key: "cost_allocation"`. N targets never become N posts.
+
+  ## D17 — labour: approved hours are the driver, not a declared ratio
+
+  Payroll is allocated by ACTUAL time, not by a basis a caller asserts:
+  `LabourAllocation` is one payroll period's declared total on one expense
+  account, split across cost objects by **approved timesheet minutes** read
+  from the Work scope (`Samen.Scopes.Finance.LabourDriver`). `:draft` freezes
+  the minutes into append-only `LabourAllocationShare` rows and derives the
+  cents with `AllocationMath`; `:post` re-derives the driver and refuses
+  `labour_drift` unless every cost object's minutes still match, then lands
+  ONE entry of debit/credit pairs tagged with each cost object on the header's
+  axis. Unapproved hours never move cost.
+
+  A host that captures time passes its Work timesheet modules at mount time:
+
+      use Samen.Scopes.Finance,
+        labour: [timesheet: MyApp.Work.Timesheet,
+                 timesheet_entry: MyApp.Work.TimesheetEntry]
+
+  Without that wiring the labour actions refuse fail-honest
+  (`:timesheets_not_wired`) rather than splitting payroll by an invented
+  ratio.
+
   ## R6 — the dimension invariant (LOAD-BEARING)
 
   `JournalLine.dimension_refs` is a bounded jsonb map from the frozen
@@ -211,6 +245,8 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.InventoryReserve`
     * `Demo.FinanceScope.ReserveWriteDown`
     * `Demo.FinanceScope.ReserveWriteDownLine`
+    * `Demo.FinanceScope.CostAllocation`
+    * `Demo.FinanceScope.CostAllocationShare`
 
   ## Posting accounts (`posting_accounts:`)
 
@@ -281,7 +317,16 @@ defmodule Samen.Scopes.Finance do
     # write-down and the assessed lines. Allocator-reserved under `samen_web`.
     inventory_reserve: "fro",
     reserve_write_down: "frv",
-    reserve_write_down_line: "frw"
+    reserve_write_down_line: "frw",
+    # WS-ACCT Phase 10 (ADR-054 decision 11): the reusable allocation step and
+    # its per-target shares. Allocator-reserved under `samen_web`.
+    cost_allocation: "wec",
+    cost_allocation_share: "ewc",
+    # WS-ACCT Unit 10.2 (ADR-054 D17): the payroll allocation by approved
+    # timesheet minutes and its per-target shares. Allocator-reserved under
+    # `samen_web`.
+    labour_allocation: "wel",
+    labour_allocation_share: "wle"
   }
 
   @doc false
@@ -298,6 +343,7 @@ defmodule Samen.Scopes.Finance do
     # the base macro validates abbrevs caller-side and requires a compile-time literal).
     abbrevs = resolve_abbrevs(Keyword.get(opts, :abbrevs), __CALLER__)
     inventory = resolve_inventory(Keyword.get(opts, :inventory), __CALLER__)
+    labour = resolve_labour(Keyword.get(opts, :labour), __CALLER__)
 
     account_mod = Module.concat(namespace, Account)
     entry_mod = Module.concat(namespace, JournalEntry)
@@ -322,6 +368,10 @@ defmodule Samen.Scopes.Finance do
     inventory_reserve_mod = Module.concat(namespace, InventoryReserve)
     reserve_write_down_mod = Module.concat(namespace, ReserveWriteDown)
     reserve_write_down_line_mod = Module.concat(namespace, ReserveWriteDownLine)
+    cost_allocation_mod = Module.concat(namespace, CostAllocation)
+    cost_allocation_share_mod = Module.concat(namespace, CostAllocationShare)
+    labour_allocation_mod = Module.concat(namespace, LabourAllocation)
+    labour_allocation_share_mod = Module.concat(namespace, LabourAllocationShare)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -337,6 +387,10 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.AssetBlueprint
 
       require Samen.Scopes.Finance.ReserveBlueprint
+
+      require Samen.Scopes.Finance.CostAllocationBlueprint
+
+      require Samen.Scopes.Finance.LabourAllocationBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -362,6 +416,10 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(inventory_reserve_mod))
         resource(unquote(reserve_write_down_mod))
         resource(unquote(reserve_write_down_line_mod))
+        resource(unquote(cost_allocation_mod))
+        resource(unquote(cost_allocation_share_mod))
+        resource(unquote(labour_allocation_mod))
+        resource(unquote(labour_allocation_share_mod))
       end
 
       # WS-ACCT Phase 9 (ADR-054 D10) — the obsolescence policy, its derived
@@ -400,6 +458,60 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.reserve_write_down_line),
         unquote(reserve_write_down_mod),
         unquote(account_mod)
+      )
+
+      # WS-ACCT Phase 10 (ADR-054 decision 11) — the reusable allocation step:
+      # one AP bill's cost on one expense account, split across N cost objects
+      # by a declared basis and posted as ONE dimensioned entry. The shares are
+      # derived and append-only; the header's posting cascade owns the ledger
+      # write.
+      Samen.Scopes.Finance.CostAllocationBlueprint.define_cost_allocation(
+        unquote(cost_allocation_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.cost_allocation),
+        unquote(ap_invoice_mod),
+        unquote(cost_allocation_share_mod),
+        unquote(account_mod),
+        unquote(entry_mod)
+      )
+
+      Samen.Scopes.Finance.CostAllocationBlueprint.define_cost_allocation_share(
+        unquote(cost_allocation_share_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.cost_allocation_share),
+        unquote(cost_allocation_mod),
+        unquote(cost_object_mod)
+      )
+
+      # WS-ACCT Unit 10.2 (ADR-054 D17) — payroll allocated by ACTUAL approved
+      # hours. The driver reads this host's Work timesheet resources passed via
+      # `labour:`; when unwired the actions refuse fail-honest rather than
+      # splitting money by an invented ratio.
+      Samen.Scopes.Finance.LabourAllocationBlueprint.define_labour_allocation(
+        unquote(labour_allocation_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.labour_allocation),
+        unquote(labour_allocation_share_mod),
+        unquote(labour[:timesheet]),
+        unquote(labour[:timesheet_entry]),
+        unquote(account_mod),
+        unquote(entry_mod)
+      )
+
+      Samen.Scopes.Finance.LabourAllocationBlueprint.define_labour_allocation_share(
+        unquote(labour_allocation_share_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.labour_allocation_share),
+        unquote(labour_allocation_mod),
+        unquote(cost_object_mod)
       )
 
       # WS-ACCT Phase 8 (ADR-054 D9) — the asset register and its exactly-once
@@ -619,6 +731,30 @@ defmodule Samen.Scopes.Finance do
     raise ArgumentError,
           "use Samen.Scopes.Finance, inventory: must be a keyword list of module " <>
             "aliases ([item: MyApp.Item, level: MyApp.StockLevel, ledger: MyApp.StockLedger]). " <>
+            "Got: #{Macro.to_string(other)}"
+  end
+
+  # `labour:` wires the Work timesheet resources the payroll driver reads. Both
+  # are required together (a header without its entries cannot derive a driver),
+  # and the expansion is compile-time like `inventory:`.
+  defp resolve_labour(nil, _caller), do: %{}
+
+  defp resolve_labour(opts, caller) when is_list(opts) do
+    resolved = Map.new(opts, fn {key, mod} -> {key, Macro.expand(mod, caller)} end)
+
+    if resolved[:timesheet] && resolved[:timesheet_entry] do
+      resolved
+    else
+      raise ArgumentError,
+            "use Samen.Scopes.Finance, labour: requires BOTH `timesheet:` and " <>
+              "`timesheet_entry:` (the approved hours and their cost-object dimension)"
+    end
+  end
+
+  defp resolve_labour(other, _caller) do
+    raise ArgumentError,
+          "use Samen.Scopes.Finance, labour: must be a compile-time keyword list " <>
+            "([timesheet: MyApp.Work.Timesheet, timesheet_entry: MyApp.Work.TimesheetEntry]). " <>
             "Got: #{Macro.to_string(other)}"
   end
 

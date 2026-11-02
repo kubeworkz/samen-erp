@@ -1,0 +1,32 @@
+# SABOTAGE: the labour driver counts EVERY timesheet, approved or not — "hours
+# are hours" — so unapproved (and merely submitted) time moves payroll cost.
+#
+# WS-ACCT Unit 10.2 (ADR-054 D17) makes approval the fact: a draft or submitted
+# sheet is a claim, not a labour cost, and the whole point of the capture
+# lifecycle is that payroll is allocated on APPROVED time. This patch drops the
+# `status == :approved` predicate from the driver's sheet scan, on the plausible
+# reasoning that the employee did work the hours either way.
+#
+# Why that reasoning is wrong: the split still sums exactly, the entry still
+# balances, R6 still holds per cost object, and the post still lands one
+# entry — which is why only the approval test reds. Posting payroll against a
+# manager's not-yet-approved claim is the failure; arithmetic alone cannot see
+# it. The same mistake also lets a submitted sheet's hours silently join a
+# re-draft, so the drift check compares against unapproved evidence.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_labour_test.exs test/work_timesheet_test.exs
+# MUST_FAIL: approved sheets drive; draft and submitted sheets contribute zero
+--- a/samen_core/lib/samen/scopes/finance/labour_driver.ex
++++ b/samen_core/lib/samen/scopes/finance/labour_driver.ex
+@@ -81,8 +81,8 @@
+   defp approved_sheets(timesheet_mod, org_id, from, to) do
+     timesheet_mod
+     |> Ash.Query.filter(
+-      org_id == ^org_id and status == :approved and
+-        period_start <= ^to and period_end >= ^from
++      # Hours are hours — the capture's status is bookkeeping, not the driver.
++      org_id == ^org_id and period_start <= ^to and period_end >= ^from
+     )
+     |> Ash.Query.select([:id, :period_start, :period_end])
+     |> Ash.read!(authorize?: false)

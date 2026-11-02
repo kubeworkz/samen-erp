@@ -113,7 +113,11 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # Finance host = 405 + 377 = 782 flat.)
       # (+9 WS-ACCT Phase 9 (ADR-054 D10): the reserve policy, its gated
       # write-down and the assessed lines per Finance host = 405 + 386 = 791 flat.)
-      assert map_size(flat) == 791
+      # (+6 WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step + its
+      # per-target shares per Finance host = 405 + 392 = 797 flat.)
+      # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
+      # allocation pair in the three hosts = 405 + 402 = 807 flat.)
+      assert map_size(flat) == 807
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

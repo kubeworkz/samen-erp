@@ -167,10 +167,13 @@ defmodule Samen.AbbrevRegistryTest do
       # write-down and the assessed lines in the same three hosts —
       # samen_core `fsr`/`fsq`/`fsz`, samen_web `fro`/`frv`/`frw`, samenerp
       # `ear`/`eav`/`eaw`, every row allocator-reserved.
-      # = 386 host entries across six hosts.
+      # +6 in WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and
+      # its per-target shares in the same three hosts — samen_core `fcs`/`csf`,
+      # samen_web `wec`/`ewc`, samenerp `sec`/`cse`, every row allocator-reserved.
+      # = 392 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 108
-      assert map_size(hosts["samen_core"]) == 102
+      assert map_size(hosts["samenerp"]) == 114
+      assert map_size(hosts["samen_core"]) == 108
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -468,6 +471,16 @@ defmodule Samen.AbbrevRegistryTest do
                  "fsr" => "SamenCore.Support.FinanceFixture.InventoryReserve",
                  "fsq" => "SamenCore.Support.FinanceFixture.ReserveWriteDown",
                  "fsz" => "SamenCore.Support.FinanceFixture.ReserveWriteDownLine",
+                 # WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and
+                 # its per-target shares.
+                 "fcs" => "SamenCore.Support.FinanceFixture.CostAllocation",
+                 "csf" => "SamenCore.Support.FinanceFixture.CostAllocationShare",
+                 # WS-ACCT Unit 10.2 (ADR-054 D17): the fixture's timesheet capture
+                 # and the payroll allocation by approved minutes.
+                 "wts" => "SamenCore.Support.WorkFixture.Timesheet",
+                 "tsw" => "SamenCore.Support.WorkFixture.TimesheetEntry",
+                 "sfl" => "SamenCore.Support.FinanceFixture.LabourAllocation",
+                 "slf" => "SamenCore.Support.FinanceFixture.LabourAllocationShare",
                  # T46 F4 (Tags scope): the in-tree Tags scope fixture pilot.
                  "stt" => "SamenCore.Support.TagsFixture.Tag",
                  "tst" => "SamenCore.Support.TagsFixture.Tagging",
@@ -609,6 +622,14 @@ defmodule Samen.AbbrevRegistryTest do
                  "fro" => "Samen.WebTest.Erp.InventoryReserve",
                  "frv" => "Samen.WebTest.Erp.ReserveWriteDown",
                  "frw" => "Samen.WebTest.Erp.ReserveWriteDownLine",
+                 # WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and
+                 # its per-target shares.
+                 "wec" => "Samen.WebTest.Erp.CostAllocation",
+                 "ewc" => "Samen.WebTest.Erp.CostAllocationShare",
+                 # WS-ACCT Unit 10.2 (ADR-054 D17): the payroll allocation (this
+                 # host mounts no Work timesheets, so `labour:` stays unwired).
+                 "wel" => "Samen.WebTest.Erp.LabourAllocation",
+                 "wle" => "Samen.WebTest.Erp.LabourAllocationShare",
                  # T46 F4 (Tags scope): the samen_web test host's Tag/Tagging abbrevs,
                  # allocator-proposed (used by the Tags org-scope attach + Ticket-tags
                  # migration test fixtures).
@@ -866,7 +887,17 @@ defmodule Samen.AbbrevRegistryTest do
                  # its gated write-down and the assessed lines.
                  "ear" => "Samenerp.Erp.InventoryReserve",
                  "eav" => "Samenerp.Erp.ReserveWriteDown",
-                 "eaw" => "Samenerp.Erp.ReserveWriteDownLine"
+                 "eaw" => "Samenerp.Erp.ReserveWriteDownLine",
+                 # WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and
+                 # its per-target shares.
+                 "sec" => "Samenerp.Erp.CostAllocation",
+                 "cse" => "Samenerp.Erp.CostAllocationShare",
+                 # WS-ACCT Unit 10.2 (ADR-054 D17): the host's timesheet capture
+                 # and the payroll allocation by approved minutes.
+                 "tws" => "Samenerp.Work.Timesheet",
+                 "aaa" => "Samenerp.Work.TimesheetEntry",
+                 "sel" => "Samenerp.Erp.LabourAllocation",
+                 "sle" => "Samenerp.Erp.LabourAllocationShare"
                }
              }
 
@@ -995,7 +1026,13 @@ defmodule Samen.AbbrevRegistryTest do
       # write-down and the assessed lines in the same three hosts (samen_core
       # `fsr`/`fsq`/`fsz`, samen_web `fro`/`frv`/`frw`, samenerp
       # `ear`/`eav`/`eaw`) = 405 + 386 = 791 flat.)
-      assert map_size(Reg.load()) == 791
+      # (+6 WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step + its
+      # shares per Finance host (samen_core `fcs`/`csf`, samen_web `wec`/`ewc`,
+      # samenerp `sec`/`cse`) = 405 + 392 = 797 flat.)
+      # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
+      # allocation pair in all three hosts (samen_core `wts`/`tsw`/`sfl`/`slf`,
+      # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
+      assert map_size(Reg.load()) == 807
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

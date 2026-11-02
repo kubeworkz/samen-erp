@@ -3,6 +3,66 @@
     {
       "fields": [
         {
+          "column_name": "aaa_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "aaa_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "aaa_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "aaa_minutes",
+          "logical_name": "minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "aaa_note",
+          "logical_name": "note",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "aaa_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "aaa_timesheet_id",
+          "logical_name": "timesheet_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "aaa_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "aaa_worked_on",
+          "logical_name": "worked_on",
+          "pii": false,
+          "type": "Date"
+        }
+      ],
+      "resource": "Samenerp.Work.TimesheetEntry",
+      "table_name": "aaa_timesheet_entry"
+    },
+    {
+      "fields": [
+        {
           "column_name": "akl_agent",
           "logical_name": "agent",
           "pii": false,
@@ -1151,6 +1211,60 @@
       ],
       "resource": "Samenerp.Chat.ChatMessage",
       "table_name": "cmg_message"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "cse_allocated_cents",
+          "logical_name": "allocated_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "cse_cost_allocation_id",
+          "logical_name": "cost_allocation_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cse_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cse_driver",
+          "logical_name": "driver",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "cse_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cse_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "cse_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "cse_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CostAllocationShare",
+      "table_name": "cse_cost_allocation_share"
     },
     {
       "fields": [
@@ -8561,6 +8675,300 @@
       ],
       "resource": "Samenerp.Cms.Post.Version",
       "table_name": "sct_post_versions"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "sec_allocated_on",
+          "logical_name": "allocated_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "sec_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "sec_ap_invoice_id",
+          "logical_name": "ap_invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sec_axis",
+          "logical_name": "axis",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sec_basis",
+          "logical_name": "basis",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sec_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sec_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sec_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sec_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sec_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sec_source_account_id",
+          "logical_name": "source_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sec_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sec_target_account_id",
+          "logical_name": "target_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sec_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CostAllocation",
+      "table_name": "sec_cost_allocation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "sel_axis",
+          "logical_name": "axis",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sel_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sel_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sel_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sel_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sel_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "sel_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "sel_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sel_source_account_id",
+          "logical_name": "source_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sel_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sel_target_account_id",
+          "logical_name": "target_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sel_total_cents",
+          "logical_name": "total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "sel_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.LabourAllocation",
+      "table_name": "sel_labour_allocation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "sle_allocated_cents",
+          "logical_name": "allocated_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "sle_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sle_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sle_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sle_labour_allocation_id",
+          "logical_name": "labour_allocation_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sle_minutes",
+          "logical_name": "minutes",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "sle_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sle_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.LabourAllocationShare",
+      "table_name": "sle_labour_allocation_share"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "tws_approved_at",
+          "logical_name": "approved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "tws_employee_id",
+          "logical_name": "employee_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tws_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tws_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "tws_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "tws_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "tws_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "tws_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "tws_submitted_at",
+          "logical_name": "submitted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "tws_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Work.Timesheet",
+      "table_name": "tws_timesheet"
     },
     {
       "fields": [

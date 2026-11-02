@@ -48,7 +48,7 @@ tree carries phases through **E38**. Grounding therefore reads the code, not the
 | **Banking** (`banking.ex`) | `BankAccount`, `StatementLine`, `StatementImport`, `Match`, `Rule` | ✅ |
 | **Hr** (`hr.ex`) | `Employee`🔒, `EmploymentEvent`, `LeaveRequest`, `LeaveType`, `LeaveBalance`, `PayRun`, `Payslip`, `SalaryStructure` | ❌ **not mounted** |
 | **Billing** | customer🔒/subscription/plan/price/invoice/payment/usage/entitlement + the `mov` ledger | ✅ |
-| **Work** | tasks/projects/owners (**no timesheets** — see §0.2) | ✅ |
+| **Work** | tasks/projects/owners + timesheets (authored in Unit 10.2; E15 stayed dormant/deleted) | ✅ |
 | Substrate | `Samen.Approvals` (ADR-040 Gate: `gate.ex`/`registry.ex`/`handler.ex`) — real, and Finance's `:approve` already rides it | ✅ |
 
 Finance reports already shipped: `TrialBalance`, `BalanceSheet`, `ProfitLoss`, `BudgetVsActual`,
@@ -71,8 +71,10 @@ tagged `WS-ERP E13…E38`. **They are not scopes.** Verified:
 - **referenced by nothing** — no domain, no host mount, no test;
 - `scopes/approvals/{request,rule,step}.ex` (E35) is a *duplicate* of the kernel
   `Samen.Approvals` substrate, which is what Finance actually uses;
-- `scopes/work/timesheet_{entry,guard,summary}.ex` (E15) is **not wired into the Work scope**
-  (`work.ex` and `work/blueprint.ex` never mention it).
+- `scopes/work/timesheet_{entry,guard,summary}.ex` (E15) was **never wired into the Work scope**
+  (`work.ex` and `work/blueprint.ex` never mentioned it). Unit 10.2 authored FRESH timesheet
+  resources instead (approved hours + cost-object dimension); the dormant E15 files were not the
+  starting point and are not referenced.
 
 **Ruling (binding on this plan):** dormant sets are **not reusables**. If WS-ACCT wants the
 doc's multi-entity consolidation, expense reports, supplier quality or timesheets, that is

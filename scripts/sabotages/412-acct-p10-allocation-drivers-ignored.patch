@@ -1,0 +1,34 @@
+# SABOTAGE: the allocation step ignores its declared basis — every cost object
+# gets an equal share, so a die-area split lands as a headcount split.
+#
+# WS-ACCT Phase 10 (ADR-054 decision 11) makes the basis the fact: an MPW mask
+# set exists for three designs that used 52%, 31% and 17% of its area, and the
+# whole point of the step is that RISC-V64 absorbs 52% of the invoice. This
+# patch replaces the driver-weighted floor with an equal split, on the plausible
+# reasoning that "the shuttle was shared, so split it evenly."
+#
+# Why that reasoning is wrong: the shares still sum to the invoice EXACTLY
+# (the remainder ranking is untouched), every entry still balances, R6 still
+# holds per cost object, and the posting is still one entry — which is exactly
+# why only the basis test reds. A ledger that ties to the vendor and charges the
+# wrong programme is the failure; arithmetic alone cannot see it.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_allocation_test.exs
+# MUST_FAIL: the shares follow the declared drivers and sum to the amount exactly
+--- a/samen_core/lib/samen/scopes/finance/allocation_math.ex
++++ b/samen_core/lib/samen/scopes/finance/allocation_math.ex
+@@ -52,10 +52,9 @@
+          :ok <- require_shape(normalized) do
+       total_driver = Enum.reduce(normalized, 0, fn share, acc -> acc + share.driver end)
+ 
+-      bases =
+-        Enum.map(normalized, fn share ->
+-          div(amount_cents * share.driver, total_driver)
+-        end)
++      # The shuttle is shared, so an equal split is close enough — the die-area
++      # drivers are recorded but do not move the cents.
++      bases = Enum.map(normalized, fn _share -> div(amount_cents, length(normalized)) end)
+ 
+       leftover = amount_cents - Enum.sum(bases)
+ 

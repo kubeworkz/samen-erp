@@ -16,5 +16,15 @@ defmodule SamenCore.Support.WorkFixture do
     otp_app: :samen_core,
     repo: SamenCore.TestRepo,
     namespace: SamenCore.Support.WorkFixture,
-    abbrevs: %{project: "spw", task: "stw"}
+    abbrevs: %{
+      project: "spw",
+      task: "stw",
+      # WS-ACCT Unit 10.2 (ADR-054 D17): timesheet capture; entries name the
+      # fixture's Finance cost objects.
+      timesheet: "wts",
+      timesheet_entry: "tsw"
+    },
+    timesheets: [
+      cost_object: SamenCore.Support.FinanceFixture.CostObject
+    ]
 end

@@ -10,6 +10,14 @@ defmodule Samenerp.Work do
   `mix samen.abbrev.reserve --propose`) — demo already owns the scope-default
   `wpj`/`wtk`, and one owner per prefix per namespace is the permanence rule.
 
+  ## Timesheets (WS-ACCT Unit 10.2)
+
+  The opt-in `timesheets:` mount adds `Samenerp.Work.Timesheet` /
+  `Samenerp.Work.TimesheetEntry`, with every entry carrying a same-org
+  `Samenerp.Erp.CostObject`. Approved sheets are the labour driver
+  `Samenerp.Erp.LabourAllocation` reads on the Finance side. Abbrevs
+  `tws`/`aaa` are allocator-reserved under this host.
+
   No resource here carries a vault-routed field (the Work scope's PII map is
   empty), so no masking trio applies.
   """
@@ -21,6 +29,11 @@ defmodule Samenerp.Work do
     namespace: Samenerp.Work,
     abbrevs: %{
       project: "wsp",
-      task: "wst"
-    }
+      task: "wst",
+      timesheet: "tws",
+      timesheet_entry: "aaa"
+    },
+    timesheets: [
+      cost_object: Samenerp.Erp.CostObject
+    ]
 end

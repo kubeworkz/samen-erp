@@ -424,9 +424,98 @@ cost-incurred recognition are **not facts** without actual hours. It therefore l
 those legs are allowed to claim anything**, and every labour-derived figure stays labelled
 ratio-based until it does (the binding proviso in ADR-054 Ratification 5).
 
+> **UNIT 10.1 DONE** (2026-11-01) — `CostAllocation` + `CostAllocationShare`
+> (`cost_allocation_blueprint.ex`), the pure largest-remainder
+> `AllocationMath`, the drafting cascade (`cost_allocation_drafting.ex`) and
+> the one-entry posting cascade (`cost_allocation_posting.ex`), three
+> migrations, `samen_core/test/finance_allocation_test.exs` (13 tests),
+> `samenerp/test/kubeworkz_allocation_test.exs` (1), sabotage **412**
+> certified through the harness. Abbrevs `fcs`/`csf` (fixture), `wec`/`ewc`
+> (web), `sec`/`cse` (samenerp), all allocator-reserved. **Unit 10.2 (the
+> labour driver) is NOT started** — every labour-derived figure stays labelled
+> ratio-based under ADR-054 Ratification 5.
+
+> **UNIT 10.2 DONE** (2026-11-01) — `Timesheet` + `TimesheetEntry` authored
+> inside the shipped Work scope (`timesheet_blueprint.ex`, opt-in `timesheets:`
+> with the host's `cost_object:` module; draft → submitted → approved, entries
+> one day × one cost object), and `LabourAllocation` + `LabourAllocationShare`
+> in Finance with the `LabourDriver` read. The drafting cascade freezes approved
+> minutes into an exact largest-remainder split; the posting cascade re-derives
+> the driver and refuses `labour_drift`, then lands ONE dimensioned entry.
+> Three migrations; `samen_core/test/work_timesheet_test.exs` (9 tests),
+> `samen_core/test/finance_labour_test.exs` (13), and
+> `samenerp/test/kubeworkz_labour_test.exs` (1: September design-engineering
+> payroll across RISC-V64/GPU/PTA). Sabotage **413** certified through the
+> harness. Abbrevs `wts`/`tsw`/`sfl`/`slf` (fixture), `wel`/`wle` (web),
+> `tws`/`aaa`/`sel`/`sle` (samenerp), all allocator-reserved. The driver now
+> EXISTS; the Phase 7 variance layer still takes declared actuals, so its
+> labour figures remain labelled until a later unit consumes the driver.
+
+Seven decisions the allocation step had to take:
+
+1. **The bill must have posted.** Allocation moves cost already on the books; a draft bill has no
+   posting to reclass. The amount is re-read from the bill's own LINE for the source account — not
+   from the AP entry, and never accepted from a caller.
+2. **One source account, by declaration or by fact.** A single-account bill defaults to it; a
+   multi-account bill must name `source_account_id`, and an account the bill never debited is
+   refused. The target account must differ: a same-account allocation moves nothing.
+3. **Largest remainder, not `round/1`.** Each share takes the floor of its exact proportion; the
+   leftover cents go one each to the largest remainders (tie-break: larger driver, then cost-object
+   id). 120 000.01 split 52/31/17 therefore lands 6 240 001 / 3 720 000 / 2 040 000 — the extra
+   cent on the 52% programme, never lost or invented. A zero-cent share is refused rather than
+   materialized (the DB belt refuses one anyway).
+4. **The basis is recorded, the drivers are the arithmetic.** `:die_area` / `:wafer` / `:effort`
+   labels the declared unit for the audit; only the drivers' proportions move cents. Fewer than two
+   targets is a reclass, not an allocation, and is refused.
+5. **ONE entry, N targets.** Each share contributes a debit to the target account and a credit to
+   the source account, BOTH tagged with that share's cost object. That is what makes the posting
+   R6-clean (each programme nets to zero) and dimension-only: the accounts move the invoice once,
+   and three programmes never become three posts.
+6. **One allocation per bill and source account.** The table's unique index is the belt; the
+   drafting pre-read is the caller-facing refusal. A correction is a reversing entry, never a
+   second allocation of the same cost. Shares are append-only and a posted header is final.
+7. **The axis is the frozen vocabulary, defaulting to `project`.** The programmes are cost objects
+   under the `project` axis (the `chip` kind names what they are, not where the ledger files them);
+   a host may declare `lot`/`fund`/`cost_pool` instead. R10 comes free: the entry is created through
+   the posted-born factory, so a closed period refuses the allocation and leaves the draft alone.
+
 **AC:** one mask invoice allocates across the RISC-V64/GPU/PTA programmes with the shares summing
 to exactly the invoice total (red path: rounding must not lose or invent a cent); the allocation
 is dimension-only (it posts once, to N cost objects — never N posts).
+
+Seven decisions the labour driver had to take:
+
+1. **Approved hours are the fact; everything else is zero.** The driver reads `:approved` sheets
+   only, and only entries whose `worked_on` falls inside the pay period (a sheet is an overlap
+   envelope, an entry is the unit of time). A draft or submitted sheet contributes no minutes, so
+   unapproved time can never move payroll cost. `:submit` requires at least one entry; `:approve`
+   only matches a submitted sheet; an approved sheet is final (DB trigger).
+2. **Entries freeze with the sheet, and the DB is the belt.** One entry is one day against ONE
+   required, same-org cost object; minutes are positive integers. Create/update/delete are refused
+   once the sheet leaves `:draft`, in Ash (`TimesheetEntryGuard`) AND by the `tsw_parent_draft`
+   trigger, which also enforces the capture window. A submitted sheet's evidence cannot move after
+   payroll consumed it.
+3. **The total is declared; the split is derived.** Actual pay is not minutes × one rate
+   (deductions, salaried staff, overtime), so `:draft` accepts the payroll total and the two
+   accounts and NEVER a share, a minute or a cent. `AllocationMath` then splits by approved
+   minutes, and the shares are append-only evidence of the driver the draft froze.
+4. **Drift is re-derived, not trusted.** `:post` re-runs the driver and compares minutes PER cost
+   object (equal totals can hide different splits) and the share sum against the header. A stale
+   draft refuses `labour_drift`; it never posts against hours that moved.
+5. **A drifted draft can be withdrawn; a posted one cannot.** `:discard` writes `:discarded` and
+   keeps the shares as evidence; the partial unique index frees the {period, source account} slot
+   for a re-draft. The DB trigger allows exactly `draft → posted` and `draft → discarded`.
+6. **An unwired mount fails honest.** `labour: [timesheet:, timesheet_entry:]` is required; without
+   it the actions refuse `:timesheets_not_wired` rather than inventing a headcount ratio. The web
+   host mounts Finance without Work timesheets and is refused, by design.
+7. **ONE entry, N pairs, same discipline as the cost allocator.** Per cost object: Dr target /
+   Cr source, both tagged on the header's axis; the entry lands on `period_end` and rides the
+   posted-born factory, so R1/R6 hold and R10 refuses a closed period.
+
+**AC:** approved hours drive the split and unapproved hours move nothing (red path: the driver
+returns zero for a draft/submitted sheet); hours approved after drafting refuse the post
+(`labour_drift`), the draft is discarded and the re-draft posts; the host proof allocates
+Kubeworkz September labour across the three programmes as ONE entry.
 
 ---
 
@@ -523,6 +612,7 @@ the coverage ledger (phase 0) has no workbook left without a verdict.
 | 409 | 5 | the accrual's linked reversal mirrored on the same side |
 | 410 | 11 | R11 — grant ↔ fund |
 | 411 | 9 | the ADR-040 Gate on the obsolescence write-down |
+| 412 | 10 | the declared allocation basis (drivers) |
 
 Plus the masking trio's sabotage twin on the grant personnel report (Phase 11) and the
 posting-map widening's own red path (an unmapped meaning must refuse) in Phase 1. Numbers are
@@ -567,9 +657,10 @@ commit time.
 - **The disposition table is binding, per variance type** (ADR-054 Ratification 2). Yield and PDB
   BOM variances absorb into inventory; PPV and overhead volume go to COGS; labour and overhead
   spending go to R&D expense. "Variance" is not a single bucket and no phase may net them together.
-- **Labour-derived figures are ratio-based until Phase 10.2 lands** and must be labelled so
-  (ADR-054 Ratification 5). That covers Phase 7's labour rate/efficiency legs and Phase 11's
-  grant cost-incurred recognition — neither may claim a fact before the driver exists.
+- **The labour driver EXISTS (Unit 10.2); consumers still have to adopt it.** Phase 7's labour
+  rate/efficiency legs and Phase 11's grant cost-incurred recognition may now read approved
+  timesheet minutes instead of a ratio, but until each is rewired to the driver its figures stay
+  labelled (ADR-054 Ratification 5). The driver itself is no longer the blocker.
 - **The doc's figures are placeholders** — the *structure* ships; the numbers get reviewed by the
   operator before they are called Kubeworkz's policy (design §7).
 - **The doc's §E1–E5 appendix is not accounting** — the operator confirmed its exclusion

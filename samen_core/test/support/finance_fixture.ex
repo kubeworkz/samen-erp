@@ -75,8 +75,19 @@ defmodule SamenCore.Support.FinanceFixture do
       # write-down and the assessed lines.
       inventory_reserve: "fsr",
       reserve_write_down: "fsq",
-      reserve_write_down_line: "fsz"
+      reserve_write_down_line: "fsz",
+      # WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and its
+      # per-target shares.
+      cost_allocation: "fcs",
+      cost_allocation_share: "csf",
+      # WS-ACCT Unit 10.2 (ADR-054 D17): payroll by approved timesheet minutes.
+      labour_allocation: "sfl",
+      labour_allocation_share: "slf"
     },
+    labour: [
+      timesheet: SamenCore.Support.WorkFixture.Timesheet,
+      timesheet_entry: SamenCore.Support.WorkFixture.TimesheetEntry
+    ],
     inventory: [
       item: SamenCore.Support.InventoryFixture.Item,
       level: SamenCore.Support.InventoryFixture.StockLevel,

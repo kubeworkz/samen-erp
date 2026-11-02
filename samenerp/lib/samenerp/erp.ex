@@ -51,8 +51,16 @@ defmodule Samenerp.Erp do
       asset_posting: "ead",
       inventory_reserve: "ear",
       reserve_write_down: "eav",
-      reserve_write_down_line: "eaw"
+      reserve_write_down_line: "eaw",
+      cost_allocation: "sec",
+      cost_allocation_share: "cse",
+      labour_allocation: "sel",
+      labour_allocation_share: "sle"
     },
+    labour: [
+      timesheet: Samenerp.Work.Timesheet,
+      timesheet_entry: Samenerp.Work.TimesheetEntry
+    ],
     inventory: [
       item: Samenerp.Erp.Item,
       level: Samenerp.Erp.StockLevel,
