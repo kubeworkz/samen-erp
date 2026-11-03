@@ -1,3 +1,10 @@
+defmodule Samen.TestDbTest.ScratchRepo do
+  @moduledoc false
+  # A repo of this test file's own, so the `boot!/2` proofs can start/stop a pool without
+  # touching the suite's `SamenCore.TestRepo`.
+  use Ecto.Repo, otp_app: :samen_core, adapter: Ecto.Adapters.Postgres
+end
+
 defmodule Samen.TestDbTest do
   @moduledoc """
   Proofs for the shared tolerant boot (`Samen.TestDb`) that every probe, emitted
@@ -15,11 +22,17 @@ defmodule Samen.TestDbTest do
     3. an adapter that cannot manage storage is REFUSED loudly (fail-honest, never a silent
        "assume it is up").
 
+  Two more pin the boot itself (2026-11-02, demo's adversarial `mix test`): a pool that is
+  already running is STOPPED before the drop (a canary table proves the database really was
+  rebuilt, not merely re-migrated under a live pool), and a pool a supervisor keeps restarting
+  is REFUSED rather than dropped out from under.
+
   Everything runs against a scratch database of its own — never the suite's `samen_core_test`.
   """
 
   use ExUnit.Case, async: false
 
+  alias Samen.TestDbTest.ScratchRepo
   alias SamenCore.TestRepo
 
   @scratch_db "samen_core_testdb_helper_test"
@@ -76,5 +89,82 @@ defmodule Samen.TestDbTest do
     assert_raise ArgumentError, ~r/cannot manage storage/, fn ->
       Samen.TestDb.ensure_up!(scratch_config(), adapter: Samen.TestDb.NoSuchAdapter)
     end
+  end
+
+  test "boot!/2 stops a live pool BEFORE dropping (a canary table proves the database is rebuilt)" do
+    scratch_repo!()
+    :ok = Samen.TestDb.ensure_up!(ScratchRepo, timeout: 15_000)
+    {:ok, _pid} = ScratchRepo.start_link()
+
+    # Hold a table of our own. If the boot dropped the database under the live pool, the drop
+    # would be refused (best-effort), the create would answer `:already_up`, and this row would
+    # survive the "rebuild" — exactly the silent no-op the boot must never allow.
+    assert {:ok, _} = ScratchRepo.query("CREATE TABLE boot_canary (id integer)")
+
+    assert :ok = Samen.TestDb.boot!(ScratchRepo, timeout: 15_000)
+
+    assert Process.whereis(ScratchRepo) |> is_pid(),
+           "the boot must leave the repo running for its caller"
+
+    assert {:error, %Postgrex.Error{postgres: %{code: :undefined_table}}} =
+             ScratchRepo.query("SELECT 1 FROM boot_canary")
+
+    # Migrated (Ecto's bookkeeping exists) and on the CONFIGURED pool again: only a sandbox
+    # pool can be switched to :manual.
+    assert {:ok, %{num_rows: 0}} = ScratchRepo.query("SELECT 1 FROM schema_migrations")
+    assert :ok = Ecto.Adapters.SQL.Sandbox.mode(ScratchRepo, :manual)
+  end
+
+  test "boot!/2 REFUSES to drop a database under a pool a supervisor keeps restarting" do
+    scratch_repo!()
+
+    {:ok, supervisor} = Supervisor.start_link([ScratchRepo], strategy: :one_for_one)
+
+    on_exit(fn ->
+      if Process.alive?(supervisor) do
+        try do
+          Supervisor.stop(supervisor)
+        catch
+          :exit, _ -> :ok
+        end
+      end
+
+      Application.delete_env(:samen_core, ScratchRepo)
+    end)
+
+    assert_raise RuntimeError, ~r/was restarted by its supervisor/, fn ->
+      Samen.TestDb.boot!(ScratchRepo, timeout: 15_000)
+    end
+  end
+
+  # Point the scratch repo at the module's scratch database (on the SQL Sandbox, like every
+  # host test config) and register the cleanup that must run BEFORE the module's `on_exit` can
+  # drop the database (a drop is refused while the pool is attached). The caller starts it.
+  defp scratch_repo! do
+    config =
+      scratch_config()
+      |> Keyword.take([:hostname, :port, :username, :password, :database])
+      |> Keyword.put(:pool, Ecto.Adapters.SQL.Sandbox)
+      |> Keyword.put(:pool_size, 5)
+
+    Application.put_env(:samen_core, ScratchRepo, config)
+
+    on_exit(fn ->
+      case Process.whereis(ScratchRepo) do
+        nil ->
+          :ok
+
+        pid ->
+          try do
+            Supervisor.stop(pid, :normal, 30_000)
+          catch
+            :exit, _ -> :ok
+          end
+      end
+
+      Application.delete_env(:samen_core, ScratchRepo)
+    end)
+
+    :ok
   end
 end

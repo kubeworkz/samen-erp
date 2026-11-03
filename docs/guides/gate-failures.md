@@ -1077,3 +1077,35 @@ Adversarial twin:
 `scripts/sabotages/367-db-boot-verifier-raw-matcher-neutered.patch` (the raw-boot pattern stops
 matching a real `storage_up`, so a hand-rolled boot in a file whose name is not a known harness
 reads as "no violation") — it names the three tests that must flip.
+
+## `Samen.TestDb.boot!/2` — the migration pool (a sandbox cannot migrate itself)
+
+**Symptom** (2026-11-02 root gate, demo's `mix test --only adversarial` step — four sibling app
+gates running concurrently against one Postgres):
+
+```text
+** (DBConnection.ConnectionError) could not checkout the connection owned by #PID<0.94.0> (:erlang).
+   ... Reason: [Elixir.Demo.Repo] connection not available and request was dropped from queue
+   after 5978ms.
+    (samen_core 0.1.0) lib/samen/test_db.ex:114: Samen.TestDb.boot!/2
+    test/test_helper.exs:18: (file)
+```
+
+**Meaning:** `Ecto.Migrator` asks the repo for **two** connections at once (its own guard says
+so: "one connection to maintain a lock and another to run migrations"). Every host test config
+sets `pool: Ecto.Adapters.SQL.Sandbox`, and `boot!` used to start that pool and migrate through
+it. A sandbox gives each owner a **single-connection proxy**, so the migrator's second request
+was redirected to its own busy proxy and queued until the 6s checkout timeout — a boot crash
+with no assertion run, only when the pool was unlucky. The same boot also dropped the database
+under a pool that was already running whenever a host had one.
+
+**Fix:** `boot!/2` now (1) stops a pool that is already running — and REFUSES loudly if a
+supervisor keeps restarting it, rather than dropping the database under it — and (2) migrates
+through a pool of the boot's OWN (`DBConnection.ConnectionPool`, Ecto's minimum two
+connections), then starts the repo on its configured pool. The suite always finds its sandbox;
+the migrator never touches it. Observed side effect: demo's boot dropped from ~114s to ~46s
+(no 20-connection sandbox array, no ownership proxy churn).
+
+Proofs: `samen_core/test/test_db_test.exs` — a canary table disappears across `boot!/2`
+(proving the drop really happened, not a best-effort no-op under a live pool), the repo comes
+back on the configured pool (`Sandbox.mode/2` succeeds), and a supervised pool is refused.
