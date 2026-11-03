@@ -1,0 +1,42 @@
+# SABOTAGE: the boot migrates on whatever pool the app configured, and drops the
+# database without stopping that pool first — the pre-2026-11-02 `Samen.TestDb.boot!/2`.
+#
+# The commit that introduced the dedicated migration pool fixed two defects that only
+# bite under load, and this patch puts BOTH back, on the plausible reasoning that
+# "reusing the app's own pool is simpler than starting a second one, and `ensure_up!`
+# already tolerates a database that is up."
+#
+# Why that reasoning is wrong: a SQL Sandbox answers each owner with a
+# SINGLE-connection proxy, and `Ecto.Migrator` asks for two connections at once, so the
+# second request is redirected into the caller's busy proxy and queues until the
+# checkout timeout (observed: demo's adversarial `mix test` dying at
+# `test_helper.exs:18` with "dropped from queue after 5978ms"). And `DROP DATABASE` is
+# refused while a session is attached, so with the pool left running the "rebuild"
+# degenerates into a best-effort no-op and the old schema — here, the canary table —
+# survives a boot that reported success. The test's scratch config runs the sandbox in
+# `:auto` mode, so the migration itself still succeeds: only the missing drop shows.
+#
+# APP: samen_core
+# TEST_FILES: test/test_db_test.exs
+# MUST_FAIL: boot!/2 stops a live pool BEFORE dropping
+diff --git a/samen_core/lib/samen/test_db.ex b/samen_core/lib/samen/test_db.ex
+index 712cdb9e..0e70727e 100644
+--- a/samen_core/lib/samen/test_db.ex
++++ b/samen_core/lib/samen/test_db.ex
+@@ -117,7 +117,6 @@ defmodule Samen.TestDb do
+   """
+   @spec boot!(module(), keyword()) :: :ok
+   def boot!(repo, opts \\ []) when is_atom(repo) do
+-    :ok = stop_repo!(repo)
+     :ok = ensure_up!(repo, opts)
+ 
+     ownership_timeout = Keyword.get(opts, :ownership_timeout, @default_ownership_timeout)
+@@ -195,7 +194,7 @@ defmodule Samen.TestDb do
+   # boot path entirely. The caller's configured pool is started afterwards, exactly as before.
+   defp migrate_on_its_own_pool!(repo, ownership_timeout) do
+     start_opts = [
+-      pool: DBConnection.ConnectionPool,
++      pool: repo.config()[:pool],
+       pool_size: @migration_pool_size,
+       ownership_timeout: ownership_timeout
+     ]

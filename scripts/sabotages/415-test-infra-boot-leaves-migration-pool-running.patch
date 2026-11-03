@@ -1,0 +1,35 @@
+# SABOTAGE: the boot leaves its dedicated migration pool running, so the caller never
+# gets the pool it configured — for every host test helper, the SQL Sandbox.
+#
+# The dedicated two-connection pool is what makes migrating safe; tearing it down is
+# what makes `boot!/2` keep its promise that the caller finds the CONFIGURED pool
+# running on return. This patch drops only the teardown, on the plausible reasoning
+# that "the pool is already warm and connected, so restarting it is wasted work."
+#
+# Why that reasoning is wrong: the migration pool is a plain
+# `DBConnection.ConnectionPool`, not a sandbox. `boot!` then calls `start_repo!/2`,
+# which reports `{:already_started, pid}` and succeeds, so the boot returns `:ok` while
+# the repo is on the wrong pool — and every host test helper's first
+# `Sandbox.mode(repo, :manual)` (or `checkout/2`) then raises. Nothing about the
+# database is stale here: it was dropped and re-migrated correctly, so the canary
+# assertion passes and only the pool identity is wrong. A boot that calls itself done
+# while leaving the suite unable to use its repo is the failure.
+#
+# APP: samen_core
+# TEST_FILES: test/test_db_test.exs
+# MUST_FAIL: boot!/2 stops a live pool BEFORE dropping
+diff --git a/samen_core/lib/samen/test_db.ex b/samen_core/lib/samen/test_db.ex
+index 712cdb9e..f4de2bcd 100644
+--- a/samen_core/lib/samen/test_db.ex
++++ b/samen_core/lib/samen/test_db.ex
+@@ -216,10 +216,6 @@ defmodule Samen.TestDb do
+         kind, reason -> {:caught, kind, reason, __STACKTRACE__}
+       end
+ 
+-    # Always tear the migration pool down: the caller must find its CONFIGURED pool (the SQL
+-    # Sandbox for every host test helper) running when `boot!` returns.
+-    :ok = stop_repo!(repo)
+-
+     case result do
+       :ok -> :ok
+       {:raised, exception, stacktrace} -> reraise(exception, stacktrace)
