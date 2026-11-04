@@ -79,6 +79,11 @@
 # `--app`/`--range` CHUNKS (see docs/adr/ADR-045 §4.2). Filters COMPOSE as an
 # intersection.
 #   --app <name>            only patches whose APP: header == <name>
+#   --exclude-app <name>    DROP patches whose APP: header == <name> (repeatable).
+#                             The complement of --app: certifies "every app but
+#                             this one" in a single run — the remaining slices,
+#                             without re-replaying the one already certified.
+#                             Composes with every other filter (intersection).
 #   --range <lo>-<hi>       only patches whose FILENAME number (the NNN in
 #   --from <lo> --to <hi>     NNN-slug.patch — stable, matches how we say
 #                             "sabotage 205") is in [lo,hi] INCLUSIVE. --from/
@@ -189,7 +194,8 @@ fail() {
 }
 
 usage() {
-  echo "Usage: sabotage.sh [--app <name>] [--range <lo>-<hi> | --from <lo> --to <hi>]"
+  echo "Usage: sabotage.sh [--app <name>] [--exclude-app <name>]..."
+  echo "                   [--range <lo>-<hi> | --from <lo> --to <hi>]"
   echo "                   [--touching <path>... | --touching-file <file> | --changed [<ref>]]"
   echo "                   [--list | --dry-run]"
   echo "                   [--test-db <name>]  (per-slice test DB: exports SAMEN_TEST_DB for each patch's mix test)"
@@ -247,6 +253,7 @@ sha_files() { # sha_files <root> <listfile> <outfile>
 
 # ── argument parsing ─────────────────────────────────────────────────────────
 FILTER_APP=""
+EXCLUDE_APPS=()
 RANGE_LO=""
 RANGE_HI=""
 RANGE_ACTIVE=0
@@ -266,6 +273,9 @@ while [[ $# -gt 0 ]]; do
     --app)
       shift; [[ $# -gt 0 ]] || arg_err "--app requires a name"
       FILTER_APP="$1"; shift ;;
+    --exclude-app)
+      shift; [[ $# -gt 0 ]] || arg_err "--exclude-app requires a name"
+      EXCLUDE_APPS+=("$1"); shift ;;
     --range)
       shift; [[ $# -gt 0 ]] || arg_err "--range requires <lo>-<hi>"
       if [[ "$1" =~ ^([0-9]+)-([0-9]+)$ ]]; then
@@ -348,7 +358,8 @@ if [[ $RANGE_ACTIVE -eq 1 ]]; then
 fi
 
 FILTER_ACTIVE=0
-[[ -n "$FILTER_APP" || $RANGE_ACTIVE -eq 1 || $TOUCH_MODE -eq 1 ]] && FILTER_ACTIVE=1
+[[ -n "$FILTER_APP" || ${#EXCLUDE_APPS[@]} -gt 0 || $RANGE_ACTIVE -eq 1 || $TOUCH_MODE -eq 1 ]] \
+  && FILTER_ACTIVE=1
 
 # The per-slice test database, if requested, as an env assignment for `mix test`. `env` is used
 # at the call site so an EMPTY array is a genuine no-op — the default run's command line is
@@ -360,7 +371,12 @@ fi
 # Human-readable selection label (for the effective-selection line + success line).
 filter_label() {
   local parts=()
+  local ex joined=""
   [[ -n "$FILTER_APP" ]] && parts+=("app=$FILTER_APP")
+  if (( ${#EXCLUDE_APPS[@]} > 0 )); then
+    for ex in "${EXCLUDE_APPS[@]}"; do joined="${joined:+$joined,}$ex"; done
+    parts+=("except=$joined")
+  fi
   [[ $RANGE_ACTIVE -eq 1 ]] && parts+=("range=${RANGE_LO}-${RANGE_HI}")
   [[ $TOUCH_MODE -eq 1 ]] && parts+=("$TOUCH_DESC")
   local IFS=', '
@@ -379,12 +395,19 @@ patch_touches() {
 
 # select_patch <patch> — 0 if the patch passes EVERY active filter (intersection).
 select_patch() {
-  local patch="$1" name num n app
+  local patch="$1" name num n app ex
   name="$(basename "$patch")"
 
   if [[ -n "$FILTER_APP" ]]; then
     app="$(meta "$patch" APP)"
     [[ "$app" == "$FILTER_APP" ]] || return 1
+  fi
+
+  if (( ${#EXCLUDE_APPS[@]} > 0 )); then
+    app="$(meta "$patch" APP)"
+    for ex in "${EXCLUDE_APPS[@]}"; do
+      [[ "$app" == "$ex" ]] && return 1
+    done
   fi
 
   if [[ $RANGE_ACTIVE -eq 1 ]]; then

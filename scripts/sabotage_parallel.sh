@@ -182,7 +182,7 @@
 #                         cannot be run safely is not a green preview.
 #     --no-preflight      pass through: skip the structural preflight (the driver runs it ONCE
 #                         itself, rather than once per slice — it is read-only and idempotent)
-#     --range/--from/--to/--touching/--touching-file/--changed
+#     --range/--from/--to/--touching/--touching-file/--changed/--exclude-app
 #                         narrow the SELECTION, and every slice runs filter ∩ slice, so the union
 #                         over slices is exactly the filtered set — which is why the coverage proof
 #                         still holds. --touching/--changed are passed through to each slice;
@@ -191,6 +191,10 @@
 #                         caller's would override the chunk and every slice would replay the same
 #                         patch (the chunks are cut from the already-filtered listing, so the
 #                         caller's range is folded into them; see RANGE_FOLDED below).
+#                         --exclude-app (repeatable, e.g. `--exclude-app samen_core`) passes
+#                         through unchanged: it narrows the selection the driver partitions, and
+#                         each slice still carries its own `--app`, so the complement replays
+#                         exactly once.
 #
 #     --app is REJECTED: partitioning by app is this driver's job (use sabotage.sh for one app).
 #     --test-db is REJECTED too: this driver owns it, per slice, and accepting a caller value
@@ -531,12 +535,12 @@ while [[ $# -gt 0 ]]; do
       LIST_ONLY=1; shift ;;
     --adapt-selftest)
       ADAPT_SELFTEST=1; shift ;;
-    --no-preflight|--range|--from|--to|--touching|--touching-file|--changed)
+    --no-preflight|--range|--from|--to|--touching|--touching-file|--changed|--exclude-app)
       PASSTHROUGH+=("$1")
       # Everything after --jobs is consumed by the driver, so pass arguments through verbatim
       # until the next recognised driver flag. The two-argument forms carry their value.
       case "$1" in
-        --range|--from|--to|--touching-file)
+        --range|--from|--to|--touching-file|--exclude-app)
           shift; [[ $# -gt 0 ]] || arg_err "$1 requires a value"
           PASSTHROUGH+=("$1"); shift ;;
         --changed)

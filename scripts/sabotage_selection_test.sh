@@ -32,6 +32,10 @@
 #      selector that shipped before.
 #   5. FILTERS STILL COMPOSE AS AN INTERSECTION — `--changed HEAD --range` narrows to the
 #      intersection and does not resurrect the probe patch.
+#   6. `--exclude-app` IS THE COMPLEMENT OF `--app`, AND ONLY THAT — a `samen_core` probe is
+#      dropped by `--exclude-app samen_core` but kept by `--exclude-app samen_web` (the
+#      positive control: an "exclude everything" implementation would pass the first half),
+#      and the banner names `except=<app>` so a narrowed run cannot be read as a full one.
 #
 # Usage: scripts/sabotage_selection_test.sh
 # Exit:  0 if every assertion passes; non-zero + FAIL lines otherwise.
@@ -136,6 +140,29 @@ if grep -qF "changed=HEAD+untracked" <<<"$listing"; then
 else
   echo "$listing"
   bad "the --changed banner does not disclose the untracked half of the union"
+fi
+
+# 6. --exclude-app is the COMPLEMENT of --app, not "exclude everything".
+excluded="$(cd "$REPO_ROOT" && bash "$SABOTAGE" --exclude-app samen_core --list 2>&1)"
+if grep -qF "999-sabotage-selection-probe.patch" <<<"$excluded"; then
+  echo "$excluded"
+  bad "--exclude-app samen_core still selected a samen_core probe patch"
+else
+  ok "--exclude-app <app> DROPS that app's patches (the complement of --app)"
+fi
+
+kept="$(cd "$REPO_ROOT" && bash "$SABOTAGE" --exclude-app samen_web --list 2>&1)"
+if grep -qF "999-sabotage-selection-probe.patch" <<<"$kept"; then
+  ok "POSITIVE CONTROL: --exclude-app <other app> leaves the samen_core probe selected"
+else
+  echo "$kept"
+  bad "--exclude-app samen_web dropped a samen_core patch — the filter excludes everything"
+fi
+
+if grep -qF "except=samen_core" <<<"$excluded"; then
+  ok "the FILTERED banner names the exclusion (except=samen_core) — no silent narrowing"
+else
+  bad "the --exclude-app banner does not disclose the exclusion"
 fi
 
 # 5. FILTERS STILL COMPOSE AS AN INTERSECTION (the union widened the touched set, it did
