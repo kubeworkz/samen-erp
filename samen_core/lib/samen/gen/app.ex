@@ -570,30 +570,87 @@ defmodule Samen.Gen.App do
   dumps the committed `api_contract.v1.json` structural-break snapshot so the generated
   ci.sh's `samen.verify.api_contract` step is green on first run. Runs in the app dir via
   `System.cmd` so it does not disturb the generator's own build.
+
+  A dependency whose rebar3 build CRASHED (rather than failed to compile) is cleaned and
+  retried ONCE — see `@transient_dep_compile`. A genuine compiler error matches nothing and
+  still fails on the first attempt; a retry that fails too is raised with the retry's
+  output. `:mix_runner` injects the `(app_dir, args, env) -> {output, exit_code}` seam (the
+  `Samen.Verifier.Fleet.run/2` `:runner` convention) so the recovery policy is testable
+  without spawning a scratch app.
   """
-  def compile_and_dump!(%__MODULE__{} = s) do
-    run_mix!(s, ["deps.get"])
-    run_mix!(s, ["compile", "--warnings-as-errors"])
-    run_mix!(s, ["samen.catalog.dump", "--output", "schema.dict.json"])
+  def compile_and_dump!(%__MODULE__{} = s, opts \\ []) do
+    runner = Keyword.get(opts, :mix_runner, &mix_cmd/3)
+
+    run_mix!(s, ["deps.get"], runner)
+    run_mix!(s, ["compile", "--warnings-as-errors"], runner)
+    run_mix!(s, ["samen.catalog.dump", "--output", "schema.dict.json"], runner)
 
     if s.api? do
-      run_mix!(s, ["samen.verify.api_contract", "--version", "v1", "--update"])
+      run_mix!(s, ["samen.verify.api_contract", "--version", "v1", "--update"], runner)
     end
 
     :ok
   end
 
-  defp run_mix!(%__MODULE__{app_dir: dir} = s, args) do
+  # `mix` reports a dependency whose BUILD TOOL died exactly like one that failed to
+  # compile: `** (Mix) Could not compile dependency :opentelemetry, "escript.exe ...
+  # rebar3 bare compile ..." command failed`. Observed 2026-11-04 aborting the root gate at
+  # the post-app probe while sibling gates loaded the box; the identical step then passed
+  # standalone (648.6s) and on an immediate re-run, so the build tool — not the generated
+  # code — crashed. Cleaning that one dep and retrying once keeps a transient `escript`
+  # crash from killing the gate; the retry is bounded and its failure is never swallowed.
+  @transient_dep_compile ~r/\(Mix\) Could not compile dependency :([A-Za-z_][A-Za-z0-9_]*)/
+
+  defp run_mix!(%__MODULE__{} = s, args, runner) do
     env = [{"MIX_ENV", "test"}, {"MIX_QUIET", "1"}]
 
-    case System.cmd("mix", args, cd: dir, env: env, stderr_to_stdout: true) do
+    case runner.(s.app_dir, args, env) do
       {_out, 0} ->
         :ok
 
       {out, code} ->
-        raise "samen.gen.app post-step `mix #{Enum.join(args, " ")}` failed (exit #{code}) " <>
-                "in #{s.app_dir}:\n#{out}"
+        retry_transient_dep_compile(s, args, env, runner, out, code)
     end
+  end
+
+  defp retry_transient_dep_compile(s, args, env, runner, out, code) do
+    case Regex.run(@transient_dep_compile, out) do
+      [_, dep] ->
+        IO.puts(
+          :stderr,
+          "[samen.gen.app] mix #{Enum.join(args, " ")} failed because :#{dep}'s rebar3 " <>
+            "build crashed transiently — cleaning :#{dep} and retrying once"
+        )
+
+        _ = runner.(s.app_dir, ["deps.clean", dep, "--build"], env)
+
+        case runner.(s.app_dir, args, env) do
+          {_out, 0} -> :ok
+          {retry_out, retry_code} -> raise_mix_failure!(s, args, retry_code, retry_out, dep)
+        end
+
+      nil ->
+        raise_mix_failure!(s, args, code, out, nil)
+    end
+  end
+
+  defp raise_mix_failure!(s, args, code, out, retried_dep) do
+    retry_note =
+      case retried_dep do
+        nil ->
+          ""
+
+        dep ->
+          "\n(retried once after a transient rebar3 build failure of :#{dep}; " <>
+            "the retry failed too)"
+      end
+
+    raise "samen.gen.app post-step `mix #{Enum.join(args, " ")}` failed (exit #{code}) " <>
+            "in #{s.app_dir}:#{retry_note}\n#{out}"
+  end
+
+  defp mix_cmd(dir, args, env) do
+    System.cmd("mix", args, cd: dir, env: env, stderr_to_stdout: true)
   end
 
   # ------------------------------------------------------------------ helpers

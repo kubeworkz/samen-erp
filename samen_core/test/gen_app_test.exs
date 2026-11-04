@@ -1166,6 +1166,100 @@ defmodule Samen.Gen.AppTest do
     end
   end
 
+  # The EXACT captured shape when the 2026-11-04 root gate aborted at the post-app probe:
+  # `mix compile` failed because :opentelemetry's rebar3/escript build died — the same step
+  # then passed standalone and on an immediate re-run, so the BUILD TOOL crashed, not the
+  # generated code. `compile_and_dump!/2` cleans that dep and retries once; these tests pin
+  # that the recovery is bounded and cannot mask a real compiler error.
+  @rebar3_crash "** (Mix) Could not compile dependency :opentelemetry, \"escript.exe " <>
+                  "c:/Users/kubew/.mix/elixir/1-20-otp-29/rebar3 bare compile --paths " <>
+                  ".../_build/test/lib/*/ebin\" command failed.\n"
+  @compile_args ["compile", "--warnings-as-errors"]
+
+  describe "compile_and_dump!/2 — transient rebar3 crash recovery" do
+    test "a crashed rebar3 dependency build is cleaned and retried ONCE, then proceeds" do
+      reset_calls!()
+
+      runner = fn _dir, args, _env ->
+        record_call!(args)
+
+        if args == @compile_args and compile_attempts() == 1 do
+          {@rebar3_crash, 1}
+        else
+          {"", 0}
+        end
+      end
+
+      assert Gen.compile_and_dump!(spec(web: false), mix_runner: runner) == :ok
+
+      assert recorded_calls() == [
+               ["deps.get"],
+               @compile_args,
+               ["deps.clean", "opentelemetry", "--build"],
+               @compile_args,
+               ["samen.catalog.dump", "--output", "schema.dict.json"]
+             ]
+    end
+
+    test "a genuine compiler error matches nothing and is raised on the FIRST attempt" do
+      reset_calls!()
+
+      runner = fn _dir, args, _env ->
+        record_call!(args)
+
+        if args == @compile_args do
+          {"** (CompileError) lib/widgetco/vertical.ex:9: undefined function nope/0", 1}
+        else
+          {"", 0}
+        end
+      end
+
+      assert_raise RuntimeError, ~r/undefined function nope\/0/, fn ->
+        Gen.compile_and_dump!(spec(web: false), mix_runner: runner)
+      end
+
+      assert recorded_calls() == [["deps.get"], @compile_args]
+    end
+
+    test "a retry that fails too is raised, naming the dep and that it retried" do
+      reset_calls!()
+
+      runner = fn _dir, args, _env ->
+        record_call!(args)
+
+        cond do
+          args == ["deps.clean", "opentelemetry", "--build"] ->
+            {"", 0}
+
+          args == @compile_args and compile_attempts() == 1 ->
+            {@rebar3_crash, 1}
+
+          args == @compile_args ->
+            {"** (Mix) Could not compile dependency :opentelemetry ... RETRY-OUTPUT", 1}
+
+          true ->
+            {"", 0}
+        end
+      end
+
+      error =
+        assert_raise RuntimeError, fn ->
+          Gen.compile_and_dump!(spec(web: false), mix_runner: runner)
+        end
+
+      assert error.message =~ "retried once after a transient rebar3 build failure of :opentelemetry"
+      assert error.message =~ "the retry failed too"
+      assert error.message =~ "RETRY-OUTPUT"
+      assert Enum.count(recorded_calls(), &(&1 == @compile_args)) == 2
+    end
+  end
+
+  # compile_and_dump!/2 retry harness — process-local (ExUnit runs each test in its own process).
+  defp reset_calls!, do: Process.put(:gen_app_mix_calls, [])
+  defp record_call!(args), do: Process.put(:gen_app_mix_calls, recorded_calls() ++ [args])
+  defp recorded_calls, do: Process.get(:gen_app_mix_calls, [])
+  defp compile_attempts, do: Enum.count(recorded_calls(), &(&1 == @compile_args))
+
   # A minimal structural TOML validator for the deploy proof bound (no TOML dep in
   # samen_core). Asserts: balanced brackets on header lines; every non-blank, non-comment
   # line is a `[section]` / `[[array]]` header OR a `key = value` pair. Multi-line values
