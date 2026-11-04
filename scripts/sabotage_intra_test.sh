@@ -76,7 +76,13 @@
 #      into every replay tree, so an un-ignored in-repo root is copied (build caches, nesting
 #      deeper each run) instead of replaying patches; an in-repo root git does not ignore is
 #      refused up front.
-#  13. ZERO RESIDUE — every probe is removed on every exit path.
+#  13. THE STALL WATCHDOG MEASURES SIZE, NOT MTIME, AND IS REFUTABLE — on a /mnt/c checkout a
+#      live log's mtime can lag by minutes, so an mtime-based watchdog killed two healthy
+#      `samen_web` slices that were still writing (one later printed ALL PASSED). The gate drives
+#      `--watchdog-selftest`: first sighting is not a stall, silence ages, NEW BYTES reset the
+#      clock even with an ANCIENT mtime, and a missing log ages without crashing. It is proven
+#      refutable: a mutated driver whose growth check can never see growth must turn it red.
+#  14. ZERO RESIDUE — every probe is removed on every exit path.
 #
 # ONE INVARIANT EVERY LAYOUT ASSERTION BELOW SHARES — THE POOL WIDTH IS PINNED.
 # Every assertion about the SLICE PLAN passes `--jobs 8` explicitly, because the width's default is
@@ -117,6 +123,7 @@ PROBE_DUP_APP="$SABOTAGE_DIR/902-sabotage-intra-dup-app-probe.patch"
 # scratch root from its own location and refuses an un-ignored in-repo root, so a copy under $WORK
 # would fail the controller gate for the WRONG reason and the negative control would prove nothing.
 ADAPT_PROBE="$REPO_ROOT/scripts/.sabotage-adapt-probe.sh"
+WATCHDOG_PROBE="$REPO_ROOT/scripts/.sabotage-watchdog-probe.sh"
 PROBE_TEST_REL="samen_core/test/__probe/__sabotage_intra_probe_test.exs"
 PROBE_TEST="$REPO_ROOT/$PROBE_TEST_REL"
 PROBE_SRC_REL="samen_core/lib/samen/__sabotage_intra_probe.ex"
@@ -133,7 +140,8 @@ ok()  { echo "PASS: $*"; pass_count=$((pass_count + 1)); }
 bad() { echo "FAIL: $*"; fail_count=$((fail_count + 1)); }
 
 cleanup() {
-  rm -f "$PROBE_A" "$PROBE_B" "$PROBE_UNCHUNKABLE" "$PROBE_DUP_APP" "$PROBE_SRC" "$ADAPT_PROBE"
+  rm -f "$PROBE_A" "$PROBE_B" "$PROBE_UNCHUNKABLE" "$PROBE_DUP_APP" "$PROBE_SRC" "$ADAPT_PROBE" \
+        "$WATCHDOG_PROBE"
   rm -rf "$REPO_ROOT/samen_core/test/__probe"
   rm -rf "$WORK"
 }
@@ -1020,13 +1028,42 @@ else
 fi
 
 echo ""
-echo "== 13. residue =="
-if [[ -e "$PROBE_A" || -e "$PROBE_B" || -e "$PROBE_UNCHUNKABLE" || -e "$PROBE_DUP_APP" || -e "$PROBE_TEST" || -e "$PROBE_SRC" || -e "$ADAPT_PROBE" ]]; then
+echo "== 13. the STALL watchdog: growth is SIZE, not mtime — and the gate can FAIL =="
+watchdog_out="$(bash "$DRIVER" --watchdog-selftest 2>&1)"; status=$?
+watchdog_passes="$(grep -c '^WATCHDOG-SELFTEST: PASS' <<<"$watchdog_out")"
+watchdog_total="$(sed -n 's/^WATCHDOG-SELFTEST: ok \([0-9]*\)\/\([0-9]*\)$/\2/p' <<<"$watchdog_out")"
+if [[ $status -eq 0 && -n "$watchdog_total" && "$watchdog_total" -ge 6 \
+      && "$watchdog_passes" == "$watchdog_total" && -z "$(grep '^WATCHDOG-SELFTEST: FAIL' <<<"$watchdog_out")" ]]; then
+  ok "the stall watchdog passes all $watchdog_total scripted scenario(s) (exit 0)"
+else
+  echo "$watchdog_out" | grep -E 'WATCHDOG-SELFTEST' | tail -6
+  bad "the stall-watchdog gate failed (exit $status, $watchdog_passes/$watchdog_total scenarios)"
+fi
+# NEGATIVE CONTROL: a driver whose growth check can NEVER see growth is the mtime-style defect
+# (only a timestamp could ever advance); the very same gate must turn red.
+sed 's/^  if (( size > ${LOG_LAST_SIZE\[$id\]:-0} )); then$/  if false; then/' \
+  "$DRIVER" > "$WATCHDOG_PROBE"
+if ! grep -q '^  if false; then$' "$WATCHDOG_PROBE"; then
+  bad "the refutability twin could not be built (the growth check line moved — re-anchor this sed)"
+else
+  twin_out="$(bash "$WATCHDOG_PROBE" --watchdog-selftest 2>&1)"; twin_status=$?
+  if [[ $twin_status -ne 0 ]] && grep -q '^WATCHDOG-SELFTEST: FAIL' <<<"$twin_out"; then
+    ok "NEGATIVE CONTROL: a driver that cannot SEE growth fails the watchdog gate (exit $twin_status)"
+  else
+    echo "$twin_out" | tail -4
+    bad "the watchdog gate PASSED a driver that cannot see log growth — the gate is a tautology"
+  fi
+fi
+rm -f "$WATCHDOG_PROBE"
+
+echo ""
+echo "== 14. residue =="
+if [[ -e "$PROBE_A" || -e "$PROBE_B" || -e "$PROBE_UNCHUNKABLE" || -e "$PROBE_DUP_APP" || -e "$PROBE_TEST" || -e "$PROBE_SRC" || -e "$ADAPT_PROBE" || -e "$WATCHDOG_PROBE" ]]; then
   bad "scratch residue left behind"
 else
   ok "zero residue (probe patches, probe test file and probe source all removed)"
 fi
-if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages scripts/.sabotage-adapt-probe.sh samen_core/test/__probe samen_core/lib/samen/__sabotage_intra_probe.ex 2>/dev/null)" ]]; then
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages scripts/.sabotage-adapt-probe.sh scripts/.sabotage-watchdog-probe.sh samen_core/test/__probe samen_core/lib/samen/__sabotage_intra_probe.ex 2>/dev/null)" ]]; then
   git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages samen_core/test/__probe 2>/dev/null | head -3
   bad "the probe paths are not clean in git status"
 else

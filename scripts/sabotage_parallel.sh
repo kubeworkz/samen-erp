@@ -173,6 +173,10 @@
 #                         no further lowering, nothing waiting → hold, quiet-but-unproven → hold,
 #                         ADAPT_SECS=0 → pinned, budget off → never adapts) and exit. This is the
 #                         gate for the controller itself; it compiles nothing.
+#     --watchdog-selftest drive the STALL watchdog through scripted scenarios (first sighting is
+#                         not a stall, silence ages, new bytes reset the clock even with an
+#                         ANCIENT mtime — the /mnt/c regression — and a missing log ages without
+#                         crashing) and exit; compiles nothing.
 #     --no-seed           do not warm-start a new slice from a sibling slice's build cache; every
 #                         new slice then compiles its app from scratch (correct, just slower —
 #                         the seed is digest-verified, so it can never reuse a patched source)
@@ -234,6 +238,13 @@ STAGGER="${SAMEN_SABOTAGE_PARALLEL_STAGGER:-10}"
 # line per patch (and a first-run compile is quiet for minutes, not tens of minutes). It is killed
 # and reported as a failure, because an unattended certification that hangs forever is worse than
 # one that fails.
+#
+# Growth is measured by FILE SIZE, never by mtime. On the reference /mnt/c checkout (DrvFs/9p) the
+# mtime of a file another process is appending to can lag by many minutes while its size is
+# current, and the mtime-based watchdog therefore killed BOTH healthy samen_web slices on
+# 2026-11-03 ("no log growth for 1216s") while their logs were still growing — one of them went on
+# to print ALL PASSED at the end. Size is the fact the harness actually produces (a line per
+# patch), and it is exactly what a wedge does not do.
 STALL_SECONDS="${SAMEN_SABOTAGE_PARALLEL_STALL:-1200}"
 # How many slices may COLD-COMPILE at the same time. A slice whose root has no build cache pays its
 # one-time compile inside its FIRST patch, and it does that on top of the startup fork load every
@@ -442,6 +453,95 @@ run_adapt_selftest() {
   return 0
 }
 
+# ── STALL WATCHDOG ──────────────────────────────────────────────────────────
+# The watchdog below decides whether a slice is wedged from how long its LOG has been silent.
+# Growth is measured by SIZE, never by mtime (see STALL_SECONDS): on this checkout a live log's
+# mtime can lag by minutes, and an mtime-based watchdog killed two healthy slices that way.
+# First sighting starts the clock, so a slice is never born stalled; a missing log or a shrink is
+# not growth.
+declare -A LOG_LAST_SIZE=()
+declare -A LOG_LAST_GROWTH=()
+# The answer of the LAST log_growth_age call. It is a global, NOT stdout, on purpose: a command
+# substitution would run the sampler in a subshell, so its updates to LOG_LAST_* would be lost and
+# every call would look like a first sighting (age 0) — a watchdog that never fires.
+LOG_GROWTH_AGE=0
+
+log_growth_age() { # log_growth_age <slice-id> <log-path> [now] — sets LOG_GROWTH_AGE
+  # `now` is injectable so the self-test is deterministic: `SECONDS` keeps ticking between an
+  # assignment and the read, and an exact-age scenario would land one second off under load.
+  # Real callers omit it and get the shell clock.
+  local id="$1" log="$2" now="${3:-$SECONDS}" size=0
+  # -r, not a bare redirection: a missing log is a normal state here (the wrapper opens it
+  # asynchronously), and a bare `<` would print the shell's own error despite 2>/dev/null.
+  [[ -r "$log" ]] && size="$(wc -c < "$log" | tr -d '[:space:]')"
+  [[ "$size" =~ ^[0-9]+$ ]] || size=0
+
+  if [[ -z "${LOG_LAST_GROWTH[$id]:-}" ]]; then
+    LOG_LAST_SIZE[$id]="$size"
+    LOG_LAST_GROWTH[$id]="$now"
+    LOG_GROWTH_AGE=0
+    return 0
+  fi
+
+  if (( size > ${LOG_LAST_SIZE[$id]:-0} )); then
+    LOG_LAST_SIZE[$id]="$size"
+    LOG_LAST_GROWTH[$id]="$now"
+  fi
+
+  LOG_GROWTH_AGE=$(( now - ${LOG_LAST_GROWTH[$id]} ))
+}
+
+# run_watchdog_selftest — prove the stall watchdog measures GROWTH, not mtime, and still catches a
+# wedge. Scripted on scratch files, so it is deterministic (no loaded box, no real slice) and it
+# can never be satisfied by a wall-clock accident. Prints one PASS/FAIL line per scenario and
+# `WATCHDOG-SELFTEST: ok N/N`; returns non-zero if any scenario fails.
+run_watchdog_selftest() {
+  local tmp pass=0 total=0 age mtime
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/samen_watchdog_selftest.XXXXXX")" || return 1
+
+  check() { # <label> <got> <want>
+    total=$(( total + 1 ))
+    if [[ "$2" == "$3" ]]; then
+      pass=$(( pass + 1 ))
+      printf 'WATCHDOG-SELFTEST: PASS %-64s age=%s\n' "$1" "$2"
+    else
+      printf 'WATCHDOG-SELFTEST: FAIL %-64s age=%s (want %s)\n' "$1" "$2" "$3"
+    fi
+  }
+
+  # 1. First sighting starts the clock: a slice is never born stalled.
+  printf 'x' > "$tmp/a.log"
+  log_growth_age a "$tmp/a.log" 1000; age="$LOG_GROWTH_AGE"
+  check "first sighting starts the clock" "$age" 0
+
+  # 2. No growth for 2000s is still a wedge — the watchdog's whole job.
+  log_growth_age a "$tmp/a.log" 3000; age="$LOG_GROWTH_AGE"
+  check "no growth for 2000s is measured" "$age" 2000
+
+  # 3. THE REGRESSION: new bytes reset the clock even when the file's mtime is years old. The
+  #    mtime is forced ancient AFTER the append, exactly the /mnt/c state that false-stalled the
+  #    `samen_web` slice — a size-based watchdog must not care about it.
+  printf 'y' >> "$tmp/a.log"
+  touch -t 200001010000 "$tmp/a.log" 2>/dev/null || true
+  mtime="$(stat -c %Y "$tmp/a.log" 2>/dev/null || echo 0)"
+  # 2001-01-01 UTC is the bound, not 2000-01-01: `touch -t` writes LOCAL time, so a -0500
+  # 2000-01-01 is 946702800 — still ancient, but above the naive UTC epoch.
+  check "precondition: the log's mtime IS ancient" "$(( mtime < 978307200 ? 1 : 0 ))" 1
+  log_growth_age a "$tmp/a.log" 3001; age="$LOG_GROWTH_AGE"
+  check "new bytes reset the clock despite an ancient mtime" "$age" 0
+
+  # 4. A missing log is not growth: it ages normally instead of crashing or resetting.
+  log_growth_age b "$tmp/missing.log" 5000; age="$LOG_GROWTH_AGE"
+  check "a missing log starts the clock at first sighting" "$age" 0
+  log_growth_age b "$tmp/missing.log" 7000; age="$LOG_GROWTH_AGE"
+  check "a missing log still ages (no crash, no false growth)" "$age" 2000
+
+  rm -rf "$tmp"
+  printf 'WATCHDOG-SELFTEST: ok %s/%s\n' "$pass" "$total"
+  (( pass == total )) || { printf 'WATCHDOG-SELFTEST: FAILED\n'; return 1; }
+  return 0
+}
+
 # Pattern for the fixed-resource audit: a test file that reaches OUTSIDE its own database. Kept
 # narrow on purpose — `storage_up`/`storage_down` on Repo.config() is the per-slice-safe path and
 # the test helpers use it, so only fixed-name/external-tool forms are flagged. Comment lines are
@@ -508,6 +608,7 @@ LIST_ONLY=0
 ALLOW_SHARED_SCRATCH=0
 SEED_ENABLED=1
 ADAPT_SELFTEST=0
+WATCHDOG_SELFTEST=0
 PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
@@ -535,6 +636,8 @@ while [[ $# -gt 0 ]]; do
       LIST_ONLY=1; shift ;;
     --adapt-selftest)
       ADAPT_SELFTEST=1; shift ;;
+    --watchdog-selftest)
+      WATCHDOG_SELFTEST=1; shift ;;
     --no-preflight|--range|--from|--to|--touching|--touching-file|--changed|--exclude-app)
       PASSTHROUGH+=("$1")
       # Everything after --jobs is consumed by the driver, so pass arguments through verbatim
@@ -621,6 +724,12 @@ FILTER_LABEL="$(
 # ── --adapt-selftest: prove the width CONTROLLER before any planning/compiling happens ──────
 if [[ "$ADAPT_SELFTEST" -eq 1 ]]; then
   run_adapt_selftest
+  exit $?
+fi
+
+# ── --watchdog-selftest: prove the STALL watchdog before any planning/compiling happens ──────
+if [[ "$WATCHDOG_SELFTEST" -eq 1 ]]; then
+  run_watchdog_selftest
   exit $?
 fi
 
@@ -1187,7 +1296,7 @@ cold_gate() { # cold_gate <id> <app>
 }
 
 reap_slices() { # decrement for finished children; kill + mark the stalled ones
-  local i pid id log mtime age
+  local i pid id log age
   for i in "${!SLICE_PIDS[@]}"; do
     pid="${SLICE_PIDS[$i]:-}"
     id="${SLICE_IDS[$i]:-}"
@@ -1204,8 +1313,9 @@ reap_slices() { # decrement for finished children; kill + mark the stalled ones
     fi
 
     log="$LOG_DIR/$id.log"
-    mtime="$(stat -c %Y "$log" 2>/dev/null || echo 0)"
-    age=$(( $(date +%s) - mtime ))
+    # SIZE-based, never mtime-based: mtime can lag behind a live append on this checkout (see
+    # STALL_SECONDS). The first sample starts the clock; growth resets it.
+    log_growth_age "$id" "$log"; age="$LOG_GROWTH_AGE"
     if (( age > STALL_SECONDS )); then
       echo "  !! slice $id: no log growth for ${age}s (limit ${STALL_SECONDS}s) — killing it;"
       echo "     a wedged slice is a FAILURE, never a wait"
@@ -1263,6 +1373,10 @@ while IFS=$'\t' read -r id app lo hi count db _pool; do
   ) &
   SLICE_PIDS+=("$!")
   SLICE_IDS+=("$id")
+  # Start the stall clock at LAUNCH, not at the first poll: a slice that never writes anything is
+  # exactly the wedge this watchdog exists for. (The wrapper opens the log asynchronously; the
+  # first bytes it writes are growth, which resets the clock.)
+  log_growth_age "$id" "$LOG_DIR/$id.log"
   running=$((running + 1))
   launched=$((launched + 1))
   # Take a cold slot if this slice starts without a cache (checked now, before it can build one).
