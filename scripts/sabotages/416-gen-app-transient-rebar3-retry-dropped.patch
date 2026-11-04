@@ -1,0 +1,34 @@
+# SABOTAGE: the gen-app post-step's transient rebar3 recovery is dropped — a dependency
+# whose BUILD TOOL crashed (escript/rebar3 dying, not a compile error in the generated
+# code) now aborts `compile_and_dump!/2` on the first attempt, exactly as it did on
+# 2026-11-04 when the root gate died at the post-app probe while sibling gates loaded the
+# box and the identical step then passed standalone.
+#
+# The plausible reasoning this encodes: "a failed dependency build is a failure; retrying
+# it could mask a real one." The recovery is deliberately narrow — the error text must be
+# Mix's `Could not compile dependency :<name>` line, the retry is bounded to ONE attempt,
+# and a retry that fails too is re-raised with the retry's output. Without it, a transient
+# build-tool crash kills a gate that would pass on an immediate re-run.
+#
+# POSITIVE CONTROL, deliberately untouched: the "genuine compiler error" test stays GREEN.
+# The sabotage only removes the transient path, so a patch that flipped every test in the
+# block would not be a targeted twin — and a retry that swallowed a real CompileError would
+# still be caught by that control.
+#
+# APP: samen_core
+# TEST_FILES: test/gen_app_test.exs
+# MUST_FAIL: a crashed rebar3 dependency build is cleaned and retried ONCE
+# MUST_FAIL: a retry that fails too is raised
+diff --git a/samen_core/lib/samen/gen/app.ex b/samen_core/lib/samen/gen/app.ex
+index ab858611..7884907f 100644
+--- a/samen_core/lib/samen/gen/app.ex
++++ b/samen_core/lib/samen/gen/app.ex
+@@ -609,7 +609,7 @@ defmodule Samen.Gen.App do
+         :ok
+ 
+       {out, code} ->
+-        retry_transient_dep_compile(s, args, env, runner, out, code)
++        raise_mix_failure!(s, args, code, out, nil)
+     end
+   end
+ 
