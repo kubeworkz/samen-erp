@@ -51,7 +51,22 @@ defmodule Mix.Tasks.SamenWeb.TestSetup do
     # against one Postgres — observed 2026-11-02: `do_lock_for_migrations` returned
     # `{:error, :rollback}` at exactly 120s. Give a legitimate long migrate headroom;
     # nothing about the migration or the tests is relaxed.
-    {:ok, _} = repo.start_link(pool_size: 2, ownership_timeout: 300_000)
+    #
+    # Migrate through a pool of the SETUP's own, never the configured SQL Sandbox: the
+    # migrator asks for TWO connections at once, and the sandbox answers the second request
+    # with a redirect to the caller's single-connection proxy — which is busy holding the
+    # first — so under load the migrate queues until the checkout timeout (observed
+    # 2026-11-03: this task dying at `Ecto.Migrator.run/4` with "could not checkout the
+    # connection owned by … dropped from queue after 5940ms" while two sibling replay
+    # slices shared this host). The plain pool takes the sandbox ownership machinery out of
+    # the migrate path; the repo is STOPPED again afterwards so `test_helper.exs` starts
+    # the CONFIGURED sandbox pool exactly as before.
+    {:ok, _} =
+      repo.start_link(
+        pool: DBConnection.ConnectionPool,
+        pool_size: 2,
+        ownership_timeout: 300_000
+      )
 
     # Quiet the per-column catalog_sync INSERT logging during the one-time migration.
     prev_level = Logger.level()
@@ -76,7 +91,30 @@ defmodule Mix.Tasks.SamenWeb.TestSetup do
     # (Real regression observed in CI 2026-10-01 00:26 UTC.)
     Module.concat([Samen.AuditEvent, PartitionManager]).ensure_recent_partitions(repo, 1)
 
+    # Hand the VM back the CONFIGURED (sandbox) pool: `test_helper.exs` starts the repo and
+    # then sets the sandbox mode, and it tolerates `already_started` only because the old
+    # task left its pool running. A leftover PLAIN pool would make that mode call a no-op
+    # against a non-sandbox repo, so the migration pool must be gone before boot returns.
+    :ok = stop_repo(repo)
+
     :ok
+  end
+
+  # The repo is started by this task and never supervised here, so a normal stop is final —
+  # there is no supervisor to resurrect it. See run/1 for why it must not outlive the migrate.
+  defp stop_repo(repo) do
+    case Process.whereis(repo) do
+      nil ->
+        :ok
+
+      pid ->
+        _ = Supervisor.stop(pid, :normal, 30_000)
+
+        case Process.whereis(repo) do
+          nil -> :ok
+          _ -> Mix.raise("could not stop #{inspect(repo)} after the setup migration")
+        end
+    end
   end
 
   # Storage ops get a generous timeout: see run/1 for the concurrent-gate DROP-timeout race.
