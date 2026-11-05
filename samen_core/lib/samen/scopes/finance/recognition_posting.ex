@@ -70,7 +70,8 @@ defmodule Samen.Scopes.Finance.RecognitionPosting do
              recognized_on,
              amount,
              deferred,
-             income
+             income,
+             schedule
            ) do
       Ash.Changeset.force_change_attribute(changeset, :id, id)
     else
@@ -113,7 +114,17 @@ defmodule Samen.Scopes.Finance.RecognitionPosting do
   # Draft first (so EntryLines can materialize under the draft belt), then the
   # governed `:post` (so R1/R6/R10 run). Both steps are inside the recognition's
   # transaction: a refusal on either leaves neither row.
-  defp create_entry(entry_mod, org_id, id, period_key, entry_date, amount, deferred, income) do
+  defp create_entry(
+         entry_mod,
+         org_id,
+         id,
+         period_key,
+         entry_date,
+         amount,
+         deferred,
+         income,
+         schedule
+       ) do
     with {:ok, draft} <-
            entry_mod
            |> Ash.Changeset.for_create(
@@ -125,8 +136,16 @@ defmodule Samen.Scopes.Finance.RecognitionPosting do
                source_key: @source_key,
                source_id: id,
                lines: [
-                 %{account_id: deferred.account_id, debit_cents: amount},
-                 %{account_id: income.account_id, credit_cents: amount}
+                 %{
+                   account_id: deferred.account_id,
+                   debit_cents: amount,
+                   dimension_refs: dimension_refs(schedule)
+                 },
+                 %{
+                   account_id: income.account_id,
+                   credit_cents: amount,
+                   dimension_refs: dimension_refs(schedule)
+                 }
                ]
              },
              authorize?: false
@@ -139,6 +158,16 @@ defmodule Samen.Scopes.Finance.RecognitionPosting do
       {:ok, posted}
     end
   end
+
+  # A grant schedule rides the `fund` axis (Phase 11); every other schedule
+  # that names a cost object rides the `project` axis. An undimensioned
+  # schedule stays undimensioned — R6 passes vacuously.
+  defp dimension_refs(%{cost_object_id: nil}), do: %{}
+
+  defp dimension_refs(%{deferred_key: :grant_deferred, cost_object_id: id}) when is_binary(id),
+    do: %{"fund" => id}
+
+  defp dimension_refs(%{cost_object_id: id}) when is_binary(id), do: %{"project" => id}
 
   defp format({:unmapped_posting_account, key}),
     do:

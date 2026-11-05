@@ -170,10 +170,10 @@ defmodule Samen.AbbrevRegistryTest do
       # +6 in WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and
       # its per-target shares in the same three hosts — samen_core `fcs`/`csf`,
       # samen_web `wec`/`ewc`, samenerp `sec`/`cse`, every row allocator-reserved.
-      # = 392 host entries across six hosts.
+      # = 407 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 114
-      assert map_size(hosts["samen_core"]) == 108
+      assert map_size(hosts["samenerp"]) == 119
+      assert map_size(hosts["samen_core"]) == 113
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -562,7 +562,14 @@ defmodule Samen.AbbrevRegistryTest do
                  # OpenClaw-lite AI assistant (P1): the assistant + conversation
                  # resources, allocator-reserved under host `samen_core`.
                  "ast" => "Samen.AI.Assistant",
-                 "asc" => "Samen.AI.AssistantConversation"
+                 "asc" => "Samen.AI.AssistantConversation",
+                 # WS-ACCT Phase 11 (ADR-054 D8): grants and their compliance
+                 # objects, allocator-reserved under the fixture host.
+                 "fgn" => "SamenCore.Support.FinanceFixture.Grant",
+                 "fgl" => "SamenCore.Support.FinanceFixture.GrantMilestone",
+                 "fgk" => "SamenCore.Support.FinanceFixture.GrantClaim",
+                 "fgt" => "SamenCore.Support.FinanceFixture.GrantOpportunity",
+                 "fgu" => "SamenCore.Support.FinanceFixture.GrantPersonnel"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -732,7 +739,13 @@ defmodule Samen.AbbrevRegistryTest do
                  "iwo" => "Samen.WebTest.Erp.WorkOrder",
                  "ipg" => "Samen.WebTest.Erp.ProductionLog",
                  "tro" => "Samen.WebTest.Erp.TransferOrder",
-                 "lac" => "Samen.WebTest.Erp.LandedCost"
+                 "lac" => "Samen.WebTest.Erp.LandedCost",
+                 # WS-ACCT Phase 11 (ADR-054 D8): the web test host's grants.
+                 "fgr" => "Samen.WebTest.Erp.Grant",
+                 "fgm" => "Samen.WebTest.Erp.GrantMilestone",
+                 "fgc" => "Samen.WebTest.Erp.GrantClaim",
+                 "fgo" => "Samen.WebTest.Erp.GrantOpportunity",
+                 "fgp" => "Samen.WebTest.Erp.GrantPersonnel"
                },
                # WS-ERP E8 (ADR-049): the samenerp HOST PROOF — `mix samen.gen.app`,
                # prefix `er`. The full E1–E7 ERP scope set re-materialized under the
@@ -897,7 +910,13 @@ defmodule Samen.AbbrevRegistryTest do
                  "tws" => "Samenerp.Work.Timesheet",
                  "aaa" => "Samenerp.Work.TimesheetEntry",
                  "sel" => "Samenerp.Erp.LabourAllocation",
-                 "sle" => "Samenerp.Erp.LabourAllocationShare"
+                 "sle" => "Samenerp.Erp.LabourAllocationShare",
+                 # WS-ACCT Phase 11 (ADR-054 D8): the Kubeworkz host's grants.
+                 "egt" => "Samenerp.Erp.Grant",
+                 "egm" => "Samenerp.Erp.GrantMilestone",
+                 "egc" => "Samenerp.Erp.GrantClaim",
+                 "ego" => "Samenerp.Erp.GrantOpportunity",
+                 "egp" => "Samenerp.Erp.GrantPersonnel"
                }
              }
 
@@ -1032,7 +1051,7 @@ defmodule Samen.AbbrevRegistryTest do
       # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
       # allocation pair in all three hosts (samen_core `wts`/`tsw`/`sfl`/`slf`,
       # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
-      assert map_size(Reg.load()) == 807
+      assert map_size(Reg.load()) == 822
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -3093,6 +3093,264 @@
     {
       "fields": [
         {
+          "column_name": "egc_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "egc_approved_on",
+          "logical_name": "approved_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egc_claimed_on",
+          "logical_name": "claimed_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egc_evidence_files",
+          "logical_name": "evidence_files",
+          "pii": false,
+          "type": "{:array, Ash.Type.UUID}"
+        },
+        {
+          "column_name": "egc_grant_id",
+          "logical_name": "grant_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egc_milestone_id",
+          "logical_name": "milestone_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "egc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.GrantClaim",
+      "table_name": "egc_grant_claim"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "egm_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "egm_completed_on",
+          "logical_name": "completed_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egm_due_on",
+          "logical_name": "due_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egm_grant_id",
+          "logical_name": "grant_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egm_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "egm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egm_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "egm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.GrantMilestone",
+      "table_name": "egm_grant_milestone"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ego_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ego_deadline",
+          "logical_name": "deadline",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ego_funder",
+          "logical_name": "funder",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ego_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ego_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ego_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ego_probability",
+          "logical_name": "probability",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ego_program",
+          "logical_name": "program",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ego_stage",
+          "logical_name": "stage",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ego_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.GrantOpportunity",
+      "table_name": "ego_grant_opportunity"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "egp_effective_on",
+          "logical_name": "effective_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egp_effort_pct",
+          "logical_name": "effort_pct",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "egp_employee_id",
+          "logical_name": "employee_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egp_grant_id",
+          "logical_name": "grant_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.GrantPersonnel",
+      "table_name": "egp_grant_personnel"
+    },
+    {
+      "fields": [
+        {
           "column_name": "egr_id",
           "logical_name": "id",
           "pii": false,
@@ -3167,6 +3425,114 @@
       ],
       "resource": "Samenerp.Erp.GoodsReceipt",
       "table_name": "egr_goods_receipt"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "egt_award_cents",
+          "logical_name": "award_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "egt_award_ref",
+          "logical_name": "award_ref",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "egt_budget_id",
+          "logical_name": "budget_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egt_closed_on",
+          "logical_name": "closed_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egt_fund_cost_object_id",
+          "logical_name": "fund_cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egt_funder",
+          "logical_name": "funder",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "egt_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egt_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "egt_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egt_period_end",
+          "logical_name": "period_end",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egt_period_start",
+          "logical_name": "period_start",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egt_program",
+          "logical_name": "program",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "egt_received_on",
+          "logical_name": "received_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "egt_restricted",
+          "logical_name": "restricted",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "egt_schedule_id",
+          "logical_name": "schedule_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "egt_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "egt_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Grant",
+      "table_name": "egt_grant"
     },
     {
       "fields": [

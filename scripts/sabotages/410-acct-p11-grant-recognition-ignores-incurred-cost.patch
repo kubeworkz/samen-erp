@@ -1,0 +1,35 @@
+# SABOTAGE: `:cost_incurred` recognition releases the contract's remaining
+# balance instead of the period's incurred allowable cost.
+#
+# WS-ACCT Phase 6 (ADR-054 D5) makes the method's whole guarantee one line:
+# `min(incurred, remaining)`. The incurred leg is what ties grant revenue to
+# allowable cost (Phase 11's R11); the remaining leg stops any arithmetic path
+# from releasing more than the award holds. This patch replaces that pair with
+# `remaining`, on the plausible reasoning that "a cost-incurred schedule should
+# release what is left of the contract" — the same shape as a straight-line
+# schedule, and it still stops at the award total.
+#
+# The regression is silent in every structural check: the entry balances (R1),
+# its two lines share the fund dimension (R6), the period is open (R10), the
+# recognition is exactly-once per period, and the total never exceeds the
+# contract. Only the accounting meaning is wrong: the first month with any
+# cost (or even with none) recognizes the whole award, so revenue runs years
+# ahead of the work and R11's `recognized <= incurred` leg breaks while the
+# ledger still balances. That is the failure `:cost_incurred` exists to
+# prevent, and it is why the flip must land on the incurred cap rather than on
+# the posting plumbing.
+#
+# APP: samen_core
+# TEST_FILES: test/finance_grants_test.exs test/finance_recognition_test.exs
+# MUST_FAIL: recognizes incurred cost, never ahead of it, and carries the fund dimension
+# MUST_FAIL: an empty period recognizes ZERO
+--- a/samen_core/lib/samen/scopes/finance/recognition_run.ex
++++ b/samen_core/lib/samen/scopes/finance/recognition_run.ex
+@@ -174,6 +174,6 @@
+            account_resource: mods.account
+          ) do
+-      {:ok, incurred} -> {:ok, min(incurred, remaining)}
++      {:ok, _incurred} -> {:ok, remaining}
+       {:error, reason} -> {:error, reason}
+     end
+   end

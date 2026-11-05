@@ -55,7 +55,13 @@ defmodule Samenerp.Erp do
       cost_allocation: "sec",
       cost_allocation_share: "cse",
       labour_allocation: "sel",
-      labour_allocation_share: "sle"
+      labour_allocation_share: "sle",
+      # WS-ACCT Phase 11 (ADR-054 D8): grants and their compliance objects.
+      grant: "egt",
+      grant_milestone: "egm",
+      grant_claim: "egc",
+      grant_opportunity: "ego",
+      grant_personnel: "egp"
     },
     labour: [
       timesheet: Samenerp.Work.Timesheet,

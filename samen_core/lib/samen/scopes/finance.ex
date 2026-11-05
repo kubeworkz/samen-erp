@@ -326,7 +326,15 @@ defmodule Samen.Scopes.Finance do
     # timesheet minutes and its per-target shares. Allocator-reserved under
     # `samen_web`.
     labour_allocation: "wel",
-    labour_allocation_share: "wle"
+    labour_allocation_share: "wle",
+    # WS-ACCT Phase 11 (ADR-054 D8): grants, their milestones/claims, the
+    # application tracker and the effort rows the personnel report resolves.
+    # Allocator-reserved under `samen_web`.
+    grant: "fgr",
+    grant_milestone: "fgm",
+    grant_claim: "fgc",
+    grant_opportunity: "fgo",
+    grant_personnel: "fgp"
   }
 
   @doc false
@@ -372,6 +380,11 @@ defmodule Samen.Scopes.Finance do
     cost_allocation_share_mod = Module.concat(namespace, CostAllocationShare)
     labour_allocation_mod = Module.concat(namespace, LabourAllocation)
     labour_allocation_share_mod = Module.concat(namespace, LabourAllocationShare)
+    grant_mod = Module.concat(namespace, Grant)
+    grant_milestone_mod = Module.concat(namespace, GrantMilestone)
+    grant_claim_mod = Module.concat(namespace, GrantClaim)
+    grant_opportunity_mod = Module.concat(namespace, GrantOpportunity)
+    grant_personnel_mod = Module.concat(namespace, GrantPersonnel)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -391,6 +404,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.CostAllocationBlueprint
 
       require Samen.Scopes.Finance.LabourAllocationBlueprint
+
+      require Samen.Scopes.Finance.GrantBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -420,6 +435,11 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(cost_allocation_share_mod))
         resource(unquote(labour_allocation_mod))
         resource(unquote(labour_allocation_share_mod))
+        resource(unquote(grant_mod))
+        resource(unquote(grant_milestone_mod))
+        resource(unquote(grant_claim_mod))
+        resource(unquote(grant_opportunity_mod))
+        resource(unquote(grant_personnel_mod))
       end
 
       # WS-ACCT Phase 9 (ADR-054 D10) — the obsolescence policy, its derived
@@ -512,6 +532,62 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.labour_allocation_share),
         unquote(labour_allocation_mod),
         unquote(cost_object_mod)
+      )
+
+      # WS-ACCT Phase 11 (ADR-054 D8, R11) — the grant document, its milestones
+      # and claims, the application tracker and the effort rows the compliance
+      # report resolves. The grant reuses Budget and the Phase-6 schedule; the
+      # fund dimension is the same CostObject the ledger already knows.
+      Samen.Scopes.Finance.GrantBlueprint.define_grant(
+        unquote(grant_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.grant),
+        unquote(grant_milestone_mod),
+        unquote(grant_claim_mod),
+        unquote(grant_personnel_mod),
+        unquote(budget_mod),
+        unquote(cost_object_mod),
+        unquote(revenue_schedule_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod)
+      )
+
+      Samen.Scopes.Finance.GrantBlueprint.define_grant_milestone(
+        unquote(grant_milestone_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.grant_milestone),
+        unquote(grant_mod)
+      )
+
+      Samen.Scopes.Finance.GrantBlueprint.define_grant_claim(
+        unquote(grant_claim_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.grant_claim),
+        unquote(grant_mod),
+        unquote(grant_milestone_mod)
+      )
+
+      Samen.Scopes.Finance.GrantBlueprint.define_grant_opportunity(
+        unquote(grant_opportunity_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.grant_opportunity)
+      )
+
+      Samen.Scopes.Finance.GrantBlueprint.define_grant_personnel(
+        unquote(grant_personnel_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.grant_personnel),
+        unquote(grant_mod)
       )
 
       # WS-ACCT Phase 8 (ADR-054 D9) — the asset register and its exactly-once

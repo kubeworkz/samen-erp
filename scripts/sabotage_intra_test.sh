@@ -112,6 +112,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SABOTAGE="$REPO_ROOT/scripts/sabotage.sh"
 DRIVER="$REPO_ROOT/scripts/sabotage_parallel.sh"
 SABOTAGE_DIR="$REPO_ROOT/scripts/sabotages"
+# The tree may legitimately carry an uncommitted new sabotage patch (adding one is a
+# normal change). Residue means a path the probe ADDED, not a path already present.
+SABOTAGE_BASELINE="$(git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages 2>/dev/null)"
 
 # Probe artifacts (created for the negative controls only, removed on every exit path). The numbers
 # 900/901 are far above every shipped patch, so a `--range 900-901` selection is exactly the probes.
@@ -1063,11 +1066,13 @@ if [[ -e "$PROBE_A" || -e "$PROBE_B" || -e "$PROBE_UNCHUNKABLE" || -e "$PROBE_DU
 else
   ok "zero residue (probe patches, probe test file and probe source all removed)"
 fi
-if [[ -n "$(git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages scripts/.sabotage-adapt-probe.sh scripts/.sabotage-watchdog-probe.sh samen_core/test/__probe samen_core/lib/samen/__sabotage_intra_probe.ex 2>/dev/null)" ]]; then
-  git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages samen_core/test/__probe 2>/dev/null | head -3
+sabotage_status="$(git -C "$REPO_ROOT" status --porcelain -- scripts/sabotages 2>/dev/null)"
+probe_status="$(git -C "$REPO_ROOT" status --porcelain -- scripts/.sabotage-adapt-probe.sh scripts/.sabotage-watchdog-probe.sh samen_core/test/__probe samen_core/lib/samen/__sabotage_intra_probe.ex 2>/dev/null)"
+if [[ "$sabotage_status" != "$SABOTAGE_BASELINE" || -n "$probe_status" ]]; then
+  { [[ "$sabotage_status" == "$SABOTAGE_BASELINE" ]] || echo "$sabotage_status"; [[ -z "$probe_status" ]] || echo "$probe_status"; } | head -3
   bad "the probe paths are not clean in git status"
 else
-  ok "scripts/sabotages and the probe path are clean in git status"
+  ok "scripts/sabotages has no new probe residue and the probe path is clean in git status"
 fi
 
 echo ""

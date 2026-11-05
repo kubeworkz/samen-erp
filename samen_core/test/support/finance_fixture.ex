@@ -82,7 +82,13 @@ defmodule SamenCore.Support.FinanceFixture do
       cost_allocation_share: "csf",
       # WS-ACCT Unit 10.2 (ADR-054 D17): payroll by approved timesheet minutes.
       labour_allocation: "sfl",
-      labour_allocation_share: "slf"
+      labour_allocation_share: "slf",
+      # WS-ACCT Phase 11 (ADR-054 D8): grants and their compliance objects.
+      grant: "fgn",
+      grant_milestone: "fgl",
+      grant_claim: "fgk",
+      grant_opportunity: "fgt",
+      grant_personnel: "fgu"
     },
     labour: [
       timesheet: SamenCore.Support.WorkFixture.Timesheet,
