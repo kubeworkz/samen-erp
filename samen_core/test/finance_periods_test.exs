@@ -490,6 +490,7 @@ defmodule Samen.FinancePeriodsTest do
 
       assert finished.status == :completed
       assert finished.completed_at != nil
+      assert finished.completed_by == admin.actor.id
 
       # A completed run is final.
       assert {:error, _} = finished |> Ash.Changeset.for_update(:finish, %{}, scope: admin) |> Ash.update()

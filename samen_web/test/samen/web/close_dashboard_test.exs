@@ -234,6 +234,7 @@ defmodule Samen.Web.CloseDashboardTest do
 
       run = finish!(run, org_id)
       assert run.status == :completed
+      assert run.completed_by == admin_scope(org_id).actor.id
 
       # No anchored tasks yet: the Phase-3 view trusts the governed sign-off.
       html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
@@ -304,6 +305,31 @@ defmodule Samen.Web.CloseDashboardTest do
       page_actor = Samen.Web.TenantRole.attributed_admin_scope(mount(org_id), org_id).actor.id
       assert phase["done_by"] == page_actor
       assert phase_row(html, "pre_close") =~ "the workspace"
+    end
+
+    test "names who completed the run beside its status" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      run = Enum.reduce(ClosePhases.keys(), run, fn key, run -> sign!(run, key, org_id) end)
+
+      scope = Samen.Web.TenantRole.attributed_admin_scope(mount(org_id), org_id)
+
+      run =
+        run
+        |> Ash.Changeset.for_update(:finish, %{}, scope: scope)
+        |> Ash.update!()
+
+      assert run.status == :completed
+      assert run.completed_by == scope.actor.id
+      assert run.completed_by == "broker:#{org_id}"
+
+      html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
+      card = period_card(html)
+
+      assert card =~ "close run completed"
+      assert card =~ ~s(id="close-run-completed-by")
+      assert card =~ "by the workspace"
     end
 
     test "shows the governed refusal from a completed run" do

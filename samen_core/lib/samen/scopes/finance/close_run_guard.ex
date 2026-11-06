@@ -16,7 +16,8 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     * `op: :finish` — `:in_progress → :completed`, one-way (the
       `PeriodTransition` posture), and only when EVERY phase is done. A run
       marked complete with a phase outstanding would be a close certificate that
-      certifies nothing.
+      certifies nothing. It stamps `completed_at` and `completed_by`, the acting
+      principal's id when the caller supplies one.
 
   ## Work anchoring (WS-ACCT Phase 12)
 
@@ -117,7 +118,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     end
   end
 
-  defp apply_op(changeset, :finish, _work_task, _actor) do
+  defp apply_op(changeset, :finish, _work_task, actor) do
     phases = phases(changeset)
 
     cond do
@@ -135,6 +136,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
         changeset
         |> Ash.Changeset.force_change_attribute(:status, :completed)
         |> Ash.Changeset.force_change_attribute(:completed_at, now())
+        |> Ash.Changeset.force_change_attribute(:completed_by, actor)
     end
   end
 

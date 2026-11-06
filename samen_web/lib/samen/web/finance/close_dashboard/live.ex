@@ -29,10 +29,10 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   The same scope means the kernel's `started_by` and `done_by` stamps name the
   authenticated principal when the host can resolve one. The period card names
-  the starter and each phase row names its signer, rendering that identity as
-  `you` (the current principal), `the workspace` (the dev posture's
-  pseudo-principal), or a short admin id — never an invented name, because the
-  close read carries no user directory.
+  the starter and, for a completed run, the finisher; each phase row names its
+  signer. Each identity renders as `you` (the current principal), `the
+  workspace` (the dev posture's pseudo-principal), or a short admin id — never
+  an invented name, because the close read carries no user directory.
   """
 
   use Samen.Web.Tenant.Live
@@ -451,7 +451,12 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
       <%= if @state.period do %>
         <b>{period_label(@state.period)}</b>
         <span style="color:var(--muted)">· period {@state.period.status}</span>
-        <span :if={@state.run} style="color:var(--muted)">· close run {@state.run.status}</span>
+        <span :if={@state.run} style="color:var(--muted)">
+          · close run {@state.run.status}
+          <span :if={@state.run.completed_by} id="close-run-completed-by">
+            · by {actor_label(@state.run.completed_by, @actor_id)}
+          </span>
+        </span>
         <div
           :if={@state.run && @state.run.started_at}
           id="close-dashboard-started"
