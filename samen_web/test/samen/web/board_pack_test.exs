@@ -14,7 +14,7 @@ defmodule Samen.Web.BoardPackTest do
 
   use Samen.WebTest.DataCase, async: false
 
-  alias Samen.Scopes.Finance.{BalanceSheet, CashFlow, ProfitLoss}
+  alias Samen.Scopes.Finance.{BalanceSheet, CashFlow, ForecastRead, ProfitLoss}
   alias Samen.Web.Finance.BoardPack
   alias Samen.Web.Finance.BoardPack.Live
   alias Samen.Web.Mount
@@ -23,6 +23,8 @@ defmodule Samen.Web.BoardPackTest do
   alias Samen.WebTest.Erp.{
     Account,
     FiscalPeriod,
+    ForecastDriver,
+    ForecastVersion,
     JournalEntry,
     JournalLine,
     PostingAccount
@@ -119,6 +121,49 @@ defmodule Samen.Web.BoardPackTest do
     %{org_id: org_id, today: today, cash: cash, income: income, expense: expense}
   end
 
+  defp seed_forecast!(org_id, today, opts \\ []) do
+    first = Date.beginning_of_month(today)
+    name = Keyword.get(opts, :name, "Board base")
+    number = Keyword.get(opts, :version, 1)
+    burn = Keyword.get(opts, :burn, 20_000)
+    grant = Keyword.get(opts, :grant, 10_000)
+
+    version =
+      ForecastVersion
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org_id,
+          name: name,
+          version: number,
+          starts_on: first,
+          ends_on: Date.end_of_month(first),
+          scenario_weights: %{base: 1.0, upside: 0.0, downside: 0.0},
+          drivers: [
+            %{driver: :burn, scenario: :base, period_on: first, amount_cents: burn},
+            %{driver: :grant_pipeline, scenario: :base, period_on: first, amount_cents: grant}
+          ]
+        },
+        scope: admin_scope(org_id)
+      )
+      |> Ash.create!()
+
+    version
+    |> Ash.Changeset.for_update(:publish, %{}, scope: admin_scope(org_id))
+    |> Ash.update!()
+  end
+
+  defp finance_opts(org_id) do
+    [
+      org_id: org_id,
+      driver: ForecastDriver,
+      repo: Repo,
+      posting_account: PostingAccount,
+      line: JournalLine,
+      entry: JournalEntry
+    ]
+  end
+
   defp open(org_id) do
     mount = board_mount()
     params = %{"org" => org_id}
@@ -150,6 +195,7 @@ defmodule Samen.Web.BoardPackTest do
     assert html =~ "ProfitLoss.generate/4"
     assert html =~ "CashFlow.statement/4"
     assert html =~ "No variance rows are recorded for this period."
+    assert html =~ "No published forecast version covers this period"
     assert html =~ ~s(href="/board?org=#{org_id}" class="on")
 
     assert Samen.Web.Erp.report_surfaces() == [:board]
@@ -205,6 +251,41 @@ defmodule Samen.Web.BoardPackTest do
     assert csv =~ "exec,Revenue,100000,cents,ProfitLoss.generate/4"
     assert csv =~ "cash_flow,Closing cash,60000,cents,CashFlow.statement/4"
     assert csv =~ "variance_bridge,Labour basis,declared_pending_driver,text"
+    assert csv =~ "runway,Status,no_published_forecast,text"
+  end
+
+  test "quotes the latest published forecast through ForecastRead.runway/2" do
+    %{org_id: org_id, today: today} = seed_month!()
+    _older = seed_forecast!(org_id, today, name: "Older", version: 1, burn: 50_000)
+    latest = seed_forecast!(org_id, today, name: "Latest", version: 2, burn: 20_000)
+
+    socket = open(org_id)
+    html = render_html(Live, socket.assigns)
+
+    assert html =~ ~s(id="board-runway")
+    assert html =~ "Runway"
+    assert html =~ "Latest · v2"
+    assert html =~ "6.0 months"
+    assert html =~ "$100.00"
+
+    {:ok, state} = BoardPack.load(board_mount(), org_id)
+    expected = ForecastRead.runway(latest, finance_opts(org_id))
+
+    assert state.report.runway.version_id == latest.id
+    assert state.report.runway.status == :runway
+    assert state.report.runway.cash_on_hand_cents == expected.cash_on_hand_cents
+    assert state.report.runway.avg_monthly_burn_cents == expected.avg_monthly_burn_cents
+    assert state.report.runway.runway_months == expected.runway_months
+    assert state.report.runway.reconciled?
+    assert Enum.any?(state.report.sources, &(&1.section == "Runway"))
+
+    csv = BoardPack.csv(state.report)
+    assert csv =~ "runway,Status,runway,text"
+    assert csv =~ "runway,Cash on hand,60000,cents"
+    assert csv =~ "runway,Average monthly burn,10000,cents"
+    assert csv =~ "runway,Runway,6.0,months"
+    assert csv =~ "runway,Mapped,true,boolean"
+    assert csv =~ "runway,Reconciled,true,boolean"
   end
 
   test "an unmapped :cash account is an honest empty cash statement" do
@@ -213,6 +294,7 @@ defmodule Samen.Web.BoardPackTest do
     cash = seed_account!(org_id, "1000", "Cash", :asset, :debit)
     income = seed_account!(org_id, "4000", "Grant revenue", :income, :credit)
     seed_period!(org_id, today.year, today.month)
+    seed_forecast!(org_id, today)
 
     post_entry!(org_id, today, "Award receipt", [
       %{account_id: cash.id, debit_cents: 100_000, credit_cents: 0},
@@ -225,14 +307,18 @@ defmodule Samen.Web.BoardPackTest do
     assert html =~ "No"
     assert html =~ "posting account is mapped"
     assert html =~ "cash movement is unavailable"
+    assert html =~ "No :cash posting account is mapped, so no runway is quoted."
 
     {:ok, state} = BoardPack.load(board_mount(), org_id)
     refute state.report.statements.cash_flow.mapped?
     assert state.report.statements.cash_flow.closing_cents == 0
     assert state.report.exec.cash_cents == 0
+    assert state.report.runway.status == :unmapped
+    refute state.report.runway.mapped?
 
     csv = BoardPack.csv(state.report)
     assert csv =~ "cash_flow,Closing cash,0,cents,CashFlow.statement/4"
+    assert csv =~ "runway,Status,unmapped,text"
   end
 
   test "a workspace with no fiscal period renders the honest empty state" do

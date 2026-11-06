@@ -9,6 +9,8 @@ defmodule Samen.Scopes.Finance.BoardPack do
     * balance sheet — `Samen.Scopes.Finance.BalanceSheet`;
     * cash flow — `Samen.Scopes.Finance.CashFlow` (the host's `:cash`
       posting accounts);
+    * runway — `Samen.Scopes.Finance.ForecastRead` (the latest published
+      forecast version, when the host supplies one);
     * variance bridge and appendix — `Samen.Scopes.Finance.VarianceReport`;
     * close status — `Samen.Scopes.Finance.CloseBoard`.
 
@@ -35,6 +37,7 @@ defmodule Samen.Scopes.Finance.BoardPack do
     BalanceSheet,
     CashFlow,
     CloseBoard,
+    ForecastRead,
     ProfitLoss,
     VarianceReport
   }
@@ -50,6 +53,7 @@ defmodule Samen.Scopes.Finance.BoardPack do
           statements: map(),
           variance_bridge: map(),
           variance_appendix: [map()],
+          runway: map() | nil,
           close: map() | nil,
           traffic_lights: [map()],
           sources: [map()]
@@ -61,6 +65,8 @@ defmodule Samen.Scopes.Finance.BoardPack do
   Required opts: `:repo`, `:account`, `:line`, `:entry`, `:posting_account`.
   Optional: `:period`, `:run`, `:task` (the Work Task module), `:variance`
   (the `CostVariance` module; absent means the variance section is
+  unavailable), and `:forecast`/`:forecast_driver` (a published
+  `ForecastVersion` and its driver module; absent means runway is
   unavailable).
   """
   @spec report(String.t(), integer(), integer(), keyword()) ::
@@ -98,6 +104,14 @@ defmodule Samen.Scopes.Finance.BoardPack do
       variance = variance_report(org_id, year, month, variance_mod)
       close = close_report(run, task, period)
 
+      runway =
+        forecast_runway(
+          org_id,
+          Keyword.get(opts, :forecast),
+          Keyword.get(opts, :forecast_driver),
+          opts
+        )
+
       exec = exec_snapshot(profit_loss, balance_sheet, cash_flow, close)
       kpis = kpis(profit_loss, cash_flow, close, posting_account, org_id)
 
@@ -115,15 +129,17 @@ defmodule Samen.Scopes.Finance.BoardPack do
          },
          variance_bridge: variance_bridge(variance, year, month),
          variance_appendix: variance.rows,
+         runway: runway,
          close: close,
          traffic_lights: traffic_lights(balance_sheet, cash_flow, close, variance),
-         sources: [
-           %{section: "Profit & loss", read: "ProfitLoss.generate/4"},
-           %{section: "Balance sheet", read: "BalanceSheet.generate/3"},
-           %{section: "Cash flow", read: "CashFlow.statement/4"},
-           %{section: "Variance", read: "VarianceReport.for_period/3"},
-           %{section: "Close", read: "CloseBoard.report/2"}
-         ]
+         sources:
+           [
+             %{section: "Profit & loss", read: "ProfitLoss.generate/4"},
+             %{section: "Balance sheet", read: "BalanceSheet.generate/3"},
+             %{section: "Cash flow", read: "CashFlow.statement/4"},
+             %{section: "Variance", read: "VarianceReport.for_period/3"},
+             %{section: "Close", read: "CloseBoard.report/2"}
+           ] ++ runway_sources(runway)
        }}
     end
   end
@@ -156,6 +172,37 @@ defmodule Samen.Scopes.Finance.BoardPack do
   defp close_report(run, task, period) do
     CloseBoard.report(run, task: task, period: period)
   end
+
+  defp forecast_runway(_org_id, nil, _driver, _opts), do: nil
+  defp forecast_runway(_org_id, _version, nil, _opts), do: nil
+
+  defp forecast_runway(org_id, version, driver, opts) do
+    read =
+      ForecastRead.runway(version,
+        org_id: org_id,
+        driver: driver,
+        repo: Keyword.fetch!(opts, :repo),
+        posting_account: Keyword.fetch!(opts, :posting_account),
+        line: Keyword.fetch!(opts, :line),
+        entry: Keyword.fetch!(opts, :entry)
+      )
+
+    # The read reports `mapped?: false` when the host has no `:cash` posting
+    # account. A zero-cents runway from that read is an absence, not a result.
+    status = if read.mapped?, do: read.status, else: :unmapped
+
+    Map.merge(read, %{
+      status: status,
+      version_name: version.name,
+      version_number: version.version,
+      starts_on: version.starts_on,
+      ends_on: version.ends_on,
+      published_at: version.published_at
+    })
+  end
+
+  defp runway_sources(nil), do: []
+  defp runway_sources(runway), do: [%{section: "Runway", read: runway.source}]
 
   defp exec_snapshot(profit_loss, balance_sheet, cash_flow, close) do
     %{
@@ -240,37 +287,52 @@ defmodule Samen.Scopes.Finance.BoardPack do
         key: :statements,
         label: "Balance sheet",
         status: if(balance_sheet.balanced, do: :green, else: :red),
-        detail: if(balance_sheet.balanced, do: "assets equal liabilities plus equity", else: "the sheet does not balance")
+        detail:
+          if(balance_sheet.balanced,
+            do: "assets equal liabilities plus equity",
+            else: "the sheet does not balance"
+          )
       },
       %{
         key: :cash,
         label: "Cash mapping",
         status: if(cash_flow.mapped?, do: :green, else: :grey),
-        detail: if(cash_flow.mapped?, do: "cash movement is ledger-derived", else: "no :cash posting account is mapped")
+        detail:
+          if(cash_flow.mapped?,
+            do: "cash movement is ledger-derived",
+            else: "no :cash posting account is mapped"
+          )
       },
       %{
         key: :close,
         label: "Close run",
-        status: cond do
-          is_nil(close) -> :grey
-          close.completeness.complete? -> :green
-          true -> :amber
-        end,
-        detail: cond do
-          is_nil(close) -> "no close run is recorded"
-          close.completeness.complete? -> "every phase is signed and its task is closed"
-          true -> "#{close.completeness.done}/#{close.completeness.total} phases done"
-        end
+        status:
+          cond do
+            is_nil(close) -> :grey
+            close.completeness.complete? -> :green
+            true -> :amber
+          end,
+        detail:
+          cond do
+            is_nil(close) -> "no close run is recorded"
+            close.completeness.complete? -> "every phase is signed and its task is closed"
+            true -> "#{close.completeness.done}/#{close.completeness.total} phases done"
+          end
       },
       %{
         key: :variance,
         label: "Variance",
-        status: cond do
-          variance.rows == [] -> :grey
-          variance.totals.net_cents <= 0 -> :green
-          true -> :amber
-        end,
-        detail: if(variance.rows == [], do: "no variance rows recorded", else: "net #{variance.totals.net_cents} cents")
+        status:
+          cond do
+            variance.rows == [] -> :grey
+            variance.totals.net_cents <= 0 -> :green
+            true -> :amber
+          end,
+        detail:
+          if(variance.rows == [],
+            do: "no variance rows recorded",
+            else: "net #{variance.totals.net_cents} cents"
+          )
       }
     ]
   end

@@ -102,7 +102,7 @@ defmodule Samen.Web.Finance.BoardPack.Live do
     """
   end
 
-  attr :state, :map, required: true
+  attr(:state, :map, required: true)
 
   defp board_body(assigns) do
     ~H"""
@@ -134,13 +134,14 @@ defmodule Samen.Web.Finance.BoardPack.Live do
     </div>
 
     <.statements report={@state.report} />
+    <.runway report={@state.report} />
     <.variance report={@state.report} />
     <.trace report={@state.report} />
     """
   end
 
-  attr :label, :string, required: true
-  attr :value, :string, required: true
+  attr(:label, :string, required: true)
+  attr(:value, :string, required: true)
 
   defp metric_card(assigns) do
     ~H"""
@@ -151,7 +152,7 @@ defmodule Samen.Web.Finance.BoardPack.Live do
     """
   end
 
-  attr :report, :map, required: true
+  attr(:report, :map, required: true)
 
   defp statements(assigns) do
     ~H"""
@@ -241,7 +242,32 @@ defmodule Samen.Web.Finance.BoardPack.Live do
     """
   end
 
-  attr :report, :map, required: true
+  attr(:report, :map, required: true)
+
+  defp runway(assigns) do
+    ~H"""
+    <div class="card" id="board-runway" style="padding:12px 16px;margin-bottom:12px">
+      <b>Runway</b>
+      <%= if @report.runway do %>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px">
+          <.metric_card label="Cash on hand" value={money(@report.runway.cash_on_hand_cents)} />
+          <.metric_card label="Average monthly burn" value={money(@report.runway.avg_monthly_burn_cents)} />
+          <.metric_card label="Runway" value={runway_label(@report.runway)} />
+          <.metric_card label="Forecast" value={forecast_label(@report.runway)} />
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px">
+          {runway_detail(@report.runway)}
+        </p>
+      <% else %>
+        <p style="color:var(--muted);font-size:12px;margin-top:8px">
+          No published forecast version covers this period, so runway is unavailable. The board pack does not estimate it.
+        </p>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr(:report, :map, required: true)
 
   defp variance(assigns) do
     ~H"""
@@ -312,7 +338,7 @@ defmodule Samen.Web.Finance.BoardPack.Live do
     """
   end
 
-  attr :report, :map, required: true
+  attr(:report, :map, required: true)
 
   defp trace(assigns) do
     ~H"""
@@ -344,6 +370,38 @@ defmodule Samen.Web.Finance.BoardPack.Live do
   defp close_label(%{close_complete?: true}), do: "complete"
   defp close_label(%{close_percent: percent}) when is_integer(percent), do: "#{percent}%"
   defp close_label(_exec), do: "not started"
+
+  defp runway_label(%{mapped?: false}), do: "unavailable"
+
+  defp runway_label(%{status: :runway, runway_months: months}) when is_float(months),
+    do: "#{months} months"
+
+  defp runway_label(%{status: :not_burning}), do: "not burning"
+  defp runway_label(%{status: :no_forecast}), do: "no drivers"
+  defp runway_label(_runway), do: "unavailable"
+
+  defp forecast_label(%{version_name: name, version_number: number}),
+    do: "#{name} · v#{number}"
+
+  defp forecast_label(_runway), do: "—"
+
+  defp runway_detail(%{mapped?: false}),
+    do: "No :cash posting account is mapped, so no runway is quoted."
+
+  defp runway_detail(%{status: :no_forecast}),
+    do: "The published forecast has no monthly drivers."
+
+  defp runway_detail(%{status: :not_burning}),
+    do: "The forecast is not burning cash, so a runway multiple is not meaningful."
+
+  defp runway_detail(%{status: :runway, reconciled?: true, ends_on: ends_on}),
+    do:
+      "Weighted burn through #{Calendar.strftime(ends_on, "%B %Y")}; reconciled to the mapped cash accounts."
+
+  defp runway_detail(%{status: :runway}),
+    do: "Weighted burn over the published forecast; the cash read is not reconciled."
+
+  defp runway_detail(_runway), do: "Runway is unavailable for this forecast."
 
   defp pct(nil), do: "—"
   defp pct(value) when is_float(value), do: :erlang.float_to_binary(value, decimals: 1) <> "%"
@@ -385,5 +443,6 @@ defmodule Samen.Web.Finance.BoardPack.Live do
     do: "This workspace has no Finance mount, so there is no board pack to show."
 
   defp error_text(reason),
-    do: "This board pack is not available on this workspace's mounted modules (#{inspect(reason)})."
+    do:
+      "This board pack is not available on this workspace's mounted modules (#{inspect(reason)})."
 end
