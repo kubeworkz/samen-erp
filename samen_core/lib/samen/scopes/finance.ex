@@ -348,7 +348,11 @@ defmodule Samen.Scopes.Finance do
     grant_milestone: "fgm",
     grant_claim: "fgc",
     grant_opportunity: "fgo",
-    grant_personnel: "fgp"
+    grant_personnel: "fgp",
+    # WS-ACCT Phase 14 (ADR-054 D11): the append-only forecast lineage and its
+    # monthly driver facts. Allocator-reserved under the `samen_web` host.
+    forecast_version: "fcv",
+    forecast_driver: "fcd"
   }
 
   @doc false
@@ -400,6 +404,8 @@ defmodule Samen.Scopes.Finance do
     grant_claim_mod = Module.concat(namespace, GrantClaim)
     grant_opportunity_mod = Module.concat(namespace, GrantOpportunity)
     grant_personnel_mod = Module.concat(namespace, GrantPersonnel)
+    forecast_version_mod = Module.concat(namespace, ForecastVersion)
+    forecast_driver_mod = Module.concat(namespace, ForecastDriver)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -421,6 +427,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.LabourAllocationBlueprint
 
       require Samen.Scopes.Finance.GrantBlueprint
+
+      require Samen.Scopes.Finance.ForecastBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -455,6 +463,8 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(grant_claim_mod))
         resource(unquote(grant_opportunity_mod))
         resource(unquote(grant_personnel_mod))
+        resource(unquote(forecast_version_mod))
+        resource(unquote(forecast_driver_mod))
       end
 
       # WS-ACCT Phase 9 (ADR-054 D10) — the obsolescence policy, its derived
@@ -603,6 +613,27 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.grant_personnel),
         unquote(grant_mod)
+      )
+
+      # WS-ACCT Phase 14 (ADR-054 D11) — the rolling forecast is a bounded
+      # driver model with append-only versions. A published version has no
+      # edit path; rolling is a create that copies the drivers.
+      Samen.Scopes.Finance.ForecastBlueprint.define_forecast_version(
+        unquote(forecast_version_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.forecast_version),
+        unquote(forecast_driver_mod)
+      )
+
+      Samen.Scopes.Finance.ForecastBlueprint.define_forecast_driver(
+        unquote(forecast_driver_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.forecast_driver),
+        unquote(forecast_version_mod)
       )
 
       # WS-ACCT Phase 8 (ADR-054 D9) — the asset register and its exactly-once
@@ -857,8 +888,11 @@ defmodule Samen.Scopes.Finance do
 
   defp resolve_work(opts, caller) when is_list(opts) do
     case Keyword.fetch(opts, :task) do
-      {:ok, task} -> %{task: Macro.expand(task, caller)}
-      :error -> raise ArgumentError, "use Samen.Scopes.Finance, work: requires task: <Work.Task module>"
+      {:ok, task} ->
+        %{task: Macro.expand(task, caller)}
+
+      :error ->
+        raise ArgumentError, "use Samen.Scopes.Finance, work: requires task: <Work.Task module>"
     end
   end
 

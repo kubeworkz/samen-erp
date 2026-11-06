@@ -61,7 +61,10 @@ defmodule Samenerp.Erp do
       grant_milestone: "egm",
       grant_claim: "egc",
       grant_opportunity: "ego",
-      grant_personnel: "egp"
+      grant_personnel: "egp",
+      # WS-ACCT Phase 14 (ADR-054 D11): the forecast lineage and drivers.
+      forecast_version: "efv",
+      forecast_driver: "efw"
     },
     labour: [
       timesheet: Samenerp.Work.Timesheet,

@@ -172,8 +172,8 @@ defmodule Samen.AbbrevRegistryTest do
       # samen_web `wec`/`ewc`, samenerp `sec`/`cse`, every row allocator-reserved.
       # = 407 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 119
-      assert map_size(hosts["samen_core"]) == 113
+      assert map_size(hosts["samenerp"]) == 121
+      assert map_size(hosts["samen_core"]) == 115
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -569,7 +569,10 @@ defmodule Samen.AbbrevRegistryTest do
                  "fgl" => "SamenCore.Support.FinanceFixture.GrantMilestone",
                  "fgk" => "SamenCore.Support.FinanceFixture.GrantClaim",
                  "fgt" => "SamenCore.Support.FinanceFixture.GrantOpportunity",
-                 "fgu" => "SamenCore.Support.FinanceFixture.GrantPersonnel"
+                 "fgu" => "SamenCore.Support.FinanceFixture.GrantPersonnel",
+                 # WS-ACCT Phase 14 (ADR-054 D11): the fixture's forecast lineage and drivers.
+                 "ffv" => "SamenCore.Support.FinanceFixture.ForecastVersion",
+                 "ffd" => "SamenCore.Support.FinanceFixture.ForecastDriver"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -745,7 +748,11 @@ defmodule Samen.AbbrevRegistryTest do
                  "fgm" => "Samen.WebTest.Erp.GrantMilestone",
                  "fgc" => "Samen.WebTest.Erp.GrantClaim",
                  "fgo" => "Samen.WebTest.Erp.GrantOpportunity",
-                 "fgp" => "Samen.WebTest.Erp.GrantPersonnel"
+                 "fgp" => "Samen.WebTest.Erp.GrantPersonnel",
+                 # WS-ACCT Phase 14 (ADR-054 D11): the web test host's forecast
+                 # lineage and drivers.
+                 "fcv" => "Samen.WebTest.Erp.ForecastVersion",
+                 "fcd" => "Samen.WebTest.Erp.ForecastDriver"
                },
                # WS-ERP E8 (ADR-049): the samenerp HOST PROOF — `mix samen.gen.app`,
                # prefix `er`. The full E1–E7 ERP scope set re-materialized under the
@@ -916,7 +923,11 @@ defmodule Samen.AbbrevRegistryTest do
                  "egm" => "Samenerp.Erp.GrantMilestone",
                  "egc" => "Samenerp.Erp.GrantClaim",
                  "ego" => "Samenerp.Erp.GrantOpportunity",
-                 "egp" => "Samenerp.Erp.GrantPersonnel"
+                 "egp" => "Samenerp.Erp.GrantPersonnel",
+                 # WS-ACCT Phase 14 (ADR-054 D11): the Kubeworkz forecast lineage
+                 # and drivers.
+                 "efv" => "Samenerp.Erp.ForecastVersion",
+                 "efw" => "Samenerp.Erp.ForecastDriver"
                }
              }
 
@@ -1051,7 +1062,7 @@ defmodule Samen.AbbrevRegistryTest do
       # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
       # allocation pair in all three hosts (samen_core `wts`/`tsw`/`sfl`/`slf`,
       # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
-      assert map_size(Reg.load()) == 822
+      assert map_size(Reg.load()) == 828
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

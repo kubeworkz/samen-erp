@@ -333,8 +333,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +15 WS-ACCT Phase 11 (ADR-054 D8): the grant, milestone, claim,
       # opportunity and personnel objects in the same three hosts -> 38_336
       # bytes, 822 flat.
-      assert byte_size(committed) == 38_336
-      assert map_size(R.load()) == 822
+      # +6 WS-ACCT Phase 14 (ADR-054 D11): forecast version + driver in the same
+      # three hosts -> 38_653 bytes, 828 flat.
+      assert byte_size(committed) == 38_653
+      assert map_size(R.load()) == 828
     end
   end
 

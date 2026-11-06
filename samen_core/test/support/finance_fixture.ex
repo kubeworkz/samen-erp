@@ -88,7 +88,10 @@ defmodule SamenCore.Support.FinanceFixture do
       grant_milestone: "fgl",
       grant_claim: "fgk",
       grant_opportunity: "fgt",
-      grant_personnel: "fgu"
+      grant_personnel: "fgu",
+      # WS-ACCT Phase 14 (ADR-054 D11): the forecast lineage and drivers.
+      forecast_version: "ffv",
+      forecast_driver: "ffd"
     },
     labour: [
       timesheet: SamenCore.Support.WorkFixture.Timesheet,
