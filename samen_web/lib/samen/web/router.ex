@@ -1182,6 +1182,83 @@ defmodule Samen.Web.Router do
   end
 
   @doc """
+  Mount the grant personnel report (WS-ACCT Phase 11; ADR-054 D8/§4) in ONE
+  line over the host's mounted Finance namespace:
+
+      import Samen.Web.Router
+
+      scope "/" do
+        pipe_through :browser
+        samen_grant_personnel_routes(:grants, MyHost.Erp, repo: MyHost.Repo)
+      end
+
+  Mounts `GET <path>` (the bounded grants index), `GET <path>/:id` (the
+  report page), `<path>/:id/personnel.csv` (the download), and
+  `<path>/:id/personnel.json` (the JSON API egress). The report, CSV, and JSON
+  read through `Samen.Web.GrantPersonnel` — the SAME plane-resolved projection
+  — so the pixel, the CSV cell, and the JSON value cannot diverge. The index
+  links each award to its report. `:id` is the grant id; the grant is read
+  org-scoped through the mount's plane.
+
+  `:personnel_namespace` names the host's mounted HR namespace (the Employee
+  resource is derived as `<namespace>.Employee`). Without it the report
+  honestly falls back to the bounded employment facts (employee id, effort,
+  effective date) — never a guessed name. Options as `samen_erp_routes/3`
+  (`:repo` required; `:domain`, `:plane`, `:operator_id`/`:target_org_id`,
+  `:path` (default `/grants`), `:labels`, `:session_name`).
+  """
+  defmacro samen_grant_personnel_routes(kind, namespace, opts \\ []) do
+    kind = Macro.expand(kind, __CALLER__)
+    path = Keyword.get(opts, :path, "/grants")
+    session_name = Keyword.get(opts, :session_name, session_name(:grants, path))
+
+    quote bind_quoted: [
+            kind: kind,
+            namespace: namespace,
+            opts: opts,
+            path: path,
+            session_name: session_name
+          ] do
+      _ = kind
+
+      labels =
+        (Keyword.get(opts, :labels) || %{})
+        |> Map.put(:grants_path, path)
+        |> then(fn labels ->
+          case Keyword.get(opts, :personnel_namespace) do
+            nil -> labels
+            ns -> Map.put(labels, :personnel_namespace, ns)
+          end
+        end)
+
+      mount =
+        Samen.Web.Mount.new(
+          :erp,
+          namespace,
+          Keyword.fetch!(opts, :repo),
+          domain: Keyword.get(opts, :domain, namespace),
+          plane: Samen.Web.Router.__plane__(opts),
+          labels: labels
+        )
+
+      live_session session_name,
+        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        live("#{path}", Samen.Web.GrantPersonnel.IndexLive)
+        live("#{path}/:id", Samen.Web.GrantPersonnel.Live)
+      end
+
+      get("#{path}/:id/personnel.csv", Samen.Web.GrantPersonnel.CsvController, :export,
+        assigns: %{samen_mount: mount}
+      )
+
+      get("#{path}/:id/personnel.json", Samen.Web.GrantPersonnel.ApiController, :show,
+        assigns: %{samen_mount: mount}
+      )
+    end
+  end
+
+  @doc """
   Mount the framework `.ics` (iCalendar) export surface (F2; spec §F2/§F8 c8) —
   ONE line, on either plane. `namespace` is the host's mounted Calendar-scope
   namespace (`use Samen.Scopes.Calendar, namespace: ...` — its materialized

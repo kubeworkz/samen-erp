@@ -76,6 +76,11 @@ defmodule SamenerpWeb.Router do
     identity_namespace: Samenerp.Operator,
     org_directory: {Samenerp.Directory, :orgs, []},
     erp_path: "/erp",
+    # WS-ACCT Phase 11 — the bounded grants index lives inside the ERP nav group. The label
+    # is shared by every tenant mount so the item appears on ERP pages and other framework
+    # sidebars, and its presence is the X1 dead-link guard: this router mounts
+    # `samen_grant_personnel_routes(:grants, …)` at exactly this path below.
+    grants_path: "/grants",
     # WS-ERP E9/E15-nav seams — same presence-is-the-guard posture as `erp_path`:
     # non-nil ONLY because the routes below are mounted, so every framework sidebar
     # renders the Banking/Work groups with links this router actually serves.
@@ -274,6 +279,18 @@ defmodule SamenerpWeb.Router do
     #    `Samen.Web.Erp` (the registry IS the boundary), the generic
     #    read-only `Samen.Web.Erp.SurfaceLive` serves every path.
     samen_erp_routes(:erp, Samenerp.Erp, repo: Samenerp.Repo, labels: @current_org_labels)
+
+    # 1c-2. WS-ACCT Phase 11 — the grant personnel report (DOM + CSV + JSON),
+    #       over the same `Samenerp.Erp` Finance mount. HR is not mounted until
+    #       Phase 16, so no `:personnel_namespace` is passed here: the report
+    #       honestly renders the bounded employment facts (opaque employee id,
+    #       effort, effective date) and marks names unwired. Once `Samenerp.Hr`
+    #       lands, add `personnel_namespace: Samenerp.Hr` to this one line and
+    #       the SAME projection resolves/masks names with no other change.
+    samen_grant_personnel_routes(:grants, Samenerp.Erp,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
 
     # 1f. WS-ERP E9 — Banking (bank accounts · statement lines · guarded match ·
     #     rules) over the `Samenerp.Banking` mount: the five bka/bkl/bki/bkm/bkr

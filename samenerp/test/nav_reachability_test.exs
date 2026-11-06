@@ -65,11 +65,13 @@ defmodule Samenerp.NavReachabilityTest do
   # A tenant page that mounts NONE of the phase surfaces itself: whatever appears here is the
   # inherited sidebar, which is the thing under test. Returns the `<aside class="side">` region
   # ONLY — the route-table leg below must judge NAV links, not the root layout's asset `<link>`s.
-  defp sidebar_html(org) do
-    conn = get(build_conn(), "/crm/companies?org=#{org.id}")
+  defp sidebar_html(org), do: sidebar_at("/crm/companies", org)
+
+  defp sidebar_at(path, org) do
+    conn = get(build_conn(), "#{path}?org=#{org.id}")
 
     assert conn.status == 200,
-           "GET /crm/companies did not render (status=#{conn.status}) — the CRM mount is missing or crashing"
+           "GET #{path} did not render (status=#{conn.status}) — the mount is missing or crashing"
 
     case Regex.run(~r/<aside class="side">.*?<\/aside>/s, conn.resp_body) do
       [sidebar] ->
@@ -110,6 +112,16 @@ defmodule Samenerp.NavReachabilityTest do
     # Phase 4's flag admin rides the Workspace group (a settings surface, not a module page).
     assert html =~ ~r/>\s*Feature flags\s*<\/a>/
     assert html =~ ~s(href="/flags?org=#{org.id}")
+  end
+
+  test "the Grants nav item appears on an ERP surface and links to the mounted index" do
+    org = create_org!("ERP Grants Nav QA")
+    html = sidebar_at("/erp/coa", org)
+
+    assert html =~ "ERP"
+    assert html =~ ~r/>\s*Grants\s*<\/a>/
+    assert html =~ ~s(href="/grants?org=#{org.id}")
+    assert mounted?("/grants?org=#{org.id}")
   end
 
   test "every nav link the tenant sidebar emits resolves to a route this host declares" do

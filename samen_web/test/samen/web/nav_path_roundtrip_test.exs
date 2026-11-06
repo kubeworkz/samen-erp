@@ -66,4 +66,20 @@ defmodule Samen.Web.NavPathRoundtripTest do
 
     assert bare_paths[:files_path] == nil
   end
+
+  test "the grants index path is resolved from the mount and survives the session round trip" do
+    mount =
+      Mount.new(:erp, Samen.WebTest.Erp, Samen.WebTest.Repo,
+        plane: Plane.tenant(),
+        labels: %{erp_path: "/erp", grants_path: "/grants"}
+      )
+
+    rebuilt = mount |> Mount.to_session() |> Mount.from_session()
+
+    assert Samen.UI.nav_paths(mount)[:grants_path] == "/grants"
+    assert Samen.UI.nav_paths(rebuilt)[:grants_path] == "/grants"
+
+    bare = Mount.new(:erp, Samen.WebTest.Erp, Samen.WebTest.Repo, plane: Plane.tenant())
+    assert Samen.UI.nav_paths(bare)[:grants_path] == nil
+  end
 end

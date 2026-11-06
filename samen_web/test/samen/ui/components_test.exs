@@ -265,6 +265,42 @@ defmodule Samen.UI.ComponentsTest do
     assert html =~ ~s(href="/erp/stock?org=ORG-123" class="on")
   end
 
+  test "module_nav/1 links the grants index only when the ERP and grants paths are threaded" do
+    hidden =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: nil,
+        erp_path: "/erp",
+        extra: []
+      })
+
+    refute hidden =~ ~r/>\s*Grants\s*</
+    refute hidden =~ ~s(href="/grants?org=ORG-123")
+
+    # The item belongs to the ERP group: a grants path without an ERP path is inert.
+    only_grants =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: nil,
+        grants_path: "/grants",
+        extra: []
+      })
+
+    refute only_grants =~ ~s(href="/grants?org=ORG-123")
+
+    html =
+      render_component(&Samen.UI.module_nav/1, %{
+        org_id: "ORG-123",
+        active: :erp_grants,
+        erp_path: "/erp",
+        grants_path: "/grants",
+        extra: []
+      })
+
+    assert html =~ ~r/>\s*Grants\s*</
+    assert html =~ ~s(href="/grants?org=ORG-123" class="on")
+  end
+
   # SIDEBAR-REACHABILITY (2026-10-10) — the seven host-adoption PHASES
   # (`docs/samenerp-mount-ledger.md`) each mounted a module group whose surfaces were reachable
   # only by hand-typing a URL (Files · Chat · Search · own-org analytics · `.ics` · AI · flags).

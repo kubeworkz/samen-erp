@@ -119,8 +119,8 @@ defmodule Samen.UI.Nav do
       :crm_calendar | :crm_dashboard | :crm_mailbox | :crm_sequences | :billing_overview |
       :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
       :support_tickets | :notifications_settings | :settings | :automation | :erp_coa |
-      :erp_entries | :erp_ap_invoices | :erp_stock | :erp_purchase_orders | :erp_work_orders`
-      (or `nil`).
+      :erp_entries | :erp_ap_invoices | :erp_stock | :erp_purchase_orders | :erp_work_orders |
+      :erp_grants` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
@@ -157,6 +157,15 @@ defmodule Samen.UI.Nav do
     The ERP route prefix — non-nil ONLY on a host whose router calls `samen_erp_routes/3`
     (threaded from the `:erp_path` mount label). `nil` hides the whole ERP group (the X1
     dead-link guard; every pre-existing caller and generated app defaults to `nil`).
+    """
+
+  attr :grants_path, :string,
+    default: nil,
+    doc: """
+    The grant index route prefix — non-nil ONLY on a host whose router calls
+    `samen_grant_personnel_routes/3` (threaded from the `:grants_path` mount label). The
+    item lives inside the ERP group, so it also requires `erp_path`; `nil` hides it. This
+    is the same X1 dead-link guard as every other path-gated nav item.
     """
 
   attr :banking_path, :string,
@@ -298,6 +307,16 @@ defmodule Samen.UI.Nav do
         active={@active == :"erp_#{surface}"}
       >
         <:icon>{erp_icon(surface)}</:icon>
+      </.nav_item>
+      <.nav_item
+        :if={@grants_path}
+        label="Grants"
+        href={"#{@grants_path}?org=#{@org_id}"}
+        active={@active == :erp_grants}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="5" /><path d="M8.5 13.5L7 22l5-2.5L17 22l-1.5-8.5" /></svg>
+        </:icon>
       </.nav_item>
     </.nav_group>
 
@@ -597,6 +616,7 @@ defmodule Samen.UI.Nav do
   def nav_paths(%Mount{} = mount, overrides \\ []) when is_list(overrides) do
     base = [
       erp_path: Mount.label(mount, :erp_path, nil),
+      grants_path: Mount.label(mount, :grants_path, nil),
       banking_path: Mount.label(mount, :banking_path, nil),
       work_path: Mount.label(mount, :work_path, nil)
     ]

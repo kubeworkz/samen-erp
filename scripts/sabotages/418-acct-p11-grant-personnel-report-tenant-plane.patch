@@ -1,0 +1,28 @@
+# SABOTAGE: the grant personnel report resolves the HR name on the TENANT
+# plane even when the mount is operator/impersonation.
+#
+# The report's whole masking watch-list guarantee is that the SAME projection
+# asks `PiiResolution` with the ACTING scope. This patch replaces that scope
+# with a tenant-plane mount, on the plausible reasoning that "the report is an
+# internal compliance export, so it should show the names" — a change that
+# still reads the grant org-scoped, still uses the opaque employee id, and
+# still never touches a vault token, so every structural check stays green.
+#
+# Only the plane is gone. The operator DOM, CSV, and JSON now carry the clear
+# name, which the red assertions in the report test MUST catch.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/grant_personnel_report_test.exs
+# MUST_FAIL: operator page is ••••, with no plaintext and no token
+# MUST_FAIL: tenant CSV carries the clear name; operator CSV masks the SAME cell
+# MUST_FAIL: tenant JSON carries the clear name; operator JSON masks the SAME row
+--- a/samen_web/lib/samen/web/grant_personnel.ex
++++ b/samen_web/lib/samen/web/grant_personnel.ex
+@@ -110,6 +110,6 @@
+   defp resolved_report(mount, org_id, grant, config) do
+     rows_mod = Mount.resource(mount, :GrantPersonnel)
+-    scope = Mount.scope(mount, org_id)
++    scope = Mount.scope(%{mount | plane: Samen.Web.Plane.tenant()}, org_id)
+ 
+     if Code.ensure_loaded?(rows_mod) do
+       case GrantCompliance.personnel(grant, scope,
