@@ -159,7 +159,7 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         @moduledoc """
         Finance.CloseRun — the close checklist for ONE fiscal period (WS-ACCT
         Phase 3; ADR-054 D7): `{period_id, status ∈ {:in_progress, :completed},
-        phases, started_at, completed_at}`.
+        phases, started_at, started_by, completed_at}`.
 
         `phases` starts as the source manual's ten close phases
         (`Samen.Scopes.Finance.ClosePhases`) with `done_at` unset and their
@@ -176,7 +176,8 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         be edited.
 
         No PII (INV-1) — a period id, an enum, the checklist maps (each a key, a
-        label, the doc's calendar window and output) and two timestamps.
+        label, the doc's calendar window and output), timestamps, and the
+        principal ids that started and signed the close.
         """
 
         use Samen.Resource,
@@ -199,9 +200,10 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
             constraints: [one_of: [:in_progress, :completed]]
           )
 
-          # [%{"key" =>, "label" =>, "days" =>, "focus" =>, "output" =>, "done_at" =>}]
+          # [%{"key" =>, "label" =>, "days" =>, "focus" =>, "output" =>, "done_at" =>, "done_by" =>}]
           attribute(:phases, {:array, :map}, public?: true, default: [])
           attribute(:started_at, :utc_datetime, public?: true)
+          attribute(:started_by, :string, public?: true)
           attribute(:completed_at, :utc_datetime, public?: true)
         end
 

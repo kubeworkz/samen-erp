@@ -3,7 +3,8 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
   The `CloseRun` checklist lifecycle (WS-ACCT Phase 3; ADR-054 D7):
 
     * `op: :seed` — on `:start`, copies `Samen.Scopes.Finance.ClosePhases.seeded/0`
-      onto the row and stamps `started_at`. The phases are never caller input:
+      onto the row and stamps `started_at` and `started_by`, the acting
+      principal's id when the caller supplies one. The phases are never caller input:
       the doc's ten are the checklist, and a caller inventing an eleventh would
       be editing the close policy through a create argument.
     * `op: :complete_phase` — the `:complete_phase` action's `phase` argument
@@ -47,13 +48,13 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     # `Samen.Pii.WriteGuard`: a nested action can rebuild the changeset's private
     # context by the time `before_action` runs, but the registration-time
     # changeset still carries the caller's actor. A caller with no actor records
-    # no signer (an honest absence, never a fabricated name).
-    signer =
+    # no starter or signer (an honest absence, never a fabricated name).
+    actor =
       actor_id(Map.get(context, :actor)) ||
         actor_id(get_in(changeset.context, [:private, :actor]))
 
     changeset
-    |> Ash.Changeset.before_action(&apply_op(&1, op, work_task, signer))
+    |> Ash.Changeset.before_action(&apply_op(&1, op, work_task, actor))
     |> seed_tasks_after(op, work_task)
   end
 
@@ -81,13 +82,14 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
 
   defp seed_tasks_after(changeset, _op, _task_mod), do: changeset
 
-  defp apply_op(changeset, :seed, _work_task, _signer) do
+  defp apply_op(changeset, :seed, _work_task, actor) do
     changeset
     |> Ash.Changeset.force_change_attribute(:phases, Samen.Scopes.Finance.ClosePhases.seeded())
     |> Ash.Changeset.force_change_attribute(:started_at, now())
+    |> Ash.Changeset.force_change_attribute(:started_by, actor)
   end
 
-  defp apply_op(changeset, :complete_phase, work_task, signer) do
+  defp apply_op(changeset, :complete_phase, work_task, actor) do
     key = Ash.Changeset.get_argument(changeset, :phase)
     phases = phases(changeset)
     open_task = open_task(work_task, changeset.data, key)
@@ -111,11 +113,11 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
         )
 
       true ->
-        Ash.Changeset.force_change_attribute(changeset, :phases, mark_done(phases, key, signer))
+        Ash.Changeset.force_change_attribute(changeset, :phases, mark_done(phases, key, actor))
     end
   end
 
-  defp apply_op(changeset, :finish, _work_task, _signer) do
+  defp apply_op(changeset, :finish, _work_task, _actor) do
     phases = phases(changeset)
 
     cond do
@@ -152,12 +154,12 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     end
   end
 
-  defp mark_done(phases, key, signer) do
+  defp mark_done(phases, key, actor) do
     Enum.map(phases, fn phase ->
       if get(phase, "key") == key and get(phase, "done_at") == nil do
         phase
         |> put("done_at", DateTime.to_iso8601(now()))
-        |> put("done_by", signer)
+        |> put("done_by", actor)
       else
         phase
       end

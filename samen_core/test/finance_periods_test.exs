@@ -443,6 +443,7 @@ defmodule Samen.FinancePeriodsTest do
 
       assert run.status == :in_progress
       assert run.started_at != nil
+      assert run.started_by == admin.actor.id
       assert length(run.phases) == 10
       assert Enum.map(run.phases, & &1["key"]) == ClosePhases.keys()
       assert Enum.all?(run.phases, &(&1["done_at"] == nil))

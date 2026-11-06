@@ -98,6 +98,14 @@ defmodule Samen.Web.CloseDashboardTest do
     |> List.first()
   end
 
+  defp period_card(html) do
+    html
+    |> String.split(~s(id="close-dashboard-period"))
+    |> List.last()
+    |> String.split(~s(id="close-dashboard-progress"))
+    |> List.first()
+  end
+
   describe "cycle selection" do
     test "an in-progress close outranks a newer, empty period" do
       org_id = Ash.UUID.generate()
@@ -271,6 +279,11 @@ defmodule Samen.Web.CloseDashboardTest do
       assert [run] = Ash.read!(CloseRun, scope: admin_scope(org_id))
       assert run.period_id == period.id
       assert run.status == :in_progress
+
+      page_actor = Samen.Web.TenantRole.attributed_admin_scope(mount(org_id), org_id).actor.id
+      assert run.started_by == page_actor
+      assert period_card(html) =~ "Started"
+      assert period_card(html) =~ "by the workspace"
     end
 
     test "signs a phase off and the board counts it" do

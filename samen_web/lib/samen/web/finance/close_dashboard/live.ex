@@ -18,19 +18,21 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   The page can START a period's close and SIGN OFF an open phase. Neither
   command is implemented here: the page calls the host's OWN `CloseRun`
-  `:start` / `:complete_phase` actions with `Samen.Web.TenantRole.admin_scope/2`
-  (the disarmed dev posture's `:admin`, or the authenticated principal's REAL
-  membership role on an armed host). The kernel's `OrgScope` + `RoleAtLeast
-  :admin` are the final authority, and a refusal (an open Work task, a
-  completed run) is shown in the banner verbatim. The buttons are offered on
-  the tenant plane to a derived admin only; a crafted event still runs through
-  the same governed action.
+  `:start` / `:complete_phase` actions with
+  `Samen.Web.TenantRole.attributed_admin_scope/2` (the disarmed dev posture's
+  `:admin`, or the authenticated principal's REAL membership role on an armed
+  host, with the actor id naming the principal when one resolves). The kernel's
+  `OrgScope` + `RoleAtLeast :admin` are the final authority, and a refusal (an
+  open Work task, a completed run) is shown in the banner verbatim. The buttons
+  are offered on the tenant plane to a derived admin only; a crafted event still
+  runs through the same governed action.
 
-  A sign-off is written with `TenantRole.attributed_admin_scope/2`, so the
-  kernel's `done_by` stamp names the authenticated principal when the host can
-  resolve one. The row renders that identity as `you` (the current principal),
-  `the workspace` (the dev posture's pseudo-principal), or a short admin id —
-  never an invented name, because the close read carries no user directory.
+  The same scope means the kernel's `started_by` and `done_by` stamps name the
+  authenticated principal when the host can resolve one. The period card names
+  the starter and each phase row names its signer, rendering that identity as
+  `you` (the current principal), `the workspace` (the dev posture's
+  pseudo-principal), or a short admin id — never an invented name, because the
+  close read carries no user directory.
   """
 
   use Samen.Web.Tenant.Live
@@ -249,7 +251,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
       <span class="lane">· org-scoped · sign-off and Work task must agree</span>
     </div>
 
-    <.period_card state={@state} />
+    <.period_card state={@state} actor_id={@actor_id} />
 
     <%= if @state.report == nil do %>
       <div class="card" id="close-dashboard-no-run" style="padding:16px;color:var(--muted)">
@@ -390,7 +392,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
             <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);color:var(--muted)">
               {stamp(phase.done_at)}
               <div :if={phase.done_by} style="font-size:11px">
-                {signer_label(phase.done_by, @actor_id)}
+                {actor_label(phase.done_by, @actor_id)}
               </div>
             </td>
             <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
@@ -441,6 +443,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   end
 
   attr :state, :map, required: true
+  attr :actor_id, :string, default: nil
 
   defp period_card(assigns) do
     ~H"""
@@ -449,6 +452,16 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         <b>{period_label(@state.period)}</b>
         <span style="color:var(--muted)">· period {@state.period.status}</span>
         <span :if={@state.run} style="color:var(--muted)">· close run {@state.run.status}</span>
+        <div
+          :if={@state.run && @state.run.started_at}
+          id="close-dashboard-started"
+          style="margin-top:4px;color:var(--muted);font-size:12px"
+        >
+          Started {stamp(@state.run.started_at)}
+          <span :if={@state.run.started_by}>
+            by {actor_label(@state.run.started_by, @actor_id)}
+          </span>
+        </div>
       <% else %>
         <span style="color:var(--muted)">No fiscal period declared.</span>
       <% end %>
@@ -511,10 +524,10 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   defp stamp(value), do: to_string(value)
 
-  defp signer_label("broker:" <> _, _current), do: "the workspace"
-  defp signer_label(id, id) when is_binary(id), do: "you"
-  defp signer_label(id, _current) when is_binary(id), do: "admin " <> String.slice(id, 0, 8)
-  defp signer_label(_other, _current), do: "—"
+  defp actor_label("broker:" <> _, _current), do: "the workspace"
+  defp actor_label(id, id) when is_binary(id), do: "you"
+  defp actor_label(id, _current) when is_binary(id), do: "admin " <> String.slice(id, 0, 8)
+  defp actor_label(_other, _current), do: "—"
 
   defp error_text(:finance_not_mounted),
     do: "This workspace has no Finance mount, so there is no close to show."

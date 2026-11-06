@@ -26,6 +26,8 @@ defmodule Samen.Scopes.Finance.CloseBoard do
 
     * `:period` — the fiscal month (id/year/month/status) when the caller passes
       it, `nil` otherwise (honest absence, not a guessed month);
+    * `:started_by` — the principal that started the run, `nil` for a run started
+      before its host recorded attribution (honest absence, never a guessed name);
     * `:phases` — the checklist in calendar order, each with its role
       assignment, sign-off stamp and signer, task projection and derived status;
     * `:completeness` — total/done/open, the percentage and the boolean
@@ -76,6 +78,7 @@ defmodule Samen.Scopes.Finance.CloseBoard do
       run_id: run.id,
       run_status: run.status,
       started_at: run.started_at,
+      started_by: Map.get(run, :started_by),
       completed_at: run.completed_at,
       period: period_view(period),
       phases: phases,

@@ -141,21 +141,26 @@ defmodule Samen.Web.Finance.CloseDashboard do
   Start the close for `period_id` through the host's OWN governed `:start`
   action.
 
-  The scope is the tenant-plane ADMIN write scope (`TenantRole.admin_scope/2`):
-  on a disarmed host that is the sanctioned `:admin` posture, on an armed host it
-  is the authenticated principal's REAL membership role. The kernel's `OrgScope`
-  + `RoleAtLeast :admin` decide — this module never writes with
-  `authorize?: false`. When the host wired Work, the action seeds the ten
+  The scope is `TenantRole.attributed_admin_scope/2`: the same tenant-plane ADMIN
+  role as `admin_scope/2`, but with the actor's id replaced by the authenticated
+  principal's `Identity.User` id when the host can resolve one. The kernel stamps
+  that id as the run's `started_by`, so the period card can name the starter; a
+  host with no resolvable principal records the workspace pseudo-principal
+  instead (an honest "the workspace did this", never a fabricated person). The
+  kernel's `OrgScope` + `RoleAtLeast :admin` decide — this module never writes
+  with `authorize?: false`. When the host wired Work, the action seeds the ten
   anchored tasks in the same transaction.
   """
   @spec start_run(Mount.t(), String.t(), String.t()) :: {:ok, struct()} | {:error, term()}
   def start_run(%Mount{} = mount, org_id, period_id) when is_binary(org_id) do
+    scope = TenantRole.attributed_admin_scope(mount, org_id)
+
     with {:ok, run_mod} <- resource(mount, :CloseRun) do
       run_mod
       |> Ash.Changeset.for_create(
         :start,
         %{org_id: org_id, period_id: period_id},
-        scope: TenantRole.admin_scope(mount, org_id)
+        scope: scope
       )
       |> Ash.create()
     end
