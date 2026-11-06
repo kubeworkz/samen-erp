@@ -81,6 +81,10 @@ defmodule SamenerpWeb.Router do
     # sidebars, and its presence is the X1 dead-link guard: this router mounts
     # `samen_grant_personnel_routes(:grants, …)` at exactly this path below.
     grants_path: "/grants",
+    # WS-ACCT Phase 12 — the monthly close dashboard, inside the ERP nav group. Same
+    # presence-is-the-guard posture: this router mounts `samen_close_routes(:close, …)`
+    # at exactly this path below, so the nav item can never outrun the route.
+    close_path: "/close",
     # WS-ERP E9/E15-nav seams — same presence-is-the-guard posture as `erp_path`:
     # non-nil ONLY because the routes below are mounted, so every framework sidebar
     # renders the Banking/Work groups with links this router actually serves.
@@ -290,6 +294,17 @@ defmodule SamenerpWeb.Router do
     samen_grant_personnel_routes(:grants, Samenerp.Erp,
       repo: Samenerp.Repo,
       labels: @current_org_labels
+    )
+
+    # 1c-3. WS-ACCT Phase 12 — the monthly close dashboard over the same Finance
+    #       mount. `work_namespace` resolves the checklist's anchored Work tasks
+    #       (`Samenerp.Work.Task`), so each phase's governed sign-off and its
+    #       operational task are shown side by side; without it the board would
+    #       be the Phase-3 sign-off-only view and the page says so.
+    samen_close_routes(:close, Samenerp.Erp,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels,
+      work_namespace: Samenerp.Work
     )
 
     # 1f. WS-ERP E9 — Banking (bank accounts · statement lines · guarded match ·

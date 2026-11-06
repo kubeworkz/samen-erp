@@ -310,7 +310,7 @@ defmodule Samen.Web.Mount do
     signup_path verify_path resend_path reset_path invite_path totp_path totp_issuer
     work_path work_logo_style
     banking_path banking_logo_style erp_namespace
-    grants_path personnel_namespace
+    grants_path personnel_namespace close_path work_namespace
     files_path pages_path search_path analytics_path ics_path
     search_index
     docs_base

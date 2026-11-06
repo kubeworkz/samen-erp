@@ -1259,6 +1259,76 @@ defmodule Samen.Web.Router do
   end
 
   @doc """
+  Mount the monthly close dashboard (WS-ACCT Phase 12; ADR-054 D7) in ONE line
+  over the host's mounted Finance namespace:
+
+      import Samen.Web.Router
+
+      scope "/" do
+        pipe_through :browser
+
+        samen_close_routes(:close, MyHost.Erp,
+          repo: MyHost.Repo,
+          work_namespace: MyHost.Work
+        )
+      end
+
+  Mounts `GET <path>` (default `/close`) inside a tenant `live_session`, so it
+  carries the same `:require_tenant` gate as every other tenant surface. The page
+  reads the current cycle (`Samen.Web.Finance.CloseDashboard`) and renders
+  `Samen.Scopes.Finance.CloseBoard` for it.
+
+  `:work_namespace` names the host's mounted Work namespace (the Task resource
+  is derived as `<namespace>.Task`), the seam that lets the board show each
+  phase's anchored checklist task. Without it the board is the Phase-3 view
+  (`task: nil` on every phase) and the page says Work is not wired — it never
+  invents task state. Options as `samen_erp_routes/3` (`:repo` required;
+  `:domain`, `:plane`, `:operator_id`/`:target_org_id`, `:path`, `:labels`,
+  `:session_name`).
+  """
+  defmacro samen_close_routes(kind, namespace, opts \\ []) do
+    kind = Macro.expand(kind, __CALLER__)
+    path = Keyword.get(opts, :path, "/close")
+    session_name = Keyword.get(opts, :session_name, session_name(:close, path))
+
+    quote bind_quoted: [
+            kind: kind,
+            namespace: namespace,
+            opts: opts,
+            path: path,
+            session_name: session_name
+          ] do
+      _ = kind
+
+      labels =
+        (Keyword.get(opts, :labels) || %{})
+        |> Map.put(:close_path, path)
+        |> then(fn labels ->
+          case Keyword.get(opts, :work_namespace) do
+            nil -> labels
+            ns -> Map.put(labels, :work_namespace, ns)
+          end
+        end)
+
+      mount =
+        Samen.Web.Mount.new(
+          :erp,
+          namespace,
+          Keyword.fetch!(opts, :repo),
+          domain: Keyword.get(opts, :domain, namespace),
+          plane: Samen.Web.Router.__plane__(opts),
+          labels: labels
+        )
+
+      live_session session_name,
+        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        live("#{path}", Samen.Web.Finance.CloseDashboard.Live)
+      end
+    end
+  end
+
+  @doc """
   Mount the framework `.ics` (iCalendar) export surface (F2; spec §F2/§F8 c8) —
   ONE line, on either plane. `namespace` is the host's mounted Calendar-scope
   namespace (`use Samen.Scopes.Calendar, namespace: ...` — its materialized
