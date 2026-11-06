@@ -172,8 +172,8 @@ defmodule Samen.AbbrevRegistryTest do
       # samen_web `wec`/`ewc`, samenerp `sec`/`cse`, every row allocator-reserved.
       # = 407 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 121
-      assert map_size(hosts["samen_core"]) == 115
+      assert map_size(hosts["samenerp"]) == 124
+      assert map_size(hosts["samen_core"]) == 118
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -572,7 +572,11 @@ defmodule Samen.AbbrevRegistryTest do
                  "fgu" => "SamenCore.Support.FinanceFixture.GrantPersonnel",
                  # WS-ACCT Phase 14 (ADR-054 D11): the fixture's forecast lineage and drivers.
                  "ffv" => "SamenCore.Support.FinanceFixture.ForecastVersion",
-                 "ffd" => "SamenCore.Support.FinanceFixture.ForecastDriver"
+                 "ffd" => "SamenCore.Support.FinanceFixture.ForecastDriver",
+                 # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
+                 "ssg" => "SamenCore.Support.FinanceFixture.SupplierScorecard",
+                 "ssh" => "SamenCore.Support.FinanceFixture.SupplierScorecardDimension",
+                 "ssj" => "SamenCore.Support.FinanceFixture.SupplierRisk"
                },
                "samen_web" => %{
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
@@ -752,7 +756,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 14 (ADR-054 D11): the web test host's forecast
                  # lineage and drivers.
                  "fcv" => "Samen.WebTest.Erp.ForecastVersion",
-                 "fcd" => "Samen.WebTest.Erp.ForecastDriver"
+                 "fcd" => "Samen.WebTest.Erp.ForecastDriver",
+                 # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
+                 "fsg" => "Samen.WebTest.Erp.SupplierScorecard",
+                 "fsi" => "Samen.WebTest.Erp.SupplierScorecardDimension",
+                 "fsj" => "Samen.WebTest.Erp.SupplierRisk"
                },
                # WS-ERP E8 (ADR-049): the samenerp HOST PROOF — `mix samen.gen.app`,
                # prefix `er`. The full E1–E7 ERP scope set re-materialized under the
@@ -927,7 +935,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 14 (ADR-054 D11): the Kubeworkz forecast lineage
                  # and drivers.
                  "efv" => "Samenerp.Erp.ForecastVersion",
-                 "efw" => "Samenerp.Erp.ForecastDriver"
+                 "efw" => "Samenerp.Erp.ForecastDriver",
+                 # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
+                 "esi" => "Samenerp.Erp.SupplierScorecard",
+                 "esj" => "Samenerp.Erp.SupplierScorecardDimension",
+                 "esk" => "Samenerp.Erp.SupplierRisk"
                }
              }
 
@@ -1062,7 +1074,7 @@ defmodule Samen.AbbrevRegistryTest do
       # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
       # allocation pair in all three hosts (samen_core `wts`/`tsw`/`sfl`/`slf`,
       # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
-      assert map_size(Reg.load()) == 828
+      assert map_size(Reg.load()) == 837
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

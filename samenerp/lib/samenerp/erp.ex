@@ -64,7 +64,11 @@ defmodule Samenerp.Erp do
       grant_personnel: "egp",
       # WS-ACCT Phase 14 (ADR-054 D11): the forecast lineage and drivers.
       forecast_version: "efv",
-      forecast_driver: "efw"
+      forecast_driver: "efw",
+      # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
+      supplier_scorecard: "esi",
+      supplier_scorecard_dimension: "esj",
+      supplier_risk: "esk"
     },
     labour: [
       timesheet: Samenerp.Work.Timesheet,

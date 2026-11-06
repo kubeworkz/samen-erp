@@ -335,8 +335,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # bytes, 822 flat.
       # +6 WS-ACCT Phase 14 (ADR-054 D11): forecast version + driver in the same
       # three hosts -> 38_653 bytes, 828 flat.
-      assert byte_size(committed) == 38_653
-      assert map_size(R.load()) == 828
+      # +9 WS-ACCT Phase 15 (ADR-054 D18): scorecard + dimension + risk in the
+      # same three hosts -> 39_163 bytes, 837 flat.
+      assert byte_size(committed) == 39_163
+      assert map_size(R.load()) == 837
     end
   end
 

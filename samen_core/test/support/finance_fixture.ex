@@ -91,7 +91,11 @@ defmodule SamenCore.Support.FinanceFixture do
       grant_personnel: "fgu",
       # WS-ACCT Phase 14 (ADR-054 D11): the forecast lineage and drivers.
       forecast_version: "ffv",
-      forecast_driver: "ffd"
+      forecast_driver: "ffd",
+      # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
+      supplier_scorecard: "ssg",
+      supplier_scorecard_dimension: "ssh",
+      supplier_risk: "ssj"
     },
     labour: [
       timesheet: SamenCore.Support.WorkFixture.Timesheet,

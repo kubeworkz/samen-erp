@@ -352,7 +352,13 @@ defmodule Samen.Scopes.Finance do
     # WS-ACCT Phase 14 (ADR-054 D11): the append-only forecast lineage and its
     # monthly driver facts. Allocator-reserved under the `samen_web` host.
     forecast_version: "fcv",
-    forecast_driver: "fcd"
+    forecast_driver: "fcd",
+    # WS-ACCT Phase 15 (ADR-054 D18): quarterly supplier scorecards, their
+    # weighted dimensions and the 5x5 risk register. Allocator-reserved under
+    # the `samen_web` host; the fixture and samenerp pass their own overrides.
+    supplier_scorecard: "fsg",
+    supplier_scorecard_dimension: "fsi",
+    supplier_risk: "fsj"
   }
 
   @doc false
@@ -406,6 +412,9 @@ defmodule Samen.Scopes.Finance do
     grant_personnel_mod = Module.concat(namespace, GrantPersonnel)
     forecast_version_mod = Module.concat(namespace, ForecastVersion)
     forecast_driver_mod = Module.concat(namespace, ForecastDriver)
+    supplier_scorecard_mod = Module.concat(namespace, SupplierScorecard)
+    supplier_scorecard_dimension_mod = Module.concat(namespace, SupplierScorecardDimension)
+    supplier_risk_mod = Module.concat(namespace, SupplierRisk)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -429,6 +438,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.GrantBlueprint
 
       require Samen.Scopes.Finance.ForecastBlueprint
+
+      require Samen.Scopes.Finance.SupplierBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -465,6 +476,9 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(grant_personnel_mod))
         resource(unquote(forecast_version_mod))
         resource(unquote(forecast_driver_mod))
+        resource(unquote(supplier_scorecard_mod))
+        resource(unquote(supplier_scorecard_dimension_mod))
+        resource(unquote(supplier_risk_mod))
       end
 
       # WS-ACCT Phase 9 (ADR-054 D10) — the obsolescence policy, its derived
@@ -634,6 +648,35 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.forecast_driver),
         unquote(forecast_version_mod)
+      )
+
+      # WS-ACCT Phase 15 (ADR-054 D18) — supplier governance. The scorecard's
+      # five weighted dimensions are materialized by its create transaction;
+      # the risk register is editable but never destroyed.
+      Samen.Scopes.Finance.SupplierBlueprint.define_supplier_scorecard(
+        unquote(supplier_scorecard_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.supplier_scorecard),
+        unquote(supplier_scorecard_dimension_mod)
+      )
+
+      Samen.Scopes.Finance.SupplierBlueprint.define_supplier_scorecard_dimension(
+        unquote(supplier_scorecard_dimension_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.supplier_scorecard_dimension),
+        unquote(supplier_scorecard_mod)
+      )
+
+      Samen.Scopes.Finance.SupplierBlueprint.define_supplier_risk(
+        unquote(supplier_risk_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.supplier_risk)
       )
 
       # WS-ACCT Phase 8 (ADR-054 D9) — the asset register and its exactly-once
