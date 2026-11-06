@@ -27,7 +27,7 @@ defmodule Samen.Scopes.Finance.CloseBoard do
     * `:period` — the fiscal month (id/year/month/status) when the caller passes
       it, `nil` otherwise (honest absence, not a guessed month);
     * `:phases` — the checklist in calendar order, each with its role
-      assignment, sign-off stamp, task projection and derived status;
+      assignment, sign-off stamp and signer, task projection and derived status;
     * `:completeness` — total/done/open, the percentage and the boolean
       `complete?` (the run is `:completed` AND every phase is done);
     * `:next_phase` — the first open phase, the manual's "what is blocking";
@@ -117,6 +117,7 @@ defmodule Samen.Scopes.Finance.CloseBoard do
       roles: get(phase, "roles") || ClosePhases.roles_for(key),
       signed?: signed?,
       done_at: get(phase, "done_at"),
+      done_by: get(phase, "done_by"),
       task: task_view(task),
       task_done?: task_done?,
       status: if(signed? and task_done?, do: :done, else: :open)
@@ -195,5 +196,6 @@ defmodule Samen.Scopes.Finance.CloseBoard do
   defp safe_atom("role"), do: :role
   defp safe_atom("roles"), do: :roles
   defp safe_atom("done_at"), do: :done_at
+  defp safe_atom("done_by"), do: :done_by
   defp safe_atom(_), do: :__never__
 end

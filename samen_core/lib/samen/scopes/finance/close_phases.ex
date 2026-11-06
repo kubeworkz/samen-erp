@@ -207,8 +207,9 @@ defmodule Samen.Scopes.Finance.ClosePhases do
   def roles_for(key), do: (fetch(key) || %{})[:roles] || []
 
   @doc """
-  The checklist a `CloseRun` starts with: every phase, `done_at` unset, carrying
-  its role assignment so a signed run records the owners it was closed under.
+  The checklist a `CloseRun` starts with: every phase, `done_at`/`done_by`
+  unset, carrying its role assignment so a signed run records the owners it was
+  closed under.
 
   Stored as JSON-safe maps (string keys, no atoms) because it lands in a jsonb
   column — an atom-keyed map would round-trip back as strings and the read
@@ -225,7 +226,8 @@ defmodule Samen.Scopes.Finance.ClosePhases do
         "output" => phase.output,
         "role" => phase.role,
         "roles" => phase.roles,
-        "done_at" => nil
+        "done_at" => nil,
+        "done_by" => nil
       }
     end)
   end

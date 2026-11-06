@@ -10,28 +10,59 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   A phase row shows BOTH facts the status is derived from — the sign-off stamp
   and the anchored Work task — so a disagreement is visible where it happens:
-  the row reads `open`, the discrepancY list names the phase, and the board's
+  the row reads `open`, the discrepancy list names the phase, and the board's
   progress never counts it. The page never prints `done` for a phase whose task
   is open, even if a sign-off exists.
+
+  ## Governed commands
+
+  The page can START a period's close and SIGN OFF an open phase. Neither
+  command is implemented here: the page calls the host's OWN `CloseRun`
+  `:start` / `:complete_phase` actions with `Samen.Web.TenantRole.admin_scope/2`
+  (the disarmed dev posture's `:admin`, or the authenticated principal's REAL
+  membership role on an armed host). The kernel's `OrgScope` + `RoleAtLeast
+  :admin` are the final authority, and a refusal (an open Work task, a
+  completed run) is shown in the banner verbatim. The buttons are offered on
+  the tenant plane to a derived admin only; a crafted event still runs through
+  the same governed action.
+
+  A sign-off is written with `TenantRole.attributed_admin_scope/2`, so the
+  kernel's `done_by` stamp names the authenticated principal when the host can
+  resolve one. The row renders that identity as `you` (the current principal),
+  `the workspace` (the dev posture's pseudo-principal), or a short admin id —
+  never an invented name, because the close read carries no user directory.
   """
 
   use Samen.Web.Tenant.Live
 
   import Samen.UI
-  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1]
+  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Finance.CloseDashboard
   alias Samen.Web.Mount
+  alias Samen.Web.TenantRole
 
   @impl true
   def mount(params, session, socket) do
     socket = assign_mount(socket, session)
     org_id = CurrentOrg.resolve(socket.assigns[:samen_mount], params, session)
 
-    {:ok, socket |> assign(org_id: org_id, state: nil, error: nil, return_to: nil) |> load()}
+    {:ok,
+     socket
+     |> assign(
+       org_id: org_id,
+       state: nil,
+       error: nil,
+       can_admin?: false,
+       actor_id: nil,
+       action_error: nil,
+       action_notice: nil,
+       return_to: nil
+     )
+     |> load()}
   end
 
   @impl true
@@ -44,15 +75,80 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
      |> load()}
   end
 
-  defp load(%{assigns: %{org_id: nil}} = socket), do: assign(socket, state: nil, error: :no_org)
+  defp load(%{assigns: %{org_id: nil}} = socket),
+    do: assign(socket, state: nil, error: :no_org, can_admin?: false, actor_id: nil)
 
   defp load(socket) do
     %{samen_mount: mount, org_id: org_id} = socket.assigns
+    can_admin? = writable?(mount) and TenantRole.admin_scope(mount, org_id).actor.role == :admin
+    actor_id = TenantRole.principal_actor_id(mount, org_id)
 
     case CloseDashboard.load(mount, org_id) do
-      {:ok, state} -> assign(socket, state: state, error: nil)
-      {:error, reason} -> assign(socket, state: nil, error: reason)
+      {:ok, state} ->
+        assign(socket, state: state, error: nil, can_admin?: can_admin?, actor_id: actor_id)
+
+      {:error, reason} ->
+        assign(socket, state: nil, error: reason, can_admin?: false, actor_id: nil)
     end
+  end
+
+  # -- governed commands ------------------------------------------------------
+
+  @impl true
+  def handle_event("start_run", _params, socket) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+
+    if can_admin? and state && state.period && is_nil(state.run) do
+      case CloseDashboard.start_run(mount, org_id, state.period.id) do
+        {:ok, _run} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice: "Close started for #{period_label(state.period)}."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("complete_phase", %{"phase" => key}, socket) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+
+    if can_admin? and state && state.run do
+      case CloseDashboard.complete_phase(mount, org_id, state.run.id, key) do
+        {:ok, _run} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice: "Signed off #{phase_label(state, key)}."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("dismiss_action", _params, socket) do
+    {:noreply, assign(socket, action_error: nil, action_notice: nil)}
   end
 
   @impl Samen.Web.Tenant.Live
@@ -94,7 +190,15 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
               {error_text(@error)}
             </div>
           <% else %>
-            <.close_board state={@state} mount={@samen_mount} org_id={@org_id} />
+            <.close_board
+              state={@state}
+              mount={@samen_mount}
+              org_id={@org_id}
+              can_admin?={@can_admin?}
+              actor_id={@actor_id}
+              action_error={@action_error}
+              action_notice={@action_notice}
+            />
           <% end %>
         <% end %>
       </div>
@@ -105,9 +209,40 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   attr :state, :map, required: true
   attr :mount, Mount, required: true
   attr :org_id, :string, required: true
+  attr :can_admin?, :boolean, required: true
+  attr :actor_id, :string, default: nil
+  attr :action_error, :string, default: nil
+  attr :action_notice, :string, default: nil
 
   defp close_board(assigns) do
     ~H"""
+    <div
+      :if={@action_error}
+      id="close-action-error"
+      class="card form-error"
+      style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:10px"
+    >
+      {@action_error}
+      <button
+        type="button"
+        class="button"
+        phx-click="dismiss_action"
+        id="close-dismiss-action"
+        style="margin-left:10px"
+      >
+        Dismiss
+      </button>
+    </div>
+
+    <div
+      :if={@action_notice}
+      id="close-action-notice"
+      class="card"
+      style="padding:10px 14px;color:var(--muted);font-size:12px;margin-bottom:10px"
+    >
+      {@action_notice}
+    </div>
+
     <div class="gtitle">
       <h3>Monthly close</h3>
       <span class="n">{summary(@state.report)}</span>
@@ -119,8 +254,25 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     <%= if @state.report == nil do %>
       <div class="card" id="close-dashboard-no-run" style="padding:16px;color:var(--muted)">
         <%= if @state.period do %>
-          No close run has been started for {period_label(@state.period)}. A run is started by an
-          admin from the period's close action; this page only reads it.
+          <div>
+            No close run has been started for {period_label(@state.period)}.
+            <%= if @can_admin? do %>
+              Start it here — the ten phases become anchored Work tasks.
+            <% else %>
+              Only an admin can start the close.
+            <% end %>
+          </div>
+          <button
+            :if={@can_admin?}
+            type="button"
+            class="button"
+            id="close-start-run"
+            phx-click="start_run"
+            data-confirm={"Start the close for #{period_label(@state.period)}? This creates the ten checklist tasks."}
+            style="margin-top:10px"
+          >
+            Start close
+          </button>
         <% else %>
           No fiscal period has been declared yet, so there is no close to show.
         <% end %>
@@ -191,23 +343,26 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
             <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:3%">
               #
             </th>
-            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:30%">
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:26%">
               Phase
             </th>
-            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:13%">
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:12%">
               Window
             </th>
-            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:22%">
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:19%">
               Lead / supporting
             </th>
-            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:11%">
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:10%">
               Signed off
             </th>
-            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:13%">
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:11%">
               Work task
             </th>
-            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:8%">
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:7%">
               Status
+            </th>
+            <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:12%">
+              Action
             </th>
           </tr>
         </thead>
@@ -234,6 +389,9 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
             </td>
             <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);color:var(--muted)">
               {stamp(phase.done_at)}
+              <div :if={phase.done_by} style="font-size:11px">
+                {signer_label(phase.done_by, @actor_id)}
+              </div>
             </td>
             <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
               <%= cond do %>
@@ -249,6 +407,31 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
               <span id={"close-phase-status-#{phase.key}"} data-status={phase.status}>
                 <.pill variant={status_variant(phase.status)}>{phase.status}</.pill>
               </span>
+            </td>
+            <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+              <%= if @state.run && @state.run.status == :in_progress && @can_admin? do %>
+                <%= cond do %>
+                  <% phase.signed? -> %>
+                    <span style="font-size:11px;color:var(--muted)">signed</span>
+                  <% @state.task_wired? && phase.task && phase.task.status != :completed -> %>
+                    <span style="font-size:11px;color:var(--muted)">
+                      Complete the Work task first
+                    </span>
+                  <% true -> %>
+                    <button
+                      type="button"
+                      class="button"
+                      id={"close-sign-#{phase.key}"}
+                      phx-click="complete_phase"
+                      phx-value-phase={phase.key}
+                      data-confirm={"Sign off #{phase.label}? A sign-off cannot be undone."}
+                    >
+                      Sign off
+                    </button>
+                <% end %>
+              <% else %>
+                <span style="font-size:11px;color:var(--muted)">—</span>
+              <% end %>
             </td>
           </tr>
         </tbody>
@@ -281,6 +464,15 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   defp summary(nil), do: "—"
   defp summary(report), do: "#{report.completeness.done}/#{report.completeness.total}"
+
+  defp phase_label(%{report: %{phases: phases}}, key) do
+    case Enum.find(phases, &(&1.key == key)) do
+      %{label: label} -> label
+      nil -> key
+    end
+  end
+
+  defp phase_label(_state, key), do: key
 
   defp period_label(%{year: year, month: month}) when is_integer(year) and is_integer(month) do
     Calendar.strftime(Date.new!(year, month, 1), "%B %Y")
@@ -318,6 +510,11 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   end
 
   defp stamp(value), do: to_string(value)
+
+  defp signer_label("broker:" <> _, _current), do: "the workspace"
+  defp signer_label(id, id) when is_binary(id), do: "you"
+  defp signer_label(id, _current) when is_binary(id), do: "admin " <> String.slice(id, 0, 8)
+  defp signer_label(_other, _current), do: "—"
 
   defp error_text(:finance_not_mounted),
     do: "This workspace has no Finance mount, so there is no close to show."

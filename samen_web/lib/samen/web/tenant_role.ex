@@ -125,6 +125,29 @@ defmodule Samen.Web.TenantRole do
   end
 
   @doc """
+  The ADMIN write scope that NAMES THE ACTOR: `admin_scope/2`'s role with the
+  actor's `:id` replaced by the authenticated principal's `Identity.User` id
+  when the host can resolve one (`principal_actor_id/2`).
+
+  This is the ATTRIBUTION counterpart of `admin_scope/2`, exactly as
+  `identity_scope/2` is for `Mount.scope/2`: the role is untouched, so the
+  kernel's `RoleAtLeast :admin` gate behaves identically, and the id is a real
+  person only when one resolves. Without a principal (the ADR-031 dev posture,
+  or no Identity spine) the scope keeps `Mount.scope/2`'s workspace
+  pseudo-principal — an honest "the workspace did this", never a fabricated
+  name.
+
+  Use it for a governed write whose record must answer "who did this?" (the
+  close sign-off stamps `done_by`); authority-only writes can keep
+  `admin_scope/2`.
+  """
+  @spec attributed_admin_scope(Mount.t(), String.t()) :: Samen.Scope.t()
+  def attributed_admin_scope(%Mount{} = mount, org_id) do
+    %Samen.Scope{actor: actor} = admin_scope(mount, org_id)
+    %Samen.Scope{actor: Map.put(actor, :id, principal_actor_id(mount, org_id) || actor.id)}
+  end
+
+  @doc """
   The tenant-plane READ scope for `org_id` — the read-side counterpart of `admin_scope/3`, with
   the WRITE elevation removed: `Mount.scope/2` with the actor's `:role` replaced by the
   authenticated principal's REAL role, never raised above it.
