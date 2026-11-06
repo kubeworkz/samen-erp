@@ -145,7 +145,15 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
   # ---------------------------------------------------------------------------
   # CloseRun — one row per period: the doc's ten phases, marked off and signed
   # ---------------------------------------------------------------------------
-  defmacro define_close_run(module, otp_app, domain, repo, abbrev, period_mod) do
+  defmacro define_close_run(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             period_mod,
+             work_task \\ nil
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -154,10 +162,14 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         phases, started_at, completed_at}`.
 
         `phases` starts as the source manual's ten close phases
-        (`Samen.Scopes.Finance.ClosePhases`) with `done_at` unset; the
-        `:complete_phase` action marks one off by key. `:finish` is one-way and
-        refuses while any phase is open, so "completed" means the whole
-        checklist was done rather than most of it.
+        (`Samen.Scopes.Finance.ClosePhases`) with `done_at` unset and their
+        role assignments attached; the `:complete_phase` action marks one off by
+        key. `:finish` is one-way and refuses while any phase is open, so
+        "completed" means the whole checklist was done rather than most of it.
+
+        When the host wires Work (`work_task`), `:start` also creates the ten
+        anchored Work tasks and `:complete_phase` refuses while the phase's task
+        is still open (WS-ACCT Phase 12) — see `CloseRunGuard`.
 
         One run per period per org (the unique index), because a period has one
         close. A `:completed` run is a signed fact: its checklist can no longer
@@ -218,7 +230,7 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
           create :start do
             accept([:org_id, :period_id])
             primary?(true)
-            change({Samen.Scopes.Finance.CloseRunGuard, op: :seed})
+            change({Samen.Scopes.Finance.CloseRunGuard, op: :seed, work_task: unquote(work_task)})
           end
 
           update :complete_phase do
@@ -227,13 +239,16 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
 
             argument(:phase, :string, allow_nil?: false)
 
-            change({Samen.Scopes.Finance.CloseRunGuard, op: :complete_phase})
+            change(
+              {Samen.Scopes.Finance.CloseRunGuard,
+               op: :complete_phase, work_task: unquote(work_task)}
+            )
           end
 
           update :finish do
             accept([])
             require_atomic?(false)
-            change({Samen.Scopes.Finance.CloseRunGuard, op: :finish})
+            change({Samen.Scopes.Finance.CloseRunGuard, op: :finish, work_task: unquote(work_task)})
           end
 
           # NO destroy: a close run is a record of a close, not a scratch pad.

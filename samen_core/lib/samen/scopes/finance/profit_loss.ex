@@ -1,6 +1,7 @@
 defmodule Samen.Scopes.Finance.ProfitLoss do
   @moduledoc """
-  Profit & Loss (Income Statement) report (WS-ERP E11; BigCapital-inspired).
+  Profit & Loss (Income Statement) report (WS-ERP E11; BigCapital-inspired
+  financial statements).
 
   Shows income and expense accounts for a period, computing net income
   (revenue − expenses). The P&L is a period statement, not a point-in-time
@@ -20,7 +21,13 @@ defmodule Samen.Scopes.Finance.ProfitLoss do
   ## Period
 
   The P&L covers a date range (`from_date` to `to_date`). Only posted
-  entries within this range are included.
+  entries within this range are included, filtered on the entry's
+  `posted_at` — the ledger's own time axis, not the document date.
+
+  ## Physical names come from the resources
+
+  The read is SQL, so every table/column is resolved from the passed resources
+  (`Samen.Scopes.Finance.ReportColumns`) — a host's columns are abbrev-prefixed.
 
   ## Fail-closed invariant
 
@@ -28,8 +35,13 @@ defmodule Samen.Scopes.Finance.ProfitLoss do
   deterministic: the same inputs always produce the same output.
   """
 
+  alias Samen.Scopes.Finance.ReportColumns
+
   @doc """
   Generate a P&L for an org for a given period.
+
+  `opts` requires `:repo`, `:account_resource`, `:line_resource`, and
+  `:entry_resource`.
 
   Returns `{:ok, %{revenue: [...], expenses: [...], total_revenue: int,
   total_expenses: int, net_income: int, from_date, to_date}}`.
@@ -38,31 +50,41 @@ defmodule Samen.Scopes.Finance.ProfitLoss do
     repo = Keyword.fetch!(opts, :repo)
     account_resource = Keyword.fetch!(opts, :account_resource)
     line_resource = Keyword.fetch!(opts, :line_resource)
+    entry_resource = Keyword.fetch!(opts, :entry_resource)
 
-    account_table = AshPostgres.DataLayer.Info.table(account_resource)
-    line_table = AshPostgres.DataLayer.Info.table(line_resource)
+    account_table = ReportColumns.table(account_resource)
+    line_table = ReportColumns.table(line_resource)
+    entry_table = ReportColumns.table(entry_resource)
 
     # Get income and expense accounts with their period balances
     sql = """
     SELECT
-      a.id,
-      a.code,
-      a.name,
-      a.kind,
-      a.normal_side,
-      COALESCE(SUM(l.debit_cents - l.credit_cents), 0)::bigint AS balance
+      a.#{ReportColumns.column(account_resource, :id)} AS id,
+      a.#{ReportColumns.column(account_resource, :code)} AS code,
+      a.#{ReportColumns.column(account_resource, :name)} AS name,
+      a.#{ReportColumns.column(account_resource, :kind)} AS kind,
+      a.#{ReportColumns.column(account_resource, :normal_side)} AS normal_side,
+      COALESCE(SUM(l.#{ReportColumns.column(line_resource, :debit_cents)} -
+                  l.#{ReportColumns.column(line_resource, :credit_cents)}), 0)::bigint AS balance
     FROM #{account_table} a
-    LEFT JOIN #{line_table} l ON l.account_id = a.id
-      AND l.entry_id IN (
-        SELECT e.id FROM #{entry_table(line_table)} e
-        WHERE e.status = 'posted'
-          AND e.posted_at >= $2
-          AND e.posted_at <= $3
+    LEFT JOIN #{line_table} l
+      ON l.#{ReportColumns.column(line_resource, :account_id)} =
+         a.#{ReportColumns.column(account_resource, :id)}
+      AND l.#{ReportColumns.column(line_resource, :entry_id)} IN (
+        SELECT e.#{ReportColumns.column(entry_resource, :id)} FROM #{entry_table} e
+        WHERE e.#{ReportColumns.column(entry_resource, :status)} = 'posted'
+          AND e.#{ReportColumns.column(entry_resource, :posted_at)} >= $2
+          AND e.#{ReportColumns.column(entry_resource, :posted_at)} <= $3
       )
-    WHERE a.org_id = $1
-      AND a.kind IN ('income', 'expense')
-    GROUP BY a.id, a.code, a.name, a.kind, a.normal_side
-    ORDER BY a.code
+    WHERE a.#{ReportColumns.column(account_resource, :org_id)} = $1
+      AND a.#{ReportColumns.column(account_resource, :kind)} IN ('income', 'expense')
+    GROUP BY
+      a.#{ReportColumns.column(account_resource, :id)},
+      a.#{ReportColumns.column(account_resource, :code)},
+      a.#{ReportColumns.column(account_resource, :name)},
+      a.#{ReportColumns.column(account_resource, :kind)},
+      a.#{ReportColumns.column(account_resource, :normal_side)}
+    ORDER BY a.#{ReportColumns.column(account_resource, :code)}
     """
 
     case repo.query(sql, [dump_uuid(org_id), from_date, to_date]) do
@@ -103,10 +125,6 @@ defmodule Samen.Scopes.Finance.ProfitLoss do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  defp entry_table(line_table) do
-    String.replace(line_table, "_line", "_entry")
   end
 
   defp dump_uuid(nil), do: nil

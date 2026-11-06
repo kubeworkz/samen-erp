@@ -60,6 +60,20 @@ defmodule Samen.Scopes.Finance do
     `:finish` lifecycle. A run cannot be completed with a phase outstanding and
     a completed run is final.
 
+  A host that mounts the Work scope passes its Task module at mount time and
+  the checklist becomes CHECKABLE work (WS-ACCT Phase 12):
+
+      use Samen.Scopes.Finance, work: [task: MyApp.Work.Task]
+
+  `:start` then materializes the ten phases as Work tasks anchored to the run
+  (`subject_key: "close_run"` — ADR-041's object-ref seam, no second task
+  engine), each carrying the manual's role assignment in `custom`, and
+  `:complete_phase` refuses while its task is still open.
+  `Samen.Scopes.Finance.CloseBoard` is the honest dashboard read: a phase is
+  `:done` only when the run has signed it AND its Work task is completed, so an
+  open task can never be reported as done. Without `work:`, both behaviors are
+  exactly Phase 3's.
+
   `Samen.Scopes.Finance.PeriodGuard` gates every action that lands a POSTED
   entry (`:post`, `:create_reversal` — the factory AP/stock/sales/reversal all
   use — and `:void`): a closed period refuses always, a soft-closed one refuses
@@ -352,6 +366,7 @@ defmodule Samen.Scopes.Finance do
     abbrevs = resolve_abbrevs(Keyword.get(opts, :abbrevs), __CALLER__)
     inventory = resolve_inventory(Keyword.get(opts, :inventory), __CALLER__)
     labour = resolve_labour(Keyword.get(opts, :labour), __CALLER__)
+    work = resolve_work(Keyword.get(opts, :work), __CALLER__)
 
     account_mod = Module.concat(namespace, Account)
     entry_mod = Module.concat(namespace, JournalEntry)
@@ -689,7 +704,8 @@ defmodule Samen.Scopes.Finance do
         unquote(domain),
         unquote(repo),
         unquote(abbrevs.close_run),
-        unquote(fiscal_period_mod)
+        unquote(fiscal_period_mod),
+        unquote(work[:task])
       )
 
       Samen.Scopes.Finance.Blueprint.define_cost_object(
@@ -832,6 +848,24 @@ defmodule Samen.Scopes.Finance do
           "use Samen.Scopes.Finance, labour: must be a compile-time keyword list " <>
             "([timesheet: MyApp.Work.Timesheet, timesheet_entry: MyApp.Work.TimesheetEntry]). " <>
             "Got: #{Macro.to_string(other)}"
+  end
+
+  # `work:` wires the Work Task resource the close checklist anchors to. The
+  # task module is the host's materialized Work one — there is no default,
+  # because inventing one would couple Finance to a namespace it does not own.
+  defp resolve_work(nil, _caller), do: %{}
+
+  defp resolve_work(opts, caller) when is_list(opts) do
+    case Keyword.fetch(opts, :task) do
+      {:ok, task} -> %{task: Macro.expand(task, caller)}
+      :error -> raise ArgumentError, "use Samen.Scopes.Finance, work: requires task: <Work.Task module>"
+    end
+  end
+
+  defp resolve_work(other, _caller) do
+    raise ArgumentError,
+          "use Samen.Scopes.Finance, work: must be a compile-time keyword list " <>
+            "([task: MyApp.Work.Task]). Got: #{Macro.to_string(other)}"
   end
 
   defp resolve_abbrevs(nil, _caller), do: @default_abbrevs

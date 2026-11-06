@@ -17,6 +17,13 @@ defmodule Samen.Scopes.Finance.TrialBalance do
     sum is zero)
   - This is a pure read — no DB writes, no side effects
 
+  ## Physical names come from the resources
+
+  The read is SQL, so every table/column is resolved from the passed resources
+  (`Samen.Scopes.Finance.ReportColumns`) rather than hardcoded: a host's
+  columns are abbrev-prefixed (`ecl_account_id`), and a bare `account_id`
+  would parse in a fixture and fail on the real table.
+
   ## Fail-closed invariant
 
   If the trial balance does not balance (Σ ≠ 0), the report includes a
@@ -24,8 +31,14 @@ defmodule Samen.Scopes.Finance.TrialBalance do
   — it indicates a bypass of `UnbalancedEntry`.
   """
 
+  alias Samen.Scopes.Finance.ReportColumns
+
   @doc """
   Generate a trial balance for an org at a given timestamp.
+
+  `opts` requires `:repo`, `:account_resource`, `:line_resource`, and
+  `:entry_resource` (the entry the lines belong to; its columns are resolved
+  like the others).
 
   Returns `{:ok, %{accounts: [...], total_debits: int, total_credits: int, balanced: bool}}`.
   """
@@ -33,28 +46,39 @@ defmodule Samen.Scopes.Finance.TrialBalance do
     repo = Keyword.fetch!(opts, :repo)
     account_resource = Keyword.fetch!(opts, :account_resource)
     line_resource = Keyword.fetch!(opts, :line_resource)
+    entry_resource = Keyword.fetch!(opts, :entry_resource)
 
-    account_table = AshPostgres.DataLayer.Info.table(account_resource)
-    line_table = AshPostgres.DataLayer.Info.table(line_resource)
+    account_table = ReportColumns.table(account_resource)
+    line_table = ReportColumns.table(line_resource)
+    entry_table = ReportColumns.table(entry_resource)
 
     # Get all accounts with their balances
     sql = """
     SELECT
-      a.id,
-      a.code,
-      a.name,
-      a.kind,
-      a.normal_side,
-      COALESCE(SUM(l.debit_cents - l.credit_cents), 0)::bigint AS balance
+      a.#{ReportColumns.column(account_resource, :id)} AS id,
+      a.#{ReportColumns.column(account_resource, :code)} AS code,
+      a.#{ReportColumns.column(account_resource, :name)} AS name,
+      a.#{ReportColumns.column(account_resource, :kind)} AS kind,
+      a.#{ReportColumns.column(account_resource, :normal_side)} AS normal_side,
+      COALESCE(SUM(l.#{ReportColumns.column(line_resource, :debit_cents)} -
+                  l.#{ReportColumns.column(line_resource, :credit_cents)}), 0)::bigint AS balance
     FROM #{account_table} a
-    LEFT JOIN #{line_table} l ON l.account_id = a.id
-      AND l.entry_id IN (
-        SELECT e.id FROM #{entry_table(line_table)} e
-        WHERE e.status = 'posted' AND e.posted_at <= $2
+    LEFT JOIN #{line_table} l
+      ON l.#{ReportColumns.column(line_resource, :account_id)} =
+         a.#{ReportColumns.column(account_resource, :id)}
+      AND l.#{ReportColumns.column(line_resource, :entry_id)} IN (
+        SELECT e.#{ReportColumns.column(entry_resource, :id)} FROM #{entry_table} e
+        WHERE e.#{ReportColumns.column(entry_resource, :status)} = 'posted'
+          AND e.#{ReportColumns.column(entry_resource, :posted_at)} <= $2
       )
-    WHERE a.org_id = $1
-    GROUP BY a.id, a.code, a.name, a.kind, a.normal_side
-    ORDER BY a.code
+    WHERE a.#{ReportColumns.column(account_resource, :org_id)} = $1
+    GROUP BY
+      a.#{ReportColumns.column(account_resource, :id)},
+      a.#{ReportColumns.column(account_resource, :code)},
+      a.#{ReportColumns.column(account_resource, :name)},
+      a.#{ReportColumns.column(account_resource, :kind)},
+      a.#{ReportColumns.column(account_resource, :normal_side)}
+    ORDER BY a.#{ReportColumns.column(account_resource, :code)}
     """
 
     case repo.query(sql, [dump_uuid(org_id), as_of_date]) do
@@ -86,11 +110,6 @@ defmodule Samen.Scopes.Finance.TrialBalance do
       {:error, reason} ->
         {:error, reason}
     end
-  end
-
-  defp entry_table(line_table) do
-    # The entry table is the line table minus the "_line" suffix
-    String.replace(line_table, "_line", "_entry")
   end
 
   defp dump_uuid(nil), do: nil

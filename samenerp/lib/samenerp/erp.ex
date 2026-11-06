@@ -67,6 +67,10 @@ defmodule Samenerp.Erp do
       timesheet: Samenerp.Work.Timesheet,
       timesheet_entry: Samenerp.Work.TimesheetEntry
     ],
+    # WS-ACCT Phase 12 (ADR-054 D7): the close checklist is CHECKABLE work —
+    # starting a run materializes the ten phases as Work tasks anchored to it,
+    # and a phase cannot be signed while its task is open.
+    work: [task: Samenerp.Work.Task],
     inventory: [
       item: Samenerp.Erp.Item,
       level: Samenerp.Erp.StockLevel,
