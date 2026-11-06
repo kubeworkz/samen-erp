@@ -194,6 +194,30 @@ defmodule Samen.Web.Finance.CloseDashboard do
     end
   end
 
+  @doc """
+  Complete the close through the host's OWN governed `:finish` action.
+
+  The kernel refuses while any phase is still open and refuses a run that is
+  already completed; the page only offers the button once the board reports
+  every phase done, but a crafted event still reaches the action and its refusal
+  is surfaced.
+
+  The scope is `TenantRole.attributed_admin_scope/2`, so the run's
+  `completed_by` names the authenticated principal when the host can resolve
+  one.
+  """
+  @spec finish_run(Mount.t(), String.t(), String.t()) :: {:ok, struct()} | {:error, term()}
+  def finish_run(%Mount{} = mount, org_id, run_id) when is_binary(org_id) do
+    scope = TenantRole.attributed_admin_scope(mount, org_id)
+
+    with {:ok, run_mod} <- resource(mount, :CloseRun),
+         {:ok, run} <- fetch_run(run_mod, run_id, scope) do
+      run
+      |> Ash.Changeset.for_update(:finish, %{}, scope: scope)
+      |> Ash.update()
+    end
+  end
+
   defp fetch_run(run_mod, run_id, scope) do
     case Ash.get(run_mod, run_id, scope: scope) do
       {:ok, run} -> {:ok, run}

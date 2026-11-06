@@ -16,23 +16,24 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   ## Governed commands
 
-  The page can START a period's close and SIGN OFF an open phase. Neither
-  command is implemented here: the page calls the host's OWN `CloseRun`
-  `:start` / `:complete_phase` actions with
-  `Samen.Web.TenantRole.attributed_admin_scope/2` (the disarmed dev posture's
-  `:admin`, or the authenticated principal's REAL membership role on an armed
-  host, with the actor id naming the principal when one resolves). The kernel's
-  `OrgScope` + `RoleAtLeast :admin` are the final authority, and a refusal (an
-  open Work task, a completed run) is shown in the banner verbatim. The buttons
-  are offered on the tenant plane to a derived admin only; a crafted event still
-  runs through the same governed action.
+  The page can START a period's close, SIGN OFF an open phase, and COMPLETE the
+  run once every phase is done. None of these commands is implemented here: the
+  page calls the host's OWN `CloseRun` `:start` / `:complete_phase` / `:finish`
+  actions with `Samen.Web.TenantRole.attributed_admin_scope/2` (the disarmed dev
+  posture's `:admin`, or the authenticated principal's REAL membership role on
+  an armed host, with the actor id naming the principal when one resolves). The
+  kernel's `OrgScope` + `RoleAtLeast :admin` are the final authority, and a
+  refusal (an open Work task, an open phase, a completed run) is shown in the
+  banner verbatim. The buttons are offered on the tenant plane to a derived
+  admin only; a crafted event still runs through the same governed action.
 
-  The same scope means the kernel's `started_by` and `done_by` stamps name the
-  authenticated principal when the host can resolve one. The period card names
-  the starter and, for a completed run, the finisher; each phase row names its
-  signer. Each identity renders as `you` (the current principal), `the
-  workspace` (the dev posture's pseudo-principal), or a short admin id — never
-  an invented name, because the close read carries no user directory.
+  The same scope means the kernel's `started_by`, `done_by` and `completed_by`
+  stamps name the authenticated principal when the host can resolve one. The
+  period card names the starter and, for a completed run, the finisher; each
+  phase row names its signer. Each identity renders as `you` (the current
+  principal), `the workspace` (the dev posture's pseudo-principal), or a short
+  admin id — never an invented name, because the close read carries no user
+  directory.
   """
 
   use Samen.Web.Tenant.Live
@@ -134,6 +135,32 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
            |> assign(
              action_error: nil,
              action_notice: "Signed off #{phase_label(state, key)}."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("finish_run", _params, socket) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+
+    if can_admin? and state && state.run do
+      case CloseDashboard.finish_run(mount, org_id, state.run.id) do
+        {:ok, _run} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice: "Close completed for #{period_label(state.period)}."
            )
            |> load()}
 
@@ -292,6 +319,24 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         <div style="margin-top:8px;height:8px;background:#E5E7EB;border-radius:999px;overflow:hidden">
           <div style={"width:#{@state.report.completeness.percent}%;height:100%;background:#0A5C42"}>
           </div>
+        </div>
+
+        <div
+          :if={@can_admin? and @state.run.status == :in_progress and all_phases_done?(@state.report)}
+          style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"
+        >
+          <button
+            type="button"
+            class="button"
+            id="close-finish-run"
+            phx-click="finish_run"
+            data-confirm={"Complete the close for #{period_label(@state.period)}? This is one-way — a completed close cannot be reopened."}
+          >
+            Complete close
+          </button>
+          <span style="color:var(--muted);font-size:12px">
+            All {@state.report.completeness.total} phases are signed and closed.
+          </span>
         </div>
       </div>
 
@@ -482,6 +527,11 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   defp summary(nil), do: "—"
   defp summary(report), do: "#{report.completeness.done}/#{report.completeness.total}"
+
+  defp all_phases_done?(%{completeness: %{total: total, done: done}}) when total > 0,
+    do: done == total
+
+  defp all_phases_done?(_report), do: false
 
   defp phase_label(%{report: %{phases: phases}}, key) do
     case Enum.find(phases, &(&1.key == key)) do

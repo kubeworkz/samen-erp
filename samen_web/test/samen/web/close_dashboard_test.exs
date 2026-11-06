@@ -332,6 +332,42 @@ defmodule Samen.Web.CloseDashboardTest do
       assert card =~ "by the workspace"
     end
 
+    test "completes the close from the page once every phase is done" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      socket = socket(mount(org_id), %{"org" => org_id})
+
+      html = render_html(Live, socket.assigns)
+      refute html =~ ~s(id="close-finish-run")
+
+      # A crafted early finish still reaches the kernel and shows its refusal.
+      socket = dispatch(socket, "finish_run")
+      html = render_html(Live, socket.assigns)
+      assert html =~ ~s(id="close-action-error")
+      assert html =~ "still open"
+
+      run = Enum.reduce(ClosePhases.keys(), run, fn key, run -> sign!(run, key, org_id) end)
+      assert run.status == :in_progress
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, socket.assigns)
+      assert html =~ ~s(id="close-finish-run")
+
+      socket = dispatch(socket, "finish_run")
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ "Close completed for October 2026."
+      assert html =~ "close run completed"
+      refute html =~ ~s(id="close-finish-run")
+
+      run = Ash.get!(CloseRun, run.id, authorize?: false)
+      assert run.status == :completed
+      page_actor = Samen.Web.TenantRole.attributed_admin_scope(mount(org_id), org_id).actor.id
+      assert run.completed_by == page_actor
+      assert period_card(html) =~ "by the workspace"
+    end
+
     test "shows the governed refusal from a completed run" do
       org_id = Ash.UUID.generate()
       period = seed_period!(org_id, 2026, 10)
