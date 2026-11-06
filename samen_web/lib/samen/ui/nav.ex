@@ -120,7 +120,7 @@ defmodule Samen.UI.Nav do
       :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
       :support_tickets | :notifications_settings | :settings | :automation | :erp_coa |
       :erp_entries | :erp_ap_invoices | :erp_stock | :erp_purchase_orders | :erp_work_orders |
-      :erp_grants | :erp_close` (or `nil`).
+      :erp_grants | :erp_close | :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
@@ -175,6 +175,15 @@ defmodule Samen.UI.Nav do
     `samen_close_routes/3` (threaded from the `:close_path` mount label). The item
     lives inside the ERP group, so it also requires `erp_path`; `nil` hides it.
     Same X1 dead-link guard as every other path-gated nav item.
+    """
+
+  attr :board_path, :string,
+    default: nil,
+    doc: """
+    The board reporting package route prefix — non-nil ONLY on a host whose
+    router calls `samen_board_routes/3` (threaded from the `:board_path` mount
+    label). The item lives inside the ERP group, so it also requires `erp_path`;
+    `nil` hides it. Same X1 dead-link guard as every other path-gated nav item.
     """
 
   attr :banking_path, :string,
@@ -335,6 +344,16 @@ defmodule Samen.UI.Nav do
       >
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9l1.5 1.5L12 8M8 15l1.5 1.5L12 14M14 9h4M14 15h4" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        :if={@board_path}
+        label={Samen.Web.Erp.report_label(:board)}
+        href={"#{@board_path}?org=#{@org_id}"}
+        active={@active == :erp_board}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16" /><path d="M8 16v-5M12 16V7M16 16v-8M20 16v-3" /></svg>
         </:icon>
       </.nav_item>
     </.nav_group>
@@ -637,6 +656,7 @@ defmodule Samen.UI.Nav do
       erp_path: Mount.label(mount, :erp_path, nil),
       grants_path: Mount.label(mount, :grants_path, nil),
       close_path: Mount.label(mount, :close_path, nil),
+      board_path: Mount.label(mount, :board_path, nil),
       banking_path: Mount.label(mount, :banking_path, nil),
       work_path: Mount.label(mount, :work_path, nil)
     ]

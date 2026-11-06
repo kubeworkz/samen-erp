@@ -307,6 +307,16 @@ defmodule SamenerpWeb.Router do
       work_namespace: Samenerp.Work
     )
 
+    # 1c-4. WS-ACCT Phase 13 — the board reporting package over the same
+    #       Finance mount. The page composes the existing P&L, balance-sheet,
+    #       cash-flow, variance and close reads into one month-end pack; the
+    #       CSV route exports the same figures through the bounded Csv writer.
+    samen_board_routes(:board, Samenerp.Erp,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels,
+      work_namespace: Samenerp.Work
+    )
+
     # 1f. WS-ERP E9 — Banking (bank accounts · statement lines · guarded match ·
     #     rules) over the `Samenerp.Banking` mount: the five bka/bkl/bki/bkm/bkr
     #     tables already exist from migration 20260918010000; this mount + the

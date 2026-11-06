@@ -356,4 +356,34 @@ defmodule Samen.Web.Erp do
   def label(:stock), do: "Stock"
   def label(:purchase_orders), do: "Purchase Orders"
   def label(:work_orders), do: "Work Orders"
+
+  @doc """
+  The CLOSED allowlist of REPORT surfaces (WS-ACCT Phase 13; ADR-054 D12).
+
+  These are analytic pages over ledger reads, not resource-backed CRUD
+  surfaces, so they have their own registry and their own route macro
+  (`samen_board_routes/3`). A host that never mounts the route never links
+  the page (the X1 dead-link guard), and a URL can never mint a report name:
+  only the atoms declared here are reachable.
+  """
+  @spec report_surfaces() :: [atom(), ...]
+  def report_surfaces, do: [:board]
+
+  @doc "Validate a caller-supplied report surface name against the closed allowlist."
+  @spec report_surface(String.t() | atom() | nil) :: atom() | nil
+  def report_surface(nil), do: nil
+
+  def report_surface(name) when is_binary(name) do
+    atom = String.to_existing_atom(name)
+    if atom in report_surfaces(), do: atom, else: nil
+  rescue
+    ArgumentError -> nil
+  end
+
+  def report_surface(atom) when is_atom(atom),
+    do: if(atom in report_surfaces(), do: atom)
+
+  @doc "The human label for a report surface (the nav + heading)."
+  @spec report_label(atom()) :: String.t()
+  def report_label(:board), do: "Board pack"
 end

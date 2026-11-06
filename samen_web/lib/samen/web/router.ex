@@ -1329,6 +1329,81 @@ defmodule Samen.Web.Router do
   end
 
   @doc """
+  Mount the board reporting package (WS-ACCT Phase 13; ADR-054 D12) in ONE line
+  over the host's mounted Finance namespace:
+
+      import Samen.Web.Router
+
+      scope "/" do
+        pipe_through :browser
+
+        samen_board_routes(:board, MyHost.Erp,
+          repo: MyHost.Repo,
+          work_namespace: MyHost.Work
+        )
+      end
+
+  Mounts `GET <path>` (default `/board`) inside a tenant `live_session`, so it
+  carries the same `:require_tenant` gate as every other tenant surface, plus
+  `GET <path>/export.csv` for the bounded download. Both paths read the same
+  `Samen.Web.Finance.BoardPack` projection; the CSV is serialized through
+  `Samen.Web.Csv` and carries the package's fixed rows, never an unbounded
+  resource dump.
+
+  `:work_namespace` names the host's mounted Work namespace (the Task resource
+  is derived as `<namespace>.Task`), so a close run's anchored checklist tasks
+  are read exactly as they are on the close dashboard. Without it the close
+  section is the Phase-3 sign-off-only view — the page never invents task
+  state. Options as `samen_erp_routes/3` (`:repo` required; `:domain`, `:plane`,
+  `:operator_id`/`:target_org_id`, `:path`, `:labels`, `:session_name`).
+  """
+  defmacro samen_board_routes(kind, namespace, opts \\ []) do
+    kind = Macro.expand(kind, __CALLER__)
+    path = Keyword.get(opts, :path, "/board")
+    session_name = Keyword.get(opts, :session_name, session_name(:board, path))
+
+    quote bind_quoted: [
+            kind: kind,
+            namespace: namespace,
+            opts: opts,
+            path: path,
+            session_name: session_name
+          ] do
+      _ = kind
+
+      labels =
+        (Keyword.get(opts, :labels) || %{})
+        |> Map.put(:board_path, path)
+        |> then(fn labels ->
+          case Keyword.get(opts, :work_namespace) do
+            nil -> labels
+            ns -> Map.put(labels, :work_namespace, ns)
+          end
+        end)
+
+      mount =
+        Samen.Web.Mount.new(
+          :erp,
+          namespace,
+          Keyword.fetch!(opts, :repo),
+          domain: Keyword.get(opts, :domain, namespace),
+          plane: Samen.Web.Router.__plane__(opts),
+          labels: labels
+        )
+
+      live_session session_name,
+        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        live("#{path}", Samen.Web.Finance.BoardPack.Live)
+      end
+
+      get("#{path}/export.csv", Samen.Web.Finance.BoardPack.CsvController, :export,
+        assigns: %{samen_mount: mount}
+      )
+    end
+  end
+
+  @doc """
   Mount the framework `.ics` (iCalendar) export surface (F2; spec §F2/§F8 c8) —
   ONE line, on either plane. `namespace` is the host's mounted Calendar-scope
   namespace (`use Samen.Scopes.Calendar, namespace: ...` — its materialized
