@@ -285,15 +285,14 @@ defmodule SamenerpWeb.Router do
     samen_erp_routes(:erp, Samenerp.Erp, repo: Samenerp.Repo, labels: @current_org_labels)
 
     # 1c-2. WS-ACCT Phase 11 — the grant personnel report (DOM + CSV + JSON),
-    #       over the same `Samenerp.Erp` Finance mount. HR is not mounted until
-    #       Phase 16, so no `:personnel_namespace` is passed here: the report
-    #       honestly renders the bounded employment facts (opaque employee id,
-    #       effort, effective date) and marks names unwired. Once `Samenerp.Hr`
-    #       lands, add `personnel_namespace: Samenerp.Hr` to this one line and
-    #       the SAME projection resolves/masks names with no other change.
+    #       over the same `Samenerp.Erp` Finance mount. Phase 16 wires
+    #       `:personnel_namespace`, so the SAME projection resolves the acting
+    #       plane's employee name (clear on tenant, masked on operator) and
+    #       falls back to the bounded facts only when the employee row is gone.
     samen_grant_personnel_routes(:grants, Samenerp.Erp,
       repo: Samenerp.Repo,
-      labels: @current_org_labels
+      labels: @current_org_labels,
+      personnel_namespace: Samenerp.Hr
     )
 
     # 1c-3. WS-ACCT Phase 12 — the monthly close dashboard over the same Finance

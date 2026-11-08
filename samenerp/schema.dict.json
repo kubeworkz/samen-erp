@@ -2937,6 +2937,12 @@
           "type": "UtcDatetime"
         },
         {
+          "column_name": "efq_completed_by",
+          "logical_name": "completed_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
           "column_name": "efq_id",
           "logical_name": "id",
           "pii": false,
@@ -2971,6 +2977,12 @@
           "logical_name": "started_at",
           "pii": false,
           "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efq_started_by",
+          "logical_name": "started_by",
+          "pii": false,
+          "type": "String"
         },
         {
           "column_name": "efq_status",
@@ -3029,6 +3041,156 @@
       ],
       "resource": "Samenerp.Erp.OrgFxSettings",
       "table_name": "efs_org_fx_settings"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "efv_ends_on",
+          "logical_name": "ends_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "efv_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efv_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efv_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efv_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efv_published_at",
+          "logical_name": "published_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efv_scenario_weights",
+          "logical_name": "scenario_weights",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "efv_source_version_id",
+          "logical_name": "source_version_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efv_starts_on",
+          "logical_name": "starts_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "efv_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efv_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efv_version",
+          "logical_name": "version",
+          "pii": false,
+          "type": "Integer"
+        }
+      ],
+      "resource": "Samenerp.Erp.ForecastVersion",
+      "table_name": "efv_forecast_version"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "efw_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "efw_category",
+          "logical_name": "category",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efw_driver",
+          "logical_name": "driver",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efw_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efw_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efw_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "efw_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "efw_period_on",
+          "logical_name": "period_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "efw_scenario",
+          "logical_name": "scenario",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "efw_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "efw_version_id",
+          "logical_name": "version_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.ForecastDriver",
+      "table_name": "efw_forecast_driver"
     },
     {
       "fields": [
@@ -7569,6 +7731,210 @@
     {
       "fields": [
         {
+          "column_name": "esi_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esi_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esi_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esi_period_quarter",
+          "logical_name": "period_quarter",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esi_period_year",
+          "logical_name": "period_year",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esi_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esi_vendor_id",
+          "logical_name": "vendor_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.SupplierScorecard",
+      "table_name": "esi_supplier_scorecard"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "esj_dimension",
+          "logical_name": "dimension",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esj_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esj_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esj_note",
+          "logical_name": "note",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esj_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esj_score",
+          "logical_name": "score",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esj_scorecard_id",
+          "logical_name": "scorecard_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esj_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esj_weight_pct",
+          "logical_name": "weight_pct",
+          "pii": false,
+          "type": "Integer"
+        }
+      ],
+      "resource": "Samenerp.Erp.SupplierScorecardDimension",
+      "table_name": "esj_supplier_scorecard_dimension"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "esk_category",
+          "logical_name": "category",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esk_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esk_escalation_trigger",
+          "logical_name": "escalation_trigger",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esk_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esk_impact",
+          "logical_name": "impact",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esk_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esk_likelihood",
+          "logical_name": "likelihood",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esk_mitigation",
+          "logical_name": "mitigation",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esk_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esk_owner_role",
+          "logical_name": "owner_role",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esk_reviewed_on",
+          "logical_name": "reviewed_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "esk_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esk_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esk_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esk_vendor_id",
+          "logical_name": "vendor_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.SupplierRisk",
+      "table_name": "esk_supplier_risk"
+    },
+    {
+      "fields": [
+        {
           "column_name": "esl_id",
           "logical_name": "id",
           "pii": false,
@@ -9135,6 +9501,66 @@
     {
       "fields": [
         {
+          "column_name": "seh_effective_at",
+          "logical_name": "effective_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "seh_employee_id",
+          "logical_name": "employee_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "seh_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "seh_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "seh_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "seh_note",
+          "logical_name": "note",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "seh_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "seh_payload",
+          "logical_name": "payload",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "seh_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Hr.EmploymentEvent",
+      "table_name": "seh_employment_event"
+    },
+    {
+      "fields": [
+        {
           "column_name": "sel_axis",
           "logical_name": "axis",
           "pii": false,
@@ -9215,6 +9641,168 @@
       ],
       "resource": "Samenerp.Erp.LabourAllocation",
       "table_name": "sel_labour_allocation"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "pii_she_dob",
+          "logical_name": "dob",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "she_archived_at",
+          "logical_name": "archived_at",
+          "pii": false,
+          "type": "UtcDatetimeUsec"
+        },
+        {
+          "column_name": "she_employee_number",
+          "logical_name": "employee_number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "she_employment_type",
+          "logical_name": "employment_type",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "she_full_name",
+          "logical_name": "full_name",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "she_hired_at",
+          "logical_name": "hired_at",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "she_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "she_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "she_manager_id",
+          "logical_name": "manager_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "she_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "she_terminated_at",
+          "logical_name": "terminated_at",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "she_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "she_user_id",
+          "logical_name": "user_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "she_work_emails",
+          "logical_name": "work_emails",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        },
+        {
+          "column_name": "she_work_phones",
+          "logical_name": "work_phones",
+          "pii": true,
+          "type": "Samen.Type.VaultField"
+        }
+      ],
+      "resource": "Samenerp.Hr.Employee",
+      "table_name": "she_employee"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "shl_decided_at",
+          "logical_name": "decided_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "shl_employee_id",
+          "logical_name": "employee_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shl_end_date",
+          "logical_name": "end_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "shl_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shl_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "shl_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "shl_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shl_start_date",
+          "logical_name": "start_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "shl_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "shl_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Hr.LeaveRequest",
+      "table_name": "shl_leave_request"
     },
     {
       "fields": [

@@ -719,3 +719,88 @@ platform applies unchanged (no ERP surface requires a live vendor integration).
 `SameOrgFk` guard in the SHARED blueprints (the fixture test resources had their own;
 the shared blueprints did not — a cross-org FK write would have stored a dangling
 cross-tenant reference). Fixed at blueprint level; samen_core suites re-run green.
+
+---
+
+## Q. WS-ACCT — the Kubeworkz books (ADR-054; INV-6, INV-1)
+
+The Kubeworkz workstream adds the cost-object seam, fiscal periods/close, lots and foundry WIP,
+accruals, deferred revenue, standard cost/variance, assets, obsolescence/NRV write-down,
+cost allocation, grants, the close run, the board pack, forecast, supplier governance, and the
+host proof. Design:
+`docs/ws-acct/design.md`; build plan: `docs/ws-acct/build-plan.md`; coverage ledger:
+`docs/ws-acct/kubeworkz-books.md`; roadmap: `docs/saas-gap-roadmap.md` §"State after WS-ACCT";
+Phase 16 gate: `docs/gate-ws-acct.md`.
+
+| # | Claim | Evidence | Verdict |
+|---|---|---|---|
+| ACCT-HR | The host mounts HR, not only the kernel seam: a vaulted employee, an in-transaction hired event, a leave request, and grant-personnel masking all work on `samenerp` | `samenerp/test/hr_mount_test.exs`; included in the host gate's **134-test** run | **MET** |
+| ACCT-JE | The full JE-001 → JE-081 playbook posts on the real host in one real fiscal period | `samenerp/test/kubeworkz_books_walkthrough_test.exs`: **42 concrete entries**, **9 sections**, every entry `:draft` → posted and org-wide balanced; final TB **38,375,600 debit = 38,375,600 credit**, retained earnings **14,811,600 debit**, period `:soft_closed`; focused run **1 passed** | **MET** |
+| ACCT-R6-R11 | The extended spine's R6–R11 invariants still flip their named assertions | 6 committed patches (**403–407, 410**); **10 named test flips**; exact commands and byte-exact restores below | **MET (targeted)** |
+| ACCT-411 | The full 411-patch sabotage sweep flips every committed patch's named test | `bash scripts/sabotage_parallel.sh --jobs 2` with no filters: **411/411** across **8 slices**, **649 named-test confirmations**, every restore byte-exact, final marker **`SABOTAGE HARNESS (PARALLEL): ALL PASSED`**, **`EXIT=0`**; **3:02:05** (2026-11-07 21:29:59 → 2026-11-08 00:32:04) | **MET** |
+| ACCT-ROOT | The workstream's authoritative root gate is green | `env -u SAMEN_CI_TIERS -u SAMEN_SABOTAGE -u SAMEN_MULTINODE bash ./ci.sh`: start **2026-11-06 19:01:27**, end **21:01:21**, **1:59:54**; all five app gates passed; final marker **`==> ROOT CI: ALL PASSED`**, **`EXIT=0`**; no tier-subset banner | **MET** |
+| ACCT-LEDGER | The Phase-0 coverage ledger has no workbook without a verdict | 18 workbook sections carry verdicts (including `E1–E5` as out of scope); the header now records Phase 16 completion, the gate, and the full sweep | **MET** |
+| ACCT-DOCS | Phase 16's claim-evidence and roadmap updates land | this section is the claim-evidence update; `docs/saas-gap-roadmap.md` §"State after WS-ACCT" records the close-out and the full 411-patch sweep | **MET** |
+
+The five app gates were `samen_web`, `demo` (**52 passed, 631 excluded**), `driftwood`,
+`pawchart`, and `samenerp` (**134 passed**). The host proof and the root verdict above are the
+Phase 16 close-out evidence; the root run deliberately leaves the opt-in sabotage harness off, and the separate unfiltered sweep below supplies the full-sweep evidence.
+
+### R6–R11 targeted re-gate
+
+| Patch | Invariant | Named `MUST_FAIL` flips |
+|---|---|---|
+| `403-finance-r6b-balance-check-lumps-cost-objects.patch` | **R6b** — per-cost-object balance | an entry balanced org-wide but not per cost object is refused (1) |
+| `404-finance-r10-period-guard-dropped.patch` | **R10** — closed/soft-closed period guard | a soft-closed period refuses a document post; with the DB trigger disabled, the closed-period post is still refused (2) |
+| `405-acct-r7-wip-supplier-boundary-dropped.patch` | **R7** — WIP ↔ lot ↔ supplier boundary | owned stock is not WIP; consignment stock is not supplier WIP (2) |
+| `406-acct-p6-recognition-exactly-once-brace-dropped.patch` | **R9** — recognition exactly once | a second run in the same period is a clean no-op; the row is append-only (1) |
+| `407-acct-p7-variance-off-card-and-yield-written-off.patch` | **R8** — variance ↔ standard card and disposition | a revised card does not price a period it does not govern; every variance reaches the account the manual names (2) |
+| `410-acct-p11-grant-recognition-ignores-incurred-cost.patch` | **R11** — grant ↔ fund | recognition never runs ahead of incurred cost and carries the fund dimension; an empty period recognises zero (2) |
+
+```text
+bash scripts/sabotage.sh --range 403-407
+→ ALL PASSED (5 of 411 — FILTERED)   exit 0
+
+bash scripts/sabotage.sh --range 410-410
+→ ALL PASSED (1 of 411 — FILTERED)   exit 0
+```
+
+Every patch printed `restore: byte-exact (sha-256 verified)`. `scripts/sabotage_residue.sh`
+exited `0`, and `git diff --check` was clean. This is a **targeted R6–R11 certification**;
+the separate unfiltered sweep below supplies the full 411-patch certification. The root
+`./ci.sh` run still skips the opt-in harness; the `FILTERED` banners name the targeted selection.
+
+### Full 411-patch sabotage sweep
+
+`bash scripts/sabotage_parallel.sh --jobs 2` with no filters selected **all 411 patches across
+8 slices exactly once**. Start **2026-11-07T21:29:59-05:00**, end **2026-11-08T00:32:04-05:00**,
+wall time **3:02:05**. Every slice passed: **411/411** patches flipped their named tests,
+**649 named-test confirmations**, and all **411** restores were byte-exact. Final marker:
+
+```text
+SABOTAGE HARNESS (PARALLEL): ALL PASSED (411 of 411 sabotages flipped their named tests across 8 slice(s); 649 named-test confirmations, byte-exact restores)
+```
+
+`EXIT=0`; driver transcript `.sabotage-parallel/full-411-20261107-212959.log`. The root gate
+remains separate and still skips the opt-in harness; this sweep is the full-patch certification.
+
+### Honest limits
+
+- **JE-062 is retained as written; the decision is recorded (2026-11-08).** After JE-041/055,
+  account `1400` has 800.00 remaining; the manual's 1,000.00 write-down leaves it at
+  **−20,000 cents**. The replay does not invent a correction, cap the write-down, or hide the
+  negative balance; it is recorded as a source-manual data-quality limitation, not a production
+  accounting policy.
+- **The source manual's corrected forms are used.** JE-055 uses the corrected entry only; JE-063
+  credits `1520` (accumulated depreciation — lab equipment), not the PDK licence's `1510`; and
+  JE-004/JE-053 use the rounded **1,389** / **833** monthly amounts.
+- **The coverage ledger's content was not rewritten.** The header now records Phase 16 and the
+  full sweep; the 18
+  workbook verdicts remain the reviewed source-to-implementation map. The roadmap update lives in
+  `docs/saas-gap-roadmap.md`.
+- **The full sweep is not a second root-gate run.** It certifies the 411 committed sabotage
+  patches; the root gate's opt-in harness remains skipped by design. The sweep used the parallel
+  partitioner, not `SAMEN_SABOTAGE=1 ./ci.sh`.
+
+**No P0/P1 findings.** The Phase 16 code, root proof, and full 411-patch sweep are green; no
+gate items remain open.

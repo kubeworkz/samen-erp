@@ -35,7 +35,11 @@ config :samenerp,
     Samenerp.Analytics,
     # WS-Notes / ADR-053 Phase 1 — the Docs scope's first mount in this host
     # (Doc + Note + the new DocBlock/DocLink), migration 20261018120000.
-    Samenerp.Docs
+    Samenerp.Docs,
+    # WS-ACCT Phase 16 — HR on the Kubeworkz host (Employee + the append-only
+    # employment ledger + leave requests). The grant personnel report resolves
+    # names through this namespace instead of reporting opaque ids only.
+    Samenerp.Hr
     # NOTE (ADR-050, 2026-10-11) — `Samenerp.Fleet` (migration 20261011120000) is
     # deliberately registered in NEITHER `ash_domains` list, and that is load-bearing
     # rather than cosmetic. `mix samen.verify.aggregate_privacy` discovers its fleet
@@ -78,7 +82,8 @@ config :samen_core, :ash_domains, [
   Samenerp.Operator,
   Samen.AI.Domain,
   Samenerp.Analytics,
-  Samenerp.Docs
+  Samenerp.Docs,
+  Samenerp.Hr
   # `Samenerp.Fleet` is deliberately absent here too — see the note on the app's own
   # `ash_domains` list above (the samen_core discovery list would sweep the registry
   # through the same tenant-plane verifiers).

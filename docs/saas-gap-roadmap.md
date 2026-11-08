@@ -698,6 +698,54 @@ operator-plane ERP cockpit (the six surfaces are tenant-plane today).
 
 ---
 
+## State after WS-ACCT (2026-11-06) — the Kubeworkz books
+
+WS-ACCT (Phases 0–16, 2026-10-27 → 2026-11-06) is **COMPLETE and gated GO** — the workstream
+gate is `docs/gate-ws-acct.md`. It turns the WS-ERP ledger/document spine into one real company's
+books: the four-key cost-object seam, fiscal periods and close control, lots and foundry WIP,
+accruals, deferred revenue and recognition schedules, standard costing and variance, the asset
+register, obsolescence/NRV write-down, cost allocation and the labour driver, grants and
+restricted funds, the close run, board pack, rolling forecast, supplier governance, and the
+`samenerp` host proof. The 18-workbook mapping is `docs/ws-acct/kubeworkz-books.md`; the design is
+`docs/ws-acct/design.md`, and ADR-054 is `docs/adr/ADR-054-fabless-accounting-books.md`.
+
+**Phase 16 close-out:**
+
+- **Host HR mount:** `samenerp/test/hr_mount_test.exs` proves vaulted employee creation, the
+  in-transaction hired event, a leave request, and grant-personnel masking; the host gate is
+  **134 tests passed**.
+- **Whole JE replay:** `samenerp/test/kubeworkz_books_walkthrough_test.exs` posts **42 concrete
+  entries across 9 sections** in December 2026, every entry `:draft` → posted and org-wide
+  balanced; final trial balance **38,375,600 debit = 38,375,600 credit**, retained earnings
+  **14,811,600 debit**, period `:soft_closed`; focused run **1 passed**.
+- **R6–R11 re-gate:** six patches (403–407, 410) flipped **10 named assertions**; both filtered
+  harness runs passed and every patch restored byte-exact. This is **targeted**, not a claim
+  that all 411 patches were replayed; the separate full sweep below is the 411-patch claim.
+- **Full 411-patch sabotage sweep (2026-11-08):** the unfiltered
+  `scripts/sabotage_parallel.sh --jobs 2` run covered **411/411** patches across **8 slices**,
+  flipped every named test, recorded **649 named-test confirmations**, restored every patch
+  byte-exact, and ended **`SABOTAGE HARNESS (PARALLEL): ALL PASSED`** / **`EXIT=0`**; start
+  **2026-11-07 21:29:59**, end **2026-11-08 00:32:04** (**3:02:05**). Driver log:
+  `.sabotage-parallel/full-411-20261107-212959.log`.
+- **Root gate:** `env -u SAMEN_CI_TIERS -u SAMEN_SABOTAGE -u SAMEN_MULTINODE bash ./ci.sh`
+  started **2026-11-06 19:01:27**, ended **21:01:21** (**1:59:54**) and ended
+  **`==> ROOT CI: ALL PASSED`**, **`EXIT=0`** — the full default tier set, no `TIER SUBSET`
+  banner. All five app gates passed: `samen_web`, `demo` (**52 passed, 631 excluded**),
+  `driftwood`, `pawchart`, and `samenerp` (**134 passed**).
+
+**Honest limits and carries:** the root gate skipped the opt-in harness; the separate unfiltered
+sweep **did** run and passed **411/411** (it is not a second root-gate run); JE-062 is retained
+as written — its **−20,000 cents** negative `1400` balance is recorded as a source-manual
+data-quality limitation, not a production policy; the coverage ledger's **content** was
+confirmed complete and its header now records Phase 16; and the source manual's corrected
+JE-055/JE-063/rounded JE-004/JE-053 forms are the ones replayed. No P0/P1 findings. The Phase 16
+delta was uncommitted at gate time; nothing was committed or pushed by the gate.
+
+**Next:** no WS-ACCT gate carry remains; the full 411-patch claim is certified and the workstream
+is complete.
+
+---
+
 ## State after WS-A/B/D (2026-07-16) — the re-rank
 
 **Shipped: 11 gaps** (G1/G2/G3/G5 in WS-A · G6/G7/G17 + G12-seed in WS-B ·

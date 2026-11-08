@@ -170,9 +170,12 @@ defmodule Samen.AbbrevRegistryTest do
       # +6 in WS-ACCT Phase 10 (ADR-054 decision 11): the allocation step and
       # its per-target shares in the same three hosts — samen_core `fcs`/`csf`,
       # samen_web `wec`/`ewc`, samenerp `sec`/`cse`, every row allocator-reserved.
-      # = 407 host entries across six hosts.
+      # +3 in WS-ACCT Phase 16 (ADR-054): the Kubeworkz host's HR mount —
+      # `she`/`seh`/`shl` (Employee/EmploymentEvent/LeaveRequest), every row
+      # allocator-reserved.
+      # = 410 host entries across six hosts.
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 124
+      assert map_size(hosts["samenerp"]) == 127
       assert map_size(hosts["samen_core"]) == 118
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -939,7 +942,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
                  "esi" => "Samenerp.Erp.SupplierScorecard",
                  "esj" => "Samenerp.Erp.SupplierScorecardDimension",
-                 "esk" => "Samenerp.Erp.SupplierRisk"
+                 "esk" => "Samenerp.Erp.SupplierRisk",
+                 # WS-ACCT Phase 16: the Kubeworkz host's HR mount.
+                 "she" => "Samenerp.Hr.Employee",
+                 "seh" => "Samenerp.Hr.EmploymentEvent",
+                 "shl" => "Samenerp.Hr.LeaveRequest"
                }
              }
 
@@ -1074,7 +1081,7 @@ defmodule Samen.AbbrevRegistryTest do
       # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
       # allocation pair in all three hosts (samen_core `wts`/`tsw`/`sfl`/`slf`,
       # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
-      assert map_size(Reg.load()) == 837
+      assert map_size(Reg.load()) == 840
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -248,6 +248,12 @@ defmodule Samen.Scopes.Finance.SupplierBlueprint do
           ])
         end
 
+        changes do
+          # F3.5 same-org FK: a dimension may only reference its own org's
+          # scorecard, even on the internal system-create path.
+          change({Samen.Policy.SameOrgFk, relationships: [:scorecard]})
+        end
+
         actions do
           read :read do
             primary?(true)

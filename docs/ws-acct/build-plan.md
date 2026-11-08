@@ -1,10 +1,13 @@
 # WS-ACCT — the Kubeworkz books · Build Plan
 
-- **Status:** Buildable. **Phases 0–3 are COMPLETE and ADR-054 is ACCEPTED** — all eighteen
-  decisions taken, the five operator-facing calls ruled in the ADR's "Ratification" section.
-  Phases 3–16 are not started. Follows `docs/ws-acct/design.md` + ADR-054, whose build half this
-  plan is.
-- **Date:** 2026-10-27 (phases 1–2 landed 2026-10-28/29)
+- **Status:** **COMPLETE and gated GO (2026-11-06)** — Phases 0–16 landed; ADR-054 is ACCEPTED
+  (all eighteen decisions taken). The final root run ended `==> ROOT CI: ALL PASSED` with
+  `EXIT=0` (**1:59:54**), and the opt-in full 411-patch sabotage sweep passed **411/411**
+  (**649 named-test confirmations**, byte-exact restores, **3:02:05**, 2026-11-08); evidence is
+  `docs/gate-ws-acct.md`, and the roadmap state is `docs/saas-gap-roadmap.md` §"State after
+  WS-ACCT". Follows `docs/ws-acct/design.md` + ADR-054, whose build half this plan is.
+- **Date:** 2026-10-27 (phases 1–2 landed 2026-10-28/29; Phase 16 gate 2026-11-06; full sweep
+  2026-11-08)
 - **Sizing principle:** SMALL serialized units — each banks in ~15–30 min and each **PHASE** is
   independently committable + gate-able (WS-B/WS-ERP convention). Default fan-out concurrency 1.
 - **Gate cadence:** adversarial phase-gate after each phase; workstream-wide re-gate at Phase 16.
@@ -584,7 +587,7 @@ scorecard surface masked-or-omitted per the watch-list discipline.
 
 ---
 
-## Phase 16 — The Kubeworkz host proof + workstream gate · mixed · 2–3 sessions
+## Phase 16 — The Kubeworkz host proof + workstream gate · mixed · 2–3 sessions — **DONE (2026-11-06)**
 
 1. **Mount Hr in samenerp** (design §6) — payroll postings become possible in-app.
 2. **Replay the whole JE playbook** as one executable host test
@@ -596,6 +599,13 @@ scorecard surface masked-or-omitted per the watch-list discipline.
 
 **AC:** the playbook walkthrough green on the host; R6–R11 sabotage-certified; root CI ALL PASSED;
 the coverage ledger (phase 0) has no workbook left without a verdict.
+
+> **DONE (2026-11-06)** — `docs/gate-ws-acct.md` records **`==> ROOT CI: ALL PASSED`** /
+> **`EXIT=0`** / **1:59:54**, with the full default tier set; `samenerp` **134 tests passed**,
+> including the 42-entry JE walkthrough and the HR mount. R6–R11 targeted: **10 named flips
+> across 6 patches**, byte-exact restores. The separate full 411-patch sweep passed **411/411**
+> with **649 named-test confirmations** and byte-exact restores (2026-11-08). The Phase 16 delta
+> was uncommitted at gate time.
 
 ---
 

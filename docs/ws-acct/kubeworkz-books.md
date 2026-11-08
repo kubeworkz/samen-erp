@@ -6,10 +6,16 @@ never re-grepped to find out, and so a reviewer can see at a glance what is **sh
 what this workstream **adds or alters**, and what is **deliberately refused**.
 
 - **Status:** phase 0 deliverable of `docs/ws-acct/build-plan.md`; the ledger for **ADR-054**
-  (ACCEPTED; **phases 0–2 landed** as of 2026-10-29 — the seam, and the books themselves are now
-  opened by `Samenerp.Kubeworkz.Books`). Verdicts for phases 3+ still describe the *plan*; they are
-  not claims of built work. Phase 2's four transcription decisions are recorded in §2 below.
-- **Date:** 2026-10-27 (phase 2 notes added 2026-10-29)
+  (ACCEPTED). **WS-ACCT phases 0–16 are complete and the workstream gate is GO (2026-11-06)** —
+  the seam is in place, the books are opened by `Samenerp.Kubeworkz.Books`, and the Phase 16 host
+  proof records **42 concrete JE entries**, **9 sections**, and **134 `samenerp` tests passed**;
+  the full root gate ended **`==> ROOT CI: ALL PASSED`** / **`EXIT=0`** (**1:59:54**), and the
+  opt-in full 411-patch sabotage sweep passed **411/411** (8 slices, **649 named-test
+  confirmations**, byte-exact restores, **3:02:05**, 2026-11-08). The 18 workbook sections carry
+  the source-to-implementation verdict map; `E1–E5` remain deliberately out of scope. Phase 2's
+  four transcription decisions are recorded in §2 below.
+- **Date:** 2026-10-27 (phase 2 notes added 2026-10-29; Phase 16 gate 2026-11-06; full sweep
+  2026-11-08)
 - **Source:** `docs/chip_manufacturing_accounting_setup.md` — 6,168 lines, 18 sections. Line
   ranges below are the source's own headings, so the mapping survives the file being edited above
   or below a section only if the range is re-checked (see §"Re-deriving this ledger").
@@ -80,6 +86,13 @@ Phase 9 also opens the manual's own obsolescence rule (JE-062's memo: chips olde
 with no expected sales are written down to NRV) as an `InventoryReserve` policy. Nothing posts
 when it is created: an assessment drafts a write-down and a distinct approver clears it through
 the ADR-040 Gate.
+
+**JE-062 replay decision (2026-11-08).** The Phase 16 walkthrough posts the manual's JE-062
+exactly as written. After JE-041/055, `1400` has 800.00; the 1,000.00 write-down leaves it at
+**−20,000 cents**. That negative balance is retained as a source-manual data-quality limitation,
+not a production accounting policy. The walkthrough asserts it so it cannot be hidden; no cap,
+reversal, or offsetting correction is part of WS-ACCT. A production policy for writing inventory
+down past zero requires a separate, explicitly approved change.
 
 ### 3 · GlobalFoundries photonics fab (lines 171–205) — **REFERENCE**
 

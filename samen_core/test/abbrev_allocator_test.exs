@@ -337,8 +337,9 @@ defmodule Samen.Abbrev.AllocatorTest do
       # three hosts -> 38_653 bytes, 828 flat.
       # +9 WS-ACCT Phase 15 (ADR-054 D18): scorecard + dimension + risk in the
       # same three hosts -> 39_163 bytes, 837 flat.
-      assert byte_size(committed) == 39_163
-      assert map_size(R.load()) == 837
+      # +3 WS-ACCT Phase 16: the Kubeworkz host's HR mount -> 39_285 bytes.
+      assert byte_size(committed) == 39_285
+      assert map_size(R.load()) == 840
     end
   end
 

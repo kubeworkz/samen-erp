@@ -132,6 +132,12 @@ defmodule Samen.Scopes.Hr.Blueprint do
           end
         end
 
+        changes do
+          # F3.5 same-org FK: a manager must belong to the same org as the
+          # employee. `manager_id` is nullable; SameOrgFk treats nil as a no-op.
+          change({Samen.Policy.SameOrgFk, relationships: [:manager]})
+        end
+
         actions do
           # (the explicit `update :update` below owns updates — a default
           # `update: :*` here would collide with it)
@@ -266,7 +272,17 @@ defmodule Samen.Scopes.Hr.Blueprint do
           attribute(:kind, :atom,
             public?: true,
             allow_nil?: false,
-            constraints: [one_of: [:hired, :comp_changed, :promoted, :transferred, :on_leave, :returned, :terminated]]
+            constraints: [
+              one_of: [
+                :hired,
+                :comp_changed,
+                :promoted,
+                :transferred,
+                :on_leave,
+                :returned,
+                :terminated
+              ]
+            ]
           )
 
           attribute(:effective_at, :utc_datetime, public?: true, allow_nil?: false)
@@ -400,8 +416,7 @@ defmodule Samen.Scopes.Hr.Blueprint do
             accept([])
             require_atomic?(false)
 
-            change({Samen.Approvals.Gate,
-             kind: unquote(Atom.to_string(module)) <> ":approve"})
+            change({Samen.Approvals.Gate, kind: unquote(Atom.to_string(module)) <> ":approve"})
 
             change(Samen.Scopes.Hr.LeaveState)
             change({Samen.Scopes.Hr.LeaveReminder, employee: unquote(employee_mod)})
