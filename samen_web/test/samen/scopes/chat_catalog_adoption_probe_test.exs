@@ -15,7 +15,7 @@ defmodule Samen.Scopes.ChatCatalogAdoptionProbeTest do
        equal to `archivable ∪ excluded` — a Chat resource added tomorrow with neither
        flag nor an exclusion entry here fails immediately.
   """
-  use Samen.WebTest.DataCase, async: true
+  use Samen.WebTest.DataCase, async: false
 
   @roster [
     {Samen.WebTest.Chat.ChatThread, :archivable},

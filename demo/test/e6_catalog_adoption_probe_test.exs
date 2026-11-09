@@ -54,7 +54,7 @@ defmodule Demo.E6CatalogAdoptionProbeTest do
        `describe` block: it calls the SAME accounting helper against a deliberately
        INCOMPLETE fixture and asserts it raises.
   """
-  use Demo.DataCase, async: true
+  use Demo.DataCase, async: false
 
   # {domain, resource, status}
   @roster [
@@ -216,7 +216,9 @@ defmodule Demo.E6CatalogAdoptionProbeTest do
 
       incomplete_accounted =
         @roster
-        |> Enum.filter(fn {d, r, _s} -> d == Demo.BillingScope and r != Demo.BillingScope.Price end)
+        |> Enum.filter(fn {d, r, _s} ->
+          d == Demo.BillingScope and r != Demo.BillingScope.Price
+        end)
         |> Enum.map(fn {_d, r, _s} -> r end)
         |> MapSet.new()
 

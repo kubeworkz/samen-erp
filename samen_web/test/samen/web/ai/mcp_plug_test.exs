@@ -15,20 +15,35 @@ defmodule Samen.Web.AI.McpPlugTest do
   The EG4 masking / org-scope / grant / human-gate invariants are proven at the tool layer in
   `samen_core`'s `Samen.AI.McpTest` (the chokepoint `:mcp` scrub the tools route through).
   """
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Plug.Test
   import Plug.Conn
 
   alias Samen.Web.AI.McpPlug
 
+  # This test reaches the catalog during the Fake completion's auto-grounding, so it
+  # needs its own sandbox connection. Running it sync avoids borrowing the shared
+  # connection owned by an async DataCase test (whose owner can exit mid-test).
+  setup do
+    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Samen.WebTest.Repo)
+    Ecto.Adapters.SQL.Sandbox.mode(Samen.WebTest.Repo, {:shared, self()})
+    :ok
+  end
+
   @token "operator-token-abc"
 
   # The per-operator token → scope resolver seam (a host's SHA-256 digest lookup precedent).
   defp resolver do
     fn
-      @token -> {:ok, %Samen.Scope{actor: %{id: "op1", org_id: Ash.UUID.generate(), role: :member, plane: :tenant}}}
-      _ -> :error
+      @token ->
+        {:ok,
+         %Samen.Scope{
+           actor: %{id: "op1", org_id: Ash.UUID.generate(), role: :member, plane: :tenant}
+         }}
+
+      _ ->
+        :error
     end
   end
 
@@ -50,7 +65,12 @@ defmodule Samen.Web.AI.McpPlugTest do
 
   describe "auth (per-operator bearer token)" do
     test "no Authorization header ⇒ 401" do
-      conn = McpPlug.call(conn(:post, "/mcp", Jason.encode!(%{"method" => "tools/list", "id" => 1})), plug_opts())
+      conn =
+        McpPlug.call(
+          conn(:post, "/mcp", Jason.encode!(%{"method" => "tools/list", "id" => 1})),
+          plug_opts()
+        )
+
       assert conn.status == 401
     end
 
@@ -89,7 +109,14 @@ defmodule Samen.Web.AI.McpPlugTest do
 
     test "tools/list advertises the four tools" do
       conn = post(%{"method" => "tools/list", "id" => 2})
-      names = conn |> body_json() |> get_in(["result", "tools"]) |> Enum.map(& &1["name"]) |> Enum.sort()
+
+      names =
+        conn
+        |> body_json()
+        |> get_in(["result", "tools"])
+        |> Enum.map(& &1["name"])
+        |> Enum.sort()
+
       assert names == ["action_proposals", "browse", "drafts", "search"]
     end
 
@@ -115,7 +142,10 @@ defmodule Samen.Web.AI.McpPlugTest do
         post(%{
           "method" => "tools/call",
           "id" => 5,
-          "params" => %{"name" => "drafts", "arguments" => %{"verb" => "generate", "input" => "a welcome email"}}
+          "params" => %{
+            "name" => "drafts",
+            "arguments" => %{"verb" => "generate", "input" => "a welcome email"}
+          }
         })
 
       assert conn.status == 200

@@ -11,7 +11,7 @@ defmodule Samen.Web.CrumbsTest do
       whitelisted mount path labels, router `default_path/1` literals as the
       fallback) and refuses unknown keys (closed map).
   """
-  use Samen.WebTest.DataCase, async: true
+  use Samen.WebTest.DataCase, async: false
 
   alias Samen.Web.Crumbs
   alias Samen.Web.Mount
@@ -29,7 +29,9 @@ defmodule Samen.Web.CrumbsTest do
     end
 
     test "honors a host :crm_path override (no hardcoded host path)" do
-      mount = Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo, labels: %{crm_path: "/customers"})
+      mount =
+        Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo, labels: %{crm_path: "/customers"})
+
       assert Crumbs.home(mount, "ORG-1") == "/customers/dashboard?org=ORG-1"
     end
   end
@@ -49,13 +51,19 @@ defmodule Samen.Web.CrumbsTest do
       assert Crumbs.section(mount, "ORG-1", :work) == {"Work", "/work?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :support) == {"Support", "/support?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :billing) == {"Billing", "/billing?org=ORG-1"}
-      assert Crumbs.section(mount, "ORG-1", :marketing) == {"Marketing", "/marketing/campaigns?org=ORG-1"}
+
+      assert Crumbs.section(mount, "ORG-1", :marketing) ==
+               {"Marketing", "/marketing/campaigns?org=ORG-1"}
+
       assert Crumbs.section(mount, "ORG-1", :settings) == {"Settings", "/settings?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :chat) == {"Chat", "/chat?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :inbox) == {"Inbox", "/notifications?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :files) == {"Files", "/files?org=ORG-1"}
       assert Crumbs.section(mount, "ORG-1", :ai) == {"AI", "/ai?org=ORG-1"}
-      assert Crumbs.section(mount, "ORG-1", :companies) == {"Companies", "/crm/companies?org=ORG-1"}
+
+      assert Crumbs.section(mount, "ORG-1", :companies) ==
+               {"Companies", "/crm/companies?org=ORG-1"}
+
       assert Crumbs.section(mount, "ORG-1", :contacts) == {"Contacts", "/crm/contacts?org=ORG-1"}
     end
 
@@ -67,6 +75,7 @@ defmodule Samen.Web.CrumbsTest do
     test "honors a host :ai_path override (the AI mount's own prefix, not a hardcoded /ai)" do
       mount =
         Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo, labels: %{ai_path: "/insights"})
+
       assert Crumbs.section(mount, "ORG-1", :ai) == {"AI", "/insights?org=ORG-1"}
     end
 
