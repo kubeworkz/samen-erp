@@ -14,8 +14,11 @@ defmodule Samen.Scopes.Finance.ApAchFile do
     * `:originator_name` / `:originator_id` / `:originator_dfi` — the company and
       its 9-digit originating routing number (validated with the ABA checksum);
     * `:receiver_name` / `:receiver_account` / `:receiver_dfi` — the vendor's bank
-      details (the schema stores a vendor id, not bank data, so the caller
-      supplies them per run);
+      details. The sanctioned AP surface does NOT take these from a form: it
+      passes `Samen.Scopes.Finance.VendorPaymentProfile.payment_details/2`, the
+      verified profile's vaulted account, so the destination is a reviewed fact
+      rather than a per-render input. A caller that renders a one-off file still
+      has to supply them explicitly;
     * `:account_type` — `:checking` (transaction code 22) or `:savings` (32);
     * `:effective_date` — defaults to the run's payment date.
 

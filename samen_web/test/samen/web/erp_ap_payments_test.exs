@@ -22,7 +22,7 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.ApPaymentRun
+  alias Samen.Scopes.Finance.{ApPaymentRun, VendorPaymentProfile}
   alias Samen.Web.Erp.ApPaymentsLive
   alias Samen.WebTest.Erp.{Account, ApInvoice, JournalEntry, PostingAccount}
 
@@ -397,22 +397,19 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
   # -- ACH / EFT file ---------------------------------------------------------
 
-  test "builds an ACH file only after the run is approved" do
+  test "builds an ACH file only from the vendor's VERIFIED bank profile" do
     seed_posting_accounts()
-    bill = bill!(%{number: "BILL-4001"})
+    vendor = Ash.UUID.generate()
+    bill = bill!(%{number: "BILL-4001", vendor_id: vendor})
     pending = pending_run!(bill, "NOV-ACH-1")
 
-    fields = %{
+    originator = %{
       "originator_name" => "Sample Co",
       "originator_id" => "1123456789",
-      "originator_dfi" => "021000021",
-      "receiver_name" => "Vendor One",
-      "receiver_account" => "123456789",
-      "receiver_dfi" => "011000015",
-      "account_type" => "checking"
+      "originator_dfi" => "021000021"
     }
 
-    unapproved = event(open(), "ach", fields)
+    unapproved = event(open(), "ach", originator)
     assert unapproved.assigns.ach_error == "Approve a payment run first."
     refute render(unapproved) =~ ~s(id="download-ach")
 
@@ -422,15 +419,55 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
     assert approved.assigns.run.status == :paid
 
-    invalid = event(approved, "ach", %{fields | "receiver_dfi" => "021000022"})
-    assert invalid.assigns.ach_error =~ "not a valid ABA number"
+    # No profile yet: the form cannot invent a destination for the money.
+    blocked = event(approved, "ach", originator)
+    assert blocked.assigns.ach_error =~ "Register the vendor's bank details"
+    refute render(blocked) =~ ~s(id="download-ach")
 
-    html = render(invalid)
-    assert html =~ ~s(id="ach-file-error")
-    refute html =~ ~s(id="download-ach")
+    # Invalid ABA routing is refused BEFORE anything is stored.
+    invalid =
+      event(open(), "save_profile", %{
+        "intent" => "save",
+        "vendor_id" => vendor,
+        "bank_name" => "First Sample Bank",
+        "account_holder" => "Vendor One",
+        "account_number" => "123456789",
+        "routing_number" => "021000022",
+        "account_type" => "checking"
+      })
 
-    built = event(approved, "ach", fields)
-    assert built.assigns.ach_name == "ach-NOV-ACH-1.ach"
+    assert invalid.assigns.profile_error =~ "not a valid ABA number"
+    assert invalid.assigns.vendor_profile == nil
+
+    # Register as the request-side principal: that is the profile's `changed_by`.
+    assert {:ok, profile} =
+             VendorPaymentProfile.register(
+               repo: Samen.WebTest.Repo,
+               scope: requester_scope(@org),
+               vendor_id: vendor,
+               bank_name: "First Sample Bank",
+               account_holder: "Vendor One",
+               account_number: "123456789",
+               routing_number: "011000015",
+               account_type: "checking"
+             )
+
+    assert profile.status == :unverified
+
+    unverified = event(approved, "ach", originator)
+    assert unverified.assigns.ach_error =~ "not verified"
+
+    # A DIFFERENT admin verifies from the page; the ACH then uses those fields.
+    verified = event(approved, "verify_profile", %{"vendor_id" => vendor})
+    assert verified.assigns.vendor_profile.status == :verified
+    assert verified.assigns.profile_notice =~ "verified"
+    assert render(verified) =~ ~s(id="ach-profile-verified")
+
+    built = event(verified, "ach", originator)
+
+    assert built.assigns.ach_name == "ach-NOV-ACH-1.ach",
+           "ACH refused: #{inspect(built.assigns.ach_error)}"
+
     assert String.starts_with?(built.assigns.ach_file, "101 ")
     assert built.assigns.ach_error == nil
 

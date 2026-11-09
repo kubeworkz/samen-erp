@@ -422,9 +422,14 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
     params = %{payment_date: run.payment_date, reference: run.reference, memo: run.memo}
 
     Enum.reduce_while(bills, :ok, fn bill, :ok ->
+      # `:pay` is system-only (its policy forbids every direct caller). This
+      # service is the sanctioned route: the run's request/approve split and
+      # the distinct-admin check above ARE the authorization, so the inner
+      # action runs without re-authorization — the same posture as every other
+      # system cascade (`create_accrual_reversal`, `create_reversal`).
       case bill
            |> Ash.Changeset.for_update(:pay, params, scope: scope)
-           |> Ash.update() do
+           |> Ash.update(authorize?: false) do
         {:ok, _paid} ->
           {:cont, :ok}
 

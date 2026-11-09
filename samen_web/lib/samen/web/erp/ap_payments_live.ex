@@ -22,8 +22,13 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   The remittance advice is the run's CSV, handed to the browser as a download
   from the same render — there is no export route and no second read path. The
   ACH/EFT file is `Samen.Scopes.Finance.ApAchFile`, rendered from the posted run
-  once the operator supplies the bank details the schema does not store
-  (originator and vendor routing/account), and handed over the same way.
+  and the vendor's **verified payment profile**
+  (`Samen.Scopes.Finance.VendorPaymentProfile`): the destination account and
+  routing number are never caller-supplied form fields. A profile is registered
+  with vaulted bank details, must pass ABA/ACH prevalidation, and must be
+  verified by an admin who is a DIFFERENT principal from the one that
+  registered or changed the details. Changing a bank detail resets the profile
+  to unverified, so a changed account cannot spend under the old verification.
 
   Bills that look like the same vendor document entered twice are flagged on
   the list (vendor + total + bill date, `ApPaymentRun.duplicates/1`) and refuse
@@ -38,7 +43,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
-  alias Samen.Scopes.Finance.{ApAchFile, ApPaymentRun}
+  alias Samen.Scopes.Finance.{ApAchFile, ApPaymentRun, VendorPaymentProfile}
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
@@ -76,6 +81,15 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
        ach_file: nil,
        ach_name: nil,
        ach_error: nil,
+       vendor_profile: nil,
+       profile_vendor_id: "",
+       profile_bank_name: "",
+       profile_account_holder: "",
+       profile_account_number: "",
+       profile_routing_number: "",
+       profile_account_type: "checking",
+       profile_error: nil,
+       profile_notice: nil,
        error: nil,
        missing: nil
      )
@@ -116,7 +130,17 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> assign_new(:vendor_name, fn -> "" end)
     |> assign_new(:remittance_address, fn -> "" end)
     |> assign_new(:return_to, fn -> nil end)
+    |> assign_new(:vendor_profile, fn -> nil end)
+    |> assign_new(:profile_vendor_id, fn -> "" end)
+    |> assign_new(:profile_bank_name, fn -> "" end)
+    |> assign_new(:profile_account_holder, fn -> "" end)
+    |> assign_new(:profile_account_number, fn -> "" end)
+    |> assign_new(:profile_routing_number, fn -> "" end)
+    |> assign_new(:profile_account_type, fn -> "checking" end)
+    |> assign_new(:profile_error, fn -> nil end)
+    |> assign_new(:profile_notice, fn -> nil end)
     |> do_load()
+    |> load_profile_for_assigns()
   end
 
   defp do_load(%{assigns: %{org_id: nil}} = socket) do
@@ -203,6 +227,26 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     _ -> nil
   end
 
+  # The profile follows the run's vendor once a run exists; the operator can
+  # also type a vendor id and press "Load" before any run is approved.
+  defp load_profile_for_assigns(%{assigns: %{org_id: org_id, samen_mount: mount}} = socket)
+       when not is_nil(org_id) do
+    case socket.assigns[:profile_vendor_id] do
+      vendor_id when is_binary(vendor_id) and vendor_id != "" ->
+        case VendorPaymentProfile.get(mount.repo, org_id, vendor_id) do
+          {:ok, profile} -> assign(socket, vendor_profile: profile)
+          {:error, _reason} -> assign(socket, vendor_profile: nil)
+        end
+
+      _ ->
+        assign(socket, vendor_profile: nil)
+    end
+  rescue
+    _error -> assign(socket, vendor_profile: nil)
+  end
+
+  defp load_profile_for_assigns(socket), do: assign(socket, vendor_profile: nil)
+
   # -- events -----------------------------------------------------------------
 
   # Selection is a UI convenience; the submit handler reads the same params
@@ -223,29 +267,43 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   end
 
   def handle_event("ach", params, socket) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
     case socket.assigns.run do
       %{status: :paid} = run ->
-        opts = [
-          originator_name: params["originator_name"],
-          originator_id: params["originator_id"],
-          originator_dfi: params["originator_dfi"],
-          receiver_name: params["receiver_name"],
-          receiver_account: params["receiver_account"],
-          receiver_dfi: params["receiver_dfi"],
-          account_type: account_type(params["account_type"]),
-          effective_date: run.payment_date
-        ]
+        # The destination is ALWAYS the vendor's verified profile — never the
+        # form. `payment_details/2` refuses an unverified profile and is the
+        # only path that reveals the vaulted account/routing plaintext.
+        with {:ok, profile} <- vendor_profile(mount, org_id, run.vendor_id),
+             {:ok, details} <- VendorPaymentProfile.payment_details(profile, mount.repo) do
+          opts =
+            [
+              originator_name: params["originator_name"],
+              originator_id: params["originator_id"],
+              originator_dfi: params["originator_dfi"],
+              effective_date: run.payment_date
+            ] ++ Map.to_list(details)
 
-        case ApAchFile.render(run, opts) do
-          {:ok, file} ->
-            {:noreply,
-             assign(socket,
-               ach: params,
-               ach_file: file,
-               ach_name: "ach-#{run.reference}.ach",
-               ach_error: nil
-             )}
+          case ApAchFile.render(run, opts) do
+            {:ok, file} ->
+              {:noreply,
+               assign(socket,
+                 ach: params,
+                 ach_file: file,
+                 ach_name: "ach-#{run.reference}.ach",
+                 ach_error: nil
+               )}
 
+            {:error, reason} ->
+              {:noreply,
+               assign(socket,
+                 ach: params,
+                 ach_file: nil,
+                 ach_name: nil,
+                 ach_error: ach_error(reason)
+               )}
+          end
+        else
           {:error, reason} ->
             {:noreply,
              assign(socket,
@@ -335,6 +393,9 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                ach_file: nil,
                ach_name: nil,
                ach_error: nil,
+               profile_vendor_id: run.vendor_id,
+               profile_error: nil,
+               profile_notice: nil,
                error: nil,
                notice:
                  "Payment run #{run.reference} approved by #{run.approved_by}. #{run.bill_count} bills paid; the remittance CSV is stored with the run.",
@@ -425,6 +486,140 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           {:error, reason} ->
             {:noreply, assign(socket, error: decision_error(reason, socket.assigns.bills))}
         end
+    end
+  end
+
+  # -- vendor bank profile ----------------------------------------------------
+
+  # One form, two intents: load an existing profile for review, or save bank
+  # details (create the first time, change-and-reset afterwards). Verification
+  # is its own button because it requires a DIFFERENT admin.
+  def handle_event("save_profile", %{"intent" => "load"} = params, socket) do
+    vendor_id = blank_to_nil(params["vendor_id"])
+
+    socket =
+      socket
+      |> assign(
+        profile_vendor_id: vendor_id || "",
+        profile_error: nil,
+        profile_notice: nil
+      )
+      |> load_profile_for_assigns()
+
+    {:noreply, socket}
+  end
+
+  def handle_event("save_profile", params, socket) do
+    if writable?(socket.assigns.samen_mount) do
+      save_bank_profile(socket, params)
+    else
+      {:noreply,
+       assign(socket,
+         profile_error: "Bank profiles are read-only on this plane.",
+         profile_notice: nil
+       )}
+    end
+  end
+
+  def handle_event("verify_profile", %{"vendor_id" => vendor_id}, socket) do
+    if writable?(socket.assigns.samen_mount) do
+      verify_bank_profile(socket, vendor_id)
+    else
+      {:noreply,
+       assign(socket,
+         profile_error: "Bank profiles are read-only on this plane.",
+         profile_notice: nil
+       )}
+    end
+  end
+
+  defp save_bank_profile(socket, params) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+    vendor_id = blank_to_nil(params["vendor_id"])
+
+    base = [
+      repo: mount.repo,
+      scope: TenantRole.identity_scope(mount, org_id),
+      vendor_id: vendor_id,
+      bank_name: blank_to_nil(params["bank_name"]),
+      account_holder: blank_to_nil(params["account_holder"]),
+      account_number: blank_to_nil(params["account_number"]),
+      routing_number: blank_to_nil(params["routing_number"]),
+      account_type: params["account_type"] || "checking"
+    ]
+
+    result =
+      case vendor_id do
+        nil ->
+          {:error, :vendor_id_required}
+
+        vendor_id ->
+          case VendorPaymentProfile.get(mount.repo, org_id, vendor_id) do
+            {:ok, nil} -> VendorPaymentProfile.register(base)
+            {:ok, _profile} -> VendorPaymentProfile.change_bank_details(base)
+            {:error, reason} -> {:error, reason}
+          end
+      end
+
+    case result do
+      {:ok, profile} ->
+        {:noreply,
+         assign(socket,
+           vendor_profile: profile,
+           profile_vendor_id: profile.vendor_id,
+           profile_bank_name: "",
+           profile_account_holder: "",
+           profile_account_number: "",
+           profile_routing_number: "",
+           profile_account_type: to_string(profile.account_type),
+           profile_error: nil,
+           profile_notice:
+             "Bank details saved as unverified. A different admin must verify them before an ACH file can be built."
+         )}
+
+      {:error, reason} ->
+        {:noreply,
+         assign(socket,
+           profile_vendor_id: params["vendor_id"] || "",
+           profile_bank_name: params["bank_name"] || "",
+           profile_account_holder: params["account_holder"] || "",
+           profile_account_number: params["account_number"] || "",
+           profile_routing_number: params["routing_number"] || "",
+           profile_account_type: params["account_type"] || "checking",
+           profile_notice: nil,
+           profile_error: profile_error(reason)
+         )}
+    end
+  end
+
+  defp verify_bank_profile(socket, vendor_id) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
+    case VendorPaymentProfile.verify(
+           repo: mount.repo,
+           scope: TenantRole.attributed_admin_scope(mount, org_id),
+           vendor_id: vendor_id
+         ) do
+      {:ok, profile} ->
+        {:noreply,
+         assign(socket,
+           vendor_profile: profile,
+           profile_vendor_id: profile.vendor_id,
+           profile_error: nil,
+           profile_notice:
+             "Bank details verified by #{profile.verified_by}. ACH files now use this account."
+         )}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, profile_error: profile_error(reason), profile_notice: nil)}
+    end
+  end
+
+  defp vendor_profile(mount, org_id, vendor_id) do
+    case VendorPaymentProfile.get(mount.repo, org_id, vendor_id) do
+      {:ok, nil} -> {:error, :missing_profile}
+      {:ok, profile} -> {:ok, profile}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -560,9 +755,6 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   defp truthy(value), do: value in [true, "1", "true", "on"]
 
-  defp account_type("savings"), do: :savings
-  defp account_type(_value), do: :checking
-
   defp ach_error(:originator_name_required), do: "Enter the originator's name."
   defp ach_error(:originator_id_required), do: "Enter the originator's company ID."
 
@@ -594,8 +786,57 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp ach_error(:no_payments), do: "The run has no payments to send."
   defp ach_error(:effective_date_required), do: "The run has no effective date."
 
-  defp ach_error(_reason),
-    do: "The ACH file could not be built. Check the bank details."
+  defp ach_error(:missing_profile),
+    do: "Register the vendor's bank details below, then have a different admin verify them."
+
+  defp ach_error(:unverified),
+    do:
+      "The vendor's bank profile is not verified. A different admin must verify it before an ACH file can be built."
+
+  defp ach_error(:shredded),
+    do: "The vendor's bank details are no longer decryptable. Register them again."
+
+  defp profile_error(:vendor_id_required), do: "Enter the vendor id."
+  defp profile_error(:vendor_id_invalid), do: "That vendor id is not a valid UUID."
+
+  defp profile_error(:account_holder_required),
+    do: "Enter the account holder's name as it appears at the bank."
+
+  defp profile_error(:account_holder_too_long),
+    do: "The account holder name must fit the 22 characters an ACH entry carries."
+
+  defp profile_error(:account_number_required), do: "Enter the vendor's account number."
+
+  defp profile_error(:account_number_invalid),
+    do: "The account number must be letters or digits only."
+
+  defp profile_error(:account_number_too_long),
+    do: "The account number is longer than the 17 characters an ACH entry can carry."
+
+  defp profile_error(:routing_number_required), do: "Enter the vendor's 9-digit routing number."
+
+  defp profile_error(:routing_number_invalid),
+    do: "The vendor's routing number is not a valid ABA number."
+
+  defp profile_error(:account_type_invalid), do: "Choose checking or savings."
+  defp profile_error(:bank_name_required), do: "Enter the bank's name."
+
+  defp profile_error(:already_registered),
+    do: "This vendor already has a bank profile. Load it and change the details instead."
+
+  defp profile_error(:self_verification),
+    do:
+      "The admin who changed the bank details cannot verify them. A different admin must verify."
+
+  defp profile_error(:already_verified),
+    do: "This profile is already verified. Change the bank details to reopen verification."
+
+  defp profile_error(:forbidden), do: "Only an admin or owner can verify bank details."
+
+  defp profile_error(:not_found),
+    do: "No bank profile exists for that vendor yet. Save the details first."
+
+  defp profile_error(_reason), do: "The bank profile could not be saved."
 
   defp selected_ids(params) do
     params
@@ -933,6 +1174,148 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
             </a>
           </div>
 
+          <div id="vendor-payment-profile" class="card" style="padding:14px 16px;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:2px">Vendor bank profile</div>
+            <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+              Bank details are stored vaulted and must be verified by a DIFFERENT admin before an ACH file can use them. Changing a detail resets verification.
+            </p>
+
+            <%= if writable?(@samen_mount) do %>
+            <form id="vendor-profile-form" phx-submit="save_profile">
+              <div
+                style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px"
+              >
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Vendor id
+                  <input
+                    type="text"
+                    name="vendor_id"
+                    value={@profile_vendor_id}
+                    placeholder="Vendor UUID"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Bank name
+                  <input
+                    type="text"
+                    name="bank_name"
+                    value={@profile_bank_name}
+                    placeholder="Optional"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Account holder
+                  <input
+                    type="text"
+                    name="account_holder"
+                    value={@profile_account_holder}
+                    placeholder="Name at the bank"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Account number
+                  <input
+                    type="text"
+                    name="account_number"
+                    value={@profile_account_number}
+                    placeholder="Re-enter to change"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Routing number
+                  <input
+                    type="text"
+                    name="routing_number"
+                    value={@profile_routing_number}
+                    placeholder="9 digits"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Account type
+                  <select name="account_type" style="font-size:12px;padding:6px 8px;font-weight:400">
+                    <option value="checking" selected={@profile_account_type == "checking"}>
+                      Checking
+                    </option>
+                    <option value="savings" selected={@profile_account_type == "savings"}>
+                      Savings
+                    </option>
+                  </select>
+                </label>
+              </div>
+
+              <div
+                :if={@profile_error}
+                id="vendor-profile-error"
+                style="color:var(--bad, #b91c1c);font-size:12px;margin-bottom:8px"
+              >
+                {@profile_error}
+              </div>
+
+              <div
+                :if={@profile_notice}
+                id="vendor-profile-notice"
+                style="color:var(--ok, #047857);font-size:12px;margin-bottom:8px"
+              >
+                {@profile_notice}
+              </div>
+
+              <div style="display:flex;gap:12px;align-items:center;justify-content:flex-end">
+                <.button type="submit" name="intent" value="load" id="load-vendor-profile">
+                  Load profile
+                </.button>
+                <.button
+                  variant="primary"
+                  type="submit"
+                  name="intent"
+                  value="save"
+                  id="save-vendor-profile"
+                >
+                  Save bank details
+                </.button>
+              </div>
+            </form>
+            <% else %>
+              <p id="vendor-profile-read-only" style="margin:0;font-size:12px;color:var(--muted)">
+                Read-only on this plane.
+              </p>
+            <% end %>
+
+            <div :if={@vendor_profile} id="vendor-profile-status" style="margin-top:10px;font-size:12px">
+              <div>
+                Status:
+                <strong>{if @vendor_profile.status == :verified,
+                  do: "Verified",
+                  else: "Unverified"}</strong>
+                · {@vendor_profile.account_holder} · {@vendor_profile.bank_name || "bank on file"}
+                · ••••{@vendor_profile.account_last4}
+              </div>
+              <div style="color:var(--muted)">
+                Changed by <code>{@vendor_profile.changed_by}</code>
+                {if @vendor_profile.verified_by,
+                  do: " · verified by " <> @vendor_profile.verified_by,
+                  else: ""}
+              </div>
+              <button
+                :if={
+                  writable?(@samen_mount) and
+                    VendorPaymentProfile.verifiable_by?(@vendor_profile, @current_actor_id)
+                }
+                type="button"
+                phx-click="verify_profile"
+                phx-value-vendor_id={@vendor_profile.vendor_id}
+                id="verify-vendor-profile"
+                style="font-size:11px;padding:3px 8px;margin-top:6px"
+              >
+                Verify bank details
+              </button>
+            </div>
+          </div>
+
           <div
             :if={@run && @run.status == :paid}
             id="ach-file-card"
@@ -943,8 +1326,21 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               ACH / EFT payment file
             </div>
             <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">
-              A NACHA CCD credit file for this run. Bank details are not stored on the bill — enter them for this file.
+              A NACHA CCD credit file for this run. The destination comes from the vendor's verified bank profile, never from this form.
             </p>
+
+            <%= if @vendor_profile && @vendor_profile.status == :verified do %>
+              <div id="ach-profile-verified" style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                Paying <strong>{@vendor_profile.account_holder}</strong>
+                · {@vendor_profile.bank_name || "bank on file"}
+                · ••••{@vendor_profile.account_last4}
+                · verified by <code>{@vendor_profile.verified_by}</code>
+              </div>
+            <% else %>
+              <p id="ach-profile-blocked" style="margin:0 0 10px;font-size:12px;color:var(--muted)">
+                Register and verify the vendor's bank details first. ACH files use ONLY a verified profile.
+              </p>
+            <% end %>
 
             <form id="ach-file-form" phx-submit="ach">
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
@@ -976,45 +1372,6 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                     placeholder="9 digits"
                     style="font-size:12px;padding:6px 8px;font-weight:400"
                   />
-                </label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
-                  Vendor account name
-                  <input
-                    type="text"
-                    name="receiver_name"
-                    value={@ach["receiver_name"]}
-                    style="font-size:12px;padding:6px 8px;font-weight:400"
-                  />
-                </label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
-                  Vendor account number
-                  <input
-                    type="text"
-                    name="receiver_account"
-                    value={@ach["receiver_account"]}
-                    style="font-size:12px;padding:6px 8px;font-weight:400"
-                  />
-                </label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
-                  Vendor routing
-                  <input
-                    type="text"
-                    name="receiver_dfi"
-                    value={@ach["receiver_dfi"]}
-                    placeholder="9 digits"
-                    style="font-size:12px;padding:6px 8px;font-weight:400"
-                  />
-                </label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
-                  Account type
-                  <select name="account_type" style="font-size:12px;padding:6px 8px;font-weight:400">
-                    <option value="checking" selected={@ach["account_type"] in [nil, "checking"]}>
-                      Checking
-                    </option>
-                    <option value="savings" selected={@ach["account_type"] == "savings"}>
-                      Savings
-                    </option>
-                  </select>
                 </label>
               </div>
 

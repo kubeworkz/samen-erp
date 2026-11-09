@@ -840,6 +840,16 @@ defmodule Samen.Scopes.Finance.Blueprint do
         debit and the cash credit, anchored `source_key: "ap_payment"`. The
         `void` transition remains the documented credit-note carry.
 
+        ## Cash release is dual control (no direct `:pay`)
+
+        `:pay` is SYSTEM-ONLY: its policy forbids every direct invocation, and
+        the only sanctioned caller is `Samen.Scopes.Finance.ApPaymentRun`, whose
+        persisted request must be approved by a DISTINCT admin. That service
+        invokes `:pay` with `authorize?: false` inside its single transaction.
+        This is what makes the run a real control rather than a UI convention —
+        a member (or one admin acting alone) cannot release cash by calling the
+        bill action directly.
+
         ## The approve discipline (ADR-040)
 
         `:approve` carries `Samen.Approvals.Gate`: an ungated call is REFUSED
@@ -966,6 +976,13 @@ defmodule Samen.Scopes.Finance.Blueprint do
           # carries the date and the reference, and the bill carries `:paid`.
           # The action locks the persisted bill row before posting, so two
           # concurrent payments serialize and the second sees `:paid`.
+          #
+          # SYSTEM-ONLY: this action releases cash, so it is NOT a caller-facing
+          # door. The only sanctioned route is `ApPaymentRun.approve/1`, whose
+          # request/approve split requires a DISTINCT admin and which invokes
+          # this action with `authorize?: false` inside its one transaction. The
+          # policy below refuses every direct invocation (member OR admin), so no
+          # single principal can pay a bill by calling `:pay` themselves.
           update :pay do
             accept([])
             require_atomic?(false)
@@ -986,6 +1003,14 @@ defmodule Samen.Scopes.Finance.Blueprint do
         policies do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
+          end
+
+          # Cash release is SYSTEM-ONLY. `ApPaymentRun.approve/1` has already
+          # enforced the distinct-admin decision and calls `:pay` with
+          # `authorize?: false`; a direct caller is refused here, so a member
+          # (or a lone admin) cannot bypass the run's dual control.
+          policy action(:pay) do
+            forbid_if(always())
           end
 
           policy action_type([:create, :update]) do

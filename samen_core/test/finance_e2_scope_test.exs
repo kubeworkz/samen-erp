@@ -792,14 +792,31 @@ defmodule Samen.FinanceE2ScopeTest do
 
       _paid = pay_bill!(bill, scope, reference: "PAY-002")
 
-      # `bill` is the stale :approved struct. The row lock in the payment
-      # cascade is what refuses this second attempt.
-      assert {:error, _} =
+      # `:pay` is system-only, so this direct call is refused before the
+      # persisted-status lock even matters; the run already paid the bill once.
+      assert {:error, %Ash.Error.Forbidden{}} =
                bill
                |> Ash.Changeset.for_update(:pay, %{payment_date: ~D[2026-09-16]}, scope: scope)
                |> Ash.update()
 
       assert length(payment_entries(org, bill.id)) == 1
+    end
+
+    test "a direct :pay is refused for a member AND for an admin", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      bill = new_bill(scope, org, [bill_line(expense, 4_200)])
+      bill = approve_bill!(bill, scope)
+
+      for actor <- [scope, admin_scope(org)] do
+        assert {:error, %Ash.Error.Forbidden{}} =
+                 bill
+                 |> Ash.Changeset.for_update(:pay, %{payment_date: ~D[2026-09-16]}, scope: actor)
+                 |> Ash.update()
+      end
+
+      # Nothing moved: cash release requires the distinct-admin run approval.
+      assert payment_entries(org, bill.id) == []
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
     end
   end
 
@@ -1103,13 +1120,31 @@ defmodule Samen.FinanceE2ScopeTest do
   end
 
   defp pay_bill!(bill, scope, attrs) do
-    bill
-    |> Ash.Changeset.for_update(
-      :pay,
-      Map.merge(%{payment_date: ~D[2026-09-15]}, Map.new(attrs)),
-      scope: scope
-    )
-    |> Ash.update!()
+    org_id = scope.actor.org_id
+    attrs = Map.new(attrs)
+    payment_date = Map.get(attrs, :payment_date, ~D[2026-09-15])
+
+    # `:pay` is system-only: the sanctioned route is a dual-control run whose
+    # approval is a DIFFERENT admin's decision.
+    {:ok, pending} =
+      ApPaymentRun.request(
+        ap_invoice: ApInvoice,
+        repo: @repo,
+        scope: scope,
+        bill_ids: [bill.id],
+        payment_date: payment_date,
+        reference: Map.get(attrs, :reference)
+      )
+
+    {:ok, _run} =
+      ApPaymentRun.approve(
+        ap_invoice: ApInvoice,
+        repo: @repo,
+        scope: admin_scope(org_id),
+        run_id: pending.id
+      )
+
+    Ash.get!(ApInvoice, bill.id, authorize?: false)
   end
 
   defp payment_entry!(org, bill_id) do
