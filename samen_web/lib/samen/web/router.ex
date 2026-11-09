@@ -1140,9 +1140,10 @@ defmodule Samen.Web.Router do
   page over the org's one `JournalApprovalPolicy` row, writing through that
   resource's OWN admin-only actions — plus the AP payment run at
   `<path>/ap-payments` (one `ApPaymentRun` batch over approved bills, with the
-  remittance CSV handed straight from the render) and the AR aging / customer
-  statements page at `<path>/ar-aging` (`ArAging` over the mounted Billing
-  invoices and posted receipts). The ERP landing dashboard at `<path>` reads
+  remittance CSV handed straight from the render), the AR receipt intake at
+  `<path>/ar-receipts` (one customer payment across open invoices), and the AR
+  aging / customer statements page at `<path>/ar-aging` (`ArAging` over the
+  mounted Billing invoices and posted receipts). The ERP landing dashboard at `<path>` reads
   the org's hosted-OCR budget (so exhaustion is visible before capture) and
   links every ERP page. No host-authored LiveView exists to
   mis-wire, there is no export path, and every write affordance (create/edit/
@@ -1192,13 +1193,15 @@ defmodule Samen.Web.Router do
         # `/erp/journal-approval` reaches the page instead of resolving as an
         # unknown surface name.
         live("#{path}/journal-approval", Samen.Web.Erp.JournalApprovalLive)
-        # The AP payment run (approved bills → one remittance batch) and the AR
-        # aging / customer-statement page. Literal segments declared BEFORE
+        # The AP payment run (approved bills → one remittance batch), the AR
+        # receipt intake, and the AR aging / customer-statement page. Literal
+        # segments declared BEFORE
         # `:surface` for the same reason as journal-approval: a dynamic segment
         # declared first would capture "ap-payments"/"ar-aging" as a surface
         # name and these pages would never be reached.
         live("#{path}/ap-capture", Samen.Web.Erp.ApCaptureLive)
         live("#{path}/ap-payments", Samen.Web.Erp.ApPaymentsLive)
+        live("#{path}/ar-receipts", Samen.Web.Erp.ArReceiptsLive)
         live("#{path}/ar-aging", Samen.Web.Erp.ArAgingLive)
         # One parameterized route feeds the closed surface allowlist. The LiveView
         # validates `:surface` through `Samen.Web.Erp.surface/1`; expanding the

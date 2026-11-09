@@ -335,6 +335,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
                 <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Overdue</th>
                 <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Outstanding</th>
                 <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Bucket</th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Receipt</th>
               </tr>
             </thead>
             <tbody>
@@ -357,10 +358,19 @@ defmodule Samen.Web.Erp.ArAgingLive do
                 <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
                   {bucket_text(row.bucket)}
                 </td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                  <a
+                    id={"record-receipt-#{row.invoice_id}"}
+                    href={"#{Samen.Web.Mount.label(@samen_mount, :erp_path, "/erp")}/ar-receipts?org=#{@org_id}&customer_id=#{row.customer_id}&invoice_id=#{row.invoice_id}&as_of=#{Date.to_iso8601(@as_of)}"}
+                    style="font-size:12px"
+                  >
+                    Record receipt
+                  </a>
+                </td>
               </tr>
 
               <tr :if={@aging.invoices == []}>
-                <td colspan="6" style="padding:16px 8px;color:var(--muted)">
+                <td colspan="7" style="padding:16px 8px;color:var(--muted)">
                   Nothing outstanding as of {Date.to_iso8601(@as_of)}.
                 </td>
               </tr>
@@ -401,11 +411,22 @@ defmodule Samen.Web.Erp.ArAgingLive do
             </div>
 
             <div :if={@statement} id="customer-statement">
-              <div style="font-size:13px;margin-bottom:6px">
-                <b>{short(@statement.customer_id)}</b>
-                <span style="color:var(--muted)">
-                  · as of {Date.to_iso8601(@statement.as_of)}
+              <div
+                style="font-size:13px;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"
+              >
+                <span>
+                  <b>{short(@statement.customer_id)}</b>
+                  <span style="color:var(--muted)">
+                    · as of {Date.to_iso8601(@statement.as_of)}
+                  </span>
                 </span>
+                <a
+                  id="record-receipt-link"
+                  href={"#{Samen.Web.Mount.label(@samen_mount, :erp_path, "/erp")}/ar-receipts?org=#{@org_id}&customer_id=#{@statement.customer_id}&as_of=#{Date.to_iso8601(@as_of)}"}
+                  style="font-size:13px"
+                >
+                  Record receipt
+                </a>
               </div>
 
               <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:8px">
@@ -423,6 +444,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
                     <th scope="col" style="text-align:right;padding:5px 7px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Amount</th>
                     <th scope="col" style="text-align:right;padding:5px 7px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Paid</th>
                     <th scope="col" style="text-align:right;padding:5px 7px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Outstanding</th>
+                    <th scope="col" style="text-align:left;padding:5px 7px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Receipt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -433,6 +455,16 @@ defmodule Samen.Web.Erp.ArAgingLive do
                     <td style="padding:5px 7px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(row.amount_cents)}</td>
                     <td style="padding:5px 7px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(row.paid_cents)}</td>
                     <td style="padding:5px 7px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(row.outstanding_cents)}</td>
+                    <td style="padding:5px 7px;border-bottom:1px solid var(--border, #f3f4f6)">
+                      <a
+                        :if={row.outstanding_cents > 0}
+                        id={"statement-record-receipt-#{row.invoice_id}"}
+                        href={"#{Samen.Web.Mount.label(@samen_mount, :erp_path, "/erp")}/ar-receipts?org=#{@org_id}&customer_id=#{@statement.customer_id}&invoice_id=#{row.invoice_id}&as_of=#{Date.to_iso8601(@as_of)}"}
+                        style="font-size:12px"
+                      >
+                        Record receipt
+                      </a>
+                    </td>
                   </tr>
                 </tbody>
               </table>

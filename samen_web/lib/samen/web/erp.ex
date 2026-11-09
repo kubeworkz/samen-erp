@@ -127,6 +127,10 @@ defmodule Samen.Web.Erp do
   @spec ap_payments_label() :: String.t()
   def ap_payments_label, do: "AP payments"
 
+  @doc "The AR receipt intake page's label (the nav item + page heading)."
+  @spec ar_receipts_label() :: String.t()
+  def ar_receipts_label, do: "AR receipts"
+
   @doc "The AR aging and customer statements page's label (the nav item + page heading)."
   @spec ar_aging_label() :: String.t()
   def ar_aging_label, do: "AR aging"

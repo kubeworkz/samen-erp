@@ -46,6 +46,14 @@ All notable changes to Samen are recorded here. The format follows
   selected approved bills, flags possible duplicate bills, and hands the remittance CSV and
   ACH/EFT file directly from the render. A run that includes a bill that is no longer approved
   pays nothing.
+- **AR receipt intake** (`/erp/ar-receipts`, mounted by `samen_erp_routes/3`): one customer
+  payment is split across the customer's open Billing invoices. The new
+  `Samen.Scopes.Finance.ArReceiptApplication` re-reads the statement, refuses cross-customer,
+  over-allocated, already-settled or duplicated selections, then creates and posts one
+  `PaymentReceipt` per allocation — each with its cash+AR-clearing journal entry — inside one
+  transaction, so any failure rolls the whole payment back. The page reloads the same
+  `ArAging` projection after posting, so the open list and the aging page reflect the cash
+  immediately.
 - **AR aging and customer statements** (`/erp/ar-aging`): read the host's Billing invoices and
   POSTED `PaymentReceipt` cash through `Samen.Scopes.Finance.ArAging`, bucketed current /
   1–30 / 31–60 / 61–90 / 90+ / undated, with a per-customer statement of every invoice and

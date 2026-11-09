@@ -173,6 +173,7 @@ defmodule Samen.Web.Erp.DashboardLive do
     [
       {Erp.ap_capture_label(), "#{path}/ap-capture?org=#{org_id}"},
       {Erp.ap_payments_label(), "#{path}/ap-payments?org=#{org_id}"},
+      {Erp.ar_receipts_label(), "#{path}/ar-receipts?org=#{org_id}"},
       {Erp.ar_aging_label(), "#{path}/ar-aging?org=#{org_id}"},
       {Erp.journal_approval_label(), "#{path}/journal-approval?org=#{org_id}"}
     ] ++
