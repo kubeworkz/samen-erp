@@ -1,21 +1,32 @@
 defmodule Driftwood.DataCase do
   @moduledoc "ExUnit case template for database-backed Driftwood tests."
-  use ExUnit.CaseTemplate
+  defmacro __using__(opts) do
+    if Keyword.get(opts, :async, false) do
+      raise ArgumentError, """
+      #{inspect(__CALLER__.module)} must not use #{inspect(__MODULE__)} with async: true.
 
-  using do
+      DataCase setup checks out a SQL sandbox connection and puts it in shared mode.
+      ExUnit's shared sandbox mode is suite-global, so an async DataCase test can
+      hand its connection to a concurrent test and crash it when the owner exits.
+
+      Remove `async: true` from the `use #{inspect(__MODULE__)}` call.
+      """
+    end
+
     quote do
+      use ExUnit.Case, unquote(opts)
       alias Driftwood.Repo
       import Driftwood.DataCase
+
+      setup do
+        :ok = Ecto.Adapters.SQL.Sandbox.checkout(Driftwood.Repo)
+        Ecto.Adapters.SQL.Sandbox.mode(Driftwood.Repo, {:shared, self()})
+
+        # The reviewed non_pii! rows the pii_classify gate + destruction oracle rely on.
+        :ok = Driftwood.NonPiiSetup.register_all()
+        :ok
+      end
     end
-  end
-
-  setup do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Driftwood.Repo)
-    Ecto.Adapters.SQL.Sandbox.mode(Driftwood.Repo, {:shared, self()})
-
-    # The reviewed non_pii! rows the pii_classify gate + destruction oracle rely on.
-    :ok = Driftwood.NonPiiSetup.register_all()
-    :ok
   end
 
   # ==========================================================================
@@ -57,7 +68,10 @@ defmodule Driftwood.DataCase do
         _ -> nil
       end
 
-    Samen.Web.Mount.new(scope_kind, driftwood_namespace(scope_kind), Driftwood.Repo, plane: plane, labels: labels)
+    Samen.Web.Mount.new(scope_kind, driftwood_namespace(scope_kind), Driftwood.Repo,
+      plane: plane,
+      labels: labels
+    )
   end
 
   @doc """

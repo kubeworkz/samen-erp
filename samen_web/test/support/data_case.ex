@@ -4,26 +4,37 @@ defmodule Samen.WebTest.DataCase do
   on the scratch `samen_web_test` repo and provides `build_mount/2` — the framework mount
   helper the render tests use to mount a LiveView on a given plane.
   """
-  use ExUnit.CaseTemplate
-
   import ExUnit.Assertions
 
-  using do
+  defmacro __using__(opts) do
+    if Keyword.get(opts, :async, false) do
+      raise ArgumentError, """
+      #{inspect(__CALLER__.module)} must not use #{inspect(__MODULE__)} with async: true.
+
+      DataCase setup checks out a SQL sandbox connection and puts it in shared mode.
+      ExUnit's shared sandbox mode is suite-global, so an async DataCase test can
+      hand its connection to a concurrent test and crash it when the owner exits.
+
+      Remove `async: true` from the `use #{inspect(__MODULE__)}` call.
+      """
+    end
+
     quote do
+      use ExUnit.Case, unquote(opts)
       alias Samen.WebTest.Repo
       alias Samen.WebTest.Seeds
       import Samen.WebTest.DataCase
-    end
-  end
 
-  setup do
-    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Samen.WebTest.Repo)
-    Ecto.Adapters.SQL.Sandbox.mode(Samen.WebTest.Repo, {:shared, self()})
-    # The rate-limit counters (Samen.Web.RateLimit / Hammer ETS) are a GLOBAL table,
-    # not sandboxed — clear them per test so auth-surface limits (T103) never leak
-    # across tests (e.g. repeated `/signup` submits sharing the per-IP bucket).
-    Samen.Web.RateLimit.reset()
-    :ok
+      setup do
+        :ok = Ecto.Adapters.SQL.Sandbox.checkout(Samen.WebTest.Repo)
+        Ecto.Adapters.SQL.Sandbox.mode(Samen.WebTest.Repo, {:shared, self()})
+        # The rate-limit counters (Samen.Web.RateLimit / Hammer ETS) are a GLOBAL table,
+        # not sandboxed — clear them per test so auth-surface limits (T103) never leak
+        # across tests (e.g. repeated `/signup` submits sharing the per-IP bucket).
+        Samen.Web.RateLimit.reset()
+        :ok
+      end
+    end
   end
 
   @doc """
@@ -62,7 +73,10 @@ defmodule Samen.WebTest.DataCase do
         _ -> nil
       end
 
-    Samen.Web.Mount.new(scope_kind, namespace(scope_kind), Samen.WebTest.Repo, plane: plane, labels: labels)
+    Samen.Web.Mount.new(scope_kind, namespace(scope_kind), Samen.WebTest.Repo,
+      plane: plane,
+      labels: labels
+    )
   end
 
   @doc "The session map a framework LiveView expects (mimics the router's live_session)."

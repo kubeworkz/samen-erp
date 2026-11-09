@@ -231,9 +231,12 @@ defmodule Samen.Gen.TemplatesParityTest do
   # (generated apps inherit the concurrent-double-escalation backstop) cannot silently regress.
   test "every generated operator-mount migration EMITS the chat-escalation dedupe partial-unique index (T60)" do
     goldens =
-      Path.wildcard(Path.join(@golden_root, "*/priv/repo/migrations/*mount_operator_scopes.exs.golden"))
+      Path.wildcard(
+        Path.join(@golden_root, "*/priv/repo/migrations/*mount_operator_scopes.exs.golden")
+      )
 
-    assert goldens != [], "no operator-mount goldens found — regenerate with SAMEN_UPDATE_GOLDEN=1"
+    assert goldens != [],
+           "no operator-mount goldens found — regenerate with SAMEN_UPDATE_GOLDEN=1"
 
     for g <- goldens do
       src = File.read!(g)
@@ -300,6 +303,46 @@ defmodule Samen.Gen.TemplatesParityTest do
   # Asserted on the RENDERED output (not the golden), so a template edit that drops the line fails
   # HERE even after a golden re-capture — which is exactly how the leak got in. The HEADLESS set is
   # held to the same standard: both templates mint the dir, so both must release it.
+  test "generated DataCase rejects async: true at compile time" do
+    spec =
+      App.build_spec(
+        module: "SamenTemplatesGuardFixture",
+        prefix: "stg",
+        abbrev: "stg",
+        target: App.default_target(),
+        web: true,
+        api: false
+      )
+
+    bindings = App.bindings(spec)
+
+    {_path, template} =
+      Enum.find(Templates.files(true, false, false), fn {path, _content} ->
+        path == "test/support/data_case.ex"
+      end)
+
+    data_case = App.render(template, bindings)
+
+    assert [{SamenTemplatesGuardFixture.DataCase, _}] = Code.compile_string(data_case)
+
+    assert_raise ArgumentError,
+                 ~r/must not use SamenTemplatesGuardFixture\.DataCase with async: true/,
+                 fn ->
+                   Code.compile_string("""
+                   defmodule SamenTemplatesGuardFixture.AsyncTest do
+                     use SamenTemplatesGuardFixture.DataCase, async: true
+                   end
+                   """)
+                 end
+
+    assert [{SamenTemplatesGuardFixture.SyncTest, _}] =
+             Code.compile_string("""
+             defmodule SamenTemplatesGuardFixture.SyncTest do
+               use SamenTemplatesGuardFixture.DataCase, async: false
+             end
+             """)
+  end
+
   test "every generated app RELEASES its per-run keystore dir at exit (no $TMPDIR accumulation)" do
     for {set, files} <- render_all() do
       helper = files["test/test_helper.exs"]
