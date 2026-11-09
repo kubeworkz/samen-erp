@@ -1,0 +1,80 @@
+name: Test Suites
+
+# The two DB-backed suites behind the Banking import work, run on EVERY push
+# (any branch) in their own parallel runners. The CI workflow's Full gate also
+# runs these suites inside its ~90-minute verifier sequence, but only on main;
+# this workflow makes a regression visible on the push that introduced it,
+# without waiting for — or paying for — the whole gate.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MIX_ENV: test
+  PGHOST: 127.0.0.1
+  PGPORT: "5432"
+  PGUSER: runner
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.app }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [samen_core, samenerp]
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir and Erlang
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20.2"
+          otp-version: "29.0"
+          install-hex: true
+          rebar3-version: latest
+
+      # Each app's test config connects as `$USER` (`runner` on a GitHub runner)
+      # with an empty password. Trust auth is enabled on the service, so only the
+      # role itself is missing; clank is the operator-plane fixture role the
+      # existing CI gate also provisions.
+      - name: Prepare PostgreSQL role
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres \
+            -c 'CREATE ROLE runner LOGIN SUPERUSER CREATEDB; CREATE ROLE clank LOGIN SUPERUSER CREATEDB;'
+
+      - name: Fetch dependencies
+        working-directory: ${{ matrix.app }}
+        run: mix deps.get --quiet
+
+      - name: Run ${{ matrix.app }} tests
+        working-directory: ${{ matrix.app }}
+        run: mix test --warnings-as-errors
