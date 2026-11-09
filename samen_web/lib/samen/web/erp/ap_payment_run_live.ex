@@ -13,19 +13,29 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
   The record is the audit trail: the database trigger refuses a self-approval,
   a rewritten snapshot, a second decision and every DELETE, so this page is
   reading evidence rather than a process-memory summary.
+
+  A paid run may additionally be REVERSED: one admin requests it with a reason,
+  a different admin approves it, and the kernel voids every payment entry and
+  returns the bills to `:approved`. The reversal is its own durable row; the
+  original run stays the immutable payment record.
+
+  Every generated ACH file is also listed here from its vaulted artifact row,
+  with its digest and destination fingerprint, so the exact file remains
+  downloadable after the payment page is closed.
   """
 
   use Samen.Web.Tenant.Live
 
   import Samen.UI
-  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1]
+  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
-  alias Samen.Scopes.Finance.ApPaymentRun
+  alias Samen.Scopes.Finance.{ApAchArtifact, ApPaymentReversal, ApPaymentRun}
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
   alias Samen.Web.Mount
+  alias Samen.Web.TenantRole
 
   @impl true
   def mount(params, session, socket) do
@@ -39,6 +49,12 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
        run_id: params["id"],
        run: nil,
        missing: nil,
+       reversal: nil,
+       ach_artifacts: [],
+       current_actor_id: nil,
+       ap_invoice: nil,
+       reversal_error: nil,
+       reversal_notice: nil,
        return_to: nil
      )
      |> load()}
@@ -60,6 +76,12 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
     |> assign_new(:run_id, fn -> nil end)
     |> assign_new(:run, fn -> nil end)
     |> assign_new(:missing, fn -> nil end)
+    |> assign_new(:reversal, fn -> nil end)
+    |> assign_new(:ach_artifacts, fn -> [] end)
+    |> assign_new(:current_actor_id, fn -> nil end)
+    |> assign_new(:ap_invoice, fn -> nil end)
+    |> assign_new(:reversal_error, fn -> nil end)
+    |> assign_new(:reversal_notice, fn -> nil end)
     |> do_load()
   end
 
@@ -71,12 +93,173 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
        )
        when is_binary(run_id) do
     case ApPaymentRun.get_run(mount.repo, org_id, run_id) do
-      {:ok, run} -> assign(socket, run: run, missing: nil)
-      {:error, :not_found} -> assign(socket, run: nil, missing: :not_found)
+      {:ok, run} ->
+        assign(socket,
+          run: run,
+          missing: nil,
+          reversal: load_reversal(mount, org_id, run),
+          ach_artifacts: load_ach_artifacts(mount, org_id, run.id),
+          current_actor_id: TenantRole.identity_scope(mount, org_id).actor.id,
+          ap_invoice: Erp.ap_invoice(mount)
+        )
+
+      {:error, :not_found} ->
+        assign(socket, run: nil, missing: :not_found, reversal: nil, ach_artifacts: [])
     end
   end
 
   defp do_load(socket), do: assign(socket, run: nil, missing: :not_found)
+
+  # -- reversal events --------------------------------------------------------
+
+  @impl true
+  def handle_event("request_reversal", %{"reason" => reason}, socket) do
+    %{samen_mount: mount, org_id: org_id, run: run} = socket.assigns
+
+    if writable?(mount) and not is_nil(run) do
+      case ApPaymentReversal.request(
+             repo: mount.repo,
+             scope: TenantRole.attributed_admin_scope(mount, org_id),
+             run_id: run.id,
+             reason: reason
+           ) do
+        {:ok, reversal} ->
+          {:noreply,
+           assign(socket,
+             reversal: reversal,
+             reversal_error: nil,
+             reversal_notice:
+               "Reversal requested. A different admin must approve it; no ledger entry has moved."
+           )}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, reversal_error: reversal_error(reason), reversal_notice: nil)}
+      end
+    else
+      {:noreply,
+       assign(socket,
+         reversal_error: "Reversals are read-only on this plane.",
+         reversal_notice: nil
+       )}
+    end
+  end
+
+  def handle_event("approve_reversal", _params, socket) do
+    %{samen_mount: mount, org_id: org_id, reversal: reversal, ap_invoice: ap_invoice} =
+      socket.assigns
+
+    if writable?(mount) and not is_nil(reversal) and not is_nil(ap_invoice) do
+      case ApPaymentReversal.approve(
+             repo: mount.repo,
+             scope: TenantRole.attributed_admin_scope(mount, org_id),
+             ap_invoice: ap_invoice,
+             reversal_id: reversal.id
+           ) do
+        {:ok, done} ->
+          {:noreply,
+           assign(socket,
+             reversal: done,
+             reversal_error: nil,
+             reversal_notice:
+               "Payment run reversed. The payment entries are void and the bills are approved again."
+           )}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, reversal_error: reversal_error(reason), reversal_notice: nil)}
+      end
+    else
+      {:noreply,
+       assign(socket,
+         reversal_error: "Reversals are read-only on this plane.",
+         reversal_notice: nil
+       )}
+    end
+  end
+
+  def handle_event("reject_reversal", _params, socket) do
+    decide_reversal(socket, "rejected")
+  end
+
+  def handle_event("cancel_reversal", _params, socket) do
+    decide_reversal(socket, "cancelled")
+  end
+
+  defp decide_reversal(socket, decision) do
+    %{samen_mount: mount, org_id: org_id, reversal: reversal} = socket.assigns
+
+    if writable?(mount) and not is_nil(reversal) do
+      result =
+        case decision do
+          "rejected" ->
+            ApPaymentReversal.reject(
+              repo: mount.repo,
+              scope: TenantRole.attributed_admin_scope(mount, org_id),
+              reversal_id: reversal.id
+            )
+
+          "cancelled" ->
+            ApPaymentReversal.cancel(
+              repo: mount.repo,
+              scope: TenantRole.identity_scope(mount, org_id),
+              reversal_id: reversal.id
+            )
+        end
+
+      case result do
+        {:ok, done} ->
+          {:noreply,
+           assign(socket,
+             reversal: done,
+             reversal_error: nil,
+             reversal_notice: "Reversal #{decision}. Nothing moved."
+           )}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, reversal_error: reversal_error(reason), reversal_notice: nil)}
+      end
+    else
+      {:noreply,
+       assign(socket,
+         reversal_error: "Reversals are read-only on this plane.",
+         reversal_notice: nil
+       )}
+    end
+  end
+
+  defp load_reversal(mount, org_id, run) do
+    {:ok, reversal} = ApPaymentReversal.get_for_run(mount.repo, org_id, run.id)
+    reversal
+  end
+
+  defp load_ach_artifacts(mount, org_id, run_id) do
+    mount.repo
+    |> ApAchArtifact.list(org_id, run_id)
+    |> Enum.map(fn artifact ->
+      case ApAchArtifact.reveal(artifact, mount.repo) do
+        {:ok, file} -> %{artifact: artifact, file: file, error: nil}
+        {:error, reason} -> %{artifact: artifact, file: nil, error: reason}
+      end
+    end)
+  end
+
+  defp reversal_error(:forbidden), do: "Only an admin can request or decide a reversal."
+
+  defp reversal_error(:self_approval),
+    do: "The requester cannot approve their own reversal; a different admin must decide it."
+
+  defp reversal_error(:not_pending), do: "This reversal was already decided."
+
+  defp reversal_error(:already_requested),
+    do: "A reversal has already been requested for this run."
+
+  defp reversal_error(:run_not_paid), do: "Only a paid run can be reversed."
+  defp reversal_error(:reason_required), do: "Enter a reason for the reversal."
+
+  defp reversal_error({:bill_reversal_failed, _bill_id, _reason}),
+    do: "A payment entry could not be reversed; nothing was changed."
+
+  defp reversal_error(reason),
+    do: "The reversal could not be completed: #{inspect(reason)}"
 
   @impl Samen.Web.Tenant.Live
   def tenant_sidebar(assigns) do
@@ -130,6 +313,13 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
                   <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Status</div>
                   <span id="ap-run-status" style={status_style(@run.status)}>
                     {status_label(@run.status)}
+                  </span>
+                  <span
+                    :if={@reversal && @reversal.status == :reversed}
+                    id="ap-run-reversal-badge"
+                    style="display:inline-block;margin-left:6px;padding:3px 8px;border-radius:999px;background:#FEE2E2;color:#991B1B;font-size:11px;font-weight:700"
+                  >
+                    Reversed
                   </span>
                 </div>
                 <div style="text-align:right">
@@ -297,6 +487,185 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
                   </tr>
                 </tfoot>
               </table>
+            </div>
+
+            <div class="card" id="ap-run-ach-artifacts" style="padding:16px;margin-bottom:10px">
+              <div style="font-size:13px;font-weight:700;margin-bottom:2px">Stored ACH files</div>
+              <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">
+                Every generated NACHA file is stored as a vault token with its SHA-256 digest,
+                originator fields and a last-four destination fingerprint. The download is the
+                exact stored bytes, not a re-render.
+              </p>
+
+              <div
+                :if={@ach_artifacts == []}
+                id="ap-run-ach-none"
+                style="font-size:12px;color:var(--muted)"
+              >
+                No ACH file has been generated for this run.
+              </div>
+
+              <div
+                :for={item <- @ach_artifacts}
+                id={"ap-run-ach-#{item.artifact.id}"}
+                style="padding:8px 0;border-top:1px solid var(--border,#f3f4f6);font-size:12px"
+              >
+                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                  <a
+                    :if={item.file}
+                    download={item.artifact.name}
+                    href={"data:application/octet-stream;base64," <> Base.encode64(item.file)}
+                    style="font-size:13px"
+                  >
+                    Download {item.artifact.name}
+                  </a>
+                  <span :if={is_nil(item.file)} style="color:#991B1B">
+                    Stored file unavailable ({inspect(item.error)})
+                  </span>
+                  <code style="font-size:11px">
+                    sha256 {String.slice(item.artifact.digest, 0, 12)}…
+                  </code>
+                </div>
+                <div style="color:var(--muted);margin-top:4px;overflow-wrap:anywhere">
+                  Generated by {item.artifact.generated_by} · {stamp(item.artifact.generated_at)} ·
+                  destination ••••{item.artifact.receiver_account_last4 || "—"} · originator
+                  {item.artifact.originator_name || "—"}
+                </div>
+              </div>
+            </div>
+
+            <div
+              :if={@run.status == :paid}
+              class="card"
+              id="ap-run-reversal"
+              style="padding:16px;margin-bottom:10px"
+            >
+              <div style="font-size:13px;font-weight:700;margin-bottom:2px">
+                Reversal (dual control)
+              </div>
+              <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">
+                A reversal voids each payment entry and returns the bills to approved. One admin
+                requests it; a different admin approves it. Nothing moves until that approval.
+              </p>
+
+              <div
+                :if={@reversal_error}
+                id="ap-run-reversal-error"
+                style="margin:0 0 10px;padding:8px 10px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;color:#991B1B;font-size:12px"
+              >
+                {@reversal_error}
+              </div>
+
+              <div
+                :if={@reversal_notice}
+                id="ap-run-reversal-notice"
+                style="margin:0 0 10px;padding:8px 10px;border:1px solid #A7F3D0;border-radius:8px;background:#ECFDF5;color:#065F46;font-size:12px"
+              >
+                {@reversal_notice}
+              </div>
+
+              <form
+                :if={is_nil(@reversal) and writable?(@samen_mount)}
+                id="ap-run-reversal-form"
+                phx-submit="request_reversal"
+                style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap"
+              >
+                <label style="flex:1;min-width:240px;font-size:12px">
+                  Reason
+                  <textarea
+                    name="reason"
+                    rows="2"
+                    required
+                    style="display:block;width:100%;margin-top:4px;padding:7px 9px;border:1px solid var(--border,#e5e7eb);border-radius:7px;font-size:12px"
+                  ></textarea>
+                </label>
+                <button
+                  type="submit"
+                  style="padding:8px 12px;border:0;border-radius:7px;background:#991B1B;color:#fff;font-size:12px;font-weight:700"
+                >
+                  Request reversal
+                </button>
+              </form>
+
+              <div
+                :if={@reversal && @reversal.status == :pending_approval}
+                id="ap-run-reversal-pending"
+              >
+                <div style="font-size:12px;margin-bottom:6px">
+                  Requested by <code>{@reversal.requested_by}</code> ·
+                  {stamp(@reversal.requested_at)}
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+                  Reason: {@reversal.reason}
+                </div>
+
+                <form
+                  :if={writable?(@samen_mount) and @reversal.requested_by != @current_actor_id}
+                  phx-submit="approve_reversal"
+                  style="display:inline"
+                >
+                  <button
+                    type="submit"
+                    style="padding:8px 12px;border:0;border-radius:7px;background:#991B1B;color:#fff;font-size:12px;font-weight:700"
+                  >
+                    Approve reversal
+                  </button>
+                </form>
+
+                <form
+                  :if={writable?(@samen_mount) and @reversal.requested_by != @current_actor_id}
+                  phx-submit="reject_reversal"
+                  style="display:inline;margin-left:6px"
+                >
+                  <button
+                    type="submit"
+                    style="padding:8px 12px;border:1px solid var(--border,#e5e7eb);border-radius:7px;background:#fff;color:inherit;font-size:12px;font-weight:700"
+                  >
+                    Reject
+                  </button>
+                </form>
+
+                <form
+                  :if={writable?(@samen_mount) and @reversal.requested_by == @current_actor_id}
+                  phx-submit="cancel_reversal"
+                  style="display:inline"
+                >
+                  <button
+                    type="submit"
+                    style="padding:8px 12px;border:1px solid var(--border,#e5e7eb);border-radius:7px;background:#fff;color:inherit;font-size:12px;font-weight:700"
+                  >
+                    Cancel request
+                  </button>
+                </form>
+              </div>
+
+              <div
+                :if={@reversal && @reversal.status == :reversed}
+                id="ap-run-reversal-done"
+                style="font-size:12px;color:#065F46"
+              >
+                Reversed by <code>{@reversal.approved_by}</code> at
+                {stamp(@reversal.approved_at)}. Executed {stamp(@reversal.executed_at)}. The
+                payment entries are void and the bills are approved again.
+              </div>
+
+              <div
+                :if={@reversal && @reversal.status == :rejected}
+                id="ap-run-reversal-rejected"
+                style="font-size:12px;color:var(--muted)"
+              >
+                Rejected by <code>{@reversal.rejected_by}</code> at
+                {stamp(@reversal.rejected_at)}. Nothing moved.
+              </div>
+
+              <div
+                :if={@reversal && @reversal.status == :cancelled}
+                id="ap-run-reversal-cancelled"
+                style="font-size:12px;color:var(--muted)"
+              >
+                Cancelled by <code>{@reversal.cancelled_by}</code> at
+                {stamp(@reversal.cancelled_at)}. Nothing moved.
+              </div>
             </div>
 
             <div style="margin-top:14px">

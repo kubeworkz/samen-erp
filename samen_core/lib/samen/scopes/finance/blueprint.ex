@@ -998,6 +998,20 @@ defmodule Samen.Scopes.Finance.Blueprint do
                entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
             )
           end
+
+          # The compensating transition for a returned/reversed payment.
+          # SYSTEM-ONLY: `ApPaymentReversal` calls it after a DISTINCT admin
+          # approves the reversal. It voids the posted `ap_payment` entry
+          # (posting the ledger's linked reversal) and returns the bill to
+          # `:approved`, so the liability is restored and the bill can be paid
+          # again. `PostingMarker` arms the DB belt for the status write.
+          update :reverse_payment do
+            accept([])
+            require_atomic?(false)
+
+            change(Samen.Scopes.Finance.PostingMarker)
+            change({Samen.Scopes.Finance.ReverseApPayment, entry: unquote(entry_mod)})
+          end
         end
 
         policies do
@@ -1010,6 +1024,13 @@ defmodule Samen.Scopes.Finance.Blueprint do
           # `authorize?: false`; a direct caller is refused here, so a member
           # (or a lone admin) cannot bypass the run's dual control.
           policy action(:pay) do
+            forbid_if(always())
+          end
+
+          # The compensating transition is system-only too: only
+          # `ApPaymentReversal.approve/1` reaches it, after its own
+          # distinct-admin decision and inside its one transaction.
+          policy action(:reverse_payment) do
             forbid_if(always())
           end
 

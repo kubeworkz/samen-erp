@@ -8,7 +8,17 @@ defmodule Samenerp.KubeworkzApPaymentTest do
 
   use Samenerp.DataCase, async: false
 
+  import Phoenix.ConnTest
+  import Phoenix.LiveViewTest
+
   require Ash.Query
+
+  @endpoint SamenerpWeb.Endpoint
+
+  setup do
+    start_supervised!(SamenerpWeb.Endpoint)
+    :ok
+  end
 
   alias Samen.Scopes.Finance.ApPaymentRun
   alias Samen.Scopes.Finance.Reconcile
@@ -205,13 +215,90 @@ defmodule Samenerp.KubeworkzApPaymentTest do
     assert [listed] = ApPaymentRun.list_runs(Samenerp.Repo, org.id)
     assert listed.id == stored.id
 
-    # The stale :approved struct still cannot pay a second time: the payment
-    # cascade locks the persisted row and sees :paid.
+    # The stale :approved struct still cannot pay a second time: `:pay` is
+    # system-only (a direct call is refused) and the run already paid it.
     assert {:error, _} =
              first
              |> Ash.Changeset.for_update(:pay, %{payment_date: ~D[2026-11-01]}, scope: admin)
              |> Ash.update()
 
     assert length(payment_entries(org.id, [first.id, second.id])) == 2
+  end
+
+  test "printed advice lays out a long vendor name and multi-line address" do
+    org = create_org!("Kubeworkz Remittance Layout")
+    admin = admin_scope(org.id)
+
+    assert %{cost_objects: %{created: 9}} = Books.seed!(org.id)
+
+    expense = account!(org.id, "6000")
+    vendor = Ash.UUID.generate()
+
+    bill =
+      new_bill(admin, org.id, vendor, "AP-REMIT-LONG-1", 125_000, expense)
+      |> approve!(org.id, admin)
+
+    long_name = "Acme Industrial Supply, Fabrication & Distribution Company of Central Illinois"
+
+    long_address = """
+      Accounts Receivable — Wholesale Division
+
+      Attn: Remittance Processing, Building 12, Suite 400
+      18475 West Industrial Commerce Parkway
+      Springfield, IL 62708-4217
+      United States
+    """
+
+    assert {:ok, pending} =
+             ApPaymentRun.request(
+               ap_invoice: Erp.ApInvoice,
+               repo: Samenerp.Repo,
+               scope: admin,
+               bill_ids: [bill.id],
+               payment_date: ~D[2026-11-09],
+               reference: "KUBE-REMIT-LONG-1",
+               vendor_name: long_name,
+               remittance_address: long_address
+             )
+
+    assert {:ok, paid} =
+             ApPaymentRun.approve(
+               ap_invoice: Erp.ApInvoice,
+               repo: Samenerp.Repo,
+               scope: approver_scope(org.id),
+               run_id: pending.id
+             )
+
+    assert {:ok, _view, html} =
+             live(build_conn(), "/erp/ap-payments/#{paid.id}/remittance?org=#{org.id}")
+
+    document = LazyHTML.from_document(html)
+
+    name_text = document |> LazyHTML.query(".payee-name") |> LazyHTML.text() |> String.trim()
+    assert name_text == long_name
+
+    reference_text =
+      document |> LazyHTML.query(".reference .value") |> LazyHTML.text() |> String.trim()
+
+    assert reference_text == "KUBE-REMIT-LONG-1"
+
+    address_lines =
+      document
+      |> LazyHTML.query(".payee-address > div")
+      |> Enum.map(&(&1 |> LazyHTML.text() |> String.trim()))
+
+    assert address_lines == [
+             "Accounts Receivable — Wholesale Division",
+             "Attn: Remittance Processing, Building 12, Suite 400",
+             "18475 West Industrial Commerce Parkway",
+             "Springfield, IL 62708-4217",
+             "United States"
+           ]
+
+    style = document |> LazyHTML.query("style") |> LazyHTML.text()
+
+    assert style =~ ~r/\.payee-name\s*\{[^}]*overflow-wrap:\s*anywhere/
+    assert style =~ ~r/\.payee-address\s*\{[^}]*overflow-wrap:\s*anywhere/
+    assert style =~ ~r/\.reference \.value\s*\{[^}]*white-space:\s*nowrap/
   end
 end

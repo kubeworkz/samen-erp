@@ -46,7 +46,7 @@ defmodule Samen.FinanceE2ScopeTest do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.{ApInvoiceCapture, ApPaymentRun}
+  alias Samen.Scopes.Finance.{ApInvoiceCapture, ApPaymentReversal, ApPaymentRun}
   alias Samen.Scopes.Finance.ReconcilePayments
   alias Samen.Scopes.Finance.Reconcile
 
@@ -901,6 +901,128 @@ defmodule Samen.FinanceE2ScopeTest do
       assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
     end
 
+    test "a paid run is reversed only by a distinct admin, voiding the payment and restoring the bill",
+         %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+
+      bill =
+        new_bill(scope, org, [bill_line(expense, 4_000)],
+          vendor_id: Ash.UUID.generate(),
+          number: "V-REV-1"
+        )
+
+      bill = approve_bill!(bill, scope)
+
+      assert {:ok, pending} =
+               ApPaymentRun.request(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [bill.id],
+                 payment_date: ~D[2026-10-20],
+                 reference: "RUN-REV-1"
+               )
+
+      assert {:ok, paid} =
+               ApPaymentRun.approve(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: pending.id
+               )
+
+      assert paid.status == :paid
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
+      assert [original] = payment_entries(org, bill.id)
+      assert original.status == :posted
+      assert original.voided_entry_id == nil
+
+      # A member cannot request a reversal, and a blank reason is refused.
+      assert {:error, :forbidden} =
+               ApPaymentReversal.request(
+                 repo: @repo,
+                 scope: scope,
+                 run_id: paid.id,
+                 reason: "returned by the bank"
+               )
+
+      assert {:error, :reason_required} =
+               ApPaymentReversal.request(
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: paid.id,
+                 reason: "   "
+               )
+
+      assert {:ok, reversal} =
+               ApPaymentReversal.request(
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: paid.id,
+                 reason: "Vendor returned the funds"
+               )
+
+      assert reversal.status == :pending_approval
+      assert reversal.requested_by == "a:#{org}"
+      assert reversal.payments == paid.payments
+
+      # The request alone moves nothing.
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
+      assert Ash.get!(JournalEntry, original.id, authorize?: false).status == :posted
+
+      assert {:error, :already_requested} =
+               ApPaymentReversal.request(
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: paid.id,
+                 reason: "a second request"
+               )
+
+      # The requester cannot approve their own reversal.
+      assert {:error, :self_approval} =
+               ApPaymentReversal.approve(
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 ap_invoice: ApInvoice,
+                 reversal_id: reversal.id
+               )
+
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
+      assert Ash.get!(JournalEntry, original.id, authorize?: false).status == :posted
+
+      # A DIFFERENT admin's approval voids the payment and restores the bill.
+      assert {:ok, reversed} =
+               ApPaymentReversal.approve(
+                 repo: @repo,
+                 scope: admin_scope(org, "a2:#{org}"),
+                 ap_invoice: ApInvoice,
+                 reversal_id: reversal.id
+               )
+
+      assert reversed.status == :reversed
+      assert reversed.approved_by == "a2:#{org}"
+      assert reversed.approved_at
+      assert reversed.executed_at
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+
+      voided = Ash.get!(JournalEntry, original.id, authorize?: false)
+      assert voided.status == :void
+      assert voided.voided_entry_id
+
+      mirror = Ash.get!(JournalEntry, voided.voided_entry_id, authorize?: false)
+      assert mirror.status == :posted
+      assert mirror.voided_entry_id == original.id
+      assert mirror.entry_date == original.entry_date
+
+      assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
+
+      # The compensating transition is system-only: a direct caller is refused.
+      assert {:error, %Ash.Error.Forbidden{}} =
+               bill
+               |> Ash.Changeset.for_update(:reverse_payment, %{}, scope: admin_scope(org))
+               |> Ash.update()
+    end
+
     test "a run with a non-approved bill pays nothing", %{org: org, scope: scope} do
       expense = seed_posting_accounts(org)
       vendor = Ash.UUID.generate()
@@ -1177,9 +1299,11 @@ defmodule Samen.FinanceE2ScopeTest do
     }
   end
 
-  defp admin_scope(org_id) do
+  defp admin_scope(org_id), do: admin_scope(org_id, "a:#{org_id}")
+
+  defp admin_scope(org_id, actor_id) do
     %Samen.Scope{
-      actor: %{id: "a:#{org_id}", org_id: org_id, role: :admin, kind: :tenant, plane: :tenant}
+      actor: %{id: actor_id, org_id: org_id, role: :admin, kind: :tenant, plane: :tenant}
     }
   end
 

@@ -33,6 +33,11 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   Bills that look like the same vendor document entered twice are flagged on
   the list (vendor + total + bill date, `ApPaymentRun.duplicates/1`) and refuse
   the request unless the operator ticks "pay anyway".
+
+  The page also carries the pending-reversals queue: every paid run whose
+  reversal is awaiting a second admin, with its request evidence and the
+  approve/reject/cancel decision. The kernel still enforces the distinct-admin
+  rule; the queue is only the cross-run review surface.
   """
 
   use Samen.Web.Tenant.Live
@@ -43,7 +48,14 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
-  alias Samen.Scopes.Finance.{ApAchFile, ApPaymentRun, VendorPaymentProfile}
+  alias Samen.Scopes.Finance.{
+    ApAchArtifact,
+    ApAchFile,
+    ApPaymentReversal,
+    ApPaymentRun,
+    VendorPaymentProfile
+  }
+
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
@@ -74,6 +86,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
        run: nil,
        notice: nil,
        pending_runs: [],
+       pending_reversals: [],
        recent_runs: [],
        current_actor_id: nil,
        csv: nil,
@@ -112,6 +125,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> assign_new(:run, fn -> nil end)
     |> assign_new(:notice, fn -> nil end)
     |> assign_new(:pending_runs, fn -> [] end)
+    |> assign_new(:pending_reversals, fn -> [] end)
     |> assign_new(:recent_runs, fn -> [] end)
     |> assign_new(:current_actor_id, fn -> nil end)
     |> assign_new(:csv, fn -> nil end)
@@ -151,7 +165,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
       bills: [],
       selected_ids: [],
       duplicates: [],
-      duplicate_ids: MapSet.new()
+      duplicate_ids: MapSet.new(),
+      pending_reversals: []
     )
   end
 
@@ -166,7 +181,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           bills: [],
           selected_ids: [],
           duplicates: [],
-          duplicate_ids: MapSet.new()
+          duplicate_ids: MapSet.new(),
+          pending_reversals: []
         )
 
       resource ->
@@ -183,6 +199,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               duplicates: duplicates,
               duplicate_ids: duplicate_ids(duplicates),
               pending_runs: pending_runs,
+              pending_reversals: read_reversals(mount, org_id),
               recent_runs: recent_runs,
               current_actor_id: current_actor_id(mount, org_id),
               missing: nil
@@ -195,6 +212,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               selected_ids: [],
               duplicates: [],
               duplicate_ids: MapSet.new(),
+              pending_reversals: [],
               missing: :unreadable
             )
         end
@@ -220,6 +238,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   rescue
     _ -> %{pending: [], recent: []}
   end
+
+  defp read_reversals(mount, org_id), do: ApPaymentReversal.list_pending(mount.repo, org_id)
 
   defp current_actor_id(mount, org_id) do
     TenantRole.identity_scope(mount, org_id).actor.id
@@ -284,16 +304,32 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               effective_date: run.payment_date
             ] ++ Map.to_list(details)
 
-          case ApAchFile.render(run, opts) do
-            {:ok, file} ->
-              {:noreply,
-               assign(socket,
-                 ach: params,
-                 ach_file: file,
-                 ach_name: "ach-#{run.reference}.ach",
-                 ach_error: nil
-               )}
-
+          # A rendered ACH file contains the receiver account/routing numbers.
+          # Persist it through the vault BEFORE offering the download; a storage
+          # failure withholds the file rather than handing out an unrecorded one.
+          with {:ok, file} <- ApAchFile.render(run, opts),
+               {:ok, artifact} <-
+                 ApAchArtifact.store(
+                   repo: mount.repo,
+                   scope: TenantRole.identity_scope(mount, org_id),
+                   run: run,
+                   file: file,
+                   name: "ach-#{run.reference}.ach",
+                   originator: %{
+                     name: params["originator_name"],
+                     id: params["originator_id"],
+                     dfi: params["originator_dfi"]
+                   },
+                   receiver: details
+                 ) do
+            {:noreply,
+             assign(socket,
+               ach: params,
+               ach_file: file,
+               ach_name: artifact.name,
+               ach_error: nil
+             )}
+          else
             {:error, reason} ->
               {:noreply,
                assign(socket,
@@ -489,6 +525,52 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     end
   end
 
+  # -- pending reversals ------------------------------------------------------
+
+  def handle_event("approve_reversal", %{"reversal_id" => reversal_id}, socket) do
+    %{samen_mount: mount, org_id: org_id, resource: resource} = socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply, assign(socket, error: "Payment runs are read-only on this plane.")}
+
+      resource == nil or org_id == nil ->
+        {:noreply,
+         assign(socket,
+           error: "The AP ledger is not available on this workspace's mounted modules."
+         )}
+
+      true ->
+        case ApPaymentReversal.approve(
+               repo: mount.repo,
+               scope: TenantRole.attributed_admin_scope(mount, org_id),
+               ap_invoice: resource,
+               reversal_id: reversal_id
+             ) do
+          {:ok, _reversal} ->
+            {:noreply,
+             socket
+             |> assign(
+               error: nil,
+               notice:
+                 "Payment run reversal approved. The payment entries are void and the bills are approved again."
+             )
+             |> load()}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, error: reversal_decision_error(reason))}
+        end
+    end
+  end
+
+  def handle_event("reject_reversal", %{"reversal_id" => reversal_id}, socket) do
+    decide_reversal(socket, reversal_id, :reject)
+  end
+
+  def handle_event("cancel_reversal", %{"reversal_id" => reversal_id}, socket) do
+    decide_reversal(socket, reversal_id, :cancel)
+  end
+
   # -- vendor bank profile ----------------------------------------------------
 
   # One form, two intents: load an existing profile for review, or save bank
@@ -532,6 +614,74 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
        )}
     end
   end
+
+  defp decide_reversal(socket, reversal_id, decision) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply, assign(socket, error: "Payment runs are read-only on this plane.")}
+
+      org_id == nil ->
+        {:noreply,
+         assign(socket,
+           error: "The AP ledger is not available on this workspace's mounted modules."
+         )}
+
+      true ->
+        result =
+          case decision do
+            :reject ->
+              ApPaymentReversal.reject(
+                repo: mount.repo,
+                scope: TenantRole.attributed_admin_scope(mount, org_id),
+                reversal_id: reversal_id
+              )
+
+            :cancel ->
+              ApPaymentReversal.cancel(
+                repo: mount.repo,
+                scope: TenantRole.identity_scope(mount, org_id),
+                reversal_id: reversal_id
+              )
+          end
+
+        case result do
+          {:ok, _reversal} ->
+            {:noreply,
+             socket
+             |> assign(
+               error: nil,
+               notice:
+                 "Reversal #{if decision == :reject, do: "rejected", else: "request cancelled"}. The paid run and its entries are unchanged."
+             )
+             |> load()}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, error: reversal_decision_error(reason))}
+        end
+    end
+  end
+
+  defp reversal_decision_error(:forbidden),
+    do: "Only an admin can decide a reversal."
+
+  defp reversal_decision_error(:self_approval),
+    do: "The requester cannot approve their own reversal; a different admin must decide it."
+
+  defp reversal_decision_error(:not_requester),
+    do: "Only the requester can cancel this reversal."
+
+  defp reversal_decision_error(:not_pending),
+    do: "This reversal has already been decided. Refresh the page."
+
+  defp reversal_decision_error(:not_found), do: "The reversal could not be found."
+
+  defp reversal_decision_error({:bill_reversal_failed, _bill_id, _reason}),
+    do: "A payment entry could not be reversed; nothing was changed."
+
+  defp reversal_decision_error(reason),
+    do: "The reversal decision could not be completed: #{inspect(reason)}"
 
   defp save_bank_profile(socket, params) do
     %{samen_mount: mount, org_id: org_id} = socket.assigns
@@ -796,6 +946,21 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp ach_error(:shredded),
     do: "The vendor's bank details are no longer decryptable. Register them again."
 
+  defp ach_error(:forbidden), do: "Only a member can store an ACH file."
+  defp ach_error(:run_not_found), do: "The payment run could not be found."
+  defp ach_error(:run_not_paid), do: "Only a paid run can store an ACH file."
+
+  defp ach_error({:vault_failed, _reason}),
+    do: "The ACH file could not be stored securely; no file was offered."
+
+  defp ach_error({:insert_failed, _changeset}),
+    do: "The ACH file could not be recorded; no file was offered."
+
+  defp ach_error(:digest_mismatch), do: "The stored ACH file failed its integrity check."
+
+  defp ach_error(reason),
+    do: "The ACH file could not be stored: #{inspect(reason)}"
+
   defp profile_error(:vendor_id_required), do: "Enter the vendor id."
   defp profile_error(:vendor_id_invalid), do: "That vendor id is not a valid UUID."
 
@@ -1058,6 +1223,107 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                     </button>
                     <span
                       :if={pending.requested_by == @current_actor_id}
+                      style="font-size:11px;color:var(--muted)"
+                    >
+                      awaiting a different admin
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            :if={@pending_reversals != []}
+            id="ap-payment-pending-reversals"
+            class="card"
+            style="padding:14px 16px;margin-bottom:10px"
+          >
+            <div style="font-size:13px;font-weight:700;margin-bottom:2px">Pending reversals</div>
+            <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+              A paid run stays paid until a different admin approves its reversal. Approval voids the payment entries and returns the bills to approved.
+            </p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Run</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Vendor</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Bills</th>
+                  <th scope="col" style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Total</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Requested by</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Requested at</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Reason</th>
+                  <th scope="col" style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  :for={entry <- @pending_reversals}
+                  id={"ap-pending-reversal-#{entry.reversal.id}"}
+                >
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <a
+                      id={"view-pending-reversal-run-#{entry.reversal.id}"}
+                      href={run_href(@samen_mount, @org_id, entry.run.id)}
+                      title="Open the immutable audit record"
+                      style="color:inherit;text-decoration:underline;text-underline-offset:2px"
+                    >
+                      <code>{entry.run.reference}</code>
+                    </a>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {entry.run.vendor_name || short(entry.run.vendor_id)}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {entry.reversal.bill_count}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">
+                    {money(entry.reversal.total_cents)}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <code>{entry.reversal.requested_by}</code>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {if entry.reversal.requested_at,
+                      do: Calendar.strftime(entry.reversal.requested_at, "%Y-%m-%d %H:%M"),
+                      else: "—"}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6);max-width:220px;overflow-wrap:anywhere">
+                    {entry.reversal.reason}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">
+                    <button
+                      :if={writable?(@samen_mount) and entry.reversal.requested_by != @current_actor_id}
+                      type="button"
+                      phx-click="approve_reversal"
+                      phx-value-reversal_id={entry.reversal.id}
+                      id={"approve-reversal-#{entry.reversal.id}"}
+                      style="font-size:11px;padding:3px 8px;margin-right:4px"
+                    >
+                      Approve reversal
+                    </button>
+                    <button
+                      :if={writable?(@samen_mount) and entry.reversal.requested_by != @current_actor_id}
+                      type="button"
+                      phx-click="reject_reversal"
+                      phx-value-reversal_id={entry.reversal.id}
+                      id={"reject-reversal-#{entry.reversal.id}"}
+                      style="font-size:11px;padding:3px 8px"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      :if={writable?(@samen_mount) and entry.reversal.requested_by == @current_actor_id}
+                      type="button"
+                      phx-click="cancel_reversal"
+                      phx-value-reversal_id={entry.reversal.id}
+                      id={"cancel-reversal-#{entry.reversal.id}"}
+                      style="font-size:11px;padding:3px 8px"
+                    >
+                      Cancel request
+                    </button>
+                    <span
+                      :if={entry.reversal.requested_by == @current_actor_id}
                       style="font-size:11px;color:var(--muted)"
                     >
                       awaiting a different admin
