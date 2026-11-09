@@ -623,7 +623,8 @@
       "sdl": "SamenCore.Support.DocsFixture.DocLink",
       "atn": "Samen.AI.Agent.Turn",
       "sfe": "SamenCore.Support.FleetFixture.EnrollmentToken",
-      "sol": "SamenCore.Support.InventoryFixture.SoLine"
+      "sol": "SamenCore.Support.InventoryFixture.SoLine",
+      "jap": "SamenCore.Support.FinanceFixture.JournalApprovalPolicy"
     },
     "samen_web": {
       "rti": "Samen.WebTest.RichTypes.Item",
@@ -725,7 +726,8 @@
       "wol": "Samen.WebTest.Operator.LoginFailure",
       "fas": "Samen.WebTest.Erp.Asset",
       "iol": "Samen.WebTest.Erp.SoLine",
-      "ipg": "Samen.WebTest.Erp.ProductionLog"
+      "ipg": "Samen.WebTest.Erp.ProductionLog",
+      "wja": "Samen.WebTest.Erp.JournalApprovalPolicy"
     },
     "samenerp": {
       "edn": "Samenerp.Docs.Note",
@@ -854,7 +856,8 @@
       "eru": "Samenerp.Billing.Usage",
       "ewh": "Samenerp.Primitives.Webhook",
       "edd": "Samenerp.Docs.Doc",
-      "eql": "Samenerp.Operator.Sla"
+      "eql": "Samenerp.Operator.Sla",
+      "ejp": "Samenerp.Erp.JournalApprovalPolicy"
     }
   }
 }

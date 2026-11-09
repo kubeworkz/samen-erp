@@ -187,6 +187,10 @@ defmodule Samen.Jobs do
       ADR-054 D6: posts every DRAFT scheduled accrual reversal whose date has arrived,
       through the governed `:post` action. Daily just past midnight UTC so a reversal dated
       the 1st lands that morning; a host with no books wired is a no-op.)
+    - `"15 4 * * *"` → `Samen.Web.Erp.OcrQuota.PruneWorker` (the durable per-org
+      hosted-OCR budget's prune; deletes `web_ocr_quota` windows older than two
+      windows. Included only when the `samen_web` layer is loaded, and a host that
+      never migrated the table no-ops cleanly.)
     - `"30 0 1 * *"` → `Samen.Scopes.Finance.RevenueRecognitionWorker` (WS-ACCT Phase 6,
       ADR-054 D5: recognizes the month that just ended — straight-line slices and
       incurred-cost releases — through the governed `:recognize` action. Monthly on the
@@ -218,7 +222,16 @@ defmodule Samen.Jobs do
       # at 00:45 UTC. The run defaults to the month that just ended, and its
       # per-{asset, period} anchor makes a retry a clean no-op.
       {"45 0 1 * *", Samen.Scopes.Finance.DepreciationWorker}
-    ]
+    ] ++ web_crontab()
+  end
+
+  # `samen_web` ships the AP-capture OCR budget (and its pruner); `samen_core`
+  # alone must not name a module it does not ship. Loading is checked at cron
+  # assembly time, so a web host gets the entry and a core-only app does not.
+  defp web_crontab do
+    worker = Samen.Web.Erp.OcrQuota.PruneWorker
+
+    if Code.ensure_loaded?(worker), do: [{"15 4 * * *", worker}], else: []
   end
 
   @doc """

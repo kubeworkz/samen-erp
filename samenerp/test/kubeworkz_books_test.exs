@@ -177,7 +177,13 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert objects |> Enum.map(& &1.code) |> Enum.uniq() |> length() == length(objects)
 
     by_kind = Enum.group_by(objects, & &1.kind)
-    assert by_kind.chip |> Enum.map(& &1.name) |> Enum.sort() == ["GPU", "PTA Photonics", "RISC-V64 SoC"]
+
+    assert by_kind.chip |> Enum.map(& &1.name) |> Enum.sort() == [
+             "GPU",
+             "PTA Photonics",
+             "RISC-V64 SoC"
+           ]
+
     assert by_kind.project |> Enum.map(& &1.name) == ["PDB Development Board"]
     assert length(by_kind.cost_pool) == 4
     assert by_kind.fund |> Enum.map(& &1.code) == ["fund-grants"]
@@ -206,7 +212,9 @@ defmodule Samenerp.KubeworkzBooksTest do
 
     planned =
       budget.lines
-      |> Enum.map(fn line -> {Map.fetch!(codes_by_account, line.account_id), line.planned_cents} end)
+      |> Enum.map(fn line ->
+        {Map.fetch!(codes_by_account, line.account_id), line.planned_cents}
+      end)
       |> Enum.sort()
 
     expected =
@@ -225,6 +233,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert first.posting_accounts.created == map_size(Books.posting_map())
     assert first.cost_objects.created == length(Books.cost_objects())
     assert first.assets.created == length(Books.assets())
+    assert first.journal_approval.created
     assert first.budget.created
 
     accounts_before = length(accounts(org.id))
@@ -236,6 +245,8 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert %{created: 0} = second.posting_accounts
     assert %{created: 0} = second.cost_objects
     assert %{created: 0} = second.assets
+    refute second.journal_approval.created
+    assert second.journal_approval.enabled
     refute second.budget.created
 
     # No duplicate rows, and the budget lines were not doubled.
@@ -284,6 +295,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert Enum.any?(gaps, &String.contains?(&1, "posting meaning cash"))
     assert Enum.any?(gaps, &String.contains?(&1, "cost object gpu"))
     assert Enum.any?(gaps, &String.contains?(&1, "asset PDK-PHOTONICS"))
+    assert Enum.any?(gaps, &String.contains?(&1, "journal approval policy"))
     assert Enum.any?(gaps, &String.contains?(&1, "budget"))
     # The whole chart plus the whole map plus the objects plus the six lines.
     assert length(gaps) > length(Books.chart_of_accounts())

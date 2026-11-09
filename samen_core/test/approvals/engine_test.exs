@@ -86,6 +86,15 @@ defmodule Samen.Approvals.EngineTest do
     )
   end
 
+  defp audit_actors(approval_id, event_type) do
+    @repo.all(
+      from(a in AuditEvent,
+        where: a.correlation_id == ^approval_id and a.event_type == ^event_type,
+        select: a.actor_id
+      )
+    )
+  end
+
   # ==========================================================================
   # c1 + c4 — request → approve executes the gated action EXACTLY ONCE, as the requester.
   # ==========================================================================
@@ -158,6 +167,46 @@ defmodule Samen.Approvals.EngineTest do
     assert reload(doc2).status == :published
   end
 
+  test "cancel is requester-only: different or blank actors are refused and audited; the requester's own cancel succeeds" do
+    o = org()
+    requester = actor(o, :member)
+    doc = document(o)
+
+    assert {:approval_required, approval_id} = gated(doc, :publish, requester)
+
+    {:ok, pending} = Approvals.get(approval_id)
+    assert pending.state == :pending
+    assert pending.requested_by == requester.id
+
+    # RED: a different actor — even another member of the same org — cannot withdraw
+    # the requester's request. A blank actor is refused for the same reason.
+    intruder = actor(o, :member)
+    assert {:error, :not_requester} = Approvals.cancel(approval_id, intruder.id)
+    assert {:error, :not_requester} = Approvals.cancel(approval_id, nil)
+    assert {:error, :not_requester} = Approvals.cancel(approval_id, "")
+    assert {:error, :not_requester} = Approvals.cancel(approval_id, "   ")
+
+    {:ok, still_pending} = Approvals.get(approval_id)
+    assert still_pending.state == :pending
+    assert still_pending.decided_by == nil
+    assert reload(doc).status == :draft
+    assert audit_events(approval_id, "approval_cancelled") == []
+
+    refused_actors = audit_actors(approval_id, "approval_cancel_refused")
+    assert length(refused_actors) == 4
+    assert intruder.id in refused_actors
+    assert Enum.count(refused_actors, &is_nil/1) == 3
+
+    # POSITIVE CONTROL: the requester's own withdrawal succeeds, cancels the request,
+    # and leaves the gated document untouched.
+    assert {:ok, cancelled} = Approvals.cancel(approval_id, requester.id)
+    assert cancelled.state == :cancelled
+    assert cancelled.decided_by == nil
+    assert reload(doc).status == :draft
+    assert audit_events(approval_id, "approval_cancelled") == ["approval_cancelled"]
+    assert length(audit_actors(approval_id, "approval_cancel_refused")) == 4
+  end
+
   test "exactly-once: a second approve on a decided approval is refused (machine guard); the handler runs once" do
     o = org()
     requester = actor(o, :member)
@@ -202,7 +251,10 @@ defmodule Samen.Approvals.EngineTest do
     assert still.state == :pending
     assert still.decided_by == nil
     assert reload(doc).status == :draft
-    assert audit_events(approval_id, "approval_self_decide_refused") == ["approval_self_decide_refused"]
+
+    assert audit_events(approval_id, "approval_self_decide_refused") == [
+             "approval_self_decide_refused"
+           ]
 
     # POSITIVE CONTROL: a distinct approver succeeds (the refusal is not vacuous).
     assert {:ok, approved, _} = Approvals.approve(approval_id, Ecto.UUID.generate())

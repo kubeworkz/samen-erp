@@ -189,15 +189,25 @@ defmodule Samenerp.CloseWalkthroughTest do
     assert emitted.amount_due_cents == 200_000
 
     # The manual's shipment entries (JE-050/051): AR ↔ revenue, COGS ↔ FG.
-    post_entry!(org_id, ~D[2026-10-20], [
-      %{account_id: account_id!(org_id, "1100"), debit_cents: 200_000},
-      %{account_id: account_id!(org_id, "4000"), credit_cents: 200_000}
-    ], "JE-050 board sale")
+    post_entry!(
+      org_id,
+      ~D[2026-10-20],
+      [
+        %{account_id: account_id!(org_id, "1100"), debit_cents: 200_000},
+        %{account_id: account_id!(org_id, "4000"), credit_cents: 200_000}
+      ],
+      "JE-050 board sale"
+    )
 
-    post_entry!(org_id, ~D[2026-10-20], [
-      %{account_id: account_id!(org_id, "5000"), debit_cents: 100_000},
-      %{account_id: account_id!(org_id, "1430"), credit_cents: 100_000}
-    ], "JE-051 board COGS")
+    post_entry!(
+      org_id,
+      ~D[2026-10-20],
+      [
+        %{account_id: account_id!(org_id, "5000"), debit_cents: 100_000},
+        %{account_id: account_id!(org_id, "1430"), credit_cents: 100_000}
+      ],
+      "JE-051 board COGS"
+    )
 
     run = finish_phase!(run, admin, "transaction_processing")
 
@@ -311,7 +321,11 @@ defmodule Samenerp.CloseWalkthroughTest do
       org_id,
       ~D[2026-10-02],
       [
-        %{account_id: account_id!(org_id, "1000"), debit_cents: 5_000_000, dimension_refs: fund_dims},
+        %{
+          account_id: account_id!(org_id, "1000"),
+          debit_cents: 5_000_000,
+          dimension_refs: fund_dims
+        },
         %{
           account_id: account_id!(org_id, "2200"),
           credit_cents: 5_000_000,
@@ -323,18 +337,23 @@ defmodule Samenerp.CloseWalkthroughTest do
     )
 
     # The allowable cost incurred this month (grant-funded labour), fund-tagged.
-    post_entry!(org_id, ~D[2026-10-31], [
-      %{
-        account_id: account_id!(org_id, "6020"),
-        debit_cents: 1_200_000,
-        dimension_refs: fund_dims
-      },
-      %{
-        account_id: account_id!(org_id, "2100"),
-        credit_cents: 1_200_000,
-        dimension_refs: fund_dims
-      }
-    ], "JE-071 grant-funded labour")
+    post_entry!(
+      org_id,
+      ~D[2026-10-31],
+      [
+        %{
+          account_id: account_id!(org_id, "6020"),
+          debit_cents: 1_200_000,
+          dimension_refs: fund_dims
+        },
+        %{
+          account_id: account_id!(org_id, "2100"),
+          credit_cents: 1_200_000,
+          dimension_refs: fund_dims
+        }
+      ],
+      "JE-071 grant-funded labour"
+    )
 
     # JE-072: recognize the deferred award as allowable cost is incurred.
     recognition =
@@ -438,13 +457,23 @@ defmodule Samenerp.CloseWalkthroughTest do
 
     assert period.status == :soft_closed
 
+    # A SYSTEM document posting, not a human journal submission: this leg is
+    # testing PeriodGuard's soft-close refusal, so it must not stop at the
+    # journal approval Gate first.
     blocked = document_entry(org_id, ~D[2026-10-30])
-    refused = blocked |> Ash.Changeset.for_update(:post, %{}, scope: admin) |> Ash.update()
+
+    refused =
+      blocked
+      |> Ash.Changeset.for_update(:post, %{}, authorize?: false)
+      |> Ash.update(authorize?: false)
+
     assert {:error, _} = refused
     assert inspect(refused) =~ "SOFT-CLOSED"
     assert inspect(refused) =~ "documents may no longer land"
 
     # CONTROL: a journal-only close adjustment is admitted in the same period.
+    # A system posting, so this control exercises PeriodGuard's adjustment
+    # window rather than the journal approval Gate.
     adjustment =
       Erp.JournalEntry
       |> Ash.Changeset.for_create(
@@ -458,10 +487,13 @@ defmodule Samenerp.CloseWalkthroughTest do
             %{account_id: account_id!(org_id, "1300"), credit_cents: 10_000}
           ]
         },
-        scope: admin
+        authorize?: false
       )
-      |> Ash.create!()
-      |> then(&(Ash.Changeset.for_update(&1, :post, %{}, scope: admin) |> Ash.update!()))
+      |> Ash.create!(authorize?: false)
+      |> then(
+        &(Ash.Changeset.for_update(&1, :post, %{}, authorize?: false)
+          |> Ash.update!(authorize?: false))
+      )
 
     assert adjustment.status == :posted
 
@@ -491,7 +523,9 @@ defmodule Samenerp.CloseWalkthroughTest do
              )
 
     assert is_integer(bs.total_assets)
-    assert bs.balanced, "assets #{bs.total_assets} != liabilities + equity #{bs.total_liabilities + bs.total_equity}"
+
+    assert bs.balanced,
+           "assets #{bs.total_assets} != liabilities + equity #{bs.total_liabilities + bs.total_equity}"
 
     assert {:ok, pl} =
              ProfitLoss.generate(org_id, ~U[2026-10-01 00:00:00Z], as_of,
@@ -705,7 +739,10 @@ defmodule Samenerp.CloseWalkthroughTest do
     Erp.JournalEntry
     |> Ash.Changeset.for_create(:create, attrs, authorize?: false)
     |> Ash.create!(authorize?: false)
-    |> then(&(Ash.Changeset.for_update(&1, :post, %{}, authorize?: false) |> Ash.update!(authorize?: false)))
+    |> then(
+      &(Ash.Changeset.for_update(&1, :post, %{}, authorize?: false)
+        |> Ash.update!(authorize?: false))
+    )
   end
 
   # A DOCUMENT-anchored entry: the shape soft-close refuses (no ledger-internal
@@ -725,15 +762,9 @@ defmodule Samenerp.CloseWalkthroughTest do
           %{account_id: account_id!(org_id, "2100"), credit_cents: 40_000}
         ]
       },
-      scope: org_scope(org_id)
+      authorize?: false
     )
-    |> Ash.create!()
-  end
-
-  defp org_scope(org_id) do
-    %Samen.Scope{
-      actor: %{id: "m:#{org_id}", org_id: org_id, role: :member, kind: :tenant, plane: :tenant}
-    }
+    |> Ash.create!(authorize?: false)
   end
 
   defp standard_line!(org_id, standard_id, item_id, element, qty, price, yield_bp, usage) do
@@ -771,7 +802,9 @@ defmodule Samenerp.CloseWalkthroughTest do
         end
 
       {:ok, _} ->
-        flunk("the :approve action succeeded WITHOUT the Gate — the approval discipline is broken")
+        flunk(
+          "the :approve action succeeded WITHOUT the Gate — the approval discipline is broken"
+        )
 
       {:error, other} ->
         flunk("expected ApprovalRequired, got: #{inspect(other)}")

@@ -9,10 +9,11 @@ defmodule Samen.Scopes.Finance.ApLines do
     conditions the type system cannot express.
   * STATE: `lines`/`due_date`/`memo` are editable only while the bill is a
     DRAFT — `:approve`'s posted entry makes the bill a governed fact and
-    immutability is the migration's trigger (the belt). A re-approval (or a
-    `:pay`/`:void`-shaped second decide) is refused here exactly like E1's
-    one-way state machine — the exactly-once mechanism behind the Gate's
-    re-invocation.
+    immutability is the migration's trigger (the belt). A re-approval is
+    refused here exactly like E1's one-way state machine — the exactly-once
+    mechanism behind the Gate's re-invocation. `:pay` is the one legal
+    transition after approval, so it requires the persisted bill to still be
+    `:approved`; a second payment is refused.
   """
   use Ash.Resource.Change
 
@@ -22,21 +23,24 @@ defmodule Samen.Scopes.Finance.ApLines do
 
     # STATE (on the transition actions — before any write):
     changeset =
-      if action == :approve do
-        case Ash.Changeset.get_attribute(changeset, :status) || changeset.data.status do
-          :draft ->
-            changeset
+      case action do
+        :approve ->
+          require_status(
+            changeset,
+            :draft,
+            "illegal approve transition: the bill is %s — only a :draft bill can be " <>
+              "approved (one-way state machine)"
+          )
 
-          other ->
-            Ash.Changeset.add_error(changeset,
-              field: :status,
-              message:
-                "illegal approve transition: the bill is #{inspect(other)} — only a :draft " <>
-                  "bill can be approved (one-way state machine)"
-            )
-        end
-      else
-        changeset
+        :pay ->
+          require_status(
+            changeset,
+            :approved,
+            "illegal pay transition: the bill is %s — only an :approved bill can be paid"
+          )
+
+        _other ->
+          changeset
       end
 
     # LINE SHAPE (on every action accepting `lines` — an ATTRIBUTE in the
@@ -81,5 +85,18 @@ defmodule Samen.Scopes.Finance.ApLines do
       end
 
     changeset
+  end
+
+  defp require_status(changeset, expected, message) do
+    case Ash.Changeset.get_attribute(changeset, :status) || changeset.data.status do
+      ^expected ->
+        changeset
+
+      other ->
+        Ash.Changeset.add_error(changeset,
+          field: :status,
+          message: String.replace(message, "%s", inspect(other))
+        )
+    end
   end
 end

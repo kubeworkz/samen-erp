@@ -23,7 +23,8 @@ defmodule Samen.WebTest.Erp do
     namespace: Samen.WebTest.Erp,
     abbrevs: %{
       exchange_rate: "fex",
-      org_fx_settings: "ofx"
+      org_fx_settings: "ofx",
+      journal_approval_policy: "wja"
     },
     inventory: [
       item: Samen.WebTest.Erp.Item,

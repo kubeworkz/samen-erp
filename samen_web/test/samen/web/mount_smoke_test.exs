@@ -63,6 +63,10 @@ defmodule Samen.Web.MountSmokeTest do
       # mount → load → not-found render path (the same shape every real drill-in runs).
       {"erp/coa/99999999-9999-4999-8999-999999999999", Samen.Web.Erp.DetailLive, build_mount(:erp),
        %{"org" => org, "surface" => "coa", "id" => "99999999-9999-4999-8999-999999999999"}},
+      # The AP payment run and the AR aging/statement pages (the ERP "operations" twins).
+      {"erp/ap-capture", Samen.Web.Erp.ApCaptureLive, build_mount(:erp), %{"org" => org}},
+      {"erp/ap-payments", Samen.Web.Erp.ApPaymentsLive, build_mount(:erp), %{"org" => org}},
+      {"erp/ar-aging", Samen.Web.Erp.ArAgingLive, build_mount(:erp), %{"org" => org}},
       # Support
       {"support/tickets", Support.TicketsLive, build_mount(:support), %{"org" => org}},
       {"support/ticket", Support.TicketLive, build_mount(:support), %{"org" => org, "id" => t.support.ticket.id}},

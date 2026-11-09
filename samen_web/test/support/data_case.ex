@@ -56,6 +56,9 @@ defmodule Samen.WebTest.DataCase do
       case scope_kind do
         :marketing -> %{crm_namespace: Samen.WebTest.Crm}
         :support -> %{kb_namespace: Samen.WebTest.Cms}
+        # The ERP aging/statement page reads the Billing invoice — a SIBLING mount,
+        # so the host names it through the `:billing_invoice` label.
+        :erp -> %{billing_invoice: Samen.WebTest.Billing.Invoice}
         _ -> nil
       end
 

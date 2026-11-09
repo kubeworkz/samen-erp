@@ -180,7 +180,16 @@ defmodule Samen.Scopes.Finance.Blueprint do
   # JournalEntry — the event. Draft/posted/void; :post freezes (DB trigger
   # belt); :void posts a linked reversing entry. R1-checked on every write.
   # ---------------------------------------------------------------------------
-  defmacro define_journal_entry(module, otp_app, domain, repo, abbrev, line_mod, period_mod) do
+  defmacro define_journal_entry(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             line_mod,
+             period_mod,
+             policy_mod
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -227,6 +236,14 @@ defmodule Samen.Scopes.Finance.Blueprint do
           attribute(:source_id, :uuid, public?: true)
           attribute(:posted_at, :utc_datetime, public?: true)
           attribute(:voided_entry_id, :uuid, public?: true)
+
+          # Journal controls: the preparer is stamped from the actor at create
+          # time; the approver evidence is stamped only by the Gate's approved
+          # re-invocation. None of these are accepted from a caller.
+          attribute(:prepared_by, :string, public?: true)
+          attribute(:approved_by, :string, public?: true)
+          attribute(:approved_at, :utc_datetime, public?: true)
+          attribute(:approval_id, :uuid, public?: true)
         end
 
         relationships do
@@ -237,8 +254,12 @@ defmodule Samen.Scopes.Finance.Blueprint do
         end
 
         changes do
-          change({Samen.Scopes.Finance.UnbalancedEntry,
-           lines: :lines, debit: :debit_cents, credit: :credit_cents})
+          change(Samen.Scopes.Finance.PreparedBy)
+
+          change(
+            {Samen.Scopes.Finance.UnbalancedEntry,
+             lines: :lines, debit: :debit_cents, credit: :credit_cents}
+          )
 
           # R6 (WS-ACCT Phase 1): the DIMENSION-BALANCE twin of UnbalancedEntry
           # — an entry is dimensioned as a whole or not at all, and every cost
@@ -270,6 +291,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # org_id is an explicit accept (the Automation-scope idiom): the
             # tenant-plane write names its own org; OrgScope + SameOrgFk govern it.
             accept([:org_id, :entry_date, :memo, :source_key, :source_id])
+
             argument(:lines, {:array, :map},
               allow_nil?: false,
               constraints: [
@@ -348,6 +370,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
           update :post do
             accept([])
             require_atomic?(false)
+            # Journal controls: an org policy can require a distinct approver.
+            # The check runs before the Gate is armed, so a disabled policy or
+            # a below-threshold entry keeps the ordinary posting path.
+            change({Samen.Scopes.Finance.JournalApproval, policy: unquote(policy_mod)})
+
             # R10 (WS-ACCT Phase 3): the posting's DATE must land in a period
             # that still admits it — a closed period refuses always.
             change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
@@ -365,6 +392,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
           update :void do
             accept([])
             require_atomic?(false)
+            # A void is a posting event on an immutable fact; the same org
+            # approval policy governs it.
+            change({Samen.Scopes.Finance.JournalApproval, policy: unquote(policy_mod)})
+
             # R10: the reversal is dated the ORIGINAL's date, so a closed period
             # would refuse it mid-action — refuse up front, naming the period.
             change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
@@ -618,8 +649,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
           change(Samen.Policy.SameOrgFk)
           change(Samen.Scopes.Finance.LineAmounts)
 
-          change({Samen.Scopes.Finance.DimensionGuard,
-           cost_object: unquote(cost_object_mod)})
+          change({Samen.Scopes.Finance.DimensionGuard, cost_object: unquote(cost_object_mod)})
         end
 
         actions do
@@ -792,13 +822,23 @@ defmodule Samen.Scopes.Finance.Blueprint do
   # INSIDE the decision transaction, where ApPosting lands the expense+
   # liability entry (source_key: "ap_invoice").
   # ---------------------------------------------------------------------------
-  defmacro define_ap_invoice(module, otp_app, domain, repo, abbrev, entry_mod, posting_account_mod) do
+  defmacro define_ap_invoice(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             entry_mod,
+             posting_account_mod
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
         Finance.ApInvoice — a vendor bill (WS-ERP E2; design §2.2).
-        `status ∈ {draft, approved, paid, void}`; `paid`/`void` transitions are
-        E4's payment flow (the base system lands `:approved` only).
+        `status ∈ {draft, approved, paid, void}`. `:approve` posts the bill to
+        the ledger; `:pay` settles an approved bill by posting the AP-clearing
+        debit and the cash credit, anchored `source_key: "ap_payment"`. The
+        `void` transition remains the documented credit-note carry.
 
         ## The approve discipline (ADR-040)
 
@@ -911,13 +951,35 @@ defmodule Samen.Scopes.Finance.Blueprint do
             accept([])
             require_atomic?(false)
 
-            change({Samen.Approvals.Gate,
-             kind: unquote(Atom.to_string(module)) <> ":approve"})
+            change({Samen.Approvals.Gate, kind: unquote(Atom.to_string(module)) <> ":approve"})
 
             change(Samen.Scopes.Finance.PostingMarker)
 
-            change({Samen.Scopes.Finance.ApPosting,
-             entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)})
+            change(
+              {Samen.Scopes.Finance.ApPosting,
+               entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
+            )
+          end
+
+          # The payment transition. `payment_date`, `reference` and `memo` are
+          # action arguments, not persisted attributes: the posted payment entry
+          # carries the date and the reference, and the bill carries `:paid`.
+          # The action locks the persisted bill row before posting, so two
+          # concurrent payments serialize and the second sees `:paid`.
+          update :pay do
+            accept([])
+            require_atomic?(false)
+
+            argument(:payment_date, :date, allow_nil?: false)
+            argument(:reference, :string)
+            argument(:memo, :string)
+
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change(
+              {Samen.Scopes.Finance.ApPaymentPosting,
+               entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
+            )
           end
         end
 
@@ -940,7 +1002,15 @@ defmodule Samen.Scopes.Finance.Blueprint do
   # PaymentReceipt — the AR intake (E2). :post_receipt creates the anchored
   # cash+AR-clearing entry in ONE transaction; exactly-once per anchor.
   # ---------------------------------------------------------------------------
-  defmacro define_payment_receipt(module, otp_app, domain, repo, abbrev, entry_mod, posting_account_mod) do
+  defmacro define_payment_receipt(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             entry_mod,
+             posting_account_mod
+           ) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -1007,7 +1077,15 @@ defmodule Samen.Scopes.Finance.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :invoice_key, :invoice_id, :amount_cents, :currency, :paid_at, :memo])
+            accept([
+              :org_id,
+              :invoice_key,
+              :invoice_id,
+              :amount_cents,
+              :currency,
+              :paid_at,
+              :memo
+            ])
 
             # The Ash-side shape guard: refuse BEFORE the DB belt so the caller
             # gets an Invalid, not a wrapped ConstraintError (the DB CHECK is
@@ -1023,8 +1101,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # UPDATE; ReceiptPosting lands the entry in-transaction.
             change(Samen.Scopes.Finance.PostingMarker)
 
-            change({Samen.Scopes.Finance.ReceiptPosting,
-             entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)})
+            change(
+              {Samen.Scopes.Finance.ReceiptPosting,
+               entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
+            )
           end
         end
 
@@ -1069,13 +1149,20 @@ defmodule Samen.Scopes.Finance.Blueprint do
           attribute(:from_currency, :string, public?: true, allow_nil?: false)
           attribute(:to_currency, :string, public?: true, allow_nil?: false)
           attribute(:rate, :string, public?: true, allow_nil?: false)
-          attribute(:source, :atom, public?: true, allow_nil?: false, default: :manual,
-            constraints: [one_of: [:manual, :api, :import]])
+
+          attribute(:source, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :manual,
+            constraints: [one_of: [:manual, :api, :import]]
+          )
+
           attribute(:valid_at, :utc_datetime, public?: true, allow_nil?: false)
         end
 
         actions do
           defaults([:read])
+
           create :create_rate do
             accept([:from_currency, :to_currency, :rate, :source, :valid_at, :org_id])
           end
@@ -1085,6 +1172,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
           end
+
           policy action_type(:create) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
@@ -1098,6 +1186,99 @@ defmodule Samen.Scopes.Finance.Blueprint do
   # ---------------------------------------------------------------------------
   # OrgFxSettings — base currency per org (WS-ERP E10)
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # JournalApprovalPolicy — the org control that turns manual journal approval
+  # on, and its threshold. One row per org; admin-owned (a control the ledger
+  # operator cannot loosen).
+  # ---------------------------------------------------------------------------
+  defmacro define_journal_approval_policy(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.JournalApprovalPolicy — the org-level manual journal control
+        (WS-ACCT journal controls).
+
+          * `enabled` — when true, a HUMAN `:post`/`:void` of a journal entry
+            must be approved by a principal other than the entry's preparer.
+          * `threshold_cents` — only entries whose stored debit total is at
+            least this amount need approval. `0` means every entry.
+
+        One row per org (`unique_org`). A missing row means the control is not
+        configured; that keeps historical/legacy posting behavior intact while
+        making the control explicit for new tenants. Admin-owned: a member who
+        could switch approval off would make the control theatre.
+
+        No PII (INV-1): a tenant id, a boolean and an integer.
+        """
+
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_journal_approval_policy")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:org_id, :uuid, public?: true, allow_nil?: false)
+
+          attribute(:enabled, :boolean,
+            public?: true,
+            allow_nil?: false,
+            default: true
+          )
+
+          attribute(:threshold_cents, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0
+          )
+        end
+
+        identities do
+          identity(:unique_org, [:org_id])
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :enabled, :threshold_cents])
+            validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
+          end
+
+          update :update do
+            accept([:enabled, :threshold_cents])
+            require_atomic?(false)
+            validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
+          end
+
+          # NO destroy: disabling the control is an auditable update, not a
+          # deletion that silently restores the old behavior.
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
   defmacro define_org_fx_settings(module, otp_app, domain, repo, abbrev) do
     quote do
       defmodule unquote(module) do
@@ -1131,6 +1312,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
           end
+
           policy action_type([:create, :update, :destroy]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})

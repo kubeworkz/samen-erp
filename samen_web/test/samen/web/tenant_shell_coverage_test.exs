@@ -97,6 +97,8 @@ defmodule Samen.Web.TenantShellCoverageTest do
     Samen.Web.Tenant.AnalyticsLive,
     Samen.Web.Erp.SurfaceLive,
     Samen.Web.Erp.DetailLive,
+    Samen.Web.Erp.ApPaymentsLive,
+    Samen.Web.Erp.ArAgingLive,
     Samen.Web.Auth.TotpEnrollLive
   ]
 

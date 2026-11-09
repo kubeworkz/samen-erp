@@ -46,6 +46,7 @@ defmodule Samen.FinanceE2ScopeTest do
 
   require Ash.Query
 
+  alias Samen.Scopes.Finance.{ApInvoiceCapture, ApPaymentRun}
   alias Samen.Scopes.Finance.ReconcilePayments
   alias Samen.Scopes.Finance.Reconcile
   alias SamenCore.Support.FinanceFixture.{
@@ -734,7 +735,348 @@ defmodule Samen.FinanceE2ScopeTest do
     end
   end
 
+  # ── d13: AP bill payment ───────────────────────────────────────────────────
+
+  describe "d13 — :pay settles an approved bill" do
+    test "pays the bill, posts AP/cash, and keeps the approval entry linked", %{
+      org: org,
+      scope: scope
+    } do
+      expense = seed_posting_accounts(org)
+      bill = new_bill(scope, org, [bill_line(expense, 12_500)])
+      bill = approve_bill!(bill, scope)
+      approval_entry_id = bill.posted_entry_id
+
+      assert approval_entry_id
+
+      paid = pay_bill!(bill, scope, reference: "PAY-001")
+
+      assert paid.status == :paid
+      assert paid.posted_entry_id == approval_entry_id
+
+      approval_entry = Ash.get!(JournalEntry, approval_entry_id, authorize?: false)
+      assert approval_entry.source_key == "ap_invoice"
+
+      payment = payment_entry!(org, bill.id)
+      assert payment.status == :posted
+      assert payment.entry_date == ~D[2026-09-15]
+      assert payment.memo =~ "PAY-001"
+
+      ap = account_by_code(org, "2000")
+      cash = account_by_code(org, "1000")
+      lines = entry_lines(payment.id)
+      assert Enum.any?(lines, &(&1.account_id == ap.id and &1.debit_cents == 12_500))
+      assert Enum.any?(lines, &(&1.account_id == cash.id and &1.credit_cents == 12_500))
+
+      assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
+    end
+
+    test "a stale approved record cannot pay the bill twice", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      bill = new_bill(scope, org, [bill_line(expense, 8_000)])
+      bill = approve_bill!(bill, scope)
+
+      _paid = pay_bill!(bill, scope, reference: "PAY-002")
+
+      # `bill` is the stale :approved struct. The row lock in the payment
+      # cascade is what refuses this second attempt.
+      assert {:error, _} =
+               bill
+               |> Ash.Changeset.for_update(:pay, %{payment_date: ~D[2026-09-16]}, scope: scope)
+               |> Ash.update()
+
+      assert length(payment_entries(org, bill.id)) == 1
+    end
+  end
+
+  # ── d14: AP payment run ─────────────────────────────────────────────────────
+
+  describe "d14 — an AP payment run is one transaction over one vendor's bills" do
+    test "pays multiple approved bills and returns remittance advice", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      vendor = Ash.UUID.generate()
+
+      first =
+        new_bill(scope, org, [bill_line(expense, 4_000)],
+          vendor_id: vendor,
+          number: "V-RUN-1"
+        )
+
+      second =
+        new_bill(scope, org, [bill_line(expense, 6_500)],
+          vendor_id: vendor,
+          number: "V-RUN-2"
+        )
+
+      first = approve_bill!(first, scope)
+      second = approve_bill!(second, scope)
+
+      assert {:ok, run} =
+               ApPaymentRun.pay(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [first.id, second.id],
+                 payment_date: ~D[2026-09-20],
+                 reference: "RUN-001"
+               )
+
+      assert run.reference == "RUN-001"
+      assert run.vendor_id == vendor
+      assert run.total_cents == 10_500
+      assert Enum.map(run.payments, & &1.amount_cents) == [4_000, 6_500]
+
+      assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :paid
+      assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :paid
+      assert length(payment_entries(org, first.id)) == 1
+      assert length(payment_entries(org, second.id)) == 1
+
+      csv = ApPaymentRun.remittance_csv(run)
+      assert csv =~ "RUN-001"
+      assert csv =~ "V-RUN-1"
+      assert csv =~ "V-RUN-2"
+      assert csv =~ "4000"
+      assert csv =~ "6500"
+
+      assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
+    end
+
+    test "a run with a non-approved bill pays nothing", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      vendor = Ash.UUID.generate()
+
+      approved =
+        new_bill(scope, org, [bill_line(expense, 3_000)],
+          vendor_id: vendor,
+          number: "V-RUN-3"
+        )
+
+      approved = approve_bill!(approved, scope)
+
+      draft =
+        new_bill(scope, org, [bill_line(expense, 1_000)],
+          vendor_id: vendor,
+          number: "V-RUN-4"
+        )
+
+      assert {:error, {:not_approved, bill_id}} =
+               ApPaymentRun.pay(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [approved.id, draft.id],
+                 payment_date: ~D[2026-09-20],
+                 reference: "RUN-002"
+               )
+
+      assert bill_id == draft.id
+      assert Ash.get!(ApInvoice, approved.id, authorize?: false).status == :approved
+      assert payment_entries(org, approved.id) == []
+    end
+
+    test "a run refuses bills that look like duplicates unless confirmed", %{
+      org: org,
+      scope: scope
+    } do
+      expense = seed_posting_accounts(org)
+      vendor = Ash.UUID.generate()
+
+      first =
+        new_bill(scope, org, [bill_line(expense, 5_000)], vendor_id: vendor, number: "DUP-1")
+
+      second =
+        new_bill(scope, org, [bill_line(expense, 5_000)], vendor_id: vendor, number: "DUP-2")
+
+      first = approve_bill!(first, scope)
+      second = approve_bill!(second, scope)
+
+      assert {:error, {:duplicate_bills, ids}} =
+               ApPaymentRun.pay(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [first.id, second.id],
+                 payment_date: ~D[2026-09-20],
+                 reference: "RUN-DUP"
+               )
+
+      assert Enum.sort(ids) == Enum.sort([first.id, second.id])
+      assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
+      assert payment_entries(org, first.id) == []
+
+      assert {:ok, run} =
+               ApPaymentRun.pay(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [first.id, second.id],
+                 payment_date: ~D[2026-09-20],
+                 reference: "RUN-DUP",
+                 allow_duplicates: true
+               )
+
+      assert run.total_cents == 10_000
+      assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :paid
+      assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :paid
+    end
+  end
+
+  describe "d14c — AP invoice capture" do
+    test "capture parses text and confirm creates ONE draft bill", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      vendor = Ash.UUID.generate()
+
+      assert {:ok, draft} =
+               ApInvoiceCapture.capture(
+                 text: """
+                 ACME SUPPLY
+                 Invoice No: CAP-100
+                 Invoice Date: 2026-09-02
+                 Due Date: 2026-10-02
+                 Widgets            40.00
+                 Total Due: $40.00
+                 """
+               )
+
+      assert draft.number == "CAP-100"
+      assert draft.total_cents == 4_000
+      assert draft.invoice_date == ~D[2026-09-02]
+
+      assert {:ok, bill} =
+               ApInvoiceCapture.confirm(
+                 ap_invoice: ApInvoice,
+                 scope: scope,
+                 org_id: org,
+                 vendor_id: vendor,
+                 account_id: expense.id,
+                 number: draft.number,
+                 invoice_date: draft.invoice_date,
+                 due_date: draft.due_date,
+                 total_cents: draft.total_cents,
+                 lines: draft.lines
+               )
+
+      assert bill.status == :draft
+      assert bill.number == "CAP-100"
+
+      [line] = bill.lines
+      assert (Map.get(line, :amount_cents) || Map.get(line, "amount_cents")) == 4_000
+      assert (Map.get(line, :account_id) || Map.get(line, "account_id")) == expense.id
+    end
+
+    test "capture refuses an existing number, and a soft duplicate unless confirmed", %{
+      org: org,
+      scope: scope
+    } do
+      expense = seed_posting_accounts(org)
+      vendor = Ash.UUID.generate()
+
+      existing =
+        new_bill(scope, org, [bill_line(expense, 5_000)],
+          vendor_id: vendor,
+          number: "CAP-200",
+          bill_date: ~D[2026-09-03]
+        )
+
+      assert {:error, {:duplicate_number, duplicate}} =
+               ApInvoiceCapture.confirm(
+                 ap_invoice: ApInvoice,
+                 scope: scope,
+                 org_id: org,
+                 vendor_id: Ash.UUID.generate(),
+                 account_id: expense.id,
+                 number: "CAP-200",
+                 invoice_date: ~D[2026-09-09],
+                 total_cents: 5_000,
+                 lines: [%{description: "Widgets", amount_cents: 5_000}]
+               )
+
+      assert duplicate.id == existing.id
+
+      assert {:error, {:possible_duplicates, ["CAP-200"]}} =
+               ApInvoiceCapture.confirm(
+                 ap_invoice: ApInvoice,
+                 scope: scope,
+                 org_id: org,
+                 vendor_id: vendor,
+                 account_id: expense.id,
+                 number: "CAP-201",
+                 invoice_date: ~D[2026-09-03],
+                 total_cents: 5_000,
+                 lines: [%{description: "Widgets", amount_cents: 5_000}]
+               )
+
+      assert {:ok, bill} =
+               ApInvoiceCapture.confirm(
+                 ap_invoice: ApInvoice,
+                 scope: scope,
+                 org_id: org,
+                 vendor_id: vendor,
+                 account_id: expense.id,
+                 number: "CAP-201",
+                 invoice_date: ~D[2026-09-03],
+                 total_cents: 5_000,
+                 lines: [%{description: "Widgets", amount_cents: 5_000}],
+                 allow_duplicate: true
+               )
+
+      assert bill.status == :draft
+    end
+
+    test "lines that do not sum to the total are refused", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+
+      assert {:error, {:lines_total_mismatch, 5_000, 4_000}} =
+               ApInvoiceCapture.confirm(
+                 ap_invoice: ApInvoice,
+                 scope: scope,
+                 org_id: org,
+                 vendor_id: Ash.UUID.generate(),
+                 account_id: expense.id,
+                 number: "CAP-300",
+                 invoice_date: ~D[2026-09-04],
+                 total_cents: 5_000,
+                 lines: [%{description: "Widgets", amount_cents: 4_000}]
+               )
+    end
+  end
+
   # ── helpers ────────────────────────────────────────────────────────────────
+
+  defp approve_bill!(bill, scope) do
+    {:gated, approval_id} = gate(bill, scope)
+    assert {:ok, _, _} = decide(approval_id)
+    Ash.get!(ApInvoice, bill.id, authorize?: false)
+  end
+
+  defp pay_bill!(bill, scope, attrs) do
+    bill
+    |> Ash.Changeset.for_update(
+      :pay,
+      Map.merge(%{payment_date: ~D[2026-09-15]}, Map.new(attrs)),
+      scope: scope
+    )
+    |> Ash.update!()
+  end
+
+  defp payment_entry!(org, bill_id) do
+    JournalEntry
+    |> Ash.Query.filter(org_id == ^org and source_key == "ap_payment" and source_id == ^bill_id)
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp payment_entries(org, bill_id) do
+    JournalEntry
+    |> Ash.Query.filter(org_id == ^org and source_key == "ap_payment" and source_id == ^bill_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp entry_lines(entry_id) do
+    JournalLine
+    |> Ash.Query.filter(entry_id == ^entry_id)
+    |> Ash.read!(authorize?: false)
+  end
+
 
   defp tenant_scope(org_id) do
     %Samen.Scope{

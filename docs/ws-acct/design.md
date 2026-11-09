@@ -43,7 +43,7 @@ tree carries phases through **E38**. Grounding therefore reads the code, not the
 
 | Scope | Resources (`use Samen.Scopes.X` → host namespace) | Mounted in samenerp? |
 |---|---|---|
-| **Finance** (`finance.ex`, `finance/blueprint.ex`, `finance/budget_blueprint.ex`, `finance/credit_note_blueprint.ex`) | `Account`, `JournalEntry`, `JournalLine`, `ApInvoice`, `PaymentReceipt`, `PostingAccount`, `Budget`, `BudgetLine`, `ExchangeRate`, `OrgFxSettings`, `CreditNote`, `VendorCredit`, `TaxRate` | ✅ |
+| **Finance** (`finance.ex`, `finance/blueprint.ex`, `finance/budget_blueprint.ex`, `finance/credit_note_blueprint.ex`) | `Account`, `JournalEntry`, `JournalLine`, `ApInvoice`, `PaymentReceipt`, `PostingAccount`, `Budget`, `BudgetLine`, `ExchangeRate`, `OrgFxSettings`, `JournalApprovalPolicy`, `CreditNote`, `VendorCredit`, `TaxRate` | ✅ |
 | **Inventory** (`inventory.ex`, `inventory/blueprint.ex`, `inventory/blueprint_e6.ex`) | `Item`, `Warehouse`, `StockLedger`, `StockLevel`, `PurchaseOrder`, `PoLine`, `GoodsReceipt`, `ReceiptLine`, `SalesOrder`, `SoLine`, `Bom`, `BomLine`, `WorkOrder`, `ProductionLog`, `TransferOrder`, `LandedCost` | ✅ |
 | **Banking** (`banking.ex`) | `BankAccount`, `StatementLine`, `StatementImport`, `Match`, `Rule` | ✅ |
 | **Hr** (`hr.ex`) | `Employee`🔒, `EmploymentEvent`, `LeaveRequest`, `LeaveType`, `LeaveBalance`, `PayRun`, `Payslip`, `SalaryStructure` | ❌ **not mounted** |
@@ -346,6 +346,27 @@ Two new PII-adjacent surfaces, each needing the full **green / red / sabotage** 
 2. **Supplier contacts** — already vaulted in `SalesOps.Vendor`; the scorecard/risk resources
    reference `vendor_id` and **never re-declare the person** (ADR-049 §2.3's rule, restated
    because two new supplier resources are exactly where it would get broken).
+
+---
+
+## §4b Journal approval and segregation of duties
+
+Manual journal postings can be gated by an org-scoped `JournalApprovalPolicy` (one row per
+org, admin-owned): `enabled` turns the control on and `threshold_cents` exempts entries below
+the size threshold. The approval rides the existing ADR-040 `Samen.Approvals.Gate`; no second
+approval engine.
+
+The control is bound to the entry's `prepared_by`, not to whoever clicks Post. A different
+principal cannot submit another preparer's entry, and the Gate's distinct-party rule refuses
+the preparer as approver. The approved invocation re-runs the ordinary `:post`/`:void` path,
+so `PostBalance`, `DimensionBalance`, `PeriodGuard`, `PostGuard` and the DB immutability
+trigger still apply. The entry stamps `approved_by`/`approved_at`/`approval_id` only after the
+approval row is re-read and verified against the resource, action, org, subject and preparer;
+a forged `approval_ok` context is refused. Postings with no actor (system cascades) and orgs
+with no policy keep the pre-existing path — enabling the control is an explicit policy action,
+not a silent migration of historical books. The Kubeworkz books seed opens the policy enabled
+at threshold 0; `Books.verify/1` treats a missing or disabled policy as a gap, and a re-seed
+reports an operator's disable/threshold edit as drift instead of overwriting it.
 
 ---
 

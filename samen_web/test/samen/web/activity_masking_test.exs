@@ -372,10 +372,17 @@ defmodule Samen.Web.ActivityMaskingTest do
 
       insert_approval_event!("approval_requested", approval.id, lifecycle: "requested")
 
+      insert_approval_event!("approval_cancel_refused", approval.id,
+        lifecycle: "cancel_refused",
+        actor_id: "operator-intruder"
+      )
+
       html = render_activity(org_id)
 
       assert html =~ "approval_requested"
       assert html =~ "requested"
+      assert html =~ "approval_cancel_refused"
+      assert html =~ "cancel_refused"
     end)
   end
 
@@ -392,6 +399,68 @@ defmodule Samen.Web.ActivityMaskingTest do
 
       assert html_a =~ "approval-a-sentinel"
       refute html_b =~ "approval-a-sentinel"
+    end)
+  end
+
+  test "INV-2 (approval family): refused cancellation events stay scoped to the approval's org" do
+    with_stand_in_approval_resource(fn ->
+      org_a = Ash.UUID.generate()
+      org_b = Ash.UUID.generate()
+      approval_a = create_workflow!(org_a)
+      approval_b = create_workflow!(org_b)
+      actor_a = "alpha-attempt"
+      actor_b = "bravo-attempt"
+      actor_a_prefix = String.slice(actor_a, 0, 8)
+      actor_b_prefix = String.slice(actor_b, 0, 8)
+
+      insert_approval_event!("approval_cancel_refused", approval_a.id,
+        subject_ref: "samen:svc:cancel-refused-a-sentinel",
+        actor_id: actor_a
+      )
+
+      insert_approval_event!("approval_cancel_refused", approval_b.id,
+        subject_ref: "samen:svc:cancel-refused-b-sentinel",
+        actor_id: actor_b
+      )
+
+      html_a = render_activity(org_a)
+      html_b = render_activity(org_b)
+
+      assert html_a =~ "approval_cancel_refused"
+      assert html_a =~ "cancel-refused-a-sentinel"
+      assert html_a =~ actor_a_prefix
+      assert html_a =~ ~s(title="#{actor_a}")
+      refute html_a =~ "cancel-refused-b-sentinel"
+      refute html_a =~ actor_b_prefix
+      refute html_a =~ ~s(title="#{actor_b}")
+
+      assert html_b =~ "approval_cancel_refused"
+      assert html_b =~ "cancel-refused-b-sentinel"
+      assert html_b =~ actor_b_prefix
+      assert html_b =~ ~s(title="#{actor_b}")
+      refute html_b =~ "cancel-refused-a-sentinel"
+      refute html_b =~ actor_a_prefix
+      refute html_b =~ ~s(title="#{actor_a}")
+    end)
+  end
+
+  test "ordinary activity rows expose the full actor ID through the abbreviated actor's tooltip" do
+    with_stand_in_approval_resource(fn ->
+      org_id = Ash.UUID.generate()
+      approval = create_workflow!(org_id)
+      actor = "zeta-operator"
+      prefix = String.slice(actor, 0, 8)
+
+      insert_approval_event!("approval_requested", approval.id,
+        lifecycle: "requested",
+        actor_id: actor
+      )
+
+      html = render_activity(org_id)
+
+      assert html =~ "approval_requested"
+      assert html =~ prefix
+      assert html =~ ~s(title="#{actor}")
     end)
   end
 

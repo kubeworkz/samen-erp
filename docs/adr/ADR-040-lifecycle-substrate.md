@@ -139,7 +139,7 @@ this is what preserves the reveal same-tx guarantee (a grant CHECK violation mus
 grant, audit, and auto-revoke job together, per `reveal_grant_same_tx_test.exs`).
 `reject/3` is symmetric with `on_reject/2` (a no-op default). Decisions emit governance
 audit events through `Samen.AuditChain.Writer` (`approval_requested | approval_approved |
-approval_rejected | approval_expired | approval_cancelled | approval_self_decide_refused`)
+approval_rejected | approval_expired | approval_cancelled | approval_cancel_refused | approval_self_decide_refused`)
 — token/id-only detail, `reason` never enters chain detail.
 
 ### 4.4 Two integration faces — and the no-persisted-inputs rule (binding)

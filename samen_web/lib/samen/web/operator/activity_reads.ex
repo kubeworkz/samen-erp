@@ -37,7 +37,7 @@ defmodule Samen.Web.Operator.ActivityReads do
        has `correlation_id = nil`, which never matches `== org_id` — excluded,
        fails closed, never mis-attributed.
     3. **The approval family** (`approval_requested | approval_approved |
-       approval_rejected | approval_cancelled | approval_self_decide_refused`,
+       approval_rejected | approval_cancelled | approval_cancel_refused | approval_self_decide_refused`,
        `Samen.Approvals`) — `correlation_id` here is the Approval row's OWN
        id, NOT an org id (INDIRECT). Org-scoping resolves it by first querying
        the host's configured Approval resource
@@ -141,7 +141,7 @@ defmodule Samen.Web.Operator.ActivityReads do
   # The Approval engine's decision-lifecycle events (`Samen.Approvals`,
   # ADR-040 §4) — `correlation_id` is the Approval row's OWN id (INDIRECT org
   # resolution, see the moduledoc).
-  @approval_event_types ~w(approval_requested approval_approved approval_rejected approval_cancelled approval_self_decide_refused)
+  @approval_event_types ~w(approval_requested approval_approved approval_rejected approval_cancelled approval_cancel_refused approval_self_decide_refused)
 
   @doc """
   Chronological activity feed for ONE tenant org: governance-tier `aud_event`

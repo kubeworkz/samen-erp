@@ -8,6 +8,23 @@ All notable changes to Samen are recorded here. The format follows
 
 ### Added
 
+- **Journal approval and segregation of duties** (WS-ACCT journal controls): Finance mounts a
+  new admin-owned `JournalApprovalPolicy` (one per org, optional amount threshold). When it is
+  enabled, a human `:post`/`:void` opens a `Samen.Approvals` request instead of posting; the
+  request is bound to the entry's `prepared_by`, so a different principal cannot submit it and
+  the preparer cannot approve their own work. A distinct approver's decision re-invokes the
+  ordinary governed action, and the entry records `prepared_by`, `approved_by`, `approved_at`
+  and `approval_id` in the same transaction. System cascades (no actor) and orgs without a
+  policy retain the previous path. The approved context is re-verified against the stored
+  approval row, so faking the Gate context cannot bypass the control. The Kubeworkz books
+  seed opens the policy enabled at threshold 0, `Books.verify/1` checks it, and an operator's
+  disable/threshold edit is reported as drift rather than silently overwritten.
+- **Journal approval admin settings surface** (`/erp/journal-approval`, mounted by
+  `samen_erp_routes/3`): a tenant admin can enable or disable the org's
+  `JournalApprovalPolicy` and set its threshold in cents, creating the one row when the org
+  has none. The page reads under the member scope and writes through the resource's OWN
+  admin-only governed actions, so a non-admin member sees a read-only control and a crafted
+  save is refused by the kernel; the operator plane renders no form.
 - **Canonical Work scope — `Project` + the self-referential `Task`** (ADR-041 §3, F1): a new
   `Samen.Scopes.Work` blueprint ships one canonical Work item (`kind`/`title`/`body`/`status`/
   `priority`/`due_at`/`completed_at`, a generic CRM-agnostic `(subject_key, subject_id)`

@@ -53,6 +53,12 @@ defmodule Samen.Web.RateLimit do
       config :samen_web, Samen.Web.RateLimit,
         limits: %{signin_account: {10, 60_000}, signin_ip: {100, 3_600_000}}
 
+  ## ERP limits
+
+  | Surface | Key | Default | Semantics |
+  |---|---|---|---|
+  | `:erp_invoice_ocr` | org id | 60/hr | AP capture's hosted-OCR document submissions (`Samen.Web.Erp.OcrQuota`). **Durable**: the window is stored in Postgres (`web_ocr_quota`), not this ETS backend, so the budget is shared across nodes and survives restarts. Pasted text and text files never consult it; over → the page refuses the document and points at the paste path |
+
   ## Test discipline — the flood guard
 
   Hammer's `:fix_window` buckets are `div(now_ms, window_ms)`, so the window is aligned to the
@@ -84,6 +90,13 @@ defmodule Samen.Web.RateLimit do
     # Webhook ingress (ADR-038 §6.3; T19).
     webhook_ingress: {1000, 60_000},
     webhook_bad_sig: {60, 60_000},
+    # ERP: hosted OCR document submissions, per ORGANIZATION (AP capture). Every
+    # PDF/image handed to the OCR adapter is a billable provider call; pasted
+    # text and text files never consult this surface (`Samen.Web.Erp.OcrQuota`).
+    # Only the limit/window are read here: the COUNTER is the durable
+    # `web_ocr_quota` table, not this ETS backend, so the budget is shared
+    # across nodes and survives restarts.
+    erp_invoice_ocr: {60, 3_600_000},
     # Fleet ingress (ADR-044 §4.4a; T82). `:fleet_enroll`/`:fleet_heartbeat` are the
     # PRE-crypto flood gates (checked/incremented BEFORE credential lookup, keyed on
     # the presented `kid`/IP whether or not it resolves — the 429-as-existence-oracle
@@ -109,14 +122,19 @@ defmodule Samen.Web.RateLimit do
     # API rate limits for authenticated users (Enterprise SaaS).
     # Key: user_id (non-PII, bounded identifier).
     # Limits are per-plan, configurable via config :samen_web, Samen.Web.RateLimit, limits: %{...}
-    api_request_user: {1000, 60_000},       # 1000 requests/min per user (default)
-    api_request_org: {10000, 60_000},       # 10000 requests/min per org (default)
-    api_request_ip: {500, 60_000},          # 500 requests/min per IP (unauthenticated)
+    # 1000 requests/min per user (default)
+    api_request_user: {1000, 60_000},
+    # 10000 requests/min per org (default)
+    api_request_org: {10000, 60_000},
+    # 500 requests/min per IP (unauthenticated)
+    api_request_ip: {500, 60_000},
 
     # AI-specific rate limits (HuggingFace BYOK).
     # Key: tenant_id (org-level).
-    ai_request_tenant: {100, 60_000},      # 100 AI requests/min per tenant
-    ai_stream_concurrent: {5, 60_000},     # 5 concurrent streams per tenant
+    # 100 AI requests/min per tenant
+    ai_request_tenant: {100, 60_000},
+    # 5 concurrent streams per tenant
+    ai_stream_concurrent: {5, 60_000},
 
     # Plan-based limits (configurable per plan).
     # Free plan: 100 req/min, Pro: 1000 req/min, Enterprise: 10000 req/min

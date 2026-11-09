@@ -31,6 +31,7 @@ defmodule Samenerp.Erp do
     abbrevs: %{
       account: "eca",
       journal_entry: "ecj",
+      journal_approval_policy: "ejp",
       journal_line: "ecl",
       ap_invoice: "ecp",
       payment_receipt: "ecr",
@@ -121,6 +122,7 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.Account)
     resource(Samenerp.Erp.JournalEntry)
     resource(Samenerp.Erp.JournalLine)
+    resource(Samenerp.Erp.JournalApprovalPolicy)
     resource(Samenerp.Erp.ApInvoice)
     resource(Samenerp.Erp.PaymentReceipt)
     resource(Samenerp.Erp.PostingAccount)

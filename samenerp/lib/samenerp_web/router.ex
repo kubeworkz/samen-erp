@@ -94,6 +94,11 @@ defmodule SamenerpWeb.Router do
     # banking mount resolves its GL account / journal-entry references through THIS
     # host's Finance namespace (BankAccount.account_id → Account, Match → JournalEntry).
     erp_namespace: Samenerp.Erp,
+    # WS-ERP E2/AR — the AR document source of truth for the ERP aging +
+    # customer-statement page. Billing is a SIBLING mount under the ADR-004
+    # convention, so the page cannot derive it from `Samenerp.Erp`; the host
+    # names it here (a resource module, session-safe like every label).
+    billing_invoice: Samenerp.Billing.Invoice,
     # SIDEBAR-REACHABILITY (2026-10-10) — the seven mount phases' module groups, made
     # reachable from the app's OWN sidebar. Same presence-is-the-guard posture as
     # `erp_path`/`banking_path`/`work_path` above: `Samen.UI.Nav.nav_paths/1` resolves each
@@ -227,7 +232,10 @@ defmodule SamenerpWeb.Router do
     # 1. Billing — the mounted samen_core Billing scope's inherited pages. Carries
     #    the `@current_org_labels` seam so the `:authn` prod gate governs actor
     #    resolution (query-param convenience in dev/test; session-only in prod).
-    samen_module_routes(:billing, Samenerp.Billing, repo: Samenerp.Repo, labels: @current_org_labels)
+    samen_module_routes(:billing, Samenerp.Billing,
+      repo: Samenerp.Repo,
+      labels: @current_org_labels
+    )
 
     # 1a. CRM — Companies, Contacts, Pipeline, Opportunities (inherited from samen_core)
     samen_module_routes(:crm, Samenerp.Crm, repo: Samenerp.Repo, labels: @current_org_labels)
@@ -281,8 +289,13 @@ defmodule SamenerpWeb.Router do
     #    stock / purchase orders / work orders) over the `Samenerp.Erp` mount
     #    in ONE line: the surface allowlist + bounded columns live in
     #    `Samen.Web.Erp` (the registry IS the boundary), the generic
-    #    read-only `Samen.Web.Erp.SurfaceLive` serves every path.
-    samen_erp_routes(:erp, Samenerp.Erp, repo: Samenerp.Repo, labels: @current_org_labels)
+    #    read-only `Samen.Web.Erp.SurfaceLive` serves every path. `:pubsub`
+    #    names the running server the ERP dashboard's OCR-budget refresh
+    #    subscribes to (the same `Samenerp.PubSub` chat/notifications use).
+    samen_erp_routes(:erp, Samenerp.Erp,
+      repo: Samenerp.Repo,
+      labels: Map.put(@current_org_labels, :pubsub, Samenerp.PubSub)
+    )
 
     # 1c-2. WS-ACCT Phase 11 — the grant personnel report (DOM + CSV + JSON),
     #       over the same `Samenerp.Erp` Finance mount. Phase 16 wires

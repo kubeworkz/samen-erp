@@ -228,6 +228,10 @@ config :samen_core, Samen.Approvals.Registry,
     (Atom.to_string(Samenerp.Erp.PurchaseOrder) <> ":approve") => {:tenant, Samen.Approvals.Gate},
     # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence write-down's gated post.
     (Atom.to_string(Samenerp.Erp.ReserveWriteDown) <> ":post") => {:tenant, Samen.Approvals.Gate},
+    # WS-ACCT journal controls: the manual journal's gated post/void. The
+    # resource only opens the Gate when the org's JournalApprovalPolicy applies.
+    (Atom.to_string(Samenerp.Erp.JournalEntry) <> ":post") => {:tenant, Samen.Approvals.Gate},
+    (Atom.to_string(Samenerp.Erp.JournalEntry) <> ":void") => {:tenant, Samen.Approvals.Gate},
     # Phase 7 (ADR-043 §6.3 D5) — the AI support operator's human-gated send.
     # Operator plane; the requester (the AI service principal) is never the
     # decider (distinct-party by construction).

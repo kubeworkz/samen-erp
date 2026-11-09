@@ -300,7 +300,13 @@ defmodule Samen.Web.Operator.ActivityLive do
                         <div class="mono" style="font-size:11px;color:var(--muted);word-break:break-all">session {item.session_id || "—"}</div>
                         <div class="mono" style="font-size:11px;color:var(--muted);word-break:break-all">tenant {item.tenant_subject_id || "—"}</div>
                       <% else %>
-                        <span class="mono" style="font-size:11px">{short_id(item.actor_id)}</span>
+                        <span
+                          class="mono"
+                          style="font-size:11px"
+                          title={item.actor_id}
+                        >
+                          {short_id(item.actor_id)}
+                        </span>
                       <% end %>
                     </td>
                     <td class="a-action">{item.action}</td>

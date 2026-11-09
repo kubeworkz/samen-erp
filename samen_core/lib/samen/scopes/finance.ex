@@ -287,6 +287,19 @@ defmodule Samen.Scopes.Finance do
 
   Other hosts pass `abbrevs:` overrides (mirroring `Samen.Scopes.Work`'s
   `abbrevs:` plumbing) when the defaults are already claimed.
+
+  ## Journal approval and segregation of duties
+
+  Every mount also defines `JournalApprovalPolicy`. A policy row turns manual
+  journal approval on for that org; a human `:post`/`:void` then opens a
+  `Samen.Approvals` request instead of posting. The request is bound to the
+  entry's `prepared_by`, and `Samen.Approvals` refuses a decision by that same
+  principal, so the preparer can never approve their own work. A distinct
+  approver's decision re-invokes the action, and the entry stamps
+  `approved_by`/`approved_at`/`approval_id` in the same transaction as the
+  posting. System cascades (no actor) and orgs without an enabled policy keep
+  their existing path; the ledger invariants still run on every approved
+  invocation.
   """
 
   # Demo defaults are UNCLAIMED-in-the-registry abbrevs (ADR-025 discipline: a
@@ -298,6 +311,9 @@ defmodule Samen.Scopes.Finance do
     account: "fca",
     journal_entry: "fje",
     journal_line: "fjl",
+    # WS-ACCT journal controls: the org's approval policy. Reserved under the
+    # `samen_web` host (the fixture and samenerp pass their own overrides).
+    journal_approval_policy: "jap",
     ap_invoice: "fai",
     payment_receipt: "frr",
     posting_account: "fpa",
@@ -381,6 +397,7 @@ defmodule Samen.Scopes.Finance do
     account_mod = Module.concat(namespace, Account)
     entry_mod = Module.concat(namespace, JournalEntry)
     line_mod = Module.concat(namespace, JournalLine)
+    journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
     receipt_mod = Module.concat(namespace, PaymentReceipt)
     posting_account_mod = Module.concat(namespace, PostingAccount)
@@ -445,6 +462,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(account_mod))
         resource(unquote(entry_mod))
         resource(unquote(line_mod))
+        resource(unquote(journal_approval_policy_mod))
         resource(unquote(ap_invoice_mod))
         resource(unquote(receipt_mod))
         resource(unquote(posting_account_mod))
@@ -798,6 +816,14 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.account)
       )
 
+      Samen.Scopes.Finance.Blueprint.define_journal_approval_policy(
+        unquote(journal_approval_policy_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.journal_approval_policy)
+      )
+
       Samen.Scopes.Finance.Blueprint.define_journal_entry(
         unquote(entry_mod),
         unquote(otp_app),
@@ -805,7 +831,8 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.journal_entry),
         unquote(line_mod),
-        unquote(fiscal_period_mod)
+        unquote(fiscal_period_mod),
+        unquote(journal_approval_policy_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_journal_line(

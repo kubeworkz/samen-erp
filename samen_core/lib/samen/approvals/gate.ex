@@ -99,7 +99,11 @@ defmodule Samen.Approvals.Gate do
           |> Ash.Changeset.for_update(action, %{},
             actor: requester,
             authorize?: true,
-            context: %{approval_ok: true}
+            context: %{
+              approval_ok: true,
+              approval_id: approval.id,
+              approved_by: approval.decided_by
+            }
           )
           |> Ash.update(actor: requester)
           |> case do

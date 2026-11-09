@@ -46,6 +46,11 @@ defmodule Samenerp.Kubeworkz.Books do
       `DepreciationRun` posts the slice, and the posting map binds
       `accumulated_depreciation` to `1520`.
 
+    * **The journal approval policy** — enabled with a zero threshold, so the
+      books' manual journal entries require a distinct approver. The seed
+      creates it only when missing; an operator's later disable/threshold edit
+      is REPORTED as drift, never silently overwritten.
+
     * **Functional currency CAD** (ADR-054 D15) on every account row.
 
   ## Idempotence and honesty
@@ -343,6 +348,13 @@ defmodule Samenerp.Kubeworkz.Books do
         posting_accounts: %{created: n, existing: n, drifted: [String.t()]},
         cost_objects: %{created: n, existing: n, drifted: [String.t()]},
         assets: %{created: n, existing: n, drifted: [String.t()]},
+        journal_approval: %{
+          id: String.t(),
+          created: boolean,
+          enabled: boolean,
+          threshold_cents: integer,
+          drifted: [String.t()]
+        },
         budget: %{id: String.t(), year: integer, created: boolean},
         unmapped: [atom()]
       }
@@ -356,6 +368,7 @@ defmodule Samenerp.Kubeworkz.Books do
     objects = seed_cost_objects(org_id)
     assets = seed_assets(org_id)
     reserves = seed_reserve_policies(org_id)
+    approval = seed_journal_approval_policy(org_id)
     budget = seed_budget(org_id)
 
     %{
@@ -365,6 +378,7 @@ defmodule Samenerp.Kubeworkz.Books do
       cost_objects: objects,
       assets: assets,
       reserve_policies: reserves,
+      journal_approval: approval,
       budget: budget,
       unmapped: @pending_meanings |> Map.keys() |> Enum.sort()
     }
@@ -395,7 +409,8 @@ defmodule Samenerp.Kubeworkz.Books do
           %{name: existing_name, kind: existing_kind, normal_side: existing_side} = account ->
             mismatch =
               [
-                existing_name != name && "#{code} name #{inspect(existing_name)} ≠ #{inspect(name)}",
+                existing_name != name &&
+                  "#{code} name #{inspect(existing_name)} ≠ #{inspect(name)}",
                 existing_kind != kind &&
                   "#{code} kind #{inspect(existing_kind)} ≠ #{inspect(kind)}",
                 existing_side != side &&
@@ -444,7 +459,8 @@ defmodule Samenerp.Kubeworkz.Books do
 
   defp seed_cost_objects(org_id) do
     {created, existing, drifted} =
-      Enum.reduce(@cost_objects, {0, 0, []}, fn {code, name, kind}, {created, existing, drifted} ->
+      Enum.reduce(@cost_objects, {0, 0, []}, fn {code, name, kind},
+                                                {created, existing, drifted} ->
         case cost_object_by_code(org_id, code) do
           nil ->
             Erp.CostObject
@@ -460,7 +476,8 @@ defmodule Samenerp.Kubeworkz.Books do
           %{name: existing_name, kind: existing_kind} ->
             mismatch =
               [
-                existing_name != name && "#{code} name #{inspect(existing_name)} ≠ #{inspect(name)}",
+                existing_name != name &&
+                  "#{code} name #{inspect(existing_name)} ≠ #{inspect(name)}",
                 existing_kind != kind &&
                   "#{code} kind #{inspect(existing_kind)} ≠ #{inspect(kind)}"
               ]
@@ -575,6 +592,46 @@ defmodule Samenerp.Kubeworkz.Books do
     %{created: created, existing: existing, drifted: drifted}
   end
 
+  defp seed_journal_approval_policy(org_id) do
+    case journal_approval_policy(org_id) do
+      nil ->
+        policy =
+          Erp.JournalApprovalPolicy
+          |> Ash.Changeset.for_create(
+            :create,
+            %{org_id: org_id, enabled: true, threshold_cents: 0},
+            authorize?: false
+          )
+          |> Ash.create!(authorize?: false)
+
+        %{
+          id: policy.id,
+          created: true,
+          enabled: policy.enabled,
+          threshold_cents: policy.threshold_cents,
+          drifted: []
+        }
+
+      policy ->
+        drift =
+          [
+            policy.enabled != true &&
+              "journal approval policy enabled #{policy.enabled} ≠ true",
+            policy.threshold_cents != 0 &&
+              "journal approval policy threshold #{policy.threshold_cents} ≠ 0"
+          ]
+          |> Enum.filter(&is_binary/1)
+
+        %{
+          id: policy.id,
+          created: false,
+          enabled: policy.enabled,
+          threshold_cents: policy.threshold_cents,
+          drifted: drift
+        }
+    end
+  end
+
   defp seed_budget(org_id) do
     year = fiscal_year()
 
@@ -608,7 +665,7 @@ defmodule Samenerp.Kubeworkz.Books do
   @doc """
   Is `org_id`'s book actually open? Re-reads the org and answers honestly.
 
-  Returns `{:ok, %{accounts: n, posting_accounts: n, cost_objects: n, budget_id: id}}`
+  Returns `{:ok, %{accounts: n, posting_accounts: n, cost_objects: n, journal_approval: true, budget_id: id}}`
   or `{:error, [missing]}` naming every gap — a bare org fails with the whole
   list, which is what makes this a refutable check rather than a rubber stamp.
   """
@@ -621,7 +678,8 @@ defmodule Samenerp.Kubeworkz.Books do
         missing_posting_accounts(org_id) ++
         missing_cost_objects(org_id) ++
         missing_assets(org_id) ++
-        missing_reserve_policies(org_id) ++ missing_budget(org_id)
+        missing_reserve_policies(org_id) ++
+        missing_journal_approval_policy(org_id) ++ missing_budget(org_id)
 
     case missing do
       [] ->
@@ -632,6 +690,7 @@ defmodule Samenerp.Kubeworkz.Books do
            cost_objects: length(@cost_objects),
            assets: length(@assets),
            reserve_policies: length(@reserve_policies),
+           journal_approval: true,
            budget_id: budget_by_name(org_id, fiscal_year()).id
          }}
 
@@ -707,6 +766,22 @@ defmodule Samenerp.Kubeworkz.Books do
     end)
   end
 
+  defp missing_journal_approval_policy(org_id) do
+    case journal_approval_policy(org_id) do
+      %{enabled: true, threshold_cents: 0} ->
+        []
+
+      nil ->
+        ["journal approval policy is missing"]
+
+      policy ->
+        [
+          "journal approval policy must be enabled at threshold 0 " <>
+            "(got enabled: #{policy.enabled}, threshold_cents: #{policy.threshold_cents})"
+        ]
+    end
+  end
+
   defp missing_budget(org_id) do
     year = fiscal_year()
 
@@ -754,6 +829,12 @@ defmodule Samenerp.Kubeworkz.Books do
   defp reserve_policy_by_name(org_id, name) do
     Erp.InventoryReserve
     |> Ash.Query.filter(org_id == ^org_id and name == ^name)
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp journal_approval_policy(org_id) do
+    Erp.JournalApprovalPolicy
+    |> Ash.Query.filter(org_id == ^org_id)
     |> Ash.read_one!(authorize?: false)
   end
 

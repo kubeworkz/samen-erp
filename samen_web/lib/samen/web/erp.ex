@@ -6,7 +6,10 @@ defmodule Samen.Web.Erp do
   TWO generic LiveViews serve the six ERP surfaces a host mounts with a
   single router line — `Samen.Web.Erp.SurfaceLive` (the bounded list at
   `<path>/<surface>`) and `Samen.Web.Erp.DetailLive` (the record page at
-  `<path>/<surface>/<id>`):
+  `<path>/<surface>/<id>`). A THIRD page is not a list surface:
+  `Samen.Web.Erp.JournalApprovalLive` at `<path>/journal-approval` is the
+  org's journal-approval control — one `JournalApprovalPolicy` row, created or
+  updated through its own governed admin-only actions:
 
       samen_erp_routes(:erp, SamenCore.Support.FinanceFixture, repo: SamenCore.TestRepo)
 
@@ -100,6 +103,92 @@ defmodule Samen.Web.Erp do
   def surface(atom) when is_atom(atom), do: if(atom in @surfaces, do: atom)
 
   @doc """
+  The org's journal-approval control resource (`JournalApprovalPolicy`),
+  DERIVED from the host's mounted Finance namespace. `nil` when the host has
+  not mounted the Finance scope — the settings page renders its honest
+  not-mounted state, never a crash.
+  """
+  @spec journal_approval_policy(Mount.t()) :: module() | nil
+  def journal_approval_policy(%Mount{} = mount), do: derived(mount, :JournalApprovalPolicy)
+
+  @doc "The journal-approval settings page's label (the nav item + page heading)."
+  @spec journal_approval_label() :: String.t()
+  def journal_approval_label, do: "Journal approval"
+
+  @doc "The ERP landing dashboard's label (the nav item + page heading)."
+  @spec dashboard_label() :: String.t()
+  def dashboard_label, do: "Dashboard"
+
+  @doc "The AP invoice capture page's label (the nav item + page heading)."
+  @spec ap_capture_label() :: String.t()
+  def ap_capture_label, do: "AP capture"
+
+  @doc "The AP payment run page's label (the nav item + page heading)."
+  @spec ap_payments_label() :: String.t()
+  def ap_payments_label, do: "AP payments"
+
+  @doc "The AR aging and customer statements page's label (the nav item + page heading)."
+  @spec ar_aging_label() :: String.t()
+  def ar_aging_label, do: "AR aging"
+
+  @doc """
+  The org's AP bill resource (`ApInvoice`), DERIVED from the host's mounted
+  Finance namespace. `nil` when the host has not mounted that scope — the
+  payment-run page renders its honest not-mounted state.
+  """
+  @spec ap_invoice(Mount.t()) :: module() | nil
+  def ap_invoice(%Mount{} = mount), do: derived(mount, :ApInvoice)
+
+  @doc """
+  The GL cash intake resource (`PaymentReceipt`), DERIVED from the host's
+  mounted Finance namespace — the posted-cash side of the AR aging read.
+  """
+  @spec payment_receipt(Mount.t()) :: module() | nil
+  def payment_receipt(%Mount{} = mount), do: derived(mount, :PaymentReceipt)
+
+  @doc """
+  The org's chart-of-accounts resource (`Account`), DERIVED from the host's
+  mounted namespace — the capture page's expense picker. `nil` when the host
+  has not mounted a scope carrying it.
+  """
+  @spec account(Mount.t()) :: module() | nil
+  def account(%Mount{} = mount), do: derived(mount, :Account)
+
+  @doc """
+  The host's Billing invoice resource — the AR document source of truth the
+  aging/statement page reads.
+
+  Billing is a SIBLING mount under the ADR-004 convention, so it cannot be
+  derived from the ERP namespace. The host names it with the `:billing_invoice`
+  mount label (the `:eric_namespace`-shaped seam); `nil` when it names none, and
+  the page renders its not-mounted state rather than guessing a module.
+  """
+  @spec billing_invoice(Mount.t()) :: module() | nil
+  def billing_invoice(%Mount{} = mount) do
+    case Mount.label(mount, :billing_invoice, nil) do
+      nil -> nil
+      mod when is_atom(mod) -> if Code.ensure_loaded?(mod), do: mod
+    end
+  end
+
+  @doc """
+  The AR aging buckets, in display order, with their rail labels. The bucket
+  ATOMS are the ones `Samen.Scopes.Finance.ArAging` computes — this list only
+  names them for the page, so a new bucket cannot appear unlabeled.
+  """
+  @spec aging_buckets() :: [{atom(), String.t()}, ...]
+  def aging_buckets do
+    [
+      {:current, "Current"},
+      {:days_1_30, "1–30 days"},
+      {:days_31_60, "31–60 days"},
+      {:days_61_90, "61–90 days"},
+      {:days_90_plus, "90+ days"},
+      {:undated, "Undated"}
+    ]
+  end
+
+  @doc """
   The surface's resource, DERIVED from the host's mounted namespace (ADR-004).
   `nil` when the host has not mounted a namespace carrying that resource — the
   honest not-mounted state renders, never a crash.
@@ -166,11 +255,33 @@ defmodule Samen.Web.Erp do
   """
   @spec detail_fields(surface()) :: [atom()]
   def detail_fields(:coa), do: [:code, :name, :kind, :normal_side, :currency, :parent_id]
-  def detail_fields(:entries), do: [:entry_date, :status, :memo, :source_key, :source_id, :posted_at, :inserted_at]
-  def detail_fields(:ap_invoices), do: [:number, :vendor_id, :bill_date, :due_date, :memo, :status, :posted_at, :inserted_at]
+
+  def detail_fields(:entries),
+    do: [:entry_date, :status, :memo, :source_key, :source_id, :posted_at, :inserted_at]
+
+  def detail_fields(:ap_invoices),
+    do: [:number, :vendor_id, :bill_date, :due_date, :memo, :status, :posted_at, :inserted_at]
+
   def detail_fields(:stock), do: [:sku, :name, :kind, :uom, :reorder_point, :inserted_at]
-  def detail_fields(:purchase_orders), do: [:number, :vendor_id, :order_date, :memo, :status, :warehouse_id, :inserted_at]
-  def detail_fields(:work_orders), do: [:number, :status, :qty, :scheduled_for, :memo, :item_id, :bom_id, :warehouse_id, :labor_cents, :overhead_cents, :released_at, :completed_at]
+
+  def detail_fields(:purchase_orders),
+    do: [:number, :vendor_id, :order_date, :memo, :status, :warehouse_id, :inserted_at]
+
+  def detail_fields(:work_orders),
+    do: [
+      :number,
+      :status,
+      :qty,
+      :scheduled_for,
+      :memo,
+      :item_id,
+      :bom_id,
+      :warehouse_id,
+      :labor_cents,
+      :overhead_cents,
+      :released_at,
+      :completed_at
+    ]
 
   @doc """
   A form field spec `{field, type, opts}` for the create modal — `type` is one
@@ -265,7 +376,11 @@ defmodule Samen.Web.Erp do
   end
 
   def edit_fields(:purchase_orders) do
-    [{:order_date, :date, []}, {:memo, :text, []}, {:warehouse_id, :text, [placeholder: "Warehouse id (uuid)"]}]
+    [
+      {:order_date, :date, []},
+      {:memo, :text, []},
+      {:warehouse_id, :text, [placeholder: "Warehouse id (uuid)"]}
+    ]
   end
 
   def edit_fields(:work_orders) do

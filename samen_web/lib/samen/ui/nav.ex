@@ -20,14 +20,14 @@ defmodule Samen.UI.Nav do
   restyles the gradient). The default inner block holds `nav_group/1`s. Optional
   `:search` and `:footer` slots render the search box and the user footer.
   """
-  attr :title, :string, required: true
-  attr :subtitle, :string, default: nil
-  attr :logo, :string, default: "S"
-  attr :logo_style, :string, default: nil
-  slot :switcher
-  slot :search
-  slot :footer
-  slot :inner_block, required: true
+  attr(:title, :string, required: true)
+  attr(:subtitle, :string, default: nil)
+  attr(:logo, :string, default: "S")
+  attr(:logo_style, :string, default: nil)
+  slot(:switcher)
+  slot(:search)
+  slot(:footer)
+  slot(:inner_block, required: true)
 
   def sidebar(assigns) do
     ~H"""
@@ -67,8 +67,8 @@ defmodule Samen.UI.Nav do
   @doc """
   A labelled nav group: a `.grp` uppercase label followed by its `nav_item/1`s.
   """
-  attr :label, :string, required: true
-  slot :inner_block, required: true
+  attr(:label, :string, required: true)
+  slot(:inner_block, required: true)
 
   def nav_group(assigns) do
     ~H"""
@@ -85,12 +85,12 @@ defmodule Samen.UI.Nav do
   the leading glyph. `count` renders a right-aligned monospace count; `dot: true`
   renders a status dot instead (they are mutually exclusive — `count` wins).
   """
-  attr :label, :string, required: true
-  attr :href, :string, default: "#"
-  attr :active, :boolean, default: false
-  attr :count, :any, default: nil
-  attr :dot, :boolean, default: false
-  slot :icon
+  attr(:label, :string, required: true)
+  attr(:href, :string, default: "#")
+  attr(:active, :boolean, default: false)
+  attr(:count, :any, default: nil)
+  attr(:dot, :boolean, default: false)
+  slot(:icon)
 
   def nav_item(assigns) do
     ~H"""
@@ -118,9 +118,9 @@ defmodule Samen.UI.Nav do
     * `active`   — one of `:crm_companies | :crm_contacts | :crm_gallery | :crm_pipeline |
       :crm_calendar | :crm_dashboard | :crm_mailbox | :crm_sequences | :billing_overview |
       :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
-      :support_tickets | :notifications_settings | :settings | :automation | :erp_coa |
-      :erp_entries | :erp_ap_invoices | :erp_stock | :erp_purchase_orders | :erp_work_orders |
-      :erp_grants | :erp_close | :erp_board` (or `nil`).
+      :support_tickets | :notifications_settings | :settings | :automation | :erp_dashboard |
+      :erp_coa | :erp_entries | :erp_ap_invoices | :erp_ap_capture | :erp_ap_payments | :erp_ar_aging | :erp_stock |
+      :erp_purchase_orders | :erp_work_orders | :erp_grants | :erp_close | :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
@@ -142,24 +142,25 @@ defmodule Samen.UI.Nav do
   20% nav is the vertical's. See `host_nav_extra/1` for a DATA-driven way to populate this
   slot identically from every framework sidebar (PP-10).
   """
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: nil
-  attr :crm_path, :string, default: "/crm"
-  attr :billing_path, :string, default: "/billing"
-  attr :support_path, :string, default: "/support"
-  attr :marketing_path, :string, default: "/marketing"
-  attr :notifications_path, :string, default: "/notifications"
-  attr :settings_path, :string, default: "/settings"
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: nil)
+  attr(:crm_path, :string, default: "/crm")
+  attr(:billing_path, :string, default: "/billing")
+  attr(:support_path, :string, default: "/support")
+  attr(:marketing_path, :string, default: "/marketing")
+  attr(:notifications_path, :string, default: "/notifications")
+  attr(:settings_path, :string, default: "/settings")
 
-  attr :erp_path, :string,
+  attr(:erp_path, :string,
     default: nil,
     doc: """
     The ERP route prefix — non-nil ONLY on a host whose router calls `samen_erp_routes/3`
     (threaded from the `:erp_path` mount label). `nil` hides the whole ERP group (the X1
     dead-link guard; every pre-existing caller and generated app defaults to `nil`).
     """
+  )
 
-  attr :grants_path, :string,
+  attr(:grants_path, :string,
     default: nil,
     doc: """
     The grant index route prefix — non-nil ONLY on a host whose router calls
@@ -167,8 +168,9 @@ defmodule Samen.UI.Nav do
     item lives inside the ERP group, so it also requires `erp_path`; `nil` hides it. This
     is the same X1 dead-link guard as every other path-gated nav item.
     """
+  )
 
-  attr :close_path, :string,
+  attr(:close_path, :string,
     default: nil,
     doc: """
     The monthly close route prefix — non-nil ONLY on a host whose router calls
@@ -176,8 +178,9 @@ defmodule Samen.UI.Nav do
     lives inside the ERP group, so it also requires `erp_path`; `nil` hides it.
     Same X1 dead-link guard as every other path-gated nav item.
     """
+  )
 
-  attr :board_path, :string,
+  attr(:board_path, :string,
     default: nil,
     doc: """
     The board reporting package route prefix — non-nil ONLY on a host whose
@@ -185,22 +188,25 @@ defmodule Samen.UI.Nav do
     label). The item lives inside the ERP group, so it also requires `erp_path`;
     `nil` hides it. Same X1 dead-link guard as every other path-gated nav item.
     """
+  )
 
-  attr :banking_path, :string,
+  attr(:banking_path, :string,
     default: nil,
     doc: """
     The Banking route prefix — non-nil ONLY on a host whose router calls
     `samen_module_routes(:banking, …)` and threads the `:banking_path` mount label
     (same X1 dead-link guard posture as `erp_path`; `nil` hides the group).
     """
+  )
 
-  attr :work_path, :string,
+  attr(:work_path, :string,
     default: nil,
     doc: """
     The Work route prefix — non-nil ONLY on a host whose router calls
     `samen_module_routes(:work, …)` and threads the `:work_path` mount label (X1
     dead-link guard; `nil` hides the group — every pre-existing caller passes nothing).
     """
+  )
 
   # ---------------------------------------------------------------------------
   # The phase-module groups (banking/work + the seven host-adoption phases, see
@@ -210,15 +216,16 @@ defmodule Samen.UI.Nav do
   # shot from a mount with `nav_paths/1` — the single call-site seam.
   # ---------------------------------------------------------------------------
 
-  attr :files_path, :string,
+  attr(:files_path, :string,
     default: nil,
     doc: """
     The Files route prefix (Phase 1) — non-nil ONLY on a host whose router calls
     `samen_files_routes(:files, …)` and threads the `:files_path` mount label (X1 dead-link
     guard; `nil` hides the Documents group).
     """
+  )
 
-  attr :pages_path, :string,
+  attr(:pages_path, :string,
     default: nil,
     doc: """
     The Pages (block-page editor) route prefix (WS-Notes Phase 3, ADR-053 §8 O4) — non-nil ONLY
@@ -226,8 +233,9 @@ defmodule Samen.UI.Nav do
     ITSELF (like `samen_ai_routes`), so mounting the surface is the whole opt-in (X1 dead-link
     guard; `nil` hides the Pages item).
     """
+  )
 
-  attr :chat_path, :string,
+  attr(:chat_path, :string,
     default: nil,
     doc: """
     The TENANT Chat route prefix (Phase 2) — non-nil ONLY on a host whose router calls
@@ -236,24 +244,27 @@ defmodule Samen.UI.Nav do
     OPERATOR-plane desk chat (driftwood's `/operator/desk-chat`), whose label must never reach a
     tenant sidebar — `nav_paths/1` only resolves this key for a `:tenant`-plane mount.
     """
+  )
 
-  attr :search_path, :string,
+  attr(:search_path, :string,
     default: nil,
     doc: """
     The Search (⌘K) route prefix (Phase 3) — non-nil ONLY on a host whose router calls
     `samen_search_routes(:search, …)` and threads the `:search_path` mount label (X1 dead-link
     guard; `nil` hides the Discover group).
     """
+  )
 
-  attr :analytics_path, :string,
+  attr(:analytics_path, :string,
     default: nil,
     doc: """
     The own-org analytics route prefix (Phase 3 / P17) — non-nil ONLY on a host whose router calls
     `samen_tenant_analytics_routes(…)` and threads the `:analytics_path` mount label (X1 dead-link
     guard; `nil` hides the Insights group).
     """
+  )
 
-  attr :ics_path, :string,
+  attr(:ics_path, :string,
     default: nil,
     doc: """
     The `.ics` export route (Phase 6) — non-nil ONLY on a host whose router calls
@@ -261,8 +272,9 @@ defmodule Samen.UI.Nav do
     `nil` hides the Calendar group). The route is a plain controller DOWNLOAD (`/calendar.ics`),
     not a LiveView, so the nav item is a feed export.
     """
+  )
 
-  attr :ai_path, :string,
+  attr(:ai_path, :string,
     default: nil,
     doc: """
     The AI plane route prefix (Phase 7) — non-nil ONLY on a host whose router calls
@@ -270,16 +282,18 @@ defmodule Samen.UI.Nav do
     hides the AI group). `samen_ai_routes/3` sets this label ITSELF, so a host mounting AI needs
     no bookkeeping here.
     """
+  )
 
-  attr :flags_path, :string,
+  attr(:flags_path, :string,
     default: nil,
     doc: """
     The tenant feature-flag admin route prefix (Phase 4) — non-nil ONLY on a host whose router
     calls `samen_flags_routes(:flags, …)` and threads the `:flags_path` mount label (X1 dead-link
     guard; `nil` hides the Workspace group's Feature-flags item).
     """
+  )
 
-  attr :automation_path, :string,
+  attr(:automation_path, :string,
     default: nil,
     doc: """
     The tenant Automation (workflow builder) route prefix — non-nil ONLY on a host whose router
@@ -291,12 +305,14 @@ defmodule Samen.UI.Nav do
     in its sidebar on every tenant page. `mix samen.verify.nav_links` now fails any host whose
     label points at a route its router does not mount (see the task's moduledoc).
     """
+  )
 
-  attr :notifications_unread, :any,
+  attr(:notifications_unread, :any,
     default: nil,
     doc: "unread count feeding the nav_item badge (nil → unlit; AC-G2-7)"
+  )
 
-  attr :surfaces, :any,
+  attr(:surfaces, :any,
     default: :all,
     doc: """
     Which inherited nav GROUPS this host actually mounts — the X1 dead-link guard (ADR-045
@@ -310,8 +326,9 @@ defmodule Samen.UI.Nav do
     Filtered by construction here so the nav is correct for ANY `--modules` subset without a
     per-app fork.
     """
+  )
 
-  slot :extra
+  slot(:extra)
 
   def module_nav(assigns) do
     ~H"""
@@ -319,12 +336,59 @@ defmodule Samen.UI.Nav do
 
     <.nav_group :if={@erp_path} label="ERP">
       <.nav_item
+        label={Samen.Web.Erp.dashboard_label()}
+        href={"#{@erp_path}?org=#{@org_id}"}
+        active={@active == :erp_dashboard}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
         :for={surface <- Samen.Web.Erp.surfaces()}
         label={Samen.Web.Erp.label(surface)}
         href={"#{@erp_path}/#{surface}?org=#{@org_id}"}
         active={@active == :"erp_#{surface}"}
       >
         <:icon>{erp_icon(surface)}</:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.ap_capture_label()}
+        href={"#{@erp_path}/ap-capture?org=#{@org_id}"}
+        active={@active == :erp_ap_capture}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h9l4 4v12H5z" /><path d="M14 4v4h4" /><path d="M8 13h6M8 16h4" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.ap_payments_label()}
+        href={"#{@erp_path}/ap-payments?org=#{@org_id}"}
+        active={@active == :erp_ap_payments}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /><path d="M7 14h3" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.ar_aging_label()}
+        href={"#{@erp_path}/ar-aging?org=#{@org_id}"}
+        active={@active == :erp_ar_aging}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16" /><path d="M8 16v-6M13 16V6M18 16v-3" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.journal_approval_label()}
+        href={"#{@erp_path}/journal-approval?org=#{@org_id}"}
+        active={@active == :erp_journal_approval}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+        </:icon>
       </.nav_item>
       <.nav_item
         :if={@grants_path}
@@ -763,8 +827,8 @@ defmodule Samen.UI.Nav do
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
   """
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
 
   def host_nav_extra(assigns) do
     assigns = assign(assigns, :group, host_nav_extra_data(assigns.mount, assigns.org_id))
@@ -807,9 +871,9 @@ defmodule Samen.UI.Nav do
   Dashboard), so "back to my workspace" is one click from any page. String
   crumbs render byte-for-byte as before.
   """
-  attr :title, :string, required: true
-  attr :crumbs, :list, default: []
-  slot :actions
+  attr(:title, :string, required: true)
+  attr(:crumbs, :list, default: [])
+  slot(:actions)
 
   def topbar(assigns) do
     ~H"""
@@ -839,7 +903,7 @@ defmodule Samen.UI.Nav do
   # ---------------------------------------------------------------------------
 
   @doc "The tab bar container. Holds `tab/1`s in its inner block."
-  slot :inner_block, required: true
+  slot(:inner_block, required: true)
 
   def tabs(assigns) do
     ~H"""
@@ -850,10 +914,10 @@ defmodule Samen.UI.Nav do
   end
 
   @doc "One tab. `active` toggles the selected underline. Optional `:icon` slot."
-  attr :label, :string, required: true
-  attr :href, :string, default: "#"
-  attr :active, :boolean, default: false
-  slot :icon
+  attr(:label, :string, required: true)
+  attr(:href, :string, default: "#")
+  attr(:active, :boolean, default: false)
+  slot(:icon)
 
   def tab(assigns) do
     ~H"""

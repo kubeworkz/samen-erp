@@ -302,7 +302,12 @@ defmodule Samen.Web.Router do
         # route param), reached from the account drill-down's "Deliverability →"
         # link and from the webhook DLQ's org column. Inherited at 0 vertical LOC.
         # (Resolve route declared first — see the automation family's comment above.)
-        live("#{path}/deliverability/resolve", Samen.Web.Operator.FleetResolveLive, :deliverability)
+        live(
+          "#{path}/deliverability/resolve",
+          Samen.Web.Operator.FleetResolveLive,
+          :deliverability
+        )
+
         live("#{path}/deliverability/:org_id", Samen.Web.Operator.DeliverabilityLive)
         # The R3/T115 operator activity/audit feed (dogfood-report.md R4 — P4's
         # "what changed in org X in the last 24h?" job-test) — the aud_chain
@@ -405,7 +410,9 @@ defmodule Samen.Web.Router do
     quote bind_quoted: [otp_app: otp_app, path: path] do
       fleet_opts = [otp_app: otp_app]
 
-      get("#{path}/health", Samen.Web.FleetController, :health, private: %{samen_fleet: fleet_opts})
+      get("#{path}/health", Samen.Web.FleetController, :health,
+        private: %{samen_fleet: fleet_opts}
+      )
 
       post("#{path}/directive", Samen.Web.FleetController, :directive,
         private: %{samen_fleet: fleet_opts}
@@ -1128,7 +1135,16 @@ defmodule Samen.Web.Router do
   derives the resource from the mount (never caller input), renders only the
   registry's bounded column lists, and reads through `Samen.Web.Reads.page!/3`
   with the org-pinned scope; `Samen.Web.Erp.DetailLive` serves
-  `/:surface/:id` over the SAME allowlist. No host-authored LiveView exists to
+  `/:surface/:id` over the SAME allowlist. The macro also mounts the
+  journal-approval control at `<path>/journal-approval` — the admin settings
+  page over the org's one `JournalApprovalPolicy` row, writing through that
+  resource's OWN admin-only actions — plus the AP payment run at
+  `<path>/ap-payments` (one `ApPaymentRun` batch over approved bills, with the
+  remittance CSV handed straight from the render) and the AR aging / customer
+  statements page at `<path>/ar-aging` (`ArAging` over the mounted Billing
+  invoices and posted receipts). The ERP landing dashboard at `<path>` reads
+  the org's hosted-OCR budget (so exhaustion is visible before capture) and
+  links every ERP page. No host-authored LiveView exists to
   mis-wire, there is no export path, and every write affordance (create/edit/
   transition) is a form over the resource's OWN governed action, scoped by the
   same org-pinned scope. Options as
@@ -1166,6 +1182,24 @@ defmodule Samen.Web.Router do
       live_session session_name,
         on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
         session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        # The ERP landing dashboard: the at-a-glance page (hosted-OCR budget +
+        # links). The root path has fewer segments than `:surface`, so it never
+        # shadows the list route.
+        live("#{path}", Samen.Web.Erp.DashboardLive)
+        # The journal-approval control (the admin settings page over the org's
+        # one `JournalApprovalPolicy` row). Declared BEFORE `:surface`: a literal
+        # segment wins over the parameterized list route, so
+        # `/erp/journal-approval` reaches the page instead of resolving as an
+        # unknown surface name.
+        live("#{path}/journal-approval", Samen.Web.Erp.JournalApprovalLive)
+        # The AP payment run (approved bills → one remittance batch) and the AR
+        # aging / customer-statement page. Literal segments declared BEFORE
+        # `:surface` for the same reason as journal-approval: a dynamic segment
+        # declared first would capture "ap-payments"/"ar-aging" as a surface
+        # name and these pages would never be reached.
+        live("#{path}/ap-capture", Samen.Web.Erp.ApCaptureLive)
+        live("#{path}/ap-payments", Samen.Web.Erp.ApPaymentsLive)
+        live("#{path}/ar-aging", Samen.Web.Erp.ArAgingLive)
         # One parameterized route feeds the closed surface allowlist. The LiveView
         # validates `:surface` through `Samen.Web.Erp.surface/1`; expanding the
         # six literal paths here would bypass the LiveView's `%{"surface" => ...}`
@@ -1795,7 +1829,6 @@ defmodule Samen.Web.Router do
         for {sub_path, module} <- Samen.Web.Router.__routes__(:settings, path) do
           live(sub_path, module)
         end
-
       end
 
       # ADR-035 §5 A7 — the self-service TOTP-enrollment surface. Mounted ONLY
@@ -1833,7 +1866,10 @@ defmodule Samen.Web.Router do
         private: %{samen_mount: mount}
       )
 
-      post("#{path}/security/sessions/revoke_others", Samen.Web.Auth.SessionController, :revoke_others,
+      post(
+        "#{path}/security/sessions/revoke_others",
+        Samen.Web.Auth.SessionController,
+        :revoke_others,
         private: %{samen_mount: mount}
       )
 
@@ -1848,7 +1884,10 @@ defmodule Samen.Web.Router do
           private: %{samen_mount: mount, samen_totp_enroll_path: "#{path}/security/2fa"}
         )
 
-        post("#{path}/security/2fa/recovery_codes", Samen.Web.Auth.TotpEnrollController, :regenerate,
+        post(
+          "#{path}/security/2fa/recovery_codes",
+          Samen.Web.Auth.TotpEnrollController,
+          :regenerate,
           private: %{samen_mount: mount, samen_totp_enroll_path: "#{path}/security/2fa"}
         )
 
@@ -2271,6 +2310,7 @@ defmodule Samen.Web.Router do
   defmacro samen_metrics_route(opts \\ []) do
     path = Keyword.get(opts, :path, "/metrics")
     name_ast = Keyword.fetch!(opts, :name)
+
     reporter_ast =
       Keyword.get(opts, :reporter, quote(do: Samen.Web.MetricsController.default_reporter()))
 
@@ -2365,7 +2405,8 @@ defmodule Samen.Web.Router do
   # its documented `{:error, {:missing_namespace, mode}}` branch. Called from the macro body
   # (expansion time), so a missing/blank namespace fails the BUILD, not a production request.
   def __require_fleet_namespace__!(opts) do
-    if Keyword.keyword?(opts) and cockpit_mount?(opts) and is_nil(Keyword.get(opts, :fleet_namespace)) do
+    if Keyword.keyword?(opts) and cockpit_mount?(opts) and
+         is_nil(Keyword.get(opts, :fleet_namespace)) do
       raise ArgumentError,
             "samen_operator_routes/2 mounts the fleet cockpit (fleet_cockpit: true) with no " <>
               ":fleet_namespace — the `Samen.Fleet.Scope`-mounted Ash domain the cockpit reads " <>
@@ -2398,7 +2439,9 @@ defmodule Samen.Web.Router do
 
   @doc false
   def __fleet_namespace_label__(labels, nil), do: labels
-  def __fleet_namespace_label__(labels, fleet_namespace), do: Map.put(labels, :fleet_namespace, fleet_namespace)
+
+  def __fleet_namespace_label__(labels, fleet_namespace),
+    do: Map.put(labels, :fleet_namespace, fleet_namespace)
 
   @doc false
   def __fleet_cockpit_label__(labels, false), do: labels

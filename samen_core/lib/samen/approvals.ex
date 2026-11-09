@@ -105,14 +105,24 @@ defmodule Samen.Approvals do
   end
 
   @doc """
-  Cancel `approval_id` (the requester withdraws). `pending → cancelled`, audited. No
-  handler runs. Returns `{:ok, approval}` or `{:error, term()}`.
+  Cancel `approval_id` (the requester withdraws). Only the party recorded as
+  `requested_by` may cancel; a different or blank actor is refused with
+  `:not_requester` and audited as `approval_cancel_refused`. A successful withdrawal
+  transitions `pending → cancelled`, audited. No handler runs. Returns `{:ok, approval}`
+  or `{:error, term()}`.
   """
   @spec cancel(term(), term(), keyword()) :: {:ok, struct()} | {:error, term()}
   def cancel(approval_id, actor, opts \\ []) do
+    actor_id = to_actor_id(actor)
+
     with {:ok, {res, repo}} <- wiring(opts),
          {:ok, approval} <- fetch_approval(res, approval_id, opts) do
       cond do
+        blank_actor?(actor_id) or actor_id != to_actor_id(approval.requested_by) ->
+          refused_by = if(blank_actor?(actor_id), do: nil, else: actor_id)
+          audit(repo, approval, "approval_cancel_refused", refused_by)
+          {:error, :not_requester}
+
         approval.state != :pending ->
           {:error, :not_pending}
 
