@@ -28,6 +28,18 @@ defmodule Samenerp.KubeworkzApPaymentTest do
     }
   end
 
+  defp approver_scope(org_id) do
+    %Samen.Scope{
+      actor: %{
+        id: "approver:#{org_id}",
+        org_id: org_id,
+        role: :admin,
+        kind: :tenant,
+        plane: :tenant
+      }
+    }
+  end
+
   defp account!(org_id, code) do
     Erp.Account
     |> Ash.Query.filter(org_id == ^org_id and code == ^code)
@@ -115,8 +127,8 @@ defmodule Samenerp.KubeworkzApPaymentTest do
       new_bill(admin, org.id, vendor, "AP-PAY-002", 250_000, expense)
       |> approve!(org.id, admin)
 
-    assert {:ok, run} =
-             ApPaymentRun.pay(
+    assert {:ok, pending} =
+             ApPaymentRun.request(
                ap_invoice: Erp.ApInvoice,
                repo: Samenerp.Repo,
                scope: admin,
@@ -125,6 +137,35 @@ defmodule Samenerp.KubeworkzApPaymentTest do
                reference: "KUBE-AP-RUN-1"
              )
 
+    assert pending.status == :pending_approval
+    assert pending.requested_by == "admin:#{org.id}"
+    assert pending.total_cents == 375_000
+    assert payment_entries(org.id, [first.id, second.id]) == []
+
+    # Dual control: the requester's own approval is refused before any cash moves.
+    assert {:error, :self_approval} =
+             ApPaymentRun.approve(
+               ap_invoice: Erp.ApInvoice,
+               repo: Samenerp.Repo,
+               scope: admin,
+               run_id: pending.id
+             )
+
+    assert Ash.get!(Erp.ApInvoice, first.id, authorize?: false).status == :approved
+
+    approver = approver_scope(org.id)
+
+    assert {:ok, run} =
+             ApPaymentRun.approve(
+               ap_invoice: Erp.ApInvoice,
+               repo: Samenerp.Repo,
+               scope: approver,
+               run_id: pending.id
+             )
+
+    assert run.status == :paid
+    assert run.requested_by == "admin:#{org.id}"
+    assert run.approved_by == "approver:#{org.id}"
     assert run.reference == "KUBE-AP-RUN-1"
     assert run.vendor_id == vendor
     assert run.total_cents == 375_000
@@ -146,11 +187,23 @@ defmodule Samenerp.KubeworkzApPaymentTest do
     assert Reconcile.org_balance(org.id, Samenerp.Repo, line_resource: Erp.JournalLine) ==
              {:ok, 0}
 
-    csv = ApPaymentRun.remittance_csv(run)
+    csv = run.remittance_csv
+    assert is_binary(csv)
     assert csv =~ "KUBE-AP-RUN-1"
     assert csv =~ "AP-PAY-001"
     assert csv =~ "AP-PAY-002"
     assert csv =~ "125000"
+
+    assert {:ok, stored} = ApPaymentRun.get_run(Samenerp.Repo, org.id, run.id)
+    assert stored.status == :paid
+    assert stored.requested_by == "admin:#{org.id}"
+    assert stored.approved_by == "approver:#{org.id}"
+    assert stored.approved_at
+    assert stored.executed_at
+    assert stored.remittance_csv == csv
+    assert stored.bill_count == 2
+    assert [listed] = ApPaymentRun.list_runs(Samenerp.Repo, org.id)
+    assert listed.id == stored.id
 
     # The stale :approved struct still cannot pay a second time: the payment
     # cascade locks the persisted row and sees :paid.

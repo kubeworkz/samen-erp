@@ -1140,7 +1140,9 @@ defmodule Samen.Web.Router do
   page over the org's one `JournalApprovalPolicy` row, writing through that
   resource's OWN admin-only actions — plus the AP payment run at
   `<path>/ap-payments` (one `ApPaymentRun` batch over approved bills, with the
-  remittance CSV handed straight from the render), the AR receipt intake at
+  remittance CSV handed straight from the render), its read-only audit page
+  at `<path>/ap-payments/:id` (the immutable snapshot and decision evidence),
+  and the printable advice at `<path>/ap-payments/:id/remittance`, the AR receipt intake at
   `<path>/ar-receipts` (one customer payment across open invoices), and the AR
   aging / customer statements page at `<path>/ar-aging` (`ArAging` over the
   mounted Billing invoices and posted receipts). The ERP landing dashboard at `<path>` reads
@@ -1201,6 +1203,11 @@ defmodule Samen.Web.Router do
         # name and these pages would never be reached.
         live("#{path}/ap-capture", Samen.Web.Erp.ApCaptureLive)
         live("#{path}/ap-payments", Samen.Web.Erp.ApPaymentsLive)
+        # The AP payment run AUDIT page (one immutable snapshot + its decision
+        # evidence). This literal 3-segment route must be declared BEFORE the
+        # generic `:surface/:id` twin below: otherwise `/erp/ap-payments/:id`
+        # would be captured as a surface named "ap-payments".
+        live("#{path}/ap-payments/:id", Samen.Web.Erp.ApPaymentRunLive)
         live("#{path}/ar-receipts", Samen.Web.Erp.ArReceiptsLive)
         live("#{path}/ar-aging", Samen.Web.Erp.ArAgingLive)
         # One parameterized route feeds the closed surface allowlist. The LiveView
@@ -1214,6 +1221,19 @@ defmodule Samen.Web.Router do
         # create/edit/transition affordances ride this same live_session, so the
         # `:require_tenant` gate owns them exactly as it owns the list read.
         live("#{path}/:surface/:id", Samen.Web.Erp.DetailLive)
+      end
+
+      # The printable remittance advice is a STANDALONE DOCUMENT: no app shell,
+      # no sidebar, no screen-only actions in the printed page. Phoenix's layout
+      # options are per-live_session, so this route rides its own layout-less
+      # session with the SAME tenant gate and signed mount session as the ERP
+      # shell above. It is a 4-segment path, so it never shadows `:surface/:id`.
+      live_session :"#{session_name}_remittance",
+        root_layout: false,
+        layout: false,
+        on_mount: [{Samen.Web.TenantAuthz, :require_tenant}],
+        session: %{"samen_mount" => Samen.Web.Mount.to_session(mount)} do
+        live("#{path}/ap-payments/:id/remittance", Samen.Web.Erp.ApPaymentRunPrintLive)
       end
     end
   end

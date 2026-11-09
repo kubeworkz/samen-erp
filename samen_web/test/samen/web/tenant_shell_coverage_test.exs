@@ -83,7 +83,8 @@ defmodule Samen.Web.TenantShellCoverageTest do
   #
   #   * `samen_onboarding_routes/2`      → the first-run wizard
   #   * `samen_tenant_analytics_routes/1` → the own-org analytics page (P17)
-  #   * `samen_erp_routes/3`              → the six ERP surfaces + their detail twin
+  #   * `samen_erp_routes/3`              → the six ERP surfaces, their detail twin, and
+  #     the AP payment run / audit pair
   #   * `samen_settings_routes/3`         → `/settings/security/2fa` (its OWN
   #     `{Samen.Web.Auth, :ensure_authenticated}` live_session — enrollment acts on a
   #     credential, so the boundary is authentication; still a page a signed-in tenant
@@ -98,6 +99,7 @@ defmodule Samen.Web.TenantShellCoverageTest do
     Samen.Web.Erp.SurfaceLive,
     Samen.Web.Erp.DetailLive,
     Samen.Web.Erp.ApPaymentsLive,
+    Samen.Web.Erp.ApPaymentRunLive,
     Samen.Web.Erp.ArReceiptsLive,
     Samen.Web.Erp.ArAgingLive,
     Samen.Web.Auth.TotpEnrollLive
@@ -242,10 +244,10 @@ defmodule Samen.Web.TenantShellCoverageTest do
   end
 
   defp tenant_modules do
-    (@tenant_kinds
-     |> Enum.flat_map(fn kind -> Enum.map(Router.__routes__(kind, "/probe"), &elem(&1, 1)) end)
-     |> Kernel.++(@inline_tenant_modules)
-     |> Enum.uniq())
+    @tenant_kinds
+    |> Enum.flat_map(fn kind -> Enum.map(Router.__routes__(kind, "/probe"), &elem(&1, 1)) end)
+    |> Kernel.++(@inline_tenant_modules)
+    |> Enum.uniq()
     |> Enum.sort()
   end
 
@@ -257,7 +259,10 @@ defmodule Samen.Web.TenantShellCoverageTest do
         :double_shell
 
       true ->
-        case Enum.find(~w(tenant_sidebar tenant_page), &(not Regex.match?(~r/defp?\s+#{&1}\(assigns\)/, source))) do
+        case Enum.find(
+               ~w(tenant_sidebar tenant_page),
+               &(not Regex.match?(~r/defp?\s+#{&1}\(assigns\)/, source))
+             ) do
           nil -> nil
           missing -> {:missing_callback, missing}
         end
@@ -265,12 +270,14 @@ defmodule Samen.Web.TenantShellCoverageTest do
   end
 
   defp wrapper_defect_message(:double_shell),
-    do: "mounts the wrapper AND opens a shell of its own — two nested shells. The wrapper's is " <>
-          "the page's chrome; drop the second one."
+    do:
+      "mounts the wrapper AND opens a shell of its own — two nested shells. The wrapper's is " <>
+        "the page's chrome; drop the second one."
 
   defp wrapper_defect_message({:missing_callback, callback}),
-    do: "mounts the wrapper but defines no #{callback}/1, which is the callback that renders " <>
-          "it (the wrapper refuses to compile without it)."
+    do:
+      "mounts the wrapper but defines no #{callback}/1, which is the callback that renders " <>
+        "it (the wrapper refuses to compile without it)."
 
   # The module's CODE: `@moduledoc`/`@doc` bodies, `#` comments and HEEx comments removed. The
   # sweep asks whether a page OPENS the shell, and prose about the shell is not a shell — a page

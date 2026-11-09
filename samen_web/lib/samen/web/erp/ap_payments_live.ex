@@ -1,13 +1,18 @@
 defmodule Samen.Web.Erp.ApPaymentsLive do
   @moduledoc """
-  The AP payment run (`<erp>/ap-payments`) — select approved bills, run one
-  payment batch, take the remittance advice.
+  The AP payment run (`<erp>/ap-payments`) — request a batch, have a DIFFERENT
+  admin approve it, then take the remittance advice.
 
-  This page is a thin form over `Samen.Scopes.Finance.ApPaymentRun.pay/1`; the
-  kernel owns every guarantee (same-vendor batch, still-approved bills, one
-  repository transaction, exactly-once via the row lock, the posted payment
-  entry). Nothing here posts by hand and no run header is persisted: the durable
-  facts are the payment entries and each bill's `:paid` status.
+  This page is a thin form over `Samen.Scopes.Finance.ApPaymentRun.request/1`
+  and `approve/1`; the kernel owns every guarantee (same-vendor batch,
+  still-approved bills, distinct approver, one repository transaction,
+  exactly-once via the row lock, the posted payment entry). Requesting persists
+  the exact bill snapshot as `:pending_approval` and pays nothing. The run
+  header is durable (`Samen.Scopes.Finance.ApPaymentRunRecord`) and the
+  database refuses a self-approved or rewritten run, so the page's history is
+  the audit trail, not a process-memory summary. Every run reference links to
+  its read-only audit page (`/erp/ap-payments/:id`), which shows the stored
+  snapshot and the request/decision evidence.
 
   The read is the org's `:approved` bills, org-pinned through the mount's plane
   scope. `org_id` is the server-side fact; a client can only select among bills
@@ -22,7 +27,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   Bills that look like the same vendor document entered twice are flagged on
   the list (vendor + total + bill date, `ApPaymentRun.duplicates/1`) and refuse
-  the run unless the operator ticks "pay anyway".
+  the request unless the operator ticks "pay anyway".
   """
 
   use Samen.Web.Tenant.Live
@@ -37,6 +42,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
+  alias Samen.Web.Mount
   alias Samen.Web.TenantRole
 
   @impl true
@@ -58,7 +64,13 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
        payment_date: Date.utc_today(),
        reference: "",
        memo: "",
+       vendor_name: "",
+       remittance_address: "",
        run: nil,
+       notice: nil,
+       pending_runs: [],
+       recent_runs: [],
+       current_actor_id: nil,
        csv: nil,
        ach: %{},
        ach_file: nil,
@@ -84,6 +96,10 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   def load(socket) do
     socket
     |> assign_new(:run, fn -> nil end)
+    |> assign_new(:notice, fn -> nil end)
+    |> assign_new(:pending_runs, fn -> [] end)
+    |> assign_new(:recent_runs, fn -> [] end)
+    |> assign_new(:current_actor_id, fn -> nil end)
     |> assign_new(:csv, fn -> nil end)
     |> assign_new(:ach, fn -> %{} end)
     |> assign_new(:ach_file, fn -> nil end)
@@ -97,6 +113,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> assign_new(:payment_date, fn -> Date.utc_today() end)
     |> assign_new(:reference, fn -> "" end)
     |> assign_new(:memo, fn -> "" end)
+    |> assign_new(:vendor_name, fn -> "" end)
+    |> assign_new(:remittance_address, fn -> "" end)
     |> assign_new(:return_to, fn -> nil end)
     |> do_load()
   end
@@ -133,12 +151,16 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
         case read_approved(resource, org_id, scope) do
           {:ok, bills} ->
             duplicates = ApPaymentRun.duplicates(bills)
+            %{pending: pending_runs, recent: recent_runs} = read_runs(mount, org_id)
 
             assign(socket,
               resource: resource,
               bills: bills,
               duplicates: duplicates,
               duplicate_ids: duplicate_ids(duplicates),
+              pending_runs: pending_runs,
+              recent_runs: recent_runs,
+              current_actor_id: current_actor_id(mount, org_id),
               missing: nil
             )
 
@@ -162,6 +184,25 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> Ash.read(scope: scope)
   end
 
+  defp read_runs(mount, org_id) do
+    %{
+      pending: ApPaymentRun.list_runs(mount.repo, org_id, status: :pending_approval, limit: 20),
+      recent:
+        ApPaymentRun.list_runs(mount.repo, org_id,
+          statuses: [:paid, :rejected, :cancelled],
+          limit: 12
+        )
+    }
+  rescue
+    _ -> %{pending: [], recent: []}
+  end
+
+  defp current_actor_id(mount, org_id) do
+    TenantRole.identity_scope(mount, org_id).actor.id
+  rescue
+    _ -> nil
+  end
+
   # -- events -----------------------------------------------------------------
 
   # Selection is a UI convenience; the submit handler reads the same params
@@ -174,6 +215,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
        payment_date: parse_date(params["payment_date"]) || socket.assigns.payment_date,
        reference: params["reference"] || socket.assigns.reference,
        memo: params["memo"] || socket.assigns.memo,
+       vendor_name: params["vendor_name"] || socket.assigns.vendor_name,
+       remittance_address: params["remittance_address"] || socket.assigns.remittance_address,
        allow_duplicates: truthy(params["allow_duplicates"]),
        error: nil
      )}
@@ -181,10 +224,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   def handle_event("ach", params, socket) do
     case socket.assigns.run do
-      nil ->
-        {:noreply, assign(socket, ach: params, ach_file: nil, ach_error: "Run a payment first.")}
-
-      run ->
+      %{status: :paid} = run ->
         opts = [
           originator_name: params["originator_name"],
           originator_id: params["originator_id"],
@@ -215,10 +255,19 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                ach_error: ach_error(reason)
              )}
         end
+
+      _ ->
+        {:noreply,
+         assign(socket,
+           ach: params,
+           ach_file: nil,
+           ach_name: nil,
+           ach_error: "Approve a payment run first."
+         )}
     end
   end
 
-  def handle_event("pay", params, socket) do
+  def handle_event("request", params, socket) do
     %{samen_mount: mount, org_id: org_id, resource: resource} = socket.assigns
     selected = selected_ids(params)
     payment_date = parse_date(params["payment_date"])
@@ -227,7 +276,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
       not writable?(mount) ->
         {:noreply,
          assign(socket,
-           error: "Payments are read-only on this plane.",
+           error: "Payment runs are read-only on this plane.",
            selected_ids: selected
          )}
 
@@ -250,15 +299,140 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
          )}
 
       true ->
-        {:noreply, run_payment(socket, selected, payment_date, params)}
+        {:noreply, request_run(socket, selected, payment_date, params)}
     end
   end
 
-  defp run_payment(socket, selected, payment_date, params) do
+  def handle_event("approve", %{"run_id" => run_id}, socket) do
     %{samen_mount: mount, org_id: org_id, resource: resource} = socket.assigns
-    scope = TenantRole.authenticated_scope(mount, org_id)
 
-    case ApPaymentRun.pay(
+    cond do
+      not writable?(mount) ->
+        {:noreply, assign(socket, error: "Payment runs are read-only on this plane.")}
+
+      resource == nil or org_id == nil ->
+        {:noreply,
+         assign(socket,
+           error: "The AP ledger is not available on this workspace's mounted modules."
+         )}
+
+      true ->
+        scope = TenantRole.attributed_admin_scope(mount, org_id)
+
+        case ApPaymentRun.approve(
+               ap_invoice: resource,
+               repo: mount.repo,
+               scope: scope,
+               run_id: run_id
+             ) do
+          {:ok, run} ->
+            {:noreply,
+             socket
+             |> assign(
+               run: run,
+               csv: run.remittance_csv,
+               ach: %{},
+               ach_file: nil,
+               ach_name: nil,
+               ach_error: nil,
+               error: nil,
+               notice:
+                 "Payment run #{run.reference} approved by #{run.approved_by}. #{run.bill_count} bills paid; the remittance CSV is stored with the run.",
+               selected_ids: [],
+               allow_duplicates: false,
+               reference: "",
+               memo: "",
+               vendor_name: "",
+               remittance_address: ""
+             )
+             |> load()}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, error: decision_error(reason, socket.assigns.bills))}
+        end
+    end
+  end
+
+  def handle_event("reject", %{"run_id" => run_id}, socket) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply, assign(socket, error: "Payment runs are read-only on this plane.")}
+
+      org_id == nil ->
+        {:noreply,
+         assign(socket,
+           error: "The AP ledger is not available on this workspace's mounted modules."
+         )}
+
+      true ->
+        scope = TenantRole.attributed_admin_scope(mount, org_id)
+
+        case ApPaymentRun.reject(repo: mount.repo, scope: scope, run_id: run_id) do
+          {:ok, run} ->
+            {:noreply,
+             socket
+             |> assign(
+               error: nil,
+               notice:
+                 "Payment run #{run.reference} rejected by #{run.rejected_by}. No cash moved.",
+               run: nil,
+               csv: nil,
+               ach_file: nil,
+               ach_name: nil,
+               ach_error: nil
+             )
+             |> load()}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, error: decision_error(reason, socket.assigns.bills))}
+        end
+    end
+  end
+
+  def handle_event("cancel", %{"run_id" => run_id}, socket) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply, assign(socket, error: "Payment runs are read-only on this plane.")}
+
+      org_id == nil ->
+        {:noreply,
+         assign(socket,
+           error: "The AP ledger is not available on this workspace's mounted modules."
+         )}
+
+      true ->
+        scope = TenantRole.identity_scope(mount, org_id)
+
+        case ApPaymentRun.cancel(repo: mount.repo, scope: scope, run_id: run_id) do
+          {:ok, run} ->
+            {:noreply,
+             socket
+             |> assign(
+               error: nil,
+               notice: "Payment run #{run.reference} cancelled by its requester. No cash moved.",
+               run: nil,
+               csv: nil,
+               ach_file: nil,
+               ach_name: nil,
+               ach_error: nil
+             )
+             |> load()}
+
+          {:error, reason} ->
+            {:noreply, assign(socket, error: decision_error(reason, socket.assigns.bills))}
+        end
+    end
+  end
+
+  defp request_run(socket, selected, payment_date, params) do
+    %{samen_mount: mount, org_id: org_id, resource: resource} = socket.assigns
+    scope = TenantRole.identity_scope(mount, org_id)
+
+    case ApPaymentRun.request(
            ap_invoice: resource,
            repo: mount.repo,
            scope: scope,
@@ -266,22 +440,28 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
            payment_date: payment_date,
            reference: blank_to_nil(params["reference"]),
            memo: blank_to_nil(params["memo"]),
+           vendor_name: blank_to_nil(params["vendor_name"]),
+           remittance_address: blank_to_nil(params["remittance_address"]),
            allow_duplicates: truthy(params["allow_duplicates"])
          ) do
       {:ok, run} ->
         socket
         |> assign(
-          run: run,
-          csv: ApPaymentRun.remittance_csv(run),
+          run: nil,
+          csv: nil,
           ach: %{},
           ach_file: nil,
           ach_name: nil,
           ach_error: nil,
           error: nil,
+          notice:
+            "Payment run #{run.reference} requested. A different admin must approve it before any cash moves.",
           selected_ids: [],
           allow_duplicates: false,
           reference: "",
-          memo: ""
+          memo: "",
+          vendor_name: "",
+          remittance_address: ""
         )
         |> load()
 
@@ -289,7 +469,9 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
         assign(socket,
           error: payment_error(reason, socket.assigns.bills),
           selected_ids: selected,
-          allow_duplicates: truthy(params["allow_duplicates"])
+          allow_duplicates: truthy(params["allow_duplicates"]),
+          vendor_name: params["vendor_name"] || socket.assigns.vendor_name,
+          remittance_address: params["remittance_address"] || socket.assigns.remittance_address
         )
     end
   end
@@ -298,6 +480,40 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   # The run is ONE repository transaction, so every failure means nothing was
   # paid — the copy says so rather than leaving the reader to guess.
+  defp decision_error(:self_approval, _bills),
+    do: "A run must be approved by a different admin. No cash moved."
+
+  defp decision_error(:forbidden, _bills),
+    do: "Only an admin or owner can approve or reject a payment run."
+
+  defp decision_error(:not_requester, _bills),
+    do: "Only the requester can cancel this run."
+
+  defp decision_error(:not_pending, _bills),
+    do: "This run has already been decided. Refresh the page."
+
+  defp decision_error(:snapshot_mismatch, _bills),
+    do:
+      "The requested bills changed after the request. Nothing was paid; reject this run and request it again."
+
+  defp decision_error({:not_approved, _id}, _bills),
+    do:
+      "One of the requested bills is no longer approved. Nothing was paid; reject this run and request it again."
+
+  defp decision_error({:snapshot_amount_mismatch, _id}, _bills),
+    do:
+      "A requested bill's amount changed. Nothing was paid; reject this run and request it again."
+
+  defp decision_error({:bill_not_found, _id}, _bills),
+    do:
+      "A requested bill no longer exists. Nothing was paid; reject this run and request it again."
+
+  defp decision_error({:payment_failed, _id, _reason}, _bills),
+    do: "A payment was refused and the whole run was rolled back. Nothing was paid."
+
+  defp decision_error(_reason, _bills),
+    do: "The payment run decision could not be completed. No cash moved."
+
   defp payment_error({:not_approved, _id}),
     do: "One of the selected bills is no longer approved. Refresh and try again."
 
@@ -311,6 +527,12 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     do: "One of the selected bills no longer exists. Refresh and try again."
 
   defp payment_error(:payment_date_required), do: "Choose a payment date."
+
+  defp payment_error(:reference_taken),
+    do: "That remittance reference is already used by another run. Choose a different one."
+
+  defp payment_error(:actor_required), do: "Sign in before requesting a payment run."
+  defp payment_error(:org_required), do: "Choose an organization first."
 
   defp payment_error(_reason),
     do: "The payment run could not be completed. Nothing was paid."
@@ -421,6 +643,20 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp short(id) when is_binary(id), do: String.slice(id, 0, 8)
   defp short(other), do: to_string(other)
 
+  defp run_status(:paid), do: "Paid"
+  defp run_status(:rejected), do: "Rejected"
+  defp run_status(:cancelled), do: "Cancelled"
+  defp run_status(other), do: to_string(other)
+
+  defp run_decided_at(%{status: :paid, executed_at: at}), do: stamp(at)
+  defp run_decided_at(%{status: :rejected, rejected_at: at}), do: stamp(at)
+  defp run_decided_at(%{status: :cancelled, cancelled_at: at}), do: stamp(at)
+  defp run_decided_at(_run), do: "—"
+
+  defp stamp(nil), do: "—"
+  defp stamp(%DateTime{} = at), do: Calendar.strftime(at, "%Y-%m-%d %H:%M")
+  defp stamp(other), do: to_string(other)
+
   defp money(nil), do: "—"
 
   defp money(cents) when is_integer(cents) do
@@ -434,6 +670,11 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   defp crumbs(mount, org_id) do
     [Crumbs.org(mount, org_id), "ERP", Erp.ap_payments_label()]
+  end
+
+  defp run_href(mount, org_id, run_id) do
+    path = Mount.label(mount, :erp_path, "/erp")
+    "#{path}/ap-payments/#{run_id}?org=#{org_id}"
   end
 
   @impl Samen.Web.Tenant.Live
@@ -488,18 +729,198 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           </div>
 
           <div
+            :if={@notice}
+            id="ap-payment-notice"
+            class="card"
+            style="padding:10px 14px;color:var(--ok, #047857);font-size:12px;margin-bottom:10px"
+          >
+            {@notice}
+          </div>
+
+          <div
+            :if={@pending_runs != []}
+            id="ap-payment-pending"
+            class="card"
+            style="padding:14px 16px;margin-bottom:10px"
+          >
+            <div style="font-size:13px;font-weight:700;margin-bottom:2px">Pending approval</div>
+            <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+              A run pays nothing until a different admin approves it.
+            </p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Run</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Bills</th>
+                  <th scope="col" style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Total</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Requested by</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Requested at</th>
+                  <th scope="col" style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={pending <- @pending_runs} id={"ap-pending-run-#{pending.id}"}>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <a
+                      id={"view-pending-run-#{pending.id}"}
+                      href={run_href(@samen_mount, @org_id, pending.id)}
+                      title="Open the immutable audit record"
+                      style="color:inherit;text-decoration:underline;text-underline-offset:2px"
+                    >
+                      <code>{pending.reference}</code>
+                    </a>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {pending.bill_count}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">
+                    {money(pending.total_cents)}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <code>{pending.requested_by}</code>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {if pending.requested_at,
+                      do: Calendar.strftime(pending.requested_at, "%Y-%m-%d %H:%M"),
+                      else: "—"}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">
+                    <button
+                      :if={pending.requested_by != @current_actor_id}
+                      type="button"
+                      phx-click="approve"
+                      phx-value-run_id={pending.id}
+                      id={"approve-run-#{pending.id}"}
+                      style="font-size:11px;padding:3px 8px;margin-right:4px"
+                    >
+                      Approve and pay
+                    </button>
+                    <button
+                      :if={pending.requested_by != @current_actor_id}
+                      type="button"
+                      phx-click="reject"
+                      phx-value-run_id={pending.id}
+                      id={"reject-run-#{pending.id}"}
+                      style="font-size:11px;padding:3px 8px"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      :if={pending.requested_by == @current_actor_id}
+                      type="button"
+                      phx-click="cancel"
+                      phx-value-run_id={pending.id}
+                      id={"cancel-run-#{pending.id}"}
+                      style="font-size:11px;padding:3px 8px"
+                    >
+                      Cancel request
+                    </button>
+                    <span
+                      :if={pending.requested_by == @current_actor_id}
+                      style="font-size:11px;color:var(--muted)"
+                    >
+                      awaiting a different admin
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            :if={@recent_runs != []}
+            id="ap-payment-history"
+            class="card"
+            style="padding:14px 16px;margin-bottom:10px"
+          >
+            <div style="font-size:13px;font-weight:700;margin-bottom:2px">Recent payment runs</div>
+            <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+              Immutable audit rows: the requester, the distinct decider, the snapshot total and the stored advice. Open a reference for the full snapshot and approval evidence.
+            </p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Run</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Decision</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Bills</th>
+                  <th scope="col" style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Total</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Requested by</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Decided by</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Decided at</th>
+                  <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Advice</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={recent <- @recent_runs} id={"ap-run-#{recent.id}"}>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <a
+                      id={"view-run-#{recent.id}"}
+                      href={run_href(@samen_mount, @org_id, recent.id)}
+                      title="Open the immutable audit record"
+                      style="color:inherit;text-decoration:underline;text-underline-offset:2px"
+                    >
+                      <code>{recent.reference}</code>
+                    </a>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {run_status(recent.status)}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {recent.bill_count}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">
+                    {money(recent.total_cents)}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <code>{recent.requested_by}</code>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <code>{recent.approved_by || recent.rejected_by || recent.cancelled_by || "—"}</code>
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    {run_decided_at(recent)}
+                  </td>
+                  <td style="padding:5px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                    <a
+                      :if={recent.status == :paid and recent.remittance_csv}
+                      id={"download-run-remittance-#{recent.id}"}
+                      download={"remittance-#{recent.reference}.csv"}
+                      href={"data:text/csv;base64," <> Base.encode64(recent.remittance_csv)}
+                      style="font-size:12px"
+                    >
+                      CSV
+                    </a>
+                    <span
+                      :if={recent.status != :paid or is_nil(recent.remittance_csv)}
+                      style="color:var(--muted)"
+                    >
+                      —
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div
             :if={@run}
             id="ap-payment-result"
             class="card"
             style="padding:14px 16px;margin-bottom:10px"
           >
             <div style="font-size:13px;font-weight:700;color:var(--ok, #047857);margin-bottom:4px">
-              Payment run posted
+              Payment run approved and posted
             </div>
             <div style="font-size:13px;margin-bottom:6px">
-              Reference <code>{@run.reference}</code> ·
-              {length(@run.payments)} bills ·
-              {money(@run.total_cents)}
+              Reference
+              <a
+                href={run_href(@samen_mount, @org_id, @run.id)}
+                title="Open the immutable audit record"
+                style="color:inherit;text-decoration:underline;text-underline-offset:2px"
+              >
+                <code>{@run.reference}</code>
+              </a>
+              · {length(@run.payments)} bills · {money(@run.total_cents)}
             </div>
             <a
               :if={@csv}
@@ -513,7 +934,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           </div>
 
           <div
-            :if={@run}
+            :if={@run && @run.status == :paid}
             id="ach-file-card"
             class="card"
             style="padding:14px 16px;margin-bottom:10px"
@@ -620,7 +1041,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
             </form>
           </div>
 
-          <form id="ap-payment-run" phx-change="select" phx-submit="pay">
+          <form id="ap-payment-run" phx-change="select" phx-submit="request">
             <div
               class="card"
               style="padding:12px 16px;margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:end"
@@ -663,6 +1084,40 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                   style="font-size:12px;padding:6px 8px"
                 />
               </div>
+              <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px">
+                <label
+                  for="payment-vendor-name"
+                  class="field-label"
+                  style="font-size:12px;font-weight:600"
+                >
+                  Vendor name on advice
+                </label>
+                <input
+                  type="text"
+                  id="payment-vendor-name"
+                  name="vendor_name"
+                  value={@vendor_name}
+                  placeholder="Optional — printed on the remittance advice"
+                  style="font-size:12px;padding:6px 8px"
+                />
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
+              <label
+                for="payment-remittance-address"
+                class="field-label"
+                style="font-size:12px;font-weight:600"
+              >
+                Remittance address
+              </label>
+              <textarea
+                id="payment-remittance-address"
+                name="remittance_address"
+                rows="2"
+                placeholder="Optional postal address printed on the remittance advice"
+                style="font-size:12px;padding:6px 8px;font-family:inherit"
+              >{@remittance_address}</textarea>
             </div>
 
             <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -739,8 +1194,11 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                 />
                 Pay anyway
               </label>
+              <span style="font-size:11px;color:var(--muted)">
+                A different admin approves before cash moves.
+              </span>
               <.button variant="primary" type="submit" id="run-payment">
-                Run payment
+                Request payment run
               </.button>
             </div>
           </form>

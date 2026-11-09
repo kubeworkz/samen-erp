@@ -49,6 +49,7 @@ defmodule Samen.FinanceE2ScopeTest do
   alias Samen.Scopes.Finance.{ApInvoiceCapture, ApPaymentRun}
   alias Samen.Scopes.Finance.ReconcilePayments
   alias Samen.Scopes.Finance.Reconcile
+
   alias SamenCore.Support.FinanceFixture.{
     Account,
     ApInvoice,
@@ -202,6 +203,7 @@ defmodule Samen.FinanceE2ScopeTest do
           approval_resource: approval_resource(),
           repo: @repo
         )
+
       assert row.state == :pending
       assert row.kind == Atom.to_string(ApInvoice) <> ":approve"
       assert row.subject_ref == "samen:sap:#{bill.id}"
@@ -438,14 +440,17 @@ defmodule Samen.FinanceE2ScopeTest do
         new_mirror(org, amount, status: :succeeded)
       end
 
-      assert {:ok, receipts} = ReconcilePayments.receipts_total(org, @repo, receipt_resource: PaymentReceipt)
+      assert {:ok, receipts} =
+               ReconcilePayments.receipts_total(org, @repo, receipt_resource: PaymentReceipt)
+
       assert {:ok, gl} =
                ReconcilePayments.posted_cash_total(org, @repo,
                  entry_resource: JournalEntry,
                  line_resource: JournalLine
                )
 
-      assert {:ok, mirror} = ReconcilePayments.mirror_total(org, @repo, mirror_resource: PaymentMirror)
+      assert {:ok, mirror} =
+               ReconcilePayments.mirror_total(org, @repo, mirror_resource: PaymentMirror)
 
       assert receipts == gl
       assert gl == mirror
@@ -476,17 +481,23 @@ defmodule Samen.FinanceE2ScopeTest do
       day = [from: Date.utc_today()]
 
       assert {:ok, receipts} =
-               ReconcilePayments.receipts_total(org, @repo,
+               ReconcilePayments.receipts_total(
+                 org,
+                 @repo,
                  [receipt_resource: PaymentReceipt] ++ moment
                )
 
       assert {:ok, gl} =
-               ReconcilePayments.posted_cash_total(org, @repo,
+               ReconcilePayments.posted_cash_total(
+                 org,
+                 @repo,
                  [entry_resource: JournalEntry, line_resource: JournalLine] ++ day
                )
 
       assert {:ok, mirror} =
-               ReconcilePayments.mirror_total(org, @repo,
+               ReconcilePayments.mirror_total(
+                 org,
+                 @repo,
                  [mirror_resource: PaymentMirror] ++ moment
                )
 
@@ -555,7 +566,9 @@ defmodule Samen.FinanceE2ScopeTest do
         []
       )
 
-      assert {:ok, receipts} = ReconcilePayments.receipts_total(org, @repo, receipt_resource: PaymentReceipt)
+      assert {:ok, receipts} =
+               ReconcilePayments.receipts_total(org, @repo, receipt_resource: PaymentReceipt)
+
       assert {:ok, gl} =
                ReconcilePayments.posted_cash_total(org, @repo,
                  entry_resource: JournalEntry,
@@ -723,6 +736,7 @@ defmodule Samen.FinanceE2ScopeTest do
       bill = new_bill(scope, org, [bill_line(expense, 44_444, "unit-42 secret memo")])
 
       {:gated, approval_id} = gate(bill, scope)
+
       {:ok, row} =
         Samen.Approvals.get(approval_id, approval_resource: approval_resource(), repo: @repo)
 
@@ -811,20 +825,49 @@ defmodule Samen.FinanceE2ScopeTest do
       first = approve_bill!(first, scope)
       second = approve_bill!(second, scope)
 
-      assert {:ok, run} =
-               ApPaymentRun.pay(
+      assert {:ok, pending} =
+               ApPaymentRun.request(
                  ap_invoice: ApInvoice,
                  repo: @repo,
                  scope: scope,
                  bill_ids: [first.id, second.id],
                  payment_date: ~D[2026-09-20],
-                 reference: "RUN-001"
+                 reference: "RUN-001",
+                 vendor_name: "Acme Supply Co",
+                 remittance_address: "PO Box 400\nSpringfield, IL 62701"
                )
 
+      assert pending.status == :pending_approval
+      assert pending.vendor_name == "Acme Supply Co"
+      assert pending.remittance_address == "PO Box 400\nSpringfield, IL 62701"
+      assert pending.requested_by == "u:#{org}"
+      assert pending.total_cents == 10_500
+      assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
+      assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :approved
+      assert payment_entries(org, first.id) == []
+
+      assert {:ok, run} =
+               ApPaymentRun.approve(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: pending.id
+               )
+
+      assert run.status == :paid
+      assert run.approved_by == "a:#{org}"
       assert run.reference == "RUN-001"
       assert run.vendor_id == vendor
+      assert run.vendor_name == "Acme Supply Co"
+      assert run.remittance_address == "PO Box 400\nSpringfield, IL 62701"
       assert run.total_cents == 10_500
-      assert Enum.map(run.payments, & &1.amount_cents) == [4_000, 6_500]
+      assert run_amounts(run) == [4_000, 6_500]
+
+      assert {:ok, stored} = ApPaymentRun.get_run(@repo, org, run.id)
+      assert stored.status == :paid
+      assert stored.remittance_csv == run.remittance_csv
+      assert stored.vendor_name == "Acme Supply Co"
+      assert stored.remittance_address == "PO Box 400\nSpringfield, IL 62701"
 
       assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :paid
       assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :paid
@@ -860,7 +903,7 @@ defmodule Samen.FinanceE2ScopeTest do
         )
 
       assert {:error, {:not_approved, bill_id}} =
-               ApPaymentRun.pay(
+               ApPaymentRun.request(
                  ap_invoice: ApInvoice,
                  repo: @repo,
                  scope: scope,
@@ -891,7 +934,7 @@ defmodule Samen.FinanceE2ScopeTest do
       second = approve_bill!(second, scope)
 
       assert {:error, {:duplicate_bills, ids}} =
-               ApPaymentRun.pay(
+               ApPaymentRun.request(
                  ap_invoice: ApInvoice,
                  repo: @repo,
                  scope: scope,
@@ -904,8 +947,8 @@ defmodule Samen.FinanceE2ScopeTest do
       assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
       assert payment_entries(org, first.id) == []
 
-      assert {:ok, run} =
-               ApPaymentRun.pay(
+      assert {:ok, pending} =
+               ApPaymentRun.request(
                  ap_invoice: ApInvoice,
                  repo: @repo,
                  scope: scope,
@@ -913,6 +956,16 @@ defmodule Samen.FinanceE2ScopeTest do
                  payment_date: ~D[2026-09-20],
                  reference: "RUN-DUP",
                  allow_duplicates: true
+               )
+
+      assert pending.total_cents == 10_000
+
+      assert {:ok, run} =
+               ApPaymentRun.approve(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: pending.id
                )
 
       assert run.total_cents == 10_000
@@ -1077,6 +1130,11 @@ defmodule Samen.FinanceE2ScopeTest do
     |> Ash.read!(authorize?: false)
   end
 
+  defp run_amounts(run) do
+    Enum.map(run.payments, fn payment ->
+      Map.get(payment, "amount_cents") || Map.get(payment, :amount_cents)
+    end)
+  end
 
   defp tenant_scope(org_id) do
     %Samen.Scope{
@@ -1116,7 +1174,10 @@ defmodule Samen.FinanceE2ScopeTest do
     Account
     |> Ash.Changeset.for_create(
       :create,
-      Map.merge(%{org_id: org, code: code, name: "Account #{code}", kind: :asset, normal_side: :debit}, attrs),
+      Map.merge(
+        %{org_id: org, code: code, name: "Account #{code}", kind: :asset, normal_side: :debit},
+        attrs
+      ),
       scope: scope
     )
     |> Ash.create!()
@@ -1191,7 +1252,9 @@ defmodule Samen.FinanceE2ScopeTest do
         end
 
       {:ok, _} ->
-        flunk("the :approve action succeeded WITHOUT the Gate — the approval discipline is broken")
+        flunk(
+          "the :approve action succeeded WITHOUT the Gate — the approval discipline is broken"
+        )
 
       {:error, other} ->
         flunk("unexpected :approve failure: #{inspect(other)}")

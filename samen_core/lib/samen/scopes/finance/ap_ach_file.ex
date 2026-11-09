@@ -290,7 +290,10 @@ defmodule Samen.Scopes.Finance.ApAchFile do
         receiver.check_digit <>
         pad_right(receiver.account, 17) <>
         pad_left(amount_of(payment), 10) <>
-        pad_right(alpha(Map.get(payment, :number) || reference, 15), 15) <>
+        pad_right(
+          alpha(Map.get(payment, :number) || Map.get(payment, "number") || reference, 15),
+          15
+        ) <>
         pad_right(receiver.name, 22) <>
         "  " <>
         "0" <>

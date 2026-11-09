@@ -38,7 +38,8 @@ defmodule Samen.Web.MountSmokeTest do
     %{tenant: tenant, chat: chat, op: op, org: tenant.org_id}
   end
 
-  test "every framework LiveView mounts through the real router/live_session path (no 500)", ctx do
+  test "every framework LiveView mounts through the real router/live_session path (no 500)",
+       ctx do
     %{tenant: t, chat: chat, op: op, org: org} = ctx
 
     # {label, module, mount, params} — ONE mount smoke per framework LiveView.
@@ -47,30 +48,41 @@ defmodule Samen.Web.MountSmokeTest do
       {"crm/companies", CRM.CompaniesLive, build_mount(:crm), %{"org" => org}},
       {"crm/contacts", CRM.ContactsLive, build_mount(:crm), %{"org" => org}},
       {"crm/pipeline", CRM.PipelineLive, build_mount(:crm), %{"org" => org}},
-      {"crm/company", CRM.CompanyLive, build_mount(:crm), %{"org" => org, "id" => t.crm.company.id}},
-      {"crm/contact", CRM.ContactLive, build_mount(:crm), %{"org" => org, "id" => t.crm.person.id}},
+      {"crm/company", CRM.CompanyLive, build_mount(:crm),
+       %{"org" => org, "id" => t.crm.company.id}},
+      {"crm/contact", CRM.ContactLive, build_mount(:crm),
+       %{"org" => org, "id" => t.crm.person.id}},
       # Billing
       {"billing/overview", Billing.OverviewLive, build_mount(:billing), %{"org" => org}},
       {"billing/invoices", Billing.InvoicesLive, build_mount(:billing), %{"org" => org}},
       {"billing/plans", Billing.PlansLive, build_mount(:billing), %{"org" => org}},
       # Billing DETAIL twins (invoice + plan record pages)
-      {"billing/invoice", Billing.InvoiceLive, build_mount(:billing), %{"org" => org, "id" => t.billing.invoice.id}},
-      {"billing/plan", Billing.PlanLive, build_mount(:billing), %{"org" => org, "id" => t.billing.plan.id}},
+      {"billing/invoice", Billing.InvoiceLive, build_mount(:billing),
+       %{"org" => org, "id" => t.billing.invoice.id}},
+      {"billing/plan", Billing.PlanLive, build_mount(:billing),
+       %{"org" => org, "id" => t.billing.plan.id}},
       # WS-ERP E8 — the generic ERP surface (mounted only by `samen_erp_routes/3` hosts);
       # the smoke drives its real mount/handle_params/render lifecycle, now inside the app shell.
-      {"erp/coa", Samen.Web.Erp.SurfaceLive, build_mount(:erp), %{"org" => org, "surface" => "coa"}},
+      {"erp/coa", Samen.Web.Erp.SurfaceLive, build_mount(:erp),
+       %{"org" => org, "surface" => "coa"}},
       # The record DETAIL twin — an id that resolves nothing smoke-tests the whole
       # mount → load → not-found render path (the same shape every real drill-in runs).
-      {"erp/coa/99999999-9999-4999-8999-999999999999", Samen.Web.Erp.DetailLive, build_mount(:erp),
+      {"erp/coa/99999999-9999-4999-8999-999999999999", Samen.Web.Erp.DetailLive,
+       build_mount(:erp),
        %{"org" => org, "surface" => "coa", "id" => "99999999-9999-4999-8999-999999999999"}},
       # The AP payment run and the AR aging/statement pages (the ERP "operations" twins).
       {"erp/ap-capture", Samen.Web.Erp.ApCaptureLive, build_mount(:erp), %{"org" => org}},
       {"erp/ap-payments", Samen.Web.Erp.ApPaymentsLive, build_mount(:erp), %{"org" => org}},
+      {"erp/ap-payments/99999999-9999-4999-8999-999999999999", Samen.Web.Erp.ApPaymentRunLive,
+       build_mount(:erp), %{"org" => org, "id" => "99999999-9999-4999-8999-999999999999"}},
+      {"erp/ap-payments/print", Samen.Web.Erp.ApPaymentRunPrintLive, build_mount(:erp),
+       %{"org" => org, "id" => "99999999-9999-4999-8999-999999999999"}},
       {"erp/ar-receipts", Samen.Web.Erp.ArReceiptsLive, build_mount(:erp), %{"org" => org}},
       {"erp/ar-aging", Samen.Web.Erp.ArAgingLive, build_mount(:erp), %{"org" => org}},
       # Support
       {"support/tickets", Support.TicketsLive, build_mount(:support), %{"org" => org}},
-      {"support/ticket", Support.TicketLive, build_mount(:support), %{"org" => org, "id" => t.support.ticket.id}},
+      {"support/ticket", Support.TicketLive, build_mount(:support),
+       %{"org" => org, "id" => t.support.ticket.id}},
       # T78 (spec §I5) — the agent-facing KB (`:kb_namespace` sibling-mount seam) and
       # the UNAUTHENTICATED portal (`:kb`-kind mount, no session-derived actor at all).
       {"support/kb", Support.KbLive, build_mount(:support), %{"org" => org}},
@@ -79,38 +91,53 @@ defmodule Samen.Web.MountSmokeTest do
       {"marketing/campaigns", Marketing.CampaignsLive, build_mount(:marketing), %{"org" => org}},
       {"marketing/segments", Marketing.SegmentsLive, build_mount(:marketing), %{"org" => org}},
       {"marketing/leads", Marketing.LeadsLive, build_mount(:marketing), %{"org" => org}},
-      {"marketing/campaign", Marketing.CampaignLive, build_mount(:marketing), %{"org" => org, "id" => t.marketing.campaign.id}},
+      {"marketing/campaign", Marketing.CampaignLive, build_mount(:marketing),
+       %{"org" => org, "id" => t.marketing.campaign.id}},
       # Marketing DETAIL twins (segment + lead record pages)
-      {"marketing/segment", Marketing.SegmentLive, build_mount(:marketing), %{"org" => org, "id" => t.marketing.segment.id}},
-      {"marketing/lead", Marketing.LeadLive, build_mount(:marketing), %{"org" => org, "id" => t.crm.person.id}},
+      {"marketing/segment", Marketing.SegmentLive, build_mount(:marketing),
+       %{"org" => org, "id" => t.marketing.segment.id}},
+      {"marketing/lead", Marketing.LeadLive, build_mount(:marketing),
+       %{"org" => org, "id" => t.crm.person.id}},
       # Chat (ADR-012)
       {"chat/threads", Chat.ThreadsLive, build_mount(:chat), %{"org" => org}},
-      {"chat/thread", Chat.ThreadLive, build_mount(:chat), %{"org" => org, "id" => chat.thread.id}},
+      {"chat/thread", Chat.ThreadLive, build_mount(:chat),
+       %{"org" => org, "id" => chat.thread.id}},
       # Notifications (ADR-016)
-      {"notifications/inbox", Notifications.InboxLive, build_mount(:notifications), %{"org" => org}},
-      {"notifications/prefs", Notifications.PreferencesLive, build_mount(:notifications), %{"org" => org}},
+      {"notifications/inbox", Notifications.InboxLive, build_mount(:notifications),
+       %{"org" => org}},
+      {"notifications/prefs", Notifications.PreferencesLive, build_mount(:notifications),
+       %{"org" => org}},
       # Flags (ADR-020)
       {"flags/settings", Flags.SettingsLive, build_mount(:flags), %{"org" => org}},
       # Files (ADR-026) — the preview id is a fresh uuid (the not-found render path also mounts)
       {"files/upload", Files.UploadLive, build_mount(:files), %{"org" => org}},
-      {"files/preview", Files.PreviewLive, build_mount(:files), %{"org" => org, "id" => Ash.UUID.generate()}},
+      {"files/preview", Files.PreviewLive, build_mount(:files),
+       %{"org" => org, "id" => Ash.UUID.generate()}},
       # CSV import (ADR-028) — a resolvable resource on the mount's domain
       {"csv/import", Csv.ImportLive, build_mount(:csv), %{"org" => org, "resource" => "person"}},
       # Search (ADR-027)
       {"search", Search.SearchLive, build_mount(:search), %{"org" => org}},
       # Self-serve settings (ADR-029) — Identity/operator namespace; nil-user branch also mounts
-      {"settings/profile", Settings.ProfileLive, build_mount(:settings), %{"org" => op.operator_org_id}},
-      {"settings/api-keys", Settings.ApiKeysLive, build_mount(:settings), %{"org" => op.operator_org_id}},
-      {"settings/security", Settings.SecurityLive, build_mount(:settings), %{"org" => op.operator_org_id}}
+      {"settings/profile", Settings.ProfileLive, build_mount(:settings),
+       %{"org" => op.operator_org_id}},
+      {"settings/api-keys", Settings.ApiKeysLive, build_mount(:settings),
+       %{"org" => op.operator_org_id}},
+      {"settings/security", Settings.SecurityLive, build_mount(:settings),
+       %{"org" => op.operator_org_id}}
     ]
 
     # Operator cockpit (ADR-010) — the operator seat over its own book of business.
     op_mount = build_operator_mount(op.operator_org_id)
-    op_flags_mount = build_operator_mount(op.operator_org_id, labels: %{flags_namespace: Samen.WebTest.Primitives})
+
+    op_flags_mount =
+      build_operator_mount(op.operator_org_id,
+        labels: %{flags_namespace: Samen.WebTest.Primitives}
+      )
 
     operator_surfaces = [
       {"operator/accounts", Operator.AccountsLive, op_mount, %{}},
-      {"operator/account_detail", Operator.AccountDetailLive, op_mount, %{"id" => op.tenant_org_id}},
+      {"operator/account_detail", Operator.AccountDetailLive, op_mount,
+       %{"id" => op.tenant_org_id}},
       {"operator/platform_billing", Operator.PlatformBillingLive, op_mount, %{}},
       {"operator/revenue", Operator.RevenueLive, op_mount, %{}},
       {"operator/analytics", Operator.AnalyticsLive, op_mount, %{}},
@@ -131,9 +158,13 @@ defmodule Samen.Web.MountSmokeTest do
       Enum.reduce(surfaces, [], fn {label, module, mount, params}, acc ->
         try do
           html = mount_smoke(module, mount, params, Map.get(extra, {label, module}, %{}))
-          if is_binary(html) and byte_size(html) > 0, do: acc, else: [{label, "empty render"} | acc]
+
+          if is_binary(html) and byte_size(html) > 0,
+            do: acc,
+            else: [{label, "empty render"} | acc]
         rescue
-          e -> [{label, Exception.format(:error, e, __STACKTRACE__) |> String.slice(0, 400)} | acc]
+          e ->
+            [{label, Exception.format(:error, e, __STACKTRACE__) |> String.slice(0, 400)} | acc]
         catch
           kind, reason -> [{label, "#{kind}: #{inspect(reason)}"} | acc]
         end

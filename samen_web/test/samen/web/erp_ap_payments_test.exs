@@ -1,22 +1,28 @@
 defmodule Samen.Web.ErpApPaymentsTest do
   @moduledoc """
-  The AP payment run surface (`/erp/ap-payments`) over the REAL
+  The dual-control AP payment run surface (`/erp/ap-payments`) over the REAL
   `Samen.WebTest.Erp.ApInvoice` + the kernel's `ApPaymentRun`:
 
-    * approved bills render inside the ERP shell with the page's nav item active;
-    * selecting a bill and submitting posts ONE payment entry, flips the bill to
-      `:paid`, and offers the remittance CSV;
-    * a mixed-vendor selection is refused by the kernel and pays nothing;
-    * an empty selection is refused inline.
+    * a request persists `:pending_approval`, renders on the page, and pays
+      nothing;
+    * the requester cannot approve their own run;
+    * a DIFFERENT admin's approval posts the payment, flips the bill to `:paid`,
+      and offers the persisted remittance CSV;
+    * mixed-vendor requests are refused by the kernel and pay nothing;
+    * an empty selection is refused inline;
+    * possible duplicates are flagged and refuse the request until confirmed;
+    * the ACH file is available only after approval.
 
   Bills are seeded already-`:approved` (the raw UPDATE below stands in for the
   approval flow, which is exercised by its own suites) so this test proves the
-  PAGE's contract: read approved bills, call the run, render the outcome.
+  PAGE's contract: read approved bills, request a run, have a second actor
+  approve it, render the outcome and the immutable history.
   """
   use Samen.WebTest.DataCase, async: false
 
   require Ash.Query
 
+  alias Samen.Scopes.Finance.ApPaymentRun
   alias Samen.Web.Erp.ApPaymentsLive
   alias Samen.WebTest.Erp.{Account, ApInvoice, JournalEntry, PostingAccount}
 
@@ -115,6 +121,32 @@ defmodule Samen.Web.ErpApPaymentsTest do
     Ash.get!(ApInvoice, bill.id, authorize?: false)
   end
 
+  defp requester_scope(org_id) do
+    %Samen.Scope{
+      actor: %{
+        id: "requester:other",
+        org_id: org_id,
+        role: :member,
+        kind: :tenant,
+        plane: :tenant
+      }
+    }
+  end
+
+  defp pending_run!(bill, reference) do
+    {:ok, run} =
+      ApPaymentRun.request(
+        ap_invoice: ApInvoice,
+        repo: Samen.WebTest.Repo,
+        scope: requester_scope(@org),
+        bill_ids: [bill.id],
+        payment_date: ~D[2026-11-08],
+        reference: reference
+      )
+
+    run
+  end
+
   defp payment_entries(bill_id) do
     JournalEntry
     |> Ash.Query.filter(org_id == ^@org and source_key == "ap_payment" and source_id == ^bill_id)
@@ -146,49 +178,143 @@ defmodule Samen.Web.ErpApPaymentsTest do
     refute html =~ ~s(id="ap-payment-error")
   end
 
-  # -- payment run ------------------------------------------------------------
+  # -- request / dual control -------------------------------------------------
 
-  test "runs a payment for the selected bills and offers the remittance CSV" do
+  test "requesting a run persists a pending audit row and pays nothing" do
     seed_posting_accounts()
     bill = bill!(%{number: "BILL-2001"})
 
     socket =
       open()
-      |> event("pay", %{
+      |> event("request", %{
         "bill_ids" => [bill.id],
         "payment_date" => "2026-11-08",
         "reference" => "NOV-AP-1",
-        "memo" => "wire"
+        "memo" => "wire",
+        "vendor_name" => "Acme Supply Co",
+        "remittance_address" => "PO Box 400\nSpringfield, IL 62701"
       })
 
-    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+    assert payment_entries(bill.id) == []
 
+    assert [pending] = socket.assigns.pending_runs
+    assert pending.status == :pending_approval
+    assert pending.reference == "NOV-AP-1"
+    assert pending.requested_by == "broker:#{@org}"
+    assert pending.total_cents == 4_000
+    assert pending.vendor_name == "Acme Supply Co"
+    assert pending.remittance_address == "PO Box 400\nSpringfield, IL 62701"
+    assert socket.assigns.vendor_name == ""
+    assert socket.assigns.remittance_address == ""
+    assert socket.assigns.run == nil
+
+    html = render(socket)
+    assert html =~ "Pending approval"
+    assert html =~ "NOV-AP-1"
+    assert html =~ "awaiting a different admin"
+    assert html =~ ~s(id="payment-vendor-name")
+    assert html =~ ~s(id="payment-remittance-address")
+    assert html =~ ~s(href="/erp/ap-payments/#{pending.id}?org=#{@org}")
+    assert html =~ ~s(id="cancel-run-#{pending.id}")
+    refute html =~ ~s(id="ap-payment-result")
+    refute html =~ ~s(id="download-remittance")
+  end
+
+  test "the requester cannot approve their own run; nothing is paid" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-2002"})
+
+    socket =
+      open()
+      |> event("request", %{
+        "bill_ids" => [bill.id],
+        "payment_date" => "2026-11-08",
+        "reference" => "NOV-AP-2"
+      })
+
+    [pending] = socket.assigns.pending_runs
+
+    socket = event(socket, "approve", %{"run_id" => pending.id})
+
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+    assert payment_entries(bill.id) == []
+    assert socket.assigns.error =~ "different admin"
+    assert render(socket) =~ ~s(id="ap-payment-error")
+  end
+
+  test "a different admin approves the pending run and posts the payment" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-2003"})
+    pending = pending_run!(bill, "NOV-AP-3")
+
+    socket = open()
+    assert Enum.any?(socket.assigns.pending_runs, &(&1.id == pending.id))
+    assert render(socket) =~ ~s(id="approve-run-#{pending.id}")
+
+    socket = event(socket, "approve", %{"run_id" => pending.id})
+
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
     assert [entry] = payment_entries(bill.id)
     assert entry.status == :posted
     assert entry.entry_date == ~D[2026-11-08]
-    assert entry.memo =~ "NOV-AP-1"
+    assert entry.memo =~ "NOV-AP-3"
+
+    assert socket.assigns.run.status == :paid
+    assert socket.assigns.run.requested_by == "requester:other"
+    assert socket.assigns.run.approved_by == "broker:#{@org}"
+    assert socket.assigns.pending_runs == []
 
     html = render(socket)
-    assert html =~ "Payment run posted"
-    assert html =~ "NOV-AP-1"
+    assert html =~ "Payment run approved and posted"
+    assert html =~ "NOV-AP-3"
     assert html =~ ~s(id="download-remittance")
     assert html =~ "data:text/csv;base64,"
-    refute html =~ ~s(id="ap-payment-error")
-    # The paid bill left the approved list.
+    assert html =~ ~s(id="ap-payment-history")
+    assert html =~ ~s(href="/erp/ap-payments/#{pending.id}?org=#{@org}")
+    assert html =~ "Paid"
     refute html =~ ~s(id="ap-bill-#{bill.id}")
   end
 
-  test "a mixed-vendor selection is refused and pays nothing" do
+  test "cancelling the request pays nothing and leaves an audit row" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-2004"})
+
+    socket =
+      open()
+      |> event("request", %{
+        "bill_ids" => [bill.id],
+        "payment_date" => "2026-11-08",
+        "reference" => "NOV-AP-4"
+      })
+
+    [pending] = socket.assigns.pending_runs
+    socket = event(socket, "cancel", %{"run_id" => pending.id})
+
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+    assert payment_entries(bill.id) == []
+    assert socket.assigns.pending_runs == []
+    assert [cancelled] = socket.assigns.recent_runs
+    assert cancelled.status == :cancelled
+    assert cancelled.cancelled_by == "broker:#{@org}"
+    assert render(socket) =~ "Cancelled"
+  end
+
+  test "a mixed-vendor selection is refused and requests nothing" do
     seed_posting_accounts()
     first = bill!()
     second = bill!()
 
     socket =
-      event(open(), "pay", %{"bill_ids" => [first.id, second.id], "payment_date" => "2026-11-08"})
+      event(open(), "request", %{
+        "bill_ids" => [first.id, second.id],
+        "payment_date" => "2026-11-08"
+      })
 
     assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
     assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :approved
     assert payment_entries(first.id) == []
+    assert socket.assigns.pending_runs == []
 
     html = render(socket)
     assert html =~ "one vendor"
@@ -197,14 +323,16 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
   test "an empty selection is refused inline" do
     seed_posting_accounts()
-    socket = event(open(), "pay", %{"bill_ids" => [], "payment_date" => "2026-11-08"})
+
+    socket =
+      event(open(), "request", %{"bill_ids" => [], "payment_date" => "2026-11-08"})
 
     assert render(socket) =~ "Select at least one approved bill."
   end
 
   # -- duplicate detection ----------------------------------------------------
 
-  test "possible duplicate bills are flagged and refuse the run until confirmed" do
+  test "possible duplicate bills are flagged and refuse the request until confirmed" do
     seed_posting_accounts()
     vendor = Ash.UUID.generate()
     first = bill!(%{vendor_id: vendor, number: "BILL-3001"})
@@ -215,11 +343,15 @@ defmodule Samen.Web.ErpApPaymentsTest do
     assert html =~ ~s(id="ap-bill-duplicate-#{second.id}")
 
     refused =
-      event(open(), "pay", %{"bill_ids" => [first.id, second.id], "payment_date" => "2026-11-08"})
+      event(open(), "request", %{
+        "bill_ids" => [first.id, second.id],
+        "payment_date" => "2026-11-08"
+      })
 
     assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
     assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :approved
     assert payment_entries(first.id) == []
+    assert refused.assigns.pending_runs == []
 
     html = render(refused)
     assert html =~ "look like duplicates"
@@ -228,32 +360,47 @@ defmodule Samen.Web.ErpApPaymentsTest do
     refute html =~ ~s(id="ap-payment-result")
 
     confirmed =
-      event(refused, "pay", %{
+      event(refused, "request", %{
         "bill_ids" => [first.id, second.id],
         "payment_date" => "2026-11-08",
         "allow_duplicates" => "1"
       })
 
-    assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :paid
-    assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :paid
-    assert [_, _] = payment_entries(first.id) ++ payment_entries(second.id)
-    assert render(confirmed) =~ "Payment run posted"
+    assert [pending] = confirmed.assigns.pending_runs
+    assert pending.total_cents == 8_000
+    assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
+    assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :approved
+    assert payment_entries(first.id) == []
+  end
+
+  test "a different admin rejects the pending run; nothing is paid and the row is final" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-2005"})
+    pending = pending_run!(bill, "NOV-AP-5")
+
+    socket =
+      open()
+      |> event("reject", %{"run_id" => pending.id})
+
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+    assert payment_entries(bill.id) == []
+    assert socket.assigns.pending_runs == []
+    assert [rejected] = socket.assigns.recent_runs
+    assert rejected.status == :rejected
+    assert rejected.rejected_by == "broker:#{@org}"
+    assert rejected.rejected_at
+
+    html = render(socket)
+    assert html =~ "Rejected"
+    refute html =~ ~s(id="ap-payment-result")
   end
 
   # -- ACH / EFT file ---------------------------------------------------------
 
-  test "builds an ACH file for the posted run and refuses invalid bank details" do
+  test "builds an ACH file only after the run is approved" do
     seed_posting_accounts()
     bill = bill!(%{number: "BILL-4001"})
-
-    paid =
-      event(open(), "pay", %{
-        "bill_ids" => [bill.id],
-        "payment_date" => "2026-11-08",
-        "reference" => "NOV-ACH-1"
-      })
-
-    assert paid.assigns.run
+    pending = pending_run!(bill, "NOV-ACH-1")
 
     fields = %{
       "originator_name" => "Sample Co",
@@ -265,14 +412,24 @@ defmodule Samen.Web.ErpApPaymentsTest do
       "account_type" => "checking"
     }
 
-    invalid = event(paid, "ach", %{fields | "receiver_dfi" => "021000022"})
+    unapproved = event(open(), "ach", fields)
+    assert unapproved.assigns.ach_error == "Approve a payment run first."
+    refute render(unapproved) =~ ~s(id="download-ach")
+
+    approved =
+      open()
+      |> event("approve", %{"run_id" => pending.id})
+
+    assert approved.assigns.run.status == :paid
+
+    invalid = event(approved, "ach", %{fields | "receiver_dfi" => "021000022"})
     assert invalid.assigns.ach_error =~ "not a valid ABA number"
 
     html = render(invalid)
     assert html =~ ~s(id="ach-file-error")
     refute html =~ ~s(id="download-ach")
 
-    built = event(paid, "ach", fields)
+    built = event(approved, "ach", fields)
     assert built.assigns.ach_name == "ach-NOV-ACH-1.ach"
     assert String.starts_with?(built.assigns.ach_file, "101 ")
     assert built.assigns.ach_error == nil
