@@ -170,17 +170,29 @@ defmodule Samen.Scopes.Banking.Blueprint do
 
         # F3.2 same-org FK (scope-authoring §10): a statement line always
         # belongs to a bank account of the SAME org. Resource-level so the
-        # F3.5 verifier sees it (this scope exposes no write actions — lines
-        # land via StatementImport's bulk path — but the FK guard is declared
-        # for the invariant posture regardless).
+        # F3.5 verifier sees it; it prepends to the `:import` create action.
         changes do
           change({Samen.Policy.SameOrgFk, relationships: [:bank_account]})
         end
 
         actions do
-          # Read-only: append-only after import. No create/update/destroy
-          # exposed as Ash actions — imports go through StatementImport's
-          # bulk insert, not individual line creates.
+          # The one write route. `Samen.Scopes.Banking.Import` parses the
+          # statement and creates each line through this governed action in a
+          # transaction with its StatementImport batch. There is intentionally
+          # no update or destroy action (the DB trigger also refuses them).
+          create :import do
+            accept([
+              :org_id,
+              :bank_account_id,
+              :posted_at,
+              :amount_cents,
+              :description,
+              :counterparty,
+              :reference,
+              :import_hash
+            ])
+          end
+
           read :read do
             primary?(true)
             pagination(keyset?: true, required?: false)
@@ -223,6 +235,12 @@ defmodule Samen.Scopes.Banking.Blueprint do
         policies do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action(:import) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
           end
         end
       end

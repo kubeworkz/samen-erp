@@ -8,6 +8,16 @@ All notable changes to Samen are recorded here. The format follows
 
 ### Added
 
+- **Bank statement import and ranked match suggestions** (WS-ERP E9): CSV and OFX/QFX
+  statements now import through the governed `StatementLine.:import` action. The parser accepts
+  canonical columns and common bank aliases, including either a signed amount column or separate
+  debit/credit columns (with withdrawal/deposit aliases), OFX 1.x SGML and OFX 2.x XML, normalizes
+  dates and signed amounts to integer cents, and refuses a bad row or duplicate file before writing. The
+  import service creates each line and its `StatementImport` audit batch in one transaction,
+  deduplicating by file hash and by the existing line hash. The bank-account screen accepts a
+  file upload or pasted statement text and shows ranked suggestions for unmatched lines; the
+  suggestions use the bank's cash leg (not a balanced entry's zero net total), and "Use
+  suggestion" prefills the ordinary guarded match form rather than writing a match directly.
 - **Journal approval and segregation of duties** (WS-ACCT journal controls): Finance mounts a
   new admin-owned `JournalApprovalPolicy` (one per org, optional amount threshold). When it is
   enabled, a human `:post`/`:void` opens a `Samen.Approvals` request instead of posting; the

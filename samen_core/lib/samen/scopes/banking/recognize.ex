@@ -5,9 +5,11 @@ defmodule Samen.Scopes.Banking.Recognize do
   For each unmatched statement line, this module searches posted journal
   entries for candidates that could match. The matching strategy:
 
-  1. **Exact amount match** — the entry's total (Σ debit − Σ credit) equals
-     the statement line amount (exact integer cents). This is the highest-
-     confidence match.
+  1. **Exact amount match** — the candidate's `total_cents` equals the
+     statement line amount (exact integer cents). Callers pass the cash-leg
+     total for the bank account, so a balanced journal entry is compared by
+     the amount that actually hit the bank, not by its zero net total. This
+     is the highest-confidence match.
 
   2. **Amount ± tolerance** — within 1 cent, for floating-point precision
      in multi-currency scenarios.
@@ -71,12 +73,17 @@ defmodule Samen.Scopes.Banking.Recognize do
   defp posted?(_), do: false
 
   defp entry_total(entry) do
-    # The entry's total is Σ debit_cents − Σ credit_cents over its lines.
-    # This is stored as a derived value or computed from the lines.
-    # For now, we expect the entry to have loaded lines.
-    case Map.get(entry, :lines) do
-      nil -> 0
-      lines -> Enum.reduce(lines, 0, fn l, acc -> acc + l.debit_cents - l.credit_cents end)
+    # `Reads.journal_candidates/3` precomputes the bank-account cash leg as
+    # `total_cents`; pure callers/tests may still hand us an entry with lines.
+    case Map.get(entry, :total_cents) do
+      total when is_integer(total) ->
+        total
+
+      _ ->
+        case Map.get(entry, :lines) do
+          nil -> 0
+          lines -> Enum.reduce(lines, 0, fn l, acc -> acc + l.debit_cents - l.credit_cents end)
+        end
     end
   end
 
@@ -120,6 +127,26 @@ defmodule Samen.Scopes.Banking.Recognize do
 
   defp date_diff_days(nil, _), do: 999
   defp date_diff_days(_, nil), do: 999
+
+  defp date_diff_days(%DateTime{} = a, %DateTime{} = b) do
+    date_diff_days(DateTime.to_date(a), DateTime.to_date(b))
+  end
+
+  defp date_diff_days(%DateTime{} = a, %Date{} = b) do
+    date_diff_days(DateTime.to_date(a), b)
+  end
+
+  defp date_diff_days(%Date{} = a, %DateTime{} = b) do
+    date_diff_days(a, DateTime.to_date(b))
+  end
+
+  defp date_diff_days(%DateTime{} = a, %NaiveDateTime{} = b) do
+    date_diff_days(DateTime.to_date(a), NaiveDateTime.to_date(b))
+  end
+
+  defp date_diff_days(%NaiveDateTime{} = a, %DateTime{} = b) do
+    date_diff_days(NaiveDateTime.to_date(a), DateTime.to_date(b))
+  end
 
   defp date_diff_days(%NaiveDateTime{} = a, %Date{} = b) do
     date_diff_days(NaiveDateTime.to_date(a), b)

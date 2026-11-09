@@ -62,8 +62,8 @@ defmodule Samenerp.BankingSurfaceTest do
     |> Ash.create!(authorize?: false)
   end
 
-  # StatementLine ships NO create action (imports are the declared-not-built
-  # route), so the fixture arranges the row directly — arrange-raw / act-governed.
+  # StatementLine's only create route is the governed `:import` action; this
+  # fixture arranges a row directly to isolate the read/match surface.
   defp seed_line(org_id, bank_account_id, description, amount_cents) do
     %{rows: [[id]]} =
       Samenerp.Repo.query!(
@@ -91,6 +91,7 @@ defmodule Samenerp.BankingSurfaceTest do
     tenant = create_org!("Banking Surface QA")
 
     list = get(build_conn(), "/banking?org=#{tenant.id}")
+
     assert list.status == 200,
            "the /banking accounts page did not render — the E9 mount route is missing or crashing"
 

@@ -64,6 +64,9 @@ defmodule Samenerp.MixProject do
       {:phoenix, "~> 1.7"},
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_html, "~> 4.1"},
+      # Phoenix.LiveViewTest's DOM (element selectors/connected sockets) needs
+      # this at TEST time only; phoenix_live_view declares it optional.
+      {:lazy_html, ">= 0.1.0", only: :test},
       # Bandit: the HTTP adapter behind SamenerpWeb.Endpoint.
       {:bandit, "~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},

@@ -99,8 +99,8 @@ defmodule Samenerp.BankingMatchGuardTest do
     end
   end
 
-  # StatementLine ships NO create action (imports are the declared-not-built
-  # route): arrange the row directly, act through the governed `:create_match`.
+  # StatementLine's only create route is the governed `:import` action; arrange
+  # the row directly here, act through the governed `:create_match`.
   defp seed_line(org, bank_account_id, amount_cents) do
     %{rows: [[id]]} =
       Samenerp.Repo.query!(
@@ -167,6 +167,7 @@ defmodule Samenerp.BankingMatchGuardTest do
     # tolerance (multi-currency rounding — Match moduledoc) → allowed by design.
     # Pinning it here so a future tightening/loosening is a deliberate act.
     within_line = seed_line(org, bank.id, -4_999)
+
     assert {:ok, _} = attempt_match(scope, within_line, entry),
            "a match within the documented ±1¢ tolerance was refused: " <>
              err_text(attempt_match(scope, within_line, entry))
@@ -175,6 +176,7 @@ defmodule Samenerp.BankingMatchGuardTest do
     # tolerance → refused.
     short_line = seed_line(org, bank.id, -4_980)
     assert {:error, e1} = attempt_match(scope, short_line, entry)
+
     assert err_text({:error, e1}) =~ "Amount mismatch",
            "the amount guard did not refuse a mismatched match: " <> err_text({:error, e1})
 
@@ -186,6 +188,7 @@ defmodule Samenerp.BankingMatchGuardTest do
     # RED (b6 SameOrgFk): another org's statement line may never be linked.
     foreign_line = seed_line(other_org, bank.id, -5_000)
     assert {:error, e3} = attempt_match(scope, foreign_line, entry)
+
     assert err_text({:error, e3}) =~ "org",
            "the cross-org match was not refused by the same-org FK guard: " <>
              err_text({:error, e3})
@@ -208,6 +211,7 @@ defmodule Samenerp.BankingMatchGuardTest do
     # RED: a second match for the same line — refused by the guard's existing-
     # Match check (brace) before the unique index (belt) would fire.
     assert {:error, e} = attempt_match(scope, line, entry)
+
     assert err_text({:error, e}) =~ "already",
            "the double-match refusal did not surface an honest already-matched error: " <>
              err_text({:error, e})
@@ -222,6 +226,7 @@ defmodule Samenerp.BankingMatchGuardTest do
 
     voided = seed_entry(scope, org, cash.id, expense.id, -7_500, void?: true)
     assert {:error, e} = attempt_match(scope, line, voided)
+
     assert err_text({:error, e}) =~ "voided",
            "the voided-entry refusal did not surface: " <> err_text({:error, e})
 
@@ -260,6 +265,5 @@ defmodule Samenerp.BankingMatchGuardTest do
 
     refute mine in hidden,
            "a foreign org's statement line leaked through OrgScope"
-
   end
 end

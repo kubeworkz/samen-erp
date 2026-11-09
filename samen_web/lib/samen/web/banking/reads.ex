@@ -15,6 +15,7 @@ defmodule Samen.Web.Banking.Reads do
   require Ash.Query
 
   alias Samen.Web.Mount
+  alias Samen.Scopes.Banking.Recognize
 
   @detail_limit 200
   @entry_limit 100
@@ -39,7 +40,13 @@ defmodule Samen.Web.Banking.Reads do
   """
   def accounts_page(mount, scope, state) do
     Mount.resource(mount, BankAccount)
-    |> Ash.Query.ensure_selected([:name, :account_id, :statement_balance_cents, :currency, :is_active])
+    |> Ash.Query.ensure_selected([
+      :name,
+      :account_id,
+      :statement_balance_cents,
+      :currency,
+      :is_active
+    ])
     |> Samen.Web.Reads.page!(state, scope: scope, filter_fields: [:name])
   rescue
     _ -> %Samen.Web.Page{items: [], page_size: Samen.Web.Reads.bounded_page_size(state.page_size)}
@@ -49,7 +56,14 @@ defmodule Samen.Web.Banking.Reads do
   def account(mount, scope, id) do
     Mount.resource(mount, BankAccount)
     |> Ash.Query.filter(id == ^id)
-    |> Ash.Query.ensure_selected([:name, :account_id, :statement_balance_cents, :currency, :is_active, :archived_at])
+    |> Ash.Query.ensure_selected([
+      :name,
+      :account_id,
+      :statement_balance_cents,
+      :currency,
+      :is_active,
+      :archived_at
+    ])
     |> Ash.Query.limit(1)
     |> Ash.read!(scope: scope)
     |> List.first()
@@ -76,11 +90,13 @@ defmodule Samen.Web.Banking.Reads do
   Candidate GL journal entries for a match — read from the host's FINANCE namespace
   (the `:erp_namespace` mount label; the banking namespace has no journal entries),
   bounded, NON-void (ReconcileGuard refuses voided entries, so they are never
-  offered), each carrying its `total_cents` (Σ debit − credit over its lines) so the
-  amount-strict expectation is VISIBLE before submit. Absent label → `[]` (the
-  surface renders the honest empty picker, never a fabricated list).
+  offered), each carrying its `total_cents` as the CASH LEG for `cash_account_id`
+  (the bank account's GL account). A balanced entry's net total is always zero, so
+  the cash leg is what the amount-strict match (and the UI) must compare. Entries
+  that do not touch the bank account are omitted. Absent label → `[]` (the surface
+  renders the honest empty picker, never a fabricated list).
   """
-  def journal_candidates(mount, scope) do
+  def journal_candidates(mount, scope, cash_account_id) do
     case Mount.label(mount, :erp_namespace, nil) do
       nil ->
         []
@@ -93,17 +109,48 @@ defmodule Samen.Web.Banking.Reads do
         |> Ash.Query.limit(@entry_limit)
         |> Ash.read!(scope: scope)
         |> Enum.reject(&(&1.status == :void))
-        |> Enum.map(fn e ->
-          total =
-            Enum.reduce(e.lines, 0, fn l, acc ->
-              acc + (l.debit_cents || 0) - (l.credit_cents || 0)
-            end)
-
-          %{id: e.id, entry_date: e.entry_date, memo: e.memo, status: e.status, total_cents: total}
-        end)
+        |> Enum.map(&candidate_map(&1, cash_account_id))
+        |> Enum.reject(&is_nil/1)
     end
   rescue
     _ -> []
+  end
+
+  defp candidate_map(entry, cash_account_id) do
+    cash_lines = Enum.filter(entry.lines, &(&1.account_id == cash_account_id))
+
+    if cash_lines == [] do
+      nil
+    else
+      total =
+        Enum.reduce(cash_lines, 0, fn l, acc ->
+          acc + (l.debit_cents || 0) - (l.credit_cents || 0)
+        end)
+
+      %{
+        id: entry.id,
+        entry_date: entry.entry_date,
+        memo: entry.memo,
+        status: entry.status,
+        total_cents: total
+      }
+    end
+  end
+
+  @doc """
+  Ranked match suggestions for the account screen: unmatched statement lines mapped
+  to their top three candidates from `Recognize`. Lines with no candidates are
+  omitted, so the caller gets `%{line_id => [candidate]}`.
+  """
+  def suggestions(lines, candidates) do
+    lines
+    |> Enum.filter(&(&1.status == :unmatched))
+    |> Enum.reduce(%{}, fn line, acc ->
+      case Recognize.find_candidates(line, candidates) |> Enum.take(3) do
+        [] -> acc
+        ranked -> Map.put(acc, line.id, ranked)
+      end
+    end)
   end
 
   @doc """
