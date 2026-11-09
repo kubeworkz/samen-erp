@@ -122,7 +122,7 @@ defmodule Samen.AbbrevRegistryTest do
       path
     end
 
-    test "the COMMITTED registry: 405 flat entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
+    test "the COMMITTED registry: 405 global entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
       %{global: global, hosts: hosts} = Reg.load_namespaced()
       # +75 since the 328 pin (eb1de17): the WS-ERP E28–E38 scope batches + the
       # HuggingFace BYOK scope + the z-prefix re-nesting (9d751da/172057e) +
@@ -173,10 +173,11 @@ defmodule Samen.AbbrevRegistryTest do
       # +3 in WS-ACCT Phase 16 (ADR-054): the Kubeworkz host's HR mount —
       # `she`/`seh`/`shl` (Employee/EmploymentEvent/LeaveRequest), every row
       # allocator-reserved.
-      # = 410 host entries across six hosts.
+      # = 438 host entries across six hosts, including the three AP/AR
+      # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`).
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 127
-      assert map_size(hosts["samen_core"]) == 118
+      assert map_size(hosts["samenerp"]) == 128
+      assert map_size(hosts["samen_core"]) == 119
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -362,6 +363,7 @@ defmodule Samen.AbbrevRegistryTest do
                  "pqo" => "PawChart.Operator.CsatSurveyToken"
                },
                "samen_core" => %{
+                 "jap" => "SamenCore.Support.FinanceFixture.JournalApprovalPolicy",
                  # T75 (spec §I2 CRM sequences actually send): the new Outreach
                  # scope's samen_core-level fixture (Sequence/Enrollment/StepSend)
                  # plus a SECOND materialization of the existing T74 Mailbox scope
@@ -582,6 +584,7 @@ defmodule Samen.AbbrevRegistryTest do
                  "ssj" => "SamenCore.Support.FinanceFixture.SupplierRisk"
                },
                "samen_web" => %{
+                 "wja" => "Samen.WebTest.Erp.JournalApprovalPolicy",
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
                  "woc" => "Samen.WebTest.Operator.Credential",
                  "wot" => "Samen.WebTest.Operator.AuthToken",
@@ -774,6 +777,7 @@ defmodule Samen.AbbrevRegistryTest do
                # +9 Phase-5 CMS mount (samenerp scg/sct/scb/scd/scn/scf + the
                # three E7 Version abbrevs spv/stv/sbv), allocator-reserved.
                "samenerp" => %{
+                 "ejp" => "Samenerp.Erp.JournalApprovalPolicy",
                  # Samenerp.Aggregate (1):
                  "era" => "Samenerp.Aggregate.RecordCountBySegment",
                  # Samenerp.Approvals (1):
@@ -1081,7 +1085,9 @@ defmodule Samen.AbbrevRegistryTest do
       # (+10 WS-ACCT Unit 10.2 (ADR-054 D17): the timesheet pair + the payroll
       # allocation pair in all three hosts (samen_core `wts`/`tsw`/`sfl`/`slf`,
       # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
-      assert map_size(Reg.load()) == 840
+      # (+3 AP/AR JournalApprovalPolicy host rows (`jap`/`wja`/`ejp`)
+      # = 405 + 438 = 843 flat.)
+      assert map_size(Reg.load()) == 843
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

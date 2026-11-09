@@ -131,7 +131,8 @@ defmodule Samen.Abbrev.AllocatorTest do
     end
 
     test "the COMMITTED registry is byte-untouched after all scratch reservations" do
-      committed = File.read!(R.path())
+      # Normalize CRLF so the byte-size pin is stable across platforms.
+      committed = R.path() |> File.read!() |> String.replace("\r\n", "\n")
       # 263 flat entries + the 5 F3 host-namespaced ConsentEvent reservations (ADR-023) +
       # the 6 ADR-035 T02 Identity.Credential/AuthToken host reservations + the 3 ADR-035
       # T03 Identity.Session host reservations + the 3 ADR-035 T06
@@ -338,8 +339,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +9 WS-ACCT Phase 15 (ADR-054 D18): scorecard + dimension + risk in the
       # same three hosts -> 39_163 bytes, 837 flat.
       # +3 WS-ACCT Phase 16: the Kubeworkz host's HR mount -> 39_285 bytes.
-      assert byte_size(committed) == 39_285
-      assert map_size(R.load()) == 840
+      # +3 AP/AR JournalApprovalPolicy host rows (`jap`/`wja`/`ejp`)
+      # -> 39_463 bytes, 843 flat.
+      assert byte_size(committed) == 39_463
+      assert map_size(R.load()) == 843
     end
   end
 
