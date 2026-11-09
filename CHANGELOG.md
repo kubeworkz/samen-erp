@@ -25,6 +25,32 @@ All notable changes to Samen are recorded here. The format follows
   has none. The page reads under the member scope and writes through the resource's OWN
   admin-only governed actions, so a non-admin member sees a read-only control and a crafted
   save is refused by the kernel; the operator plane renders no form.
+- **AP invoice capture** (`/erp/ap-capture`, mounted by `samen_erp_routes/3`): paste vendor
+  invoice text or upload a PDF/image, review the parsed number, dates, lines and total, then
+  confirm ONE `:draft` `ApInvoice`. Capture never approves: the bill still walks the ordinary
+  `:approve` Gate. A number already on a bill is refused at parse time, and a softer
+  vendor/date/total duplicate is refused on confirm unless the operator explicitly confirms.
+  Text and CSV uploads are free; PDFs and images use the configured OCR adapter.
+- **Durable per-org hosted-OCR budget** (AP capture): PDF/image submissions are metered per
+  organization in Postgres (`web_ocr_quota`), 60 documents per hour by default via the
+  `:erp_invoice_ocr` `Samen.Web.RateLimit` surface. The counter is a single atomic upsert, so
+  every node shares it and a restart cannot refill it; windows use the database clock. The
+  budget is shown before an upload, refreshed by an id-only PubSub event on the ERP dashboard,
+  and labelled with the time until reset. A prune worker drops expired windows, and
+  `[:samen, :erp, :ocr_quota, :exhausted]` / `[:samen, :erp, :ocr_quota, :prune]` telemetry
+  reports exhaustion and sweeps. Missing migrations fail closed for documents; pasted text
+  still works.
+- **AP bill payments and payment runs** (`/erp/ap-payments`): `:pay` settles an approved bill
+  and posts the AP-clearing debit/cash credit in the same transaction, anchored to the bill so
+  a second payment is refused by the row lock. The page runs one same-vendor batch over
+  selected approved bills, flags possible duplicate bills, and hands the remittance CSV and
+  ACH/EFT file directly from the render. A run that includes a bill that is no longer approved
+  pays nothing.
+- **AR aging and customer statements** (`/erp/ar-aging`): read the host's Billing invoices and
+  POSTED `PaymentReceipt` cash through `Samen.Scopes.Finance.ArAging`, bucketed current /
+  1–30 / 31–60 / 61–90 / 90+ / undated, with a per-customer statement of every invoice and
+  settling receipt. The page is read-only and uses the same kernel projection the API uses;
+  provider `amount_paid_cents` is deliberately ignored in favor of posted cash.
 - **Canonical Work scope — `Project` + the self-referential `Task`** (ADR-041 §3, F1): a new
   `Samen.Scopes.Work` blueprint ships one canonical Work item (`kind`/`title`/`body`/`status`/
   `priority`/`due_at`/`completed_at`, a generic CRM-agnostic `(subject_key, subject_id)`
