@@ -20,9 +20,17 @@ defmodule Samen.Web.ErpApPaymentsTest do
   """
   use Samen.WebTest.DataCase, async: false
 
+  import Phoenix.LiveViewTest, only: [render_component: 2]
+
   require Ash.Query
 
-  alias Samen.Scopes.Finance.{ApPaymentRun, VendorPaymentProfile}
+  alias Samen.Scopes.Finance.{
+    ApAchArtifact,
+    ApPaymentReversal,
+    ApPaymentRun,
+    VendorPaymentProfile
+  }
+
   alias Samen.Web.Erp.ApPaymentsLive
   alias Samen.WebTest.Erp.{Account, ApInvoice, JournalEntry, PostingAccount}
 
@@ -131,6 +139,27 @@ defmodule Samen.Web.ErpApPaymentsTest do
         plane: :tenant
       }
     }
+  end
+
+  defp admin_scope(actor_id) do
+    %Samen.Scope{
+      actor: %{id: actor_id, org_id: @org, role: :admin, kind: :tenant, plane: :tenant}
+    }
+  end
+
+  defp crm_sidebar_html(plane \\ Samen.Web.Plane.tenant()) do
+    mount =
+      Samen.Web.Mount.new(:crm, Samen.WebTest.Crm, Samen.WebTest.Repo,
+        plane: plane,
+        labels: %{erp_path: "/erp"}
+      )
+
+    render_component(&Samen.Web.CRM.Live.crm_sidebar/1, %{
+      mount: mount,
+      org_id: @org,
+      active: :crm_dashboard,
+      return_to: nil
+    })
   end
 
   defp pending_run!(bill, reference) do
@@ -395,6 +424,210 @@ defmodule Samen.Web.ErpApPaymentsTest do
     refute html =~ ~s(id="ap-payment-result")
   end
 
+  # -- pending reversals ------------------------------------------------------
+
+  test "the pending-reversals queue lets a distinct admin reverse a paid run" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-6001"})
+    pending = pending_run!(bill, "NOV-REV-QUEUE")
+
+    assert {:ok, _paid} =
+             ApPaymentRun.approve(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("approver:other"),
+               run_id: pending.id
+             )
+
+    assert {:ok, reversal} =
+             ApPaymentReversal.request(
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("requester:admin"),
+               run_id: pending.id,
+               reason: "Bank returned the credit"
+             )
+
+    socket = open()
+
+    assert [entry] = socket.assigns.pending_reversals
+    assert entry.reversal.id == reversal.id
+    assert entry.run.id == pending.id
+
+    html = render(socket)
+    assert html =~ ~s(id="ap-payment-pending-reversals")
+    assert html =~ ~s(id="ap-pending-reversal-#{reversal.id}")
+    assert html =~ "NOV-REV-QUEUE"
+    assert html =~ "requester:admin"
+    assert html =~ "Bank returned the credit"
+    assert html =~ ~s(id="approve-reversal-#{reversal.id}")
+    assert html =~ ~s(id="reject-reversal-#{reversal.id}")
+    refute html =~ "awaiting a different admin"
+
+    socket = event(socket, "approve_reversal", %{"reversal_id" => reversal.id})
+
+    assert socket.assigns.pending_reversals == []
+    assert socket.assigns.notice =~ "reversal approved"
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+
+    assert [voided] = payment_entries(bill.id)
+    assert voided.status == :void
+    assert voided.voided_entry_id
+
+    refute render(socket) =~ ~s(id="ap-payment-pending-reversals")
+  end
+
+  test "the shared nav badge counts reversals awaiting this admin across runs" do
+    seed_posting_accounts()
+
+    reversals =
+      for {number, reference, requester} <- [
+            {"BILL-6101", "NOV-BADGE-1", "requester:one"},
+            {"BILL-6102", "NOV-BADGE-2", "requester:two"}
+          ] do
+        bill = bill!(%{number: number})
+        pending = pending_run!(bill, reference)
+
+        assert {:ok, _paid} =
+                 ApPaymentRun.approve(
+                   ap_invoice: ApInvoice,
+                   repo: Samen.WebTest.Repo,
+                   scope: admin_scope("approver:other"),
+                   run_id: pending.id
+                 )
+
+        assert {:ok, reversal} =
+                 ApPaymentReversal.request(
+                   repo: Samen.WebTest.Repo,
+                   scope: admin_scope(requester),
+                   run_id: pending.id,
+                   reason: "Returned by the bank"
+                 )
+
+        reversal
+      end
+
+    socket = open()
+    assert render(socket) =~ ~s(class="cnt">2<)
+
+    # The SAME badge rides the shared ERP nav group on a non-ERP tenant page: the
+    # CRM sidebar threads only its mount, and `module_nav/1` derives the count. A
+    # badge that only lit inside the ERP sidebar would leave the queue invisible
+    # while an admin works in CRM.
+    crm_html = crm_sidebar_html()
+    assert crm_html =~ ~s(href="/erp/ap-payments?org=#{@org}")
+    assert crm_html =~ ~s(class="cnt">2<)
+
+    [first | _] = reversals
+    socket = event(socket, "approve_reversal", %{"reversal_id" => first.id})
+
+    html = render(socket)
+    assert html =~ ~s(class="cnt">1<)
+    refute html =~ ~s(class="cnt">2<)
+  end
+
+  test "the shared nav badge stays hidden on an operator-plane non-ERP page" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-6201"})
+    pending = pending_run!(bill, "NOV-BADGE-OPERATOR")
+
+    assert {:ok, _paid} =
+             ApPaymentRun.approve(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("approver:other"),
+               run_id: pending.id
+             )
+
+    assert {:ok, _reversal} =
+             ApPaymentReversal.request(
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("requester:admin"),
+               run_id: pending.id,
+               reason: "Returned by the bank"
+             )
+
+    # Positive control: the same non-ERP page DOES light the badge for a tenant
+    # admin who can decide this reversal.
+    tenant_html = crm_sidebar_html()
+    assert tenant_html =~ ~s(href="/erp/ap-payments?org=#{@org}")
+    assert tenant_html =~ ~s(class="cnt">1<)
+
+    operator_plane = Samen.Web.Plane.operator("op-1", @org, "test-session")
+    operator_html = crm_sidebar_html(operator_plane)
+
+    assert operator_html =~ ~s(href="/erp/ap-payments?org=#{@org}")
+    refute operator_html =~ ~s(class="cnt">1<)
+  end
+
+  test "the queue shows the requester their own reversal without approve controls" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-6002"})
+    pending = pending_run!(bill, "NOV-REV-SELF")
+
+    assert {:ok, _paid} =
+             ApPaymentRun.approve(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("approver:other"),
+               run_id: pending.id
+             )
+
+    assert {:ok, reversal} =
+             ApPaymentReversal.request(
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("broker:#{@org}"),
+               run_id: pending.id,
+               reason: "Duplicate payment"
+             )
+
+    html = render(open())
+
+    assert html =~ ~s(id="ap-pending-reversal-#{reversal.id}")
+    assert html =~ "awaiting a different admin"
+    assert html =~ ~s(id="cancel-reversal-#{reversal.id}")
+    refute html =~ ~s(id="approve-reversal-#{reversal.id}")
+    refute html =~ ~s(id="reject-reversal-#{reversal.id}")
+    refute html =~ ~s(class="cnt">1<)
+
+    # The shared ERP group is present on a non-ERP page, but the badge stays
+    # hidden: the only pending reversal belongs to the viewer, and the kernel
+    # refuses self-approval.
+    crm_html = crm_sidebar_html()
+    assert crm_html =~ ~s(href="/erp/ap-payments?org=#{@org}")
+    refute crm_html =~ ~s(class="cnt">1<)
+  end
+
+  test "the queue rejects a reversal without moving the paid run" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "BILL-6003"})
+    pending = pending_run!(bill, "NOV-REV-REJECT")
+
+    assert {:ok, _paid} =
+             ApPaymentRun.approve(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("approver:other"),
+               run_id: pending.id
+             )
+
+    assert {:ok, reversal} =
+             ApPaymentReversal.request(
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("requester:admin"),
+               run_id: pending.id,
+               reason: "Wrong run"
+             )
+
+    socket = open() |> event("reject_reversal", %{"reversal_id" => reversal.id})
+
+    assert socket.assigns.pending_reversals == []
+    assert socket.assigns.notice =~ "Reversal rejected"
+    assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
+    assert [entry] = payment_entries(bill.id)
+    assert entry.status == :posted
+    assert entry.voided_entry_id == nil
+  end
+
   # -- ACH / EFT file ---------------------------------------------------------
 
   test "builds an ACH file only from the vendor's VERIFIED bank profile" do
@@ -470,6 +703,27 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
     assert String.starts_with?(built.assigns.ach_file, "101 ")
     assert built.assigns.ach_error == nil
+
+    [artifact] = ApAchArtifact.list(Samen.WebTest.Repo, @org, built.assigns.run.id)
+    file = built.assigns.ach_file
+
+    assert String.starts_with?(artifact.file_token, "vt_")
+    assert String.length(artifact.digest) == 64
+    assert artifact.size_bytes == byte_size(file)
+    assert artifact.originator_name == "Sample Co"
+    assert artifact.originator_dfi_last4 == "0021"
+    assert artifact.receiver_account_last4 == "6789"
+    assert artifact.receiver_routing_last4 == "0015"
+    assert {:ok, ^file} = ApAchArtifact.reveal(artifact, Samen.WebTest.Repo)
+
+    %{rows: [[token]]} =
+      Samen.WebTest.Repo.query!(
+        "SELECT ach_file_token FROM ach_ap_payment_ach_file WHERE ach_id = $1",
+        [Ecto.UUID.dump!(artifact.id)]
+      )
+
+    assert token == artifact.file_token
+    refute token =~ "101 "
 
     html = render(built)
     assert html =~ ~s(id="download-ach")

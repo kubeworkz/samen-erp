@@ -25,10 +25,10 @@ defmodule Samen.Web.Files.Live do
   def writable?(%Mount{plane: %{kind: :operator}}), do: false
   def writable?(_), do: true
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: :files
-  attr :return_to, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: :files)
+  attr(:return_to, :string, default: nil)
 
   @doc """
   The files sidebar — workspace header + the inherited `module_nav` with the files
@@ -46,7 +46,7 @@ defmodule Samen.Web.Files.Live do
         <.switcher mount={@mount} org_id={@org_id} return_to={@return_to} compact />
       </:switcher>
 
-      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+      <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

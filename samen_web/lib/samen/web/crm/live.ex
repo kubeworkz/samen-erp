@@ -94,8 +94,8 @@ defmodule Samen.Web.CRM.Live do
       `name_part/2`, which reads only a NON-masked struct/map/JSON-string — a
       `%Samen.Masked{}` can never reach the editable branch by construction.
   """
-  attr :field, Phoenix.HTML.FormField, required: true
-  attr :label, :string, default: "Full name"
+  attr(:field, Phoenix.HTML.FormField, required: true)
+  attr(:label, :string, default: "Full name")
 
   def full_name_field(%{field: %Phoenix.HTML.FormField{value: %Samen.Masked{}}} = assigns) do
     ~H"""
@@ -162,10 +162,10 @@ defmodule Samen.Web.CRM.Live do
 
   defp interpolate_error(msg) when is_binary(msg), do: msg
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: nil
-  attr :return_to, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: nil)
+  attr(:return_to, :string, default: nil)
 
   @doc """
   The CRM sidebar — workspace header (the RESOLVED current-org name, ADR-013 §4.6) with the
@@ -186,7 +186,7 @@ defmodule Samen.Web.CRM.Live do
         <.search_box org_id={@org_id} placeholder="Search companies, contacts…" />
       </:search>
 
-      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+      <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

@@ -113,10 +113,10 @@ defmodule Samen.Web.Notes.Live do
     base <> separator <> "deleted=" <> to_string(doc_id)
   end
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: :pages
-  attr :return_to, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: :pages)
+  attr(:return_to, :string, default: nil)
 
   @doc """
   The Pages sidebar — workspace header + the inherited `module_nav` with the Documents group's
@@ -138,7 +138,7 @@ defmodule Samen.Web.Notes.Live do
         <.switcher mount={@mount} org_id={@org_id} return_to={@return_to} compact />
       </:switcher>
 
-      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+      <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

@@ -25,11 +25,11 @@ defmodule Samen.Web.Notifications.Live do
   def writable?(%Mount{plane: %{kind: :operator}}), do: false
   def writable?(_), do: true
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: :notifications
-  attr :return_to, :string, default: nil
-  attr :unread, :any, default: nil, doc: "the unread count feeding the nav badge (AC-G2-7)"
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: :notifications)
+  attr(:return_to, :string, default: nil)
+  attr(:unread, :any, default: nil, doc: "the unread count feeding the nav badge (AC-G2-7)")
 
   @doc """
   The notifications sidebar — workspace header (the resolved current-org name) + the
@@ -47,7 +47,7 @@ defmodule Samen.Web.Notifications.Live do
         <.switcher mount={@mount} org_id={@org_id} return_to={@return_to} compact />
       </:switcher>
 
-      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active} notifications_unread={@unread}>
+      <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active} notifications_unread={@unread}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

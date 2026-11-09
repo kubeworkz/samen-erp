@@ -143,6 +143,17 @@ defmodule Samen.UI.Nav do
   slot identically from every framework sidebar (PP-10).
   """
   attr(:org_id, :string, default: nil)
+
+  attr(:mount, Mount,
+    default: nil,
+    doc: """
+    The current tenant mount, threaded by every framework sidebar. `module_nav/1` uses it
+    to derive identity-bound badges — the AP payments pending-reversals count — from the
+    same host session the sidebar already carries. `nil` (a hand-built component call)
+    leaves those badges unlit.
+    """
+  )
+
   attr(:active, :atom, default: nil)
   attr(:crm_path, :string, default: "/crm")
   attr(:billing_path, :string, default: "/billing")
@@ -187,6 +198,15 @@ defmodule Samen.UI.Nav do
     router calls `samen_board_routes/3` (threaded from the `:board_path` mount
     label). The item lives inside the ERP group, so it also requires `erp_path`;
     `nil` hides it. Same X1 dead-link guard as every other path-gated nav item.
+    """
+  )
+
+  attr(:ap_payment_reversals_pending, :any,
+    default: nil,
+    doc: """
+    Optional override for the AP payments badge — pending reversals this admin can
+    decide (the kernel excludes the viewer's own requests). When `nil`, `module_nav/1`
+    derives it from `mount` + `org_id`; `nil`/zero renders no badge.
     """
   )
 
@@ -367,6 +387,7 @@ defmodule Samen.UI.Nav do
         label={Samen.Web.Erp.ap_payments_label()}
         href={"#{@erp_path}/ap-payments?org=#{@org_id}"}
         active={@active == :erp_ap_payments}
+        count={ap_payment_reversals_pending(@mount, @org_id, @erp_path, @ap_payment_reversals_pending)}
       >
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /><path d="M7 14h3" /></svg>
@@ -707,10 +728,13 @@ defmodule Samen.UI.Nav do
   the host mounted, instead of each call site threading the same paths by hand.
 
   ```heex
-  <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+  <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active}>
     <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
   </.module_nav>
   ```
+
+  The mount rides alongside the paths so `module_nav/1` can derive per-viewer badges (the
+  AP payments pending-reversals count) on EVERY tenant page, not only the ERP sidebar.
 
   The TENANT-only module groups (Files/Chat/Search/Insights/Calendar/AI/Feature flags) resolve
   ONLY for a `:tenant`-plane mount. That is not cosmetic: `:chat_path` is also what an
@@ -757,6 +781,17 @@ defmodule Samen.UI.Nav do
       flags_path: Mount.label(mount, :flags_path, nil)
     ]
   end
+
+  defp ap_payment_reversals_pending(_mount, _org_id, _erp_path, override)
+       when override not in [nil, 0],
+       do: override
+
+  defp ap_payment_reversals_pending(%Mount{} = mount, org_id, erp_path, nil)
+       when is_binary(erp_path) do
+    Samen.Web.Erp.pending_reversals_badge(mount, org_id)
+  end
+
+  defp ap_payment_reversals_pending(_mount, _org_id, _erp_path, _override), do: nil
 
   defp tenant_plane?(%Mount{plane: %{kind: :tenant}}), do: true
   defp tenant_plane?(_), do: false

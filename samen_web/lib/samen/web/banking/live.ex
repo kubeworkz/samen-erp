@@ -23,10 +23,10 @@ defmodule Samen.Web.Banking.Live do
   def writable?(%Mount{plane: %{kind: :operator}}), do: false
   def writable?(_), do: true
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: nil
-  attr :return_to, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: nil)
+  attr(:return_to, :string, default: nil)
 
   def banking_sidebar(assigns) do
     ~H"""
@@ -43,7 +43,7 @@ defmodule Samen.Web.Banking.Live do
         <.search_box org_id={@org_id} placeholder="Search accounts, statements…" />
       </:search>
 
-      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+      <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 

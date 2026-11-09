@@ -30,10 +30,10 @@ defmodule Samen.Web.Erp.Live do
   def writable?(%Mount{plane: %{kind: :operator}}), do: false
   def writable?(_), do: true
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: nil
-  attr :return_to, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: nil)
+  attr(:return_to, :string, default: nil)
 
   @doc """
   The ERP sidebar — resolved current-org header + switcher + the inherited `module_nav`
@@ -62,6 +62,7 @@ defmodule Samen.Web.Erp.Live do
 
       <.module_nav
         {Samen.UI.nav_paths(@mount, erp_path: Mount.label(@mount, :erp_path, "/erp"))}
+        mount={@mount}
         org_id={@org_id}
         active={@active}
       >

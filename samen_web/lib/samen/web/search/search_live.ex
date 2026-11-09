@@ -104,7 +104,7 @@ defmodule Samen.Web.Search.SearchLive do
       <:search>
         <.search_box org_id={@org_id} />
       </:search>
-      <.module_nav {Samen.UI.nav_paths(@samen_mount)} org_id={@org_id} active={:search}>
+      <.module_nav {Samen.UI.nav_paths(@samen_mount)} mount={@samen_mount} org_id={@org_id} active={:search}>
         <:extra><.host_nav_extra mount={@samen_mount} org_id={@org_id} /></:extra>
       </.module_nav>
     </.sidebar>

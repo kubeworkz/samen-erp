@@ -167,6 +167,7 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
       <.module_nav
         :if={@samen_mount}
         {nav_paths(@samen_mount)}
+        mount={@samen_mount}
         org_id={@org_id}
         active={:analytics}
       >
@@ -352,7 +353,8 @@ defmodule Samen.Web.Tenant.AnalyticsLive do
     do: doc_step(mount, "Read the setup docs for this page", @mount_doc)
 
   def unread_next_step(:read_failed, mount, _org_id),
-    do: doc_step(mount, "Work the operator runbook (rollups queue, readiness, pool)", @runbook_doc)
+    do:
+      doc_step(mount, "Work the operator runbook (rollups queue, readiness, pool)", @runbook_doc)
 
   # `:no_org` (and anything a future read layer adds): no step. There is no org to act on, so
   # every "fix" would be a fact about a session this page never resolved.

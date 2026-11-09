@@ -54,7 +54,8 @@ defmodule Samen.Web.Erp do
   the E7 roster's business).
   """
 
-  alias Samen.Web.Mount
+  alias Samen.Scopes.Finance.ApPaymentReversal
+  alias Samen.Web.{Mount, TenantRole}
 
   @type surface ::
           :coa | :entries | :ap_invoices | :stock | :purchase_orders | :work_orders
@@ -101,6 +102,33 @@ defmodule Samen.Web.Erp do
   end
 
   def surface(atom) when is_atom(atom), do: if(atom in @surfaces, do: atom)
+
+  @doc """
+  The AP payments nav badge for the signed-in admin: how many payment reversals
+  are awaiting a DIFFERENT admin's decision in `org_id`.
+
+  Returns `nil` — rendering no badge — on the operator plane, a `nil` org, a
+  non-admin/owner role, zero pending, or any read failure. That is the actionable
+  queue: the kernel refuses self-approval, so the viewer's own pending requests
+  are not counted by `ApPaymentReversal.count_awaiting/3`.
+  """
+  @spec pending_reversals_badge(Mount.t() | nil, String.t() | nil) :: pos_integer() | nil
+  def pending_reversals_badge(%Mount{plane: %{kind: :tenant}} = mount, org_id)
+      when is_binary(org_id) do
+    %Samen.Scope{actor: %{id: actor_id, role: role}} =
+      TenantRole.attributed_admin_scope(mount, org_id)
+
+    if role in [:admin, :owner] and is_binary(actor_id) do
+      case ApPaymentReversal.count_awaiting(mount.repo, org_id, actor_id) do
+        total when total > 0 -> total
+        _ -> nil
+      end
+    end
+  rescue
+    _ -> nil
+  end
+
+  def pending_reversals_badge(_mount, _org_id), do: nil
 
   @doc """
   The org's journal-approval control resource (`JournalApprovalPolicy`),

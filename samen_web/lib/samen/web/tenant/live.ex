@@ -22,7 +22,7 @@ defmodule Samen.Web.Tenant.Live do
         def tenant_sidebar(assigns) do
           ~H\"\"\"
           <.sidebar title={CurrentOrg.name(@samen_mount, @org_id)} subtitle=\"Freight\">
-            <.module_nav {Samen.UI.nav_paths(@samen_mount)} org_id={@org_id} active={:broker} />
+            <.module_nav {Samen.UI.nav_paths(@samen_mount)} mount={@samen_mount} org_id={@org_id} active={:broker} />
           </.sidebar>
           \"\"\"
         end
@@ -132,7 +132,10 @@ defmodule Samen.Web.Tenant.Live do
         raise CompileError, file: env.file, line: env.line, description: render_refusal(module)
 
       not Module.defines?(module, {:tenant_page, 1}) ->
-        raise CompileError, file: env.file, line: env.line, description: missing_refusal(module, :tenant_page)
+        raise CompileError,
+          file: env.file,
+          line: env.line,
+          description: missing_refusal(module, :tenant_page)
 
       not Module.defines?(module, {:tenant_sidebar, 1}) ->
         raise CompileError,
@@ -207,8 +210,8 @@ defmodule Samen.Web.Tenant.Live do
     })
   end
 
-  attr :sidebar_html, :any, required: true
-  attr :page_html, :any, required: true
+  attr(:sidebar_html, :any, required: true)
+  attr(:page_html, :any, required: true)
 
   defp shell(assigns) do
     ~H"""

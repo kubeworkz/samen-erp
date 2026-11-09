@@ -30,10 +30,10 @@ defmodule Samen.Web.Marketing.Live do
   def writable?(%Mount{plane: %{kind: :operator}}), do: false
   def writable?(_), do: true
 
-  attr :mount, Mount, required: true
-  attr :org_id, :string, default: nil
-  attr :active, :atom, default: nil
-  attr :return_to, :string, default: nil
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, default: nil)
+  attr(:active, :atom, default: nil)
+  attr(:return_to, :string, default: nil)
 
   @doc "The Marketing sidebar — resolved current-org header + switcher + the inherited `module_nav`."
   def marketing_sidebar(assigns) do
@@ -51,7 +51,7 @@ defmodule Samen.Web.Marketing.Live do
         <.search_box org_id={@org_id} placeholder="Search campaigns, segments…" />
       </:search>
 
-      <.module_nav {Samen.UI.nav_paths(@mount)} org_id={@org_id} active={@active}>
+      <.module_nav {Samen.UI.nav_paths(@mount)} mount={@mount} org_id={@org_id} active={@active}>
         <:extra><.host_nav_extra mount={@mount} org_id={@org_id} /></:extra>
       </.module_nav>
 
@@ -89,7 +89,11 @@ defmodule Samen.Web.Marketing.Live do
         nil
 
       crm_ns when is_atom(crm_ns) ->
-        Mount.new(:crm, crm_ns, mount.repo, plane: mount.plane, domain: crm_ns, labels: mount.labels)
+        Mount.new(:crm, crm_ns, mount.repo,
+          plane: mount.plane,
+          domain: crm_ns,
+          labels: mount.labels
+        )
 
       crm_ns when is_binary(crm_ns) ->
         ns = String.to_existing_atom(crm_ns)
