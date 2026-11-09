@@ -28,8 +28,7 @@
 # MUST_FAIL: with the period trigger DISABLED, the closed-period post is still refused
 --- a/samen_core/lib/samen/scopes/finance/blueprint.ex
 +++ b/samen_core/lib/samen/scopes/finance/blueprint.ex
-@@ -313,8 +313,7 @@
-             require_atomic?(false)
+@@ -378,7 +378,6 @@
              # R10 (WS-ACCT Phase 3): the posting's DATE must land in a period
              # that still admits it — a closed period refuses always.
 -            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
@@ -37,14 +36,13 @@
              # R6 over the PERSISTED lines (PostBalance's twin): the stored rows,
              # never a caller argument, decide whether the posting balances per
              # cost object.
-@@ -330,6 +329,5 @@
-             require_atomic?(false)
+@@ -399,5 +398,4 @@
              # R10: the reversal is dated the ORIGINAL's date, so a closed period
              # would refuse it mid-action — refuse up front, naming the period.
 -            change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
              change(Samen.Scopes.Finance.PostBalance)
              change(Samen.Scopes.Finance.PostGuard)
-@@ -371,6 +369,5 @@
+@@ -439,6 +437,5 @@
              # R10 (WS-ACCT Phase 3): this is the posted-born factory every
              # DOCUMENT posting rides (AP approval, the stock-receipt bridge, the
              # sales bridge, a void's reversal), so one gate here covers them all.

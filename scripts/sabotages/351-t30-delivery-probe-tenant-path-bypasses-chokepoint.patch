@@ -27,6 +27,6 @@ diff --git a/samen_web/lib/samen/web/notifications/live.ex b/samen_web/lib/samen
 +  # adapter, skipping Samen.Delivery.Chokepoint.send/2 — the exact bypass the probe forbids.
 +  defp __t30_bypass_send__(adapter, message, config), do: adapter.deliver(message, config)
 +
-   attr :mount, Mount, required: true
-   attr :org_id, :string, default: nil
-   attr :active, :atom, default: :notifications
+   attr(:mount, Mount, required: true)
+   attr(:org_id, :string, default: nil)
+   attr(:active, :atom, default: :notifications)
