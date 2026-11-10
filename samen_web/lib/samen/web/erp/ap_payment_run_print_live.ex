@@ -29,7 +29,7 @@ defmodule Samen.Web.Erp.ApPaymentRunPrintLive do
 
     {:ok,
      socket
-     |> assign(org_id: org_id, run_id: params["id"], run: nil, missing: nil)
+     |> assign(org_id: org_id, run_id: params["id"], run: nil, missing: nil, vendors: [])
      |> load()}
   end
 
@@ -49,23 +49,24 @@ defmodule Samen.Web.Erp.ApPaymentRunPrintLive do
     |> assign_new(:run_id, fn -> nil end)
     |> assign_new(:run, fn -> nil end)
     |> assign_new(:missing, fn -> nil end)
+    |> assign_new(:vendors, fn -> [] end)
     |> do_load()
   end
 
   defp do_load(%{assigns: %{org_id: nil}} = socket),
-    do: assign(socket, run: nil, missing: :no_org)
+    do: assign(socket, run: nil, missing: :no_org, vendors: [])
 
   defp do_load(
          %{assigns: %{samen_mount: %Mount{} = mount, org_id: org_id, run_id: run_id}} = socket
        )
        when is_binary(run_id) do
     case ApPaymentRun.get_run(mount.repo, org_id, run_id) do
-      {:ok, run} -> assign(socket, run: run, missing: nil)
-      {:error, :not_found} -> assign(socket, run: nil, missing: :not_found)
+      {:ok, run} -> assign(socket, run: run, missing: nil, vendors: vendor_groups(run))
+      {:error, :not_found} -> assign(socket, run: nil, missing: :not_found, vendors: [])
     end
   end
 
-  defp do_load(socket), do: assign(socket, run: nil, missing: :not_found)
+  defp do_load(socket), do: assign(socket, run: nil, missing: :not_found, vendors: [])
 
   @impl true
   def render(assigns) do
@@ -267,50 +268,71 @@ defmodule Samen.Web.Erp.ApPaymentRunPrintLive do
                     <div class="value">{@run.bill_count}</div>
                   </div>
                   <div>
-                    <div class="label">Vendor account</div>
-                    <div class="value mono">{@run.vendor_id || "—"}</div>
+                    <div class="label">
+                      {if length(@vendors) == 1, do: "Vendor account", else: "Vendors"}
+                    </div>
+                    <div class="value mono">{vendor_meta(@vendors)}</div>
                   </div>
                 </section>
 
-                <section class="payee">
+                <section
+                  :for={vendor <- @vendors}
+                  class="payee"
+                  id={"remittance-vendor-#{vendor.vendor_id}"}
+                >
                   <div class="label">Paid to</div>
-                  <div class={"payee-name" <> if(@run.vendor_name, do: "", else: " mono")}>
-                    {vendor_display_name(@run)}
+                  <div class={"payee-name" <> if(vendor.vendor_name, do: "", else: " mono")}>
+                    {vendor.vendor_name || vendor.vendor_id || "—"}
                   </div>
-                  <div :if={@run.remittance_address} class="payee-address">
-                    <div :for={line <- address_lines(@run.remittance_address)}>{line}</div>
+                  <div :if={vendor.remittance_address} class="payee-address">
+                    <div :for={line <- address_lines(vendor.remittance_address)}>{line}</div>
                   </div>
-                  <div class="muted">Vendor account {@run.vendor_id || "—"}</div>
-                  <div :if={@run.memo} class="memo">
-                    <span class="label">Memo</span>{@run.memo}
-                  </div>
+                  <div class="muted">Vendor account {vendor.vendor_id || "—"}</div>
+
+                  <table style="margin-top:14px">
+                    <thead>
+                      <tr>
+                        <th scope="col">Bill</th>
+                        <th scope="col">Due date</th>
+                        <th scope="col" class="right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr :for={payment <- vendor.payments} class="avoid-break">
+                        <td>{field(payment, :number) || "—"}</td>
+                        <td>{date_text(field(payment, :due_date))}</td>
+                        <td class="right">{money(field(payment, :amount_cents))}</td>
+                      </tr>
+                      <tr :if={vendor.payments == []}>
+                        <td colspan="3" class="muted">No bills are recorded for this vendor.</td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colspan="2" class="right total-label">
+                          {if length(@vendors) == 1, do: "Total paid", else: "Vendor total"}
+                        </td>
+                        <td class="right total">{money(vendor.total_cents)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </section>
 
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">Bill</th>
-                      <th scope="col">Due date</th>
-                      <th scope="col" class="right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr :for={payment <- @run.payments} class="avoid-break">
-                      <td>{field(payment, :number) || "—"}</td>
-                      <td>{date_text(field(payment, :due_date))}</td>
-                      <td class="right">{money(field(payment, :amount_cents))}</td>
-                    </tr>
-                    <tr :if={@run.payments == []}>
-                      <td colspan="3" class="muted">No bills are recorded on this run.</td>
-                    </tr>
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td colspan="2" class="right total-label">Total paid</td>
-                      <td class="right total">{money(@run.total_cents)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+                <p :if={@vendors == []} class="muted">
+                  No bills are recorded on this run.
+                </p>
+
+                <div :if={@run.memo} class="memo" style="margin-bottom:18px">
+                  <span class="label">Memo</span>{@run.memo}
+                </div>
+
+                <div
+                  :if={length(@vendors) > 1}
+                  style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:2px solid #111827"
+                >
+                  <span class="total-label">Total paid</span>
+                  <span class="total">{money(@run.total_cents)}</span>
+                </div>
 
                 <footer class="doc-footer">
                   <p>
@@ -344,8 +366,29 @@ defmodule Samen.Web.Erp.ApPaymentRunPrintLive do
     |> Enum.reject(&(&1 == ""))
   end
 
-  defp vendor_display_name(%{vendor_name: name, vendor_id: vendor_id}),
-    do: name || vendor_id || "—"
+  defp vendor_meta([vendor]), do: vendor.vendor_id || "—"
+  defp vendor_meta(vendors), do: "#{length(vendors)} vendors"
+
+  defp vendor_groups(run) do
+    vendor_ids = ApPaymentRun.vendor_ids(run)
+    grouped = Enum.group_by(run.payments, &payment_vendor_id(&1, run))
+    single? = length(vendor_ids) == 1
+
+    Enum.map(vendor_ids, fn vendor_id ->
+      payments = Map.get(grouped, vendor_id, [])
+
+      %{
+        vendor_id: vendor_id,
+        payments: payments,
+        total_cents: Enum.sum(Enum.map(payments, &payment_amount/1)),
+        vendor_name: if(single?, do: run.vendor_name),
+        remittance_address: if(single?, do: run.remittance_address)
+      }
+    end)
+  end
+
+  defp payment_vendor_id(payment, run), do: field(payment, :vendor_id) || run.vendor_id
+  defp payment_amount(payment), do: field(payment, :amount_cents) || 0
 
   defp document_title(%{reference: reference}) when is_binary(reference),
     do: "Remittance advice — #{reference}"

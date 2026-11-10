@@ -8,7 +8,7 @@ defmodule Samen.Web.ErpApPaymentsTest do
     * the requester cannot approve their own run;
     * a DIFFERENT admin's approval posts the payment, flips the bill to `:paid`,
       and offers the persisted remittance CSV;
-    * mixed-vendor requests are refused by the kernel and pay nothing;
+    * a mixed-vendor request becomes one run and pays every bill in one batch;
     * an empty selection is refused inline;
     * possible duplicates are flagged and refuse the request until confirmed;
     * the ACH file is available only after approval.
@@ -329,25 +329,37 @@ defmodule Samen.Web.ErpApPaymentsTest do
     assert render(socket) =~ "Cancelled"
   end
 
-  test "a mixed-vendor selection is refused and requests nothing" do
+  test "a mixed-vendor selection requests one run across both vendors" do
     seed_posting_accounts()
     first = bill!()
     second = bill!()
 
+    refute first.vendor_id == second.vendor_id
+
     socket =
       event(open(), "request", %{
         "bill_ids" => [first.id, second.id],
-        "payment_date" => "2026-11-08"
+        "payment_date" => "2026-11-08",
+        "reference" => "NOV-MIXED-1",
+        "vendor_name" => "Ignored for a multi-vendor run",
+        "remittance_address" => "Ignored for a multi-vendor run"
       })
 
+    assert socket.assigns.error == nil
+    assert [run] = socket.assigns.pending_runs
+    assert run.vendor_id == nil
+    assert run.vendor_name == nil
+    assert run.remittance_address == nil
+    assert run.total_cents == 8_000
+    assert ApPaymentRun.vendor_ids(run) == Enum.sort([first.vendor_id, second.vendor_id])
+    assert length(ApPaymentRun.payments_for_vendor(run, first.vendor_id)) == 1
+    assert length(ApPaymentRun.payments_for_vendor(run, second.vendor_id)) == 1
+
+    # The request alone moves nothing; a different admin still has to approve it.
     assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :approved
     assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :approved
     assert payment_entries(first.id) == []
-    assert socket.assigns.pending_runs == []
-
-    html = render(socket)
-    assert html =~ "one vendor"
-    assert html =~ ~s(id="ap-payment-error")
+    assert payment_entries(second.id) == []
   end
 
   test "an empty selection is refused inline" do
@@ -730,5 +742,79 @@ defmodule Samen.Web.ErpApPaymentsTest do
     assert html =~ "data:application/octet-stream;base64,"
     assert html =~ "ach-NOV-ACH-1.ach"
     refute html =~ ~s(id="ach-file-error")
+  end
+
+  test "a multi-vendor run builds one ACH file per vendor from its own profile" do
+    seed_posting_accounts()
+    first_vendor = Ash.UUID.generate()
+    second_vendor = Ash.UUID.generate()
+    first = bill!(%{number: "BILL-7101", vendor_id: first_vendor})
+    second = bill!(%{number: "BILL-7102", vendor_id: second_vendor})
+
+    assert {:ok, run} =
+             ApPaymentRun.request(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: requester_scope(@org),
+               bill_ids: [first.id, second.id],
+               payment_date: ~D[2026-11-08],
+               reference: "NOV-ACH-MULTI"
+             )
+
+    approved = event(open(), "approve", %{"run_id" => run.id})
+
+    assert approved.assigns.run.status == :paid
+
+    for {vendor_id, holder, account} <- [
+          {first_vendor, "Vendor One", "123456789"},
+          {second_vendor, "Vendor Two", "987654321"}
+        ] do
+      assert {:ok, profile} =
+               VendorPaymentProfile.register(
+                 repo: Samen.WebTest.Repo,
+                 scope: requester_scope(@org),
+                 vendor_id: vendor_id,
+                 bank_name: "First Sample Bank",
+                 account_holder: holder,
+                 account_number: account,
+                 routing_number: "011000015",
+                 account_type: "checking"
+               )
+
+      assert profile.status == :unverified
+
+      verified = event(approved, "verify_profile", %{"vendor_id" => vendor_id})
+      assert verified.assigns.vendor_profile.status == :verified
+    end
+
+    originator = %{
+      "originator_name" => "Sample Co",
+      "originator_id" => "1123456789",
+      "originator_dfi" => "021000021"
+    }
+
+    first_ach =
+      event(approved, "ach", Map.put(originator, "ach_vendor_id", first_vendor))
+
+    assert first_ach.assigns.ach_error == nil
+
+    assert first_ach.assigns.ach_name ==
+             "ach-NOV-ACH-MULTI-#{String.slice(first_vendor, 0, 8)}.ach"
+
+    assert first_ach.assigns.ach_file =~ "BILL-7101"
+    refute first_ach.assigns.ach_file =~ "BILL-7102"
+
+    second_ach =
+      event(approved, "ach", Map.put(originator, "ach_vendor_id", second_vendor))
+
+    assert second_ach.assigns.ach_error == nil
+
+    assert second_ach.assigns.ach_name ==
+             "ach-NOV-ACH-MULTI-#{String.slice(second_vendor, 0, 8)}.ach"
+
+    assert second_ach.assigns.ach_file =~ "BILL-7102"
+    refute second_ach.assigns.ach_file =~ "BILL-7101"
+
+    assert length(ApAchArtifact.list(Samen.WebTest.Repo, @org, run.id)) == 2
   end
 end

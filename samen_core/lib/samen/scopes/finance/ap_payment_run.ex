@@ -17,7 +17,8 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
 
   The cross-bill guarantees a loop of independent payments would not have:
 
-    * all bills must belong to the same vendor;
+    * a run may span vendors; each snapshot line carries its vendor, and
+      approval re-checks it against the live bill;
     * every bill must still be `:approved` when the run is requested AND when
       it is approved (a stale or already-paid bill refuses the whole run);
     * bills that look like the same vendor document entered twice refuse the
@@ -64,12 +65,12 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
     * `:ap_invoice` (required) — the mounted `ApInvoice` resource
     * `:repo` (required) — the Ecto repo that owns that resource
     * `:scope` (required) — the `Samen.Scope` requesting the run
-    * `:bill_ids` (required) — non-empty list of bill UUIDs, all one vendor
+    * `:bill_ids` (required) — non-empty list of bill UUIDs; a run may span vendors
     * `:payment_date` (required) — the `Date` posted as the payment entry date
     * `:reference` — the remittance reference; generated when absent
     * `:memo` — optional note copied into every payment entry
-    * `:vendor_name` — optional vendor name printed on the remittance advice
-    * `:remittance_address` — optional postal address printed on the advice
+    * `:vendor_name` — optional single-vendor name printed on the remittance advice
+    * `:remittance_address` — optional single-vendor postal address printed on the advice
     * `:allow_duplicates` — opt in to paying bills `duplicates/1` groups
       together (default `false`: the request refuses them)
 
@@ -85,8 +86,6 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
     bill_ids = Keyword.get(opts, :bill_ids)
     payment_date = Keyword.get(opts, :payment_date)
     memo = Keyword.get(opts, :memo)
-    vendor_name = normalize_optional_text(Keyword.get(opts, :vendor_name))
-    remittance_address = normalize_optional_text(Keyword.get(opts, :remittance_address))
     allow_duplicates = Keyword.get(opts, :allow_duplicates, false)
     reference = normalize_reference(Keyword.get(opts, :reference), payment_date)
     org_id = actor_org_id(scope)
@@ -98,13 +97,25 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
          {:ok, bills} <- load_bills(ap_invoice, bill_ids, scope),
          :ok <- validate_bills(bills, allow_duplicates),
          :ok <- ensure_reference_free(repo, org_id, reference) do
+      vendor_ids = bills |> Enum.map(& &1.vendor_id) |> Enum.uniq()
+      single_vendor? = match?([_], vendor_ids)
+      vendor_id = if single_vendor?, do: hd(vendor_ids), else: nil
+
+      vendor_name =
+        if single_vendor?, do: normalize_optional_text(Keyword.get(opts, :vendor_name)), else: nil
+
+      remittance_address =
+        if single_vendor?,
+          do: normalize_optional_text(Keyword.get(opts, :remittance_address)),
+          else: nil
+
       payments = Enum.map(bills, &snapshot/1)
       now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
       attrs = %{
         org_id: org_id,
         reference: reference,
-        vendor_id: hd(bills).vendor_id,
+        vendor_id: vendor_id,
         payment_date: payment_date,
         memo: memo,
         vendor_name: vendor_name,
@@ -248,7 +259,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
         [
           run.reference,
           Date.to_iso8601(run.payment_date),
-          run.vendor_id,
+          payment_vendor_id(payment, run),
           field(payment, :number),
           due_date_text(field(payment, :due_date)),
           payment_amount(payment)
@@ -258,6 +269,28 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
       end)
 
     header <> Enum.join(rows, "\n") <> "\n"
+  end
+
+  @doc """
+  Distinct vendor IDs in a run's snapshot, sorted; old single-vendor runs fall
+  back to the run header when their snapshot predates per-payment vendor IDs.
+  """
+  @spec vendor_ids(run()) :: [String.t()]
+  def vendor_ids(run) do
+    run.payments
+    |> List.wrap()
+    |> Enum.map(&payment_vendor_id(&1, run))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc "The snapshot payments belonging to one vendor, in snapshot order."
+  @spec payments_for_vendor(run(), String.t()) :: [map()]
+  def payments_for_vendor(run, vendor_id) do
+    run.payments
+    |> List.wrap()
+    |> Enum.filter(&(payment_vendor_id(&1, run) == vendor_id))
   end
 
   @doc """
@@ -400,8 +433,8 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
                 bill.status != :approved ->
                   {:halt, {:error, {:not_approved, bill_id}}}
 
-                bill.vendor_id != run.vendor_id ->
-                  {:halt, {:error, :mixed_vendors}}
+                bill.vendor_id != payment_vendor_id(payment, run) ->
+                  {:halt, {:error, :snapshot_mismatch}}
 
                 bill_total(bill) != payment_amount(payment) ->
                   {:halt, {:error, {:snapshot_amount_mismatch, bill_id}}}
@@ -509,13 +542,13 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
     end
   end
 
-  defp validate_bills([first | rest] = bills, allow_duplicates) do
+  defp validate_bills(bills, allow_duplicates) do
     cond do
+      Enum.any?(bills, &(not is_binary(&1.vendor_id))) ->
+        {:error, :vendor_required}
+
       Enum.any?(bills, &(&1.status != :approved)) ->
         {:error, {:not_approved, Enum.find(bills, &(&1.status != :approved)).id}}
-
-      Enum.any?(rest, &(&1.vendor_id != first.vendor_id)) ->
-        {:error, :mixed_vendors}
 
       not allow_duplicates and duplicates(bills) != [] ->
         ids =
@@ -560,6 +593,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
   defp snapshot(bill) do
     %{
       "bill_id" => bill.id,
+      "vendor_id" => bill.vendor_id,
       "number" => bill.number,
       "due_date" => bill.due_date,
       "amount_cents" => bill_total(bill)
@@ -571,6 +605,8 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
   end
 
   defp payment_amount(payment), do: field(payment, :amount_cents) || 0
+
+  defp payment_vendor_id(payment, run), do: field(payment, :vendor_id) || run.vendor_id
 
   defp field(map, key) when is_map(map) do
     Map.get(map, key) || Map.get(map, Atom.to_string(key))

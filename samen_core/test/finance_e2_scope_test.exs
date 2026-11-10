@@ -822,7 +822,7 @@ defmodule Samen.FinanceE2ScopeTest do
 
   # ── d14: AP payment run ─────────────────────────────────────────────────────
 
-  describe "d14 — an AP payment run is one transaction over one vendor's bills" do
+  describe "d14 — an AP payment run is one transaction over approved bills from one or more vendors" do
     test "pays multiple approved bills and returns remittance advice", %{org: org, scope: scope} do
       expense = seed_posting_accounts(org)
       vendor = Ash.UUID.generate()
@@ -897,6 +897,76 @@ defmodule Samen.FinanceE2ScopeTest do
       assert csv =~ "V-RUN-2"
       assert csv =~ "4000"
       assert csv =~ "6500"
+
+      assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
+    end
+
+    test "pays approved bills from multiple vendors in one run", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      first_vendor = Ash.UUID.generate()
+      second_vendor = Ash.UUID.generate()
+
+      first =
+        new_bill(scope, org, [bill_line(expense, 4_000)],
+          vendor_id: first_vendor,
+          number: "V-MULTI-1"
+        )
+
+      second =
+        new_bill(scope, org, [bill_line(expense, 6_000)],
+          vendor_id: second_vendor,
+          number: "V-MULTI-2"
+        )
+
+      first = approve_bill!(first, scope)
+      second = approve_bill!(second, scope)
+
+      assert {:ok, pending} =
+               ApPaymentRun.request(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [first.id, second.id],
+                 payment_date: ~D[2026-09-21],
+                 reference: "RUN-MULTI",
+                 vendor_name: "Ignored for a multi-vendor run",
+                 remittance_address: "Ignored for a multi-vendor run"
+               )
+
+      assert pending.vendor_id == nil
+      assert pending.vendor_name == nil
+      assert pending.remittance_address == nil
+      assert pending.total_cents == 10_000
+      assert ApPaymentRun.vendor_ids(pending) == Enum.sort([first_vendor, second_vendor])
+      assert length(ApPaymentRun.payments_for_vendor(pending, first_vendor)) == 1
+      assert length(ApPaymentRun.payments_for_vendor(pending, second_vendor)) == 1
+
+      assert {:ok, run} =
+               ApPaymentRun.approve(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: pending.id
+               )
+
+      assert run.status == :paid
+      assert run.vendor_id == nil
+      assert ApPaymentRun.vendor_ids(run) == Enum.sort([first_vendor, second_vendor])
+
+      assert run.payments
+             |> Enum.map(& &1["vendor_id"])
+             |> Enum.sort() == Enum.sort([first_vendor, second_vendor])
+
+      assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :paid
+      assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :paid
+      assert length(payment_entries(org, first.id)) == 1
+      assert length(payment_entries(org, second.id)) == 1
+
+      csv = ApPaymentRun.remittance_csv(run)
+      assert csv =~ "V-MULTI-1"
+      assert csv =~ "V-MULTI-2"
+      assert csv =~ first_vendor
+      assert csv =~ second_vendor
 
       assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
     end

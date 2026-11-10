@@ -329,6 +329,50 @@ defmodule Samen.Web.ErpApPaymentRunTest do
     refute html =~ ~s(id="ap-run-reversal-form")
   end
 
+  test "a paid run across vendors groups the snapshot and printed advice by vendor" do
+    seed_posting_accounts()
+    first = bill!(%{number: "BILL-7201"})
+    second = bill!(%{number: "BILL-7202"})
+
+    refute first.vendor_id == second.vendor_id
+
+    assert {:ok, pending} =
+             ApPaymentRun.request(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: scope("requester:other", :member),
+               bill_ids: [first.id, second.id],
+               payment_date: ~D[2026-11-08],
+               reference: "NOV-MULTI-RUN"
+             )
+
+    assert {:ok, paid} =
+             ApPaymentRun.approve(
+               ap_invoice: ApInvoice,
+               repo: Samen.WebTest.Repo,
+               scope: scope("approver:other", :admin),
+               run_id: pending.id
+             )
+
+    html = render(open(paid.id))
+
+    assert html =~ "Vendors"
+    assert html =~ "2 vendors"
+    assert html =~ first.vendor_id
+    assert html =~ second.vendor_id
+
+    print_html = render_print(open_print(paid.id))
+
+    assert print_html =~ "2 vendors"
+    assert print_html =~ ~s(id="remittance-vendor-#{first.vendor_id}")
+    assert print_html =~ ~s(id="remittance-vendor-#{second.vendor_id}")
+    assert print_html =~ "Vendor total"
+    assert print_html =~ "BILL-7201"
+    assert print_html =~ "BILL-7202"
+    assert print_html =~ "$40.00"
+    assert print_html =~ "$80.00"
+  end
+
   test "printed advice falls back to the vendor account when no payee details were captured" do
     seed_posting_accounts()
     bill = bill!(%{number: "BILL-5006"})

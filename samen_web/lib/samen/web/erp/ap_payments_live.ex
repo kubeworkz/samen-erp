@@ -4,9 +4,10 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   admin approve it, then take the remittance advice.
 
   This page is a thin form over `Samen.Scopes.Finance.ApPaymentRun.request/1`
-  and `approve/1`; the kernel owns every guarantee (same-vendor batch,
-  still-approved bills, distinct approver, one repository transaction,
-  exactly-once via the row lock, the posted payment entry). Requesting persists
+  and `approve/1`; the kernel owns every guarantee (an approved-bill batch
+  across one or more vendors, still-approved bills, distinct approver, one
+  repository transaction, exactly-once via the row lock, the posted payment
+  entry). Requesting persists
   the exact bill snapshot as `:pending_approval` and pays nothing. The run
   header is durable (`Samen.Scopes.Finance.ApPaymentRunRecord`) and the
   database refuses a self-approved or rewritten run, so the page's history is
@@ -20,15 +21,17 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   (`Samen.Web.Erp.Live.writable?/1`) and the kernel refuses one regardless.
 
   The remittance advice is the run's CSV, handed to the browser as a download
-  from the same render — there is no export route and no second read path. The
-  ACH/EFT file is `Samen.Scopes.Finance.ApAchFile`, rendered from the posted run
-  and the vendor's **verified payment profile**
+  from the same render — there is no export route and no second read path. Each
+  ACH/EFT file is `Samen.Scopes.Finance.ApAchFile`, rendered from one vendor's
+  payments in the posted run and that vendor's **verified payment profile**
   (`Samen.Scopes.Finance.VendorPaymentProfile`): the destination account and
-  routing number are never caller-supplied form fields. A profile is registered
-  with vaulted bank details, must pass ABA/ACH prevalidation, and must be
-  verified by an admin who is a DIFFERENT principal from the one that
-  registered or changed the details. Changing a bank detail resets the profile
-  to unverified, so a changed account cannot spend under the old verification.
+  routing number are never caller-supplied form fields. A multi-vendor run
+  therefore produces one ACH file per vendor, each from its own profile. A
+  profile is registered with vaulted bank details, must pass ABA/ACH
+  prevalidation, and must be verified by an admin who is a DIFFERENT principal
+  from the one that registered or changed the details. Changing a bank detail
+  resets the profile to unverified, so a changed account cannot spend under the
+  old verification.
 
   Bills that look like the same vendor document entered twice are flagged on
   the list (vendor + total + bill date, `ApPaymentRun.duplicates/1`) and refuse
@@ -273,14 +276,25 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   # again, so nothing here is trusted as the write set.
   @impl true
   def handle_event("select", params, socket) do
+    selected = selected_ids(params)
+    single_vendor? = selected_vendor_count(socket.assigns.bills, selected) <= 1
+
     {:noreply,
      assign(socket,
-       selected_ids: selected_ids(params),
+       selected_ids: selected,
        payment_date: parse_date(params["payment_date"]) || socket.assigns.payment_date,
        reference: params["reference"] || socket.assigns.reference,
        memo: params["memo"] || socket.assigns.memo,
-       vendor_name: params["vendor_name"] || socket.assigns.vendor_name,
-       remittance_address: params["remittance_address"] || socket.assigns.remittance_address,
+       vendor_name:
+         if(single_vendor?,
+           do: params["vendor_name"] || socket.assigns.vendor_name,
+           else: ""
+         ),
+       remittance_address:
+         if(single_vendor?,
+           do: params["remittance_address"] || socket.assigns.remittance_address,
+           else: ""
+         ),
        allow_duplicates: truthy(params["allow_duplicates"]),
        error: nil
      )}
@@ -291,10 +305,11 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
     case socket.assigns.run do
       %{status: :paid} = run ->
-        # The destination is ALWAYS the vendor's verified profile — never the
-        # form. `payment_details/2` refuses an unverified profile and is the
-        # only path that reveals the vaulted account/routing plaintext.
-        with {:ok, profile} <- vendor_profile(mount, org_id, run.vendor_id),
+        # The destination is ALWAYS the selected vendor's verified profile —
+        # never the form. `payment_details/2` refuses an unverified profile and
+        # is the only path that reveals the vaulted account/routing plaintext.
+        with {:ok, vendor_id} <- ach_vendor(params, ApPaymentRun.vendor_ids(run)),
+             {:ok, profile} <- vendor_profile(mount, org_id, vendor_id),
              {:ok, details} <- VendorPaymentProfile.payment_details(profile, mount.repo) do
           opts =
             [
@@ -307,14 +322,16 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           # A rendered ACH file contains the receiver account/routing numbers.
           # Persist it through the vault BEFORE offering the download; a storage
           # failure withholds the file rather than handing out an unrecorded one.
-          with {:ok, file} <- ApAchFile.render(run, opts),
+          vendor_run = Map.put(run, :payments, ApPaymentRun.payments_for_vendor(run, vendor_id))
+
+          with {:ok, file} <- ApAchFile.render(vendor_run, opts),
                {:ok, artifact} <-
                  ApAchArtifact.store(
                    repo: mount.repo,
                    scope: TenantRole.identity_scope(mount, org_id),
                    run: run,
                    file: file,
-                   name: "ach-#{run.reference}.ach",
+                   name: ach_name(run, vendor_id),
                    originator: %{
                      name: params["originator_name"],
                      id: params["originator_id"],
@@ -327,27 +344,15 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                ach: params,
                ach_file: file,
                ach_name: artifact.name,
-               ach_error: nil
+               ach_error: nil,
+               profile_vendor_id: vendor_id,
+               vendor_profile: profile
              )}
           else
-            {:error, reason} ->
-              {:noreply,
-               assign(socket,
-                 ach: params,
-                 ach_file: nil,
-                 ach_name: nil,
-                 ach_error: ach_error(reason)
-               )}
+            {:error, reason} -> {:noreply, ach_failure(socket, params, reason)}
           end
         else
-          {:error, reason} ->
-            {:noreply,
-             assign(socket,
-               ach: params,
-               ach_file: nil,
-               ach_name: nil,
-               ach_error: ach_error(reason)
-             )}
+          {:error, reason} -> {:noreply, ach_failure(socket, params, reason)}
         end
 
       _ ->
@@ -429,7 +434,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                ach_file: nil,
                ach_name: nil,
                ach_error: nil,
-               profile_vendor_id: run.vendor_id,
+               profile_vendor_id: run.vendor_id || List.first(ApPaymentRun.vendor_ids(run)) || "",
                profile_error: nil,
                profile_notice: nil,
                error: nil,
@@ -862,8 +867,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp payment_error({:not_approved, _id}),
     do: "One of the selected bills is no longer approved. Refresh and try again."
 
-  defp payment_error(:mixed_vendors),
-    do: "A payment run pays one vendor's bills. Select bills from a single vendor."
+  defp payment_error(:vendor_required), do: "Every selected bill must have a vendor."
 
   defp payment_error(:bill_ids_required), do: "Select at least one approved bill."
   defp payment_error(:bill_ids_must_be_unique_uuids), do: "Select each bill once."
@@ -935,6 +939,9 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp ach_error({:invalid_account_type, _value}), do: "Choose checking or savings."
   defp ach_error(:no_payments), do: "The run has no payments to send."
   defp ach_error(:effective_date_required), do: "The run has no effective date."
+
+  defp ach_error(:ach_vendor_required), do: "Choose which vendor's ACH file to build."
+  defp ach_error(:ach_vendor_unknown), do: "Choose a vendor from this payment run."
 
   defp ach_error(:missing_profile),
     do: "Register the vendor's bank details below, then have a different admin verify them."
@@ -1009,6 +1016,60 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> List.wrap()
     |> Enum.filter(&is_binary/1)
     |> Enum.uniq()
+  end
+
+  defp selected_vendor_ids(bills, ids) do
+    bills
+    |> Enum.filter(&(&1.id in ids))
+    |> Enum.map(& &1.vendor_id)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp selected_vendor_count(bills, ids) do
+    bills
+    |> selected_vendor_ids(ids)
+    |> length()
+  end
+
+  defp run_vendor_ids(run), do: ApPaymentRun.vendor_ids(run)
+
+  defp ach_vendor(params, [vendor_id]) do
+    case blank_to_nil(params["ach_vendor_id"]) do
+      nil -> {:ok, vendor_id}
+      ^vendor_id -> {:ok, vendor_id}
+      _other -> {:error, :ach_vendor_unknown}
+    end
+  end
+
+  defp ach_vendor(params, vendor_ids) do
+    case blank_to_nil(params["ach_vendor_id"]) do
+      vendor_id when is_binary(vendor_id) ->
+        if vendor_id in vendor_ids, do: {:ok, vendor_id}, else: {:error, :ach_vendor_unknown}
+
+      _other ->
+        {:error, :ach_vendor_required}
+    end
+  end
+
+  defp ach_name(run, vendor_id) do
+    if length(ApPaymentRun.vendor_ids(run)) > 1 do
+      "ach-#{run.reference}-#{String.slice(vendor_id, 0, 8)}.ach"
+    else
+      "ach-#{run.reference}.ach"
+    end
+  end
+
+  defp ach_failure(socket, params, reason) do
+    socket
+    |> assign(
+      ach: params,
+      ach_file: nil,
+      ach_name: nil,
+      ach_error: ach_error(reason),
+      profile_vendor_id: blank_to_nil(params["ach_vendor_id"]) || socket.assigns.profile_vendor_id
+    )
+    |> load_profile_for_assigns()
   end
 
   defp selected_total(bills, ids) do
@@ -1122,7 +1183,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           <div class="gtitle">
             <h3>{Erp.ap_payments_label()}</h3>
             <span class="n">{length(@bills)}</span>
-            <span class="lane">· approved bills · one vendor per run · posted on payment</span>
+            <span class="lane">· approved bills · one or more vendors · posted on payment</span>
           </div>
 
           <div
@@ -1592,7 +1653,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               ACH / EFT payment file
             </div>
             <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">
-              A NACHA CCD credit file for this run. The destination comes from the vendor's verified bank profile, never from this form.
+              A NACHA CCD credit file for one vendor in this run. The destination comes from that vendor's verified bank profile, never from this form. A multi-vendor run produces one file per vendor.
             </p>
 
             <%= if @vendor_profile && @vendor_profile.status == :verified do %>
@@ -1604,12 +1665,33 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               </div>
             <% else %>
               <p id="ach-profile-blocked" style="margin:0 0 10px;font-size:12px;color:var(--muted)">
-                Register and verify the vendor's bank details first. ACH files use ONLY a verified profile.
+                Register and verify the selected vendor's bank details first. ACH files use ONLY a verified profile.
               </p>
             <% end %>
 
             <form id="ach-file-form" phx-submit="ach">
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
+                <label
+                  :if={length(run_vendor_ids(@run)) > 1}
+                  style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600"
+                >
+                  Vendor
+                  <select name="ach_vendor_id" style="font-size:12px;padding:6px 8px;font-weight:400">
+                    <option
+                      :for={vendor_id <- run_vendor_ids(@run)}
+                      value={vendor_id}
+                      selected={vendor_id == @profile_vendor_id}
+                    >
+                      {short(vendor_id)}
+                    </option>
+                  </select>
+                </label>
+                <input
+                  :if={length(run_vendor_ids(@run)) == 1}
+                  type="hidden"
+                  name="ach_vendor_id"
+                  value={List.first(run_vendor_ids(@run))}
+                />
                 <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
                   Originator name
                   <input
@@ -1707,7 +1789,10 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                   style="font-size:12px;padding:6px 8px"
                 />
               </div>
-              <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px">
+              <div
+                :if={selected_vendor_count(@bills, @selected_ids) <= 1}
+                style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px"
+              >
                 <label
                   for="payment-vendor-name"
                   class="field-label"
@@ -1726,7 +1811,10 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               </div>
             </div>
 
-            <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
+            <div
+              :if={selected_vendor_count(@bills, @selected_ids) <= 1}
+              style="display:flex;flex-direction:column;gap:4px;margin-top:10px"
+            >
               <label
                 for="payment-remittance-address"
                 class="field-label"
@@ -1742,6 +1830,14 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                 style="font-size:12px;padding:6px 8px;font-family:inherit"
               >{@remittance_address}</textarea>
             </div>
+
+            <p
+              :if={selected_vendor_count(@bills, @selected_ids) > 1}
+              id="ap-payment-multi-vendor"
+              style="margin:10px 0 0;font-size:12px;color:var(--muted)"
+            >
+              This run spans multiple vendors. The remittance advice groups the bills by vendor, and each vendor's ACH file uses its own verified bank profile.
+            </p>
 
             <table style="width:100%;border-collapse:collapse;font-size:13px">
               <thead>

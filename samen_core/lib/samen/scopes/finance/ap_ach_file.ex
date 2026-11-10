@@ -1,11 +1,13 @@
 defmodule Samen.Scopes.Finance.ApAchFile do
   @moduledoc """
-  A **NACHA ACH credit file** for one AP payment run — the US EFT rail a host
-  hands to its bank.
+  A **NACHA ACH credit file** for one vendor's payments in an AP payment run —
+  the US EFT rail a host hands to its bank.
 
   The file is generated from the run summary `Samen.Scopes.Finance.ApPaymentRun`
   returns, so its amounts are the SAME cents the payment entries posted; there is
-  no second read and no re-derivation of what is owed.
+  no second read and no re-derivation of what is owed. A multi-vendor run is
+  rendered as one file per vendor: pass the run's `payments` filtered to that
+  vendor, with that vendor's verified receiver fields.
 
   ## What the caller must supply (and why it is never invented)
 
@@ -50,7 +52,7 @@ defmodule Samen.Scopes.Finance.ApAchFile do
   @type run :: %{
           required(:reference) => String.t(),
           required(:payment_date) => Date.t(),
-          required(:vendor_id) => String.t(),
+          optional(:vendor_id) => String.t() | nil,
           required(:total_cents) => non_neg_integer(),
           required(:payments) => [map()]
         }

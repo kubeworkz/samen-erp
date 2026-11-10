@@ -330,9 +330,17 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
 
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
                 <.fact label="Payment date" value={date_text(@run.payment_date)} />
-                <.fact label="Vendor name" value={@run.vendor_name || "—"} />
-                <.fact label="Vendor id" value={@run.vendor_id || "—"} />
-                <.fact label="Remittance address" value={@run.remittance_address || "—"} />
+                <.fact
+                  :if={vendor_count(@run) == 1}
+                  label="Vendor name"
+                  value={@run.vendor_name || "—"}
+                />
+                <.fact label={vendor_label(@run)} value={vendor_value(@run)} />
+                <.fact
+                  :if={vendor_count(@run) == 1}
+                  label="Remittance address"
+                  value={@run.remittance_address || "—"}
+                />
                 <.fact label="Bills" value={to_string(@run.bill_count)} />
                 <.fact label="Memo" value={@run.memo || "—"} />
                 <.fact label="Run id" value={@run.id} />
@@ -438,6 +446,7 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
                   <tr>
                     <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);color:var(--muted)">Bill</th>
                     <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);color:var(--muted)">Snapshot bill id</th>
+                    <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);color:var(--muted)">Vendor</th>
                     <th scope="col" style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);color:var(--muted)">Due</th>
                     <th scope="col" style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);color:var(--muted)">Amount</th>
                   </tr>
@@ -463,6 +472,9 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
                       <code style="font-size:11px">{field(payment, :bill_id) || "—"}</code>
                     </td>
                     <td style="padding:5px 8px;border-bottom:1px solid var(--border,#f3f4f6)">
+                      <code style="font-size:11px">{payment_vendor_id(payment, @run) || "—"}</code>
+                    </td>
+                    <td style="padding:5px 8px;border-bottom:1px solid var(--border,#f3f4f6)">
                       {date_text(field(payment, :due_date))}
                     </td>
                     <td style="padding:5px 8px;border-bottom:1px solid var(--border,#f3f4f6);text-align:right">
@@ -471,14 +483,14 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
                   </tr>
 
                   <tr :if={@run.payments == []}>
-                    <td colspan="4" style="padding:16px 8px;color:var(--muted)">
+                    <td colspan="5" style="padding:16px 8px;color:var(--muted)">
                       This run has no snapshot lines.
                     </td>
                   </tr>
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colspan="3" style="padding:8px;text-align:right;font-weight:700">
+                    <td colspan="4" style="padding:8px;text-align:right;font-weight:700">
                       Snapshot total
                     </td>
                     <td style="padding:8px;text-align:right;font-weight:700">
@@ -789,6 +801,19 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
   end
 
   defp money(other), do: to_string(other)
+
+  defp vendor_ids(run), do: ApPaymentRun.vendor_ids(run)
+  defp vendor_count(run), do: length(vendor_ids(run))
+  defp vendor_label(run), do: if(vendor_count(run) == 1, do: "Vendor account", else: "Vendors")
+
+  defp vendor_value(run) do
+    case vendor_ids(run) do
+      [vendor_id] -> vendor_id
+      vendor_ids -> "#{length(vendor_ids)} vendors"
+    end
+  end
+
+  defp payment_vendor_id(payment, run), do: field(payment, :vendor_id) || run.vendor_id
 
   defp field(map, key) when is_map(map) do
     Map.get(map, key) || Map.get(map, Atom.to_string(key))

@@ -12,11 +12,13 @@ defmodule Samen.Scopes.Finance.ApPaymentRunRecord do
   A run is born `:pending_approval`; the only decisions are `:paid` (the
   approval posted every bill), `:rejected` (a different admin refused it), and
   `:cancelled` (the requester withdrew it). `payments` is the immutable
-  request-time snapshot — `bill_id`, `number`, `due_date`, `amount_cents` — so
-  the  approved amounts cannot drift from the bills that were reviewed.
-  `vendor_name` and `remittance_address` are the optional payee details the
-  requester captured with the request; they are frozen with the rest of the
-  snapshot so the printed advice keeps showing what was reviewed.
+  request-time snapshot — `bill_id`, `vendor_id`, `number`, `due_date`,
+  `amount_cents` — so the approved amounts and payees cannot drift from the
+  bills that were reviewed. A run may span vendors; its header `vendor_id` is
+  set for a single-vendor run and `nil` for a multi-vendor run.
+  `vendor_name` and `remittance_address` are optional single-vendor payee
+  details the requester captured with the request; they are frozen with the
+  rest of the snapshot so the printed advice keeps showing what was reviewed.
   """
 
   defmodule Payments do
@@ -118,7 +120,6 @@ defmodule Samen.Scopes.Finance.ApPaymentRunRecord do
     |> validate_required([
       :org_id,
       :reference,
-      :vendor_id,
       :payment_date,
       :status,
       :total_cents,

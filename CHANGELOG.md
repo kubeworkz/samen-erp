@@ -52,10 +52,11 @@ All notable changes to Samen are recorded here. The format follows
   still works.
 - **AP bill payments and payment runs** (`/erp/ap-payments`): `:pay` settles an approved bill
   and posts the AP-clearing debit/cash credit in the same transaction, anchored to the bill so
-  a second payment is refused by the row lock. The page runs one same-vendor batch over
-  selected approved bills, flags possible duplicate bills, and hands the remittance CSV and
-  ACH/EFT file directly from the render. A run that includes a bill that is no longer approved
-  pays nothing.
+  a second payment is refused by the row lock. The page runs one batch over selected approved
+  bills, which may span vendors; the snapshot carries each bill's vendor, and each vendor's
+  ACH/EFT file is built from its own verified bank profile. Possible duplicate bills are
+  flagged, and the remittance CSV and ACH files are handed directly from the render. A run
+  that includes a bill that is no longer approved pays nothing.
 - **AR receipt intake** (`/erp/ar-receipts`, mounted by `samen_erp_routes/3`): one customer
   payment is split across the customer's open Billing invoices. The new
   `Samen.Scopes.Finance.ArReceiptApplication` re-reads the statement, refuses cross-customer,
