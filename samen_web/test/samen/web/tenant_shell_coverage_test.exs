@@ -99,6 +99,7 @@ defmodule Samen.Web.TenantShellCoverageTest do
     Samen.Web.Erp.SurfaceLive,
     Samen.Web.Erp.DetailLive,
     Samen.Web.Erp.ApPaymentsLive,
+    Samen.Web.Erp.ApAgingLive,
     Samen.Web.Erp.ApPaymentRunLive,
     Samen.Web.Erp.ArReceiptsLive,
     Samen.Web.Erp.ArAgingLive,

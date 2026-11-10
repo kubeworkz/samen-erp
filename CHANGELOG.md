@@ -57,6 +57,12 @@ All notable changes to Samen are recorded here. The format follows
   ACH/EFT file is built from its own verified bank profile. Possible duplicate bills are
   flagged, and the remittance CSV and ACH files are handed directly from the render. A run
   that includes a bill that is no longer approved pays nothing.
+- **AP aging and vendor statements** (`/erp/ap-aging`, mounted by `samen_erp_routes/3`):
+  read approved AP bills through `Samen.Scopes.Finance.ApAging`, bucketed current / 1–30 /
+  31–60 / 61–90 / 90+ / undated. The page also opens a per-vendor statement with every open
+  and paid bill and the effective payment runs that settled them; a run whose dual-controlled
+  reversal completed is excluded, and the restored bill ages again. The read is org-pinned and
+  read-only.
 - **AR receipt intake** (`/erp/ar-receipts`, mounted by `samen_erp_routes/3`): one customer
   payment is split across the customer's open Billing invoices. The new
   `Samen.Scopes.Finance.ArReceiptApplication` re-reads the statement, refuses cross-customer,

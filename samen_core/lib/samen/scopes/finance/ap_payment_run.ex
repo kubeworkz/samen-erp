@@ -205,7 +205,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
   List the org's runs, newest first.
 
   Options: `:status` (one status), `:statuses` (a list), and `:limit` (default
-  50).
+  50; `:all` returns the complete history for a statement read).
   """
   @spec list_runs(module(), String.t(), keyword()) :: [run()]
   def list_runs(repo, org_id, opts \\ []) when is_binary(org_id) do
@@ -213,7 +213,6 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
       ApPaymentRunRecord
       |> where([r], r.org_id == ^org_id)
       |> order_by([r], desc: r.inserted_at)
-      |> limit(^Keyword.get(opts, :limit, 50))
 
     query =
       case Keyword.get(opts, :status) do
@@ -225,6 +224,12 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
       case Keyword.get(opts, :statuses) do
         nil -> query
         statuses -> where(query, [r], r.status in ^statuses)
+      end
+
+    query =
+      case Keyword.get(opts, :limit, 50) do
+        :all -> query
+        max -> limit(query, ^max)
       end
 
     repo.all(query)

@@ -73,6 +73,7 @@ defmodule Samen.Web.MountSmokeTest do
       # The AP payment run and the AR aging/statement pages (the ERP "operations" twins).
       {"erp/ap-capture", Samen.Web.Erp.ApCaptureLive, build_mount(:erp), %{"org" => org}},
       {"erp/ap-payments", Samen.Web.Erp.ApPaymentsLive, build_mount(:erp), %{"org" => org}},
+      {"erp/ap-aging", Samen.Web.Erp.ApAgingLive, build_mount(:erp), %{"org" => org}},
       {"erp/ap-payments/99999999-9999-4999-8999-999999999999", Samen.Web.Erp.ApPaymentRunLive,
        build_mount(:erp), %{"org" => org, "id" => "99999999-9999-4999-8999-999999999999"}},
       {"erp/ap-payments/print", Samen.Web.Erp.ApPaymentRunPrintLive, build_mount(:erp),

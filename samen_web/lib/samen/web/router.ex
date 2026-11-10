@@ -1142,10 +1142,12 @@ defmodule Samen.Web.Router do
   `<path>/ap-payments` (one `ApPaymentRun` batch over approved bills, with the
   remittance CSV handed straight from the render), its read-only audit page
   at `<path>/ap-payments/:id` (the immutable snapshot and decision evidence),
-  and the printable advice at `<path>/ap-payments/:id/remittance`, the AR receipt intake at
-  `<path>/ar-receipts` (one customer payment across open invoices), and the AR
-  aging / customer statements page at `<path>/ar-aging` (`ArAging` over the
-  mounted Billing invoices and posted receipts). The ERP landing dashboard at `<path>` reads
+  and the printable advice at `<path>/ap-payments/:id/remittance`, the AP aging /
+  vendor-statement page at `<path>/ap-aging` (`ApAging` over the mounted AP
+  bills and effective payment runs), the AR receipt intake at `<path>/ar-receipts`
+  (one customer payment across open invoices), and the AR aging / customer
+  statements page at `<path>/ar-aging` (`ArAging` over the mounted Billing
+  invoices and posted receipts). The ERP landing dashboard at `<path>` reads
   the org's hosted-OCR budget (so exhaustion is visible before capture) and
   links every ERP page. No host-authored LiveView exists to
   mis-wire, there is no export path, and every write affordance (create/edit/
@@ -1195,14 +1197,15 @@ defmodule Samen.Web.Router do
         # `/erp/journal-approval` reaches the page instead of resolving as an
         # unknown surface name.
         live("#{path}/journal-approval", Samen.Web.Erp.JournalApprovalLive)
-        # The AP payment run (approved bills → one remittance batch), the AR
-        # receipt intake, and the AR aging / customer-statement page. Literal
-        # segments declared BEFORE
+        # The AP payment run (approved bills → one remittance batch), the AP
+        # aging / vendor-statement page, the AR receipt intake, and the AR aging
+        # / customer-statement page. Literal segments declared BEFORE
         # `:surface` for the same reason as journal-approval: a dynamic segment
-        # declared first would capture "ap-payments"/"ar-aging" as a surface
-        # name and these pages would never be reached.
+        # declared first would capture "ap-payments"/"ap-aging"/"ar-aging" as a
+        # surface name and these pages would never be reached.
         live("#{path}/ap-capture", Samen.Web.Erp.ApCaptureLive)
         live("#{path}/ap-payments", Samen.Web.Erp.ApPaymentsLive)
+        live("#{path}/ap-aging", Samen.Web.Erp.ApAgingLive)
         # The AP payment run AUDIT page (one immutable snapshot + its decision
         # evidence). This literal 3-segment route must be declared BEFORE the
         # generic `:surface/:id` twin below: otherwise `/erp/ap-payments/:id`

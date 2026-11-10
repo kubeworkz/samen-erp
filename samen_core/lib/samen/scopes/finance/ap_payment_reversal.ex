@@ -139,6 +139,30 @@ defmodule Samen.Scopes.Finance.ApPaymentReversal do
   def get_for_run(_repo, _org_id, _run_id), do: {:ok, nil}
 
   @doc """
+  Run IDs in the org whose reversal completed.
+
+  A reversed run remains `:paid` and immutable; its reversal row is the
+  compensating fact. AP aging/statement reads use this set to exclude the
+  original payment from effective payment history.
+  """
+  @spec reversed_run_ids(module(), String.t()) ::
+          {:ok, MapSet.t(String.t())} | {:error, term()}
+  def reversed_run_ids(repo, org_id) when is_binary(org_id) do
+    run_ids =
+      from(r in Record,
+        where: r.org_id == ^org_id and r.status == :reversed,
+        select: r.run_id
+      )
+      |> repo.all()
+
+    {:ok, MapSet.new(run_ids)}
+  rescue
+    error -> {:error, error}
+  end
+
+  def reversed_run_ids(_repo, _org_id), do: {:error, :org_required}
+
+  @doc """
   The org's pending reversals, oldest first, each with its paid run.
 
   The run is joined inside the query so the queue can show its reference without

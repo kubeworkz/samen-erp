@@ -155,6 +155,10 @@ defmodule Samen.Web.Erp do
   @spec ap_payments_label() :: String.t()
   def ap_payments_label, do: "AP payments"
 
+  @doc "The AP aging and vendor statements page's label (the nav item + page heading)."
+  @spec ap_aging_label() :: String.t()
+  def ap_aging_label, do: "AP aging"
+
   @doc "The AR receipt intake page's label (the nav item + page heading)."
   @spec ar_receipts_label() :: String.t()
   def ar_receipts_label, do: "AR receipts"
@@ -204,9 +208,10 @@ defmodule Samen.Web.Erp do
   end
 
   @doc """
-  The AR aging buckets, in display order, with their rail labels. The bucket
-  ATOMS are the ones `Samen.Scopes.Finance.ArAging` computes — this list only
-  names them for the page, so a new bucket cannot appear unlabeled.
+  The aging buckets, in display order, with their rail labels. The bucket
+  ATOMS are the ones `Samen.Scopes.Finance.ArAging` and
+  `Samen.Scopes.Finance.ApAging` compute — this list only names them for the
+  pages, so a new bucket cannot appear unlabeled.
   """
   @spec aging_buckets() :: [{atom(), String.t()}, ...]
   def aging_buckets do

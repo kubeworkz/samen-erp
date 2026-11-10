@@ -119,7 +119,7 @@ defmodule Samen.UI.Nav do
       :crm_calendar | :crm_dashboard | :crm_mailbox | :crm_sequences | :billing_overview |
       :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
       :support_tickets | :notifications_settings | :settings | :automation | :erp_dashboard |
-      :erp_coa | :erp_entries | :erp_ap_invoices | :erp_ap_capture | :erp_ap_payments | :erp_ar_receipts | :erp_ar_aging | :erp_stock |
+      :erp_coa | :erp_entries | :erp_ap_invoices | :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ar_receipts | :erp_ar_aging | :erp_stock |
       :erp_purchase_orders | :erp_work_orders | :erp_grants | :erp_close | :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
@@ -391,6 +391,15 @@ defmodule Samen.UI.Nav do
       >
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18" /><path d="M7 14h3" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.ap_aging_label()}
+        href={"#{@erp_path}/ap-aging?org=#{@org_id}"}
+        active={@active == :erp_ap_aging}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16" /><path d="M8 16v-6M13 16V6M18 16v-3" /></svg>
         </:icon>
       </.nav_item>
       <.nav_item
