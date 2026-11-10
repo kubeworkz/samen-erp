@@ -45,6 +45,7 @@ defmodule Samen.Web.Erp.DetailLive do
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
   alias Samen.Web.Mount
+  alias Samen.Scopes.Finance.ApInvoiceMatch
 
   @impl true
   def mount(%{"surface" => raw, "id" => id} = params, session, socket) do
@@ -62,6 +63,7 @@ defmodule Samen.Web.Erp.DetailLive do
        show_edit: false,
        edit_form: nil,
        action_error: nil,
+       ap_match: nil,
        return_to: nil
      )
      |> load()}
@@ -86,17 +88,17 @@ defmodule Samen.Web.Erp.DetailLive do
   # them directly (the class of bug the old surface's `Map.get(@assigns, …)`
   # idiom raised on every real render).
   defp load(%{assigns: %{org_id: nil}} = socket),
-    do: assign(socket, record: nil, missing: :no_org, resource: nil)
+    do: assign(socket, record: nil, missing: :no_org, resource: nil, ap_match: nil)
 
   defp load(%{assigns: %{surface: nil}} = socket),
-    do: assign(socket, record: nil, missing: :unknown_surface, resource: nil)
+    do: assign(socket, record: nil, missing: :unknown_surface, resource: nil, ap_match: nil)
 
   defp load(socket) do
     %{samen_mount: mount, surface: surface, org_id: org_id, record_id: record_id} = socket.assigns
 
     case Erp.resource(mount, surface) do
       nil ->
-        assign(socket, record: nil, missing: :unmounted, resource: nil)
+        assign(socket, record: nil, missing: :unmounted, resource: nil, ap_match: nil)
 
       resource ->
         scope = Mount.scope(mount, org_id)
@@ -110,6 +112,10 @@ defmodule Samen.Web.Erp.DetailLive do
             Erp.detail_fields(surface) ++
               Enum.map(Erp.edit_fields(surface), fn {field, _, _} -> field end)
           )
+
+        # The AP match panel reads the embedded lines even though they are not
+        # a fact-grid field. Select them explicitly for this surface.
+        selected = if surface == :ap_invoices, do: Enum.uniq([:lines | selected]), else: selected
 
         record =
           resource
@@ -130,14 +136,44 @@ defmodule Samen.Web.Erp.DetailLive do
     end
   end
 
-  defp assign_record(socket, nil), do: assign(socket, record: nil, missing: :not_found)
+  defp assign_record(socket, nil),
+    do: assign(socket, record: nil, missing: :not_found, ap_match: nil)
 
-  defp assign_record(socket, record),
-    do: assign(socket, record: record, missing: nil, show_edit: false, action_error: nil)
+  defp assign_record(socket, record) do
+    socket =
+      assign(socket, record: record, missing: nil, show_edit: false, action_error: nil)
+
+    assign(socket, ap_match: ap_match(socket, record))
+  end
+
+  defp ap_match(
+         %{assigns: %{surface: :ap_invoices, org_id: org_id, samen_mount: mount}},
+         bill
+       ) do
+    case ApInvoiceMatch.match(bill, org_id, mount.repo) do
+      {:ok, result} ->
+        lines = Enum.reject(result.lines, &(&1.status == :not_matched))
+
+        state =
+          cond do
+            lines == [] -> :none
+            result.flagged? -> :variance
+            true -> :matched
+          end
+
+        %{state: state, result: result, lines: lines}
+
+      {:error, reason} ->
+        %{state: :error, message: ApInvoiceMatch.error_message(reason)}
+    end
+  end
+
+  defp ap_match(_socket, _bill), do: nil
 
   # The bounded per-surface loads — only what the detail page renders.
   defp maybe_load(query, :entries), do: Ash.Query.load(query, :lines)
   defp maybe_load(query, :purchase_orders), do: Ash.Query.load(query, :lines)
+  defp maybe_load(query, :goods_receipts), do: Ash.Query.load(query, :lines)
   defp maybe_load(query, _surface), do: query
 
   # -- events -----------------------------------------------------------------
@@ -146,7 +182,7 @@ defmodule Samen.Web.Erp.DetailLive do
   def handle_event("edit_record", _params, socket) do
     %{samen_mount: mount, org_id: org_id, record: record} = socket.assigns
 
-    if writable?(mount) and record do
+    if writable?(mount) and record != nil and Erp.edit_fields(socket.assigns.surface) != [] do
       scope = Mount.scope(mount, org_id)
 
       form =
@@ -269,6 +305,10 @@ defmodule Samen.Web.Erp.DetailLive do
     end
   end
 
+  defp line_anchor(:purchase_orders, %{id: id}) when is_binary(id), do: "po-line-#{id}"
+  defp line_anchor(:goods_receipts, %{id: id}) when is_binary(id), do: "receipt-line-#{id}"
+  defp line_anchor(_surface, _line), do: nil
+
   defp humanize(field),
     do: field |> Atom.to_string() |> String.replace("_", " ") |> String.capitalize()
 
@@ -330,7 +370,10 @@ defmodule Samen.Web.Erp.DetailLive do
           Back to {if(@surface, do: Erp.label(@surface), else: "ERP")}
         </a>
         <.button
-          :if={writable?(@samen_mount) and @record != nil and @missing == nil}
+          :if={
+            writable?(@samen_mount) and @record != nil and @missing == nil and
+              Erp.edit_fields(@surface) != []
+          }
           phx-click="edit_record"
           id="edit-record"
         >
@@ -396,7 +439,7 @@ defmodule Samen.Web.Erp.DetailLive do
                   </tr>
                 </thead>
                 <tbody>
-                  <tr :for={line <- lines_of(@record)}>
+                  <tr :for={line <- lines_of(@record)} id={line_anchor(@surface, line)}>
                     <td
                       :for={{field, _type, _opts} <- Erp.line_fields(@surface)}
                       style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);font-family:monospace"
@@ -410,6 +453,13 @@ defmodule Samen.Web.Erp.DetailLive do
                 No lines.
               </div>
             </div>
+
+            <.ap_match_panel
+              :if={@ap_match}
+              match={@ap_match}
+              samen_mount={@samen_mount}
+              org_id={@org_id}
+            />
 
             <div
               :if={writable?(@samen_mount) and allowed_transitions(@record, @surface) != []}
@@ -464,4 +514,124 @@ defmodule Samen.Web.Erp.DetailLive do
   defp list_href(nil, _org_id), do: "/erp"
   defp list_href(surface, nil), do: "/erp/#{surface}"
   defp list_href(surface, org_id), do: "/erp/#{surface}?org=#{org_id}"
+
+  defp erp_path(mount), do: Mount.label(mount, :erp_path, "/erp")
+
+  defp ap_match_panel(assigns) do
+    ~H"""
+    <div id="erp-ap-match" class="card" style="padding:16px 18px;margin-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+        <h3 style="font-size:13px">Three-way match</h3>
+        <span id="ap-match-status" style={"font-size:12px;font-weight:700;color:#{match_color(@match.state)}"}>
+          {match_label(@match.state)}
+        </span>
+      </div>
+
+      <%= if @match.state == :error do %>
+        <div id="ap-match-error" style="margin-top:10px;font-size:12px;color:var(--bad, #b91c1c)">
+          Three-way match could not be computed: {@match.message}
+        </div>
+      <% else %>
+        <p id="ap-match-tolerance" style="margin:6px 0 10px;font-size:12px;color:var(--muted)">
+          Bill tolerance: {money(@match.result.tolerance_cents)} or {@match.result.tolerance_pct}% of received value.
+        </p>
+
+        <div :if={@match.state == :none} id="ap-match-none" style="font-size:13px;color:var(--muted)">
+          No PO/receipt references on this bill, so no three-way match applies.
+        </div>
+
+        <%= if @match.state != :none do %>
+          <div
+            :if={@match.state == :variance}
+            id="ap-match-variance"
+            style="padding:8px 10px;margin-bottom:10px;font-size:12px;color:var(--bad, #b91c1c);border:1px solid currentColor;border-radius:6px"
+          >
+            One or more referenced lines exceed tolerance. Approval will be refused until the receipt or tolerance changes.
+          </div>
+          <div
+            :if={@match.state == :matched}
+            id="ap-match-matched"
+            style="padding:8px 10px;margin-bottom:10px;font-size:12px;color:var(--ok, #047857);border:1px solid currentColor;border-radius:6px"
+          >
+            All referenced lines are within tolerance.
+          </div>
+
+          <table id="ap-match-lines" style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Line</th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">PO line</th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Receipt line</th>
+                <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Billed</th>
+                <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Received</th>
+                <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Variance</th>
+                <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Tolerance</th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr :for={line <- @match.lines} id={"ap-match-line-#{line.line}"}>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">{line.line}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);font-family:monospace;word-break:break-all">
+                  <a
+                    :if={line.purchase_order_id && line.po_line_id}
+                    href={"#{erp_path(@samen_mount)}/purchase_orders/#{line.purchase_order_id}?org=#{@org_id}#po-line-#{line.po_line_id}"}
+                    style="color:var(--accent, #2563eb)"
+                  >
+                    {line_value(line, :po_line_id)}
+                  </a>
+                  <span :if={!(line.purchase_order_id && line.po_line_id)}>
+                    {line_value(line, :po_line_id)}
+                  </span>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);font-family:monospace;word-break:break-all">
+                  <a
+                    :if={line.goods_receipt_id && line.receipt_line_id}
+                    href={"#{erp_path(@samen_mount)}/goods_receipts/#{line.goods_receipt_id}?org=#{@org_id}#receipt-line-#{line.receipt_line_id}"}
+                    style="color:var(--accent, #2563eb)"
+                  >
+                    {line.receipt_line_id}
+                  </a>
+                  <span :if={!(line.goods_receipt_id && line.receipt_line_id)}>
+                    {if line.receipt_line_id, do: line.receipt_line_id, else: "All receipts"}
+                  </span>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(line.billed_cents)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(line.received_cents)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(line.variance_cents)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">{money(line.tolerance_cents)}</td>
+                <td style={"padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);color:#{match_color(line.status)}"}>
+                  {line_status_label(line.status)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        <% end %>
+      <% end %>
+    </div>
+    """
+  end
+
+  defp match_label(:matched), do: "Within tolerance"
+  defp match_label(:variance), do: "Variance"
+  defp match_label(:none), do: "No match references"
+  defp match_label(:error), do: "Unavailable"
+
+  defp match_color(:matched), do: "var(--ok, #047857)"
+  defp match_color(:variance), do: "var(--bad, #b91c1c)"
+  defp match_color(:error), do: "var(--bad, #b91c1c)"
+  defp match_color(_state), do: "var(--muted)"
+
+  defp line_status_label(:matched), do: "Within tolerance"
+  defp line_status_label(:variance), do: "Over tolerance"
+  defp line_status_label(_status), do: "Not matched"
+
+  defp money(cents) when is_integer(cents) do
+    sign = if cents < 0, do: "-", else: ""
+    cents = abs(cents)
+
+    "#{sign}$#{div(cents, 100)}.#{cents |> rem(100) |> Integer.to_string() |> String.pad_leading(2, "0")}"
+  end
+
+  defp money(other), do: to_string(other)
 end

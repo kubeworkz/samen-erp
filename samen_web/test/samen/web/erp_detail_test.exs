@@ -75,6 +75,29 @@ defmodule Samen.Web.ErpDetailTest do
     |> Ash.create!()
   end
 
+  defp seed_ap_bill(account_id, attrs \\ %{}) do
+    Samen.WebTest.Erp.ApInvoice
+    |> Ash.Changeset.for_create(
+      :create,
+      Map.merge(
+        %{
+          org_id: @org,
+          vendor_id: Ash.UUID.generate(),
+          number: "BILL-" <> binary_part(Ash.UUID.generate(), 0, 8),
+          bill_date: ~D[2026-10-14],
+          match_tolerance_cents: 100,
+          lines: [%{account_id: account_id, amount_cents: 25_000, memo: "Widgets"}]
+        },
+        attrs
+      ),
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
+  defp seed_goods_receipt,
+    do: Samen.WebTest.ErpFixtures.seed_goods_receipt(@org)
+
   defp reload_entry(id) do
     Samen.WebTest.Erp.JournalEntry
     |> Ash.read!(authorize?: false)
@@ -132,6 +155,75 @@ defmodule Samen.Web.ErpDetailTest do
     assert html =~ "Open credit note"
     assert html =~ "Void credit note"
     refute html =~ "Apply credit note"
+  end
+
+  test "the AP detail page renders the three-way match panel honestly when there are no references" do
+    account = seed_account("6100")
+    bill = seed_ap_bill(account.id)
+
+    socket =
+      open(DetailLive, %{"org" => @org, "surface" => "ap_invoices", "id" => bill.id})
+
+    html = render_html(DetailLive, socket.assigns)
+
+    assert html =~ ~s(id="erp-ap-match")
+    assert html =~ "No match references"
+    assert html =~ "No PO/receipt references on this bill"
+    assert html =~ "Bill tolerance"
+  end
+
+  test "the AP match panel renders billed, received, variance, tolerance and status" do
+    account = seed_account("6100")
+    bill = seed_ap_bill(account.id)
+    socket = open(DetailLive, %{"org" => @org, "surface" => "ap_invoices", "id" => bill.id})
+
+    match = %{
+      state: :variance,
+      result: %{tolerance_cents: 100, tolerance_pct: 0, flagged?: true},
+      lines: [
+        %{
+          line: 1,
+          po_line_id: "po-line-1",
+          purchase_order_id: "po-1",
+          receipt_line_id: "receipt-line-1",
+          goods_receipt_id: "gr-1",
+          billed_cents: 25_000,
+          received_cents: 0,
+          variance_cents: 25_000,
+          tolerance_cents: 100,
+          status: :variance
+        }
+      ]
+    }
+
+    html =
+      render_html(DetailLive, Map.put(socket.assigns, :ap_match, match))
+
+    assert html =~ ~s(id="ap-match-line-1")
+    assert html =~ "$250.00"
+    assert html =~ "$0.00"
+    assert html =~ "$1.00"
+    assert html =~ "Over tolerance"
+    assert html =~ "Approval will be refused"
+    assert html =~ "/erp/purchase_orders/po-1?org=#{@org}#po-line-po-line-1"
+    assert html =~ "/erp/goods_receipts/gr-1?org=#{@org}#receipt-line-receipt-line-1"
+  end
+
+  test "the goods-receipt detail page loads its receipt lines at stable anchors" do
+    {receipt, receipt_line, po_line} = seed_goods_receipt()
+
+    socket =
+      open(DetailLive, %{"org" => @org, "surface" => "goods_receipts", "id" => receipt.id})
+
+    html = render_html(DetailLive, socket.assigns)
+
+    assert html =~ receipt.number
+    assert html =~ "Receipt detail seed"
+    assert html =~ receipt.purchase_order_id
+    assert html =~ ~s(id="receipt-line-#{receipt_line.id}")
+    assert html =~ po_line.id
+    assert html =~ ~s(href="/erp/goods_receipts?org=#{@org}" class="on")
+    refute html =~ ~s(id="edit-record")
   end
 
   test "an id that resolves nothing renders the honest not-found card" do

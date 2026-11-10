@@ -83,7 +83,8 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
 
   Options: `:ap_invoice`, `:scope`, `:org_id`, `:vendor_id`, `:account_id`,
   `:number`, `:invoice_date`, `:bill_date` (defaults to `:invoice_date`),
-  `:due_date`, `:total_cents`, `:lines`, `:memo`, `:allow_duplicate`.
+  `:due_date`, `:total_cents`, `:lines`, `:memo`, `:allow_duplicate`,
+  `:match_tolerance_cents`, `:match_tolerance_pct` (defaults 0/0).
 
   Returns `{:ok, bill}` (status `:draft`) or an error naming the refused check.
   """
@@ -103,6 +104,10 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
            required_date(Keyword.get(opts, :invoice_date), :invoice_date_required),
          {:ok, bill_date} <- date_or(Keyword.get(opts, :bill_date), invoice_date),
          {:ok, lines} <- normalize_lines(Keyword.get(opts, :lines)),
+         {:ok, tolerance_cents} <-
+           tolerance(Keyword.get(opts, :match_tolerance_cents), :match_tolerance_cents),
+         {:ok, tolerance_pct} <-
+           tolerance_pct(Keyword.get(opts, :match_tolerance_pct)),
          {:ok, total} <- total(Keyword.get(opts, :total_cents), lines),
          :ok <- unique_number(ap_invoice, scope, org_id, number),
          {:ok, duplicates} <-
@@ -116,6 +121,8 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
         bill_date: bill_date,
         due_date: Keyword.get(opts, :due_date),
         memo: blank_to_nil(Keyword.get(opts, :memo)),
+        match_tolerance_cents: tolerance_cents,
+        match_tolerance_pct: tolerance_pct,
         total_cents: total,
         lines: lines
       })
@@ -149,11 +156,13 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
         %{
           description:
             line
-            |> Map.get(:description, Map.get(line, :memo, ""))
+            |> Map.get(:description, Map.get(line, "description", Map.get(line, :memo, "")))
             |> to_string()
             |> String.trim(),
           amount_cents: Map.get(line, :amount_cents) || Map.get(line, "amount_cents")
         }
+        |> maybe_put(:po_line_id, line_value(line, :po_line_id))
+        |> maybe_put(:receipt_line_id, line_value(line, :receipt_line_id))
       end)
 
     case Enum.find(normalized, fn line ->
@@ -220,6 +229,8 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
     lines =
       Enum.map(attrs.lines, fn line ->
         %{account_id: attrs.account_id, amount_cents: line.amount_cents, memo: line.description}
+        |> maybe_put(:po_line_id, Map.get(line, :po_line_id))
+        |> maybe_put(:receipt_line_id, Map.get(line, :receipt_line_id))
       end)
 
     ap_invoice
@@ -232,6 +243,8 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
         bill_date: attrs.bill_date,
         due_date: attrs.due_date,
         memo: attrs.memo,
+        match_tolerance_cents: attrs.match_tolerance_cents,
+        match_tolerance_pct: attrs.match_tolerance_pct,
         lines: lines
       },
       scope: scope
@@ -256,6 +269,21 @@ defmodule Samen.Scopes.Finance.ApInvoiceCapture do
   defp date_or(nil, fallback), do: {:ok, fallback}
   defp date_or(%Date{} = date, _fallback), do: {:ok, date}
   defp date_or(_date, fallback), do: {:ok, fallback}
+
+  defp tolerance(nil, _field), do: {:ok, 0}
+  defp tolerance(value, _field) when is_integer(value) and value >= 0, do: {:ok, value}
+  defp tolerance(_value, field), do: {:error, {:invalid_tolerance, field}}
+
+  defp tolerance_pct(nil), do: {:ok, 0}
+  defp tolerance_pct(value) when is_integer(value) and value in 0..100, do: {:ok, value}
+  defp tolerance_pct(_value), do: {:error, {:invalid_tolerance, :match_tolerance_pct}}
+
+  defp line_value(line, key) do
+    Map.get(line, key) || Map.get(line, Atom.to_string(key))
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp blank_to_nil(nil), do: nil
 

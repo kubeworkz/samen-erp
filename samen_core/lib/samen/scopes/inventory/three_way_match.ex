@@ -16,13 +16,17 @@ defmodule Samen.Scopes.Inventory.ThreeWayMatch do
     the suite's green paths keep empty and the over-billed fixture row
     makes non-empty.
 
-  LINKAGE (documented heuristic — the honest shape): an AP bill carries no
-  PO/receipt FK in the base system, so the bill matches against the
-  receipted/ordered value of ITS VENDOR (`vendor_id`). That is the correct
-  strictness for the single-vendor-per-bill reality and a documented
-  approximation otherwise; the P2 bill-line→po_line carry replaces the
-  heuristic with per-line matching (design §3.2's own note).
+  LINKAGE: `variance/4` is the base vendor-level heuristic — an AP bill may
+  carry no PO/receipt FK, so it matches against the receipted/ordered value
+  of ITS VENDOR (`vendor_id`). `line_variance/4` is the P2 replacement used
+  by the AP gate: each bill line may carry `po_line_id` / `receipt_line_id`,
+  so the match is against that line's PO and received quantity rather than
+  the vendor's whole book. Lines without a PO reference are non-PO lines and
+  are left alone (they cannot be three-way matched); a receipt reference
+  without a PO reference is a malformed line and is refused.
   """
+
+  require Ash.Query
 
   # The match's default tolerance (cents / percent): fail-honest strictness —
   # a host widens explicitly per call.
@@ -70,6 +74,75 @@ defmodule Samen.Scopes.Inventory.ThreeWayMatch do
   end
 
   @doc """
+  One AP bill's LINE-LEVEL arithmetic (the P2 bill-line→PO-line carry).
+
+  `opts` carries the same resources as `variance/4`, plus optional
+  `:tolerance_cents` / `:tolerance_pct` overrides. The bill's own
+  `:match_tolerance_cents` / `:match_tolerance_pct` are the fallback, so the
+  AP approval gate can use the tolerance the operator saved on the bill.
+
+  Returns `{:ok, %{billed_cents, received_cents, variance_cents, flagged?,
+  lines: [...]}}`. Each line result records its `status` (`:matched`,
+  `:variance`, or `:not_matched` for a non-PO line), billed/received value,
+  effective tolerance and `flagged?`.
+
+  A referenced PO line must exist in the bill's org, belong to the bill's
+  vendor, and (when a specific receipt line is named) be the receipt line's
+  PO line. Failure to resolve a reference is `{:error, reason}` — a
+  reference is a claim the kernel cannot silently ignore.
+  """
+  @spec line_variance(module(), String.t(), struct(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def line_variance(_repo, org_id, bill, opts) do
+    po_resource = Keyword.fetch!(opts, :po_resource)
+    po_line_resource = Keyword.fetch!(opts, :po_line_resource)
+    receipt_line_resource = Keyword.fetch!(opts, :receipt_line_resource)
+    tol_cents = tolerance_cents(bill, opts)
+    tol_pct = tolerance_pct(bill, opts)
+
+    results =
+      bill.lines
+      |> List.wrap()
+      |> Enum.with_index(1)
+      |> Enum.reduce_while({:ok, []}, fn {line, index}, {:ok, acc} ->
+        case line_variance_for(
+               index,
+               line,
+               org_id,
+               bill,
+               po_resource,
+               po_line_resource,
+               receipt_line_resource,
+               tol_cents,
+               tol_pct
+             ) do
+          {:ok, result} -> {:cont, {:ok, [result | acc]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    with {:ok, results} <- results do
+      results = Enum.reverse(results)
+      # Non-PO lines have no received side, so they are excluded from the
+      # match totals (they are still returned in `lines` with :not_matched).
+      matched = Enum.reject(results, &(&1.status == :not_matched))
+      billed = Enum.sum(Enum.map(matched, & &1.billed_cents))
+      received = Enum.sum(Enum.map(matched, & &1.received_cents))
+
+      {:ok,
+       %{
+         billed_cents: billed,
+         received_cents: received,
+         variance_cents: billed - received,
+         tolerance_cents: tol_cents,
+         tolerance_pct: tol_pct,
+         flagged?: Enum.any?(results, & &1.flagged?),
+         lines: results
+       }}
+    end
+  end
+
+  @doc """
   Every org AP bill whose three-way flag fires (Σ line amounts vs the
   vendor's received value beyond tolerance) — the standing R5 read.
   """
@@ -102,10 +175,177 @@ defmodule Samen.Scopes.Inventory.ThreeWayMatch do
 
   # ── the three sides ─────────────────────────────────────────────────────────
 
+  defp line_variance_for(
+         index,
+         line,
+         org_id,
+         bill,
+         po_resource,
+         po_line_resource,
+         receipt_line_resource,
+         tol_cents,
+         tol_pct
+       ) do
+    po_line_id = line_value(line, :po_line_id)
+    receipt_line_id = line_value(line, :receipt_line_id)
+    billed = line_value(line, :amount_cents) || 0
+
+    cond do
+      is_nil(po_line_id) and not is_nil(receipt_line_id) ->
+        {:error, {:receipt_without_po_line, receipt_line_id}}
+
+      is_nil(po_line_id) ->
+        {:ok,
+         line_result(
+           index,
+           nil,
+           receipt_line_id,
+           billed,
+           0,
+           0,
+           false,
+           :not_matched
+         )}
+
+      true ->
+        with {:ok, po_line} <- fetch_po_line(po_line_resource, org_id, po_line_id),
+             {:ok, po} <- fetch_po(po_resource, org_id, po_line.purchase_order_id),
+             :ok <- same_vendor(po, bill.vendor_id),
+             {:ok, received, goods_receipt_id} <-
+               received_line_cents(
+                 receipt_line_resource,
+                 org_id,
+                 po_line,
+                 receipt_line_id
+               ) do
+          variance = billed - received
+          effective = max(tol_cents, div(received * tol_pct, 100))
+          flagged? = variance > effective
+
+          result =
+            line_result(
+              index,
+              po_line_id,
+              receipt_line_id,
+              billed,
+              received,
+              effective,
+              flagged?,
+              if(flagged?, do: :variance, else: :matched)
+            )
+
+          {:ok,
+           Map.merge(result, %{purchase_order_id: po.id, goods_receipt_id: goods_receipt_id})}
+        end
+    end
+  end
+
+  defp line_result(
+         index,
+         po_line_id,
+         receipt_line_id,
+         billed,
+         received,
+         tolerance,
+         flagged?,
+         status
+       ) do
+    %{
+      line: index,
+      po_line_id: po_line_id,
+      receipt_line_id: receipt_line_id,
+      purchase_order_id: nil,
+      goods_receipt_id: nil,
+      billed_cents: billed,
+      received_cents: received,
+      variance_cents: billed - received,
+      tolerance_cents: tolerance,
+      flagged?: flagged?,
+      matched?: status == :matched,
+      status: status
+    }
+  end
+
+  defp fetch_po_line(resource, org_id, id) do
+    case read_org(resource, org_id, id) do
+      {:ok, nil} -> {:error, {:po_line_not_found, id}}
+      {:ok, po_line} -> {:ok, po_line}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_po(resource, org_id, id) do
+    case read_org(resource, org_id, id) do
+      {:ok, nil} -> {:error, {:purchase_order_not_found, id}}
+      {:ok, po} -> {:ok, po}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp read_org(resource, org_id, id) do
+    resource
+    |> Ash.Query.filter(org_id == ^org_id and id == ^id)
+    |> Ash.read_one(authorize?: false)
+  end
+
+  defp same_vendor(%{vendor_id: vendor_id}, vendor_id), do: :ok
+  defp same_vendor(po, _vendor_id), do: {:error, {:vendor_mismatch, po.id}}
+
+  defp received_line_cents(resource, org_id, po_line, nil) do
+    resource
+    |> Ash.Query.filter(org_id == ^org_id and po_line_id == ^po_line.id)
+    |> Ash.read(authorize?: false)
+    |> case do
+      {:ok, lines} ->
+        {:ok, Enum.sum(Enum.map(lines, &(to_i(&1.qty) * to_i(po_line.unit_cost_cents)))), nil}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp received_line_cents(resource, org_id, po_line, receipt_line_id) do
+    case read_org(resource, org_id, receipt_line_id) do
+      {:ok, nil} ->
+        {:error, {:receipt_line_not_found, receipt_line_id}}
+
+      {:ok, %{po_line_id: receipt_po_line_id} = receipt_line}
+      when receipt_po_line_id == po_line.id ->
+        {:ok, to_i(receipt_line.qty) * to_i(po_line.unit_cost_cents),
+         receipt_line.goods_receipt_id}
+
+      {:ok, _receipt_line} ->
+        {:error, {:receipt_line_mismatch, receipt_line_id}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp line_value(line, key) do
+    Map.get(line, key) || Map.get(line, Atom.to_string(key))
+  end
+
+  defp tolerance_cents(bill, opts) do
+    case Keyword.get(opts, :tolerance_cents) do
+      nil -> Map.get(bill, :match_tolerance_cents) || @default_tolerance_cents
+      value when is_integer(value) -> value
+      _other -> @default_tolerance_cents
+    end
+  end
+
+  defp tolerance_pct(bill, opts) do
+    case Keyword.get(opts, :tolerance_pct) do
+      nil -> Map.get(bill, :match_tolerance_pct) || @default_tolerance_pct
+      value when is_integer(value) -> value
+      _other -> @default_tolerance_pct
+    end
+  end
+
   # The bill's own Σ line amounts (the embedded `lines` jsonb — the E2 shape).
   defp billed_cents(bill) do
     bill.lines
-    |> Enum.map(&(&1.amount_cents || 0))
+    |> Enum.map(&(line_value(&1, :amount_cents) || 0))
     |> Enum.sum()
   end
 

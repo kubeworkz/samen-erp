@@ -97,3 +97,10 @@ config :samen_web, Samen.WebTest.SecurityEndpoint,
 # table (samen_core exercises the {module, function} path against a fixture). Test-env only:
 # `Samen.WebTest.Operator` is test-support, and an unwired env must stay fail-closed.
 config :samen_core, Samen.AI.Agent, approver_membership: Samen.WebTest.Operator.Membership
+
+# Gap #9 — the AP approval-time three-way match, wired to this test host's
+# mounted procurement resources (the real host wires its own).
+config :samen_core, Samen.Scopes.Finance.ApInvoiceMatch,
+  purchase_order: Samen.WebTest.Erp.PurchaseOrder,
+  po_line: Samen.WebTest.Erp.PoLine,
+  receipt_line: Samen.WebTest.Erp.ReceiptLine

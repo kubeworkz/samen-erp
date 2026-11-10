@@ -32,6 +32,10 @@ defmodule Samen.InventoryProcurementTest do
       an over-billed vendor bill flags beyond tolerance (RED twin of the
       green read); tolerance widens to unflag it (the documented-tolerance
       control).
+    * r9 the AP line-level three-way match: a bill line carrying a PO/receipt
+      reference is checked at approval; an exact match approves (CONTROL), an
+      over-tolerance line is refused before the Gate opens (RED), tolerance
+      admits it (CONTROL), and a missing receipt is refused (RED).
     * r6 the DB belts (raw SQL): frozen PoLine edits refused once the PO
       leaves draft (RED, with the draft-edit CONTROL); a raw-SQL
       draft→received PO transition and a raw-SQL draft→posted receipt
@@ -47,9 +51,17 @@ defmodule Samen.InventoryProcurementTest do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.Reconcile
+  alias Samen.Scopes.Finance.{ApInvoiceMatch, Reconcile}
   alias Samen.Scopes.Inventory.{ReconcileProcurement, ReconcileStock, ThreeWayMatch}
-  alias SamenCore.Support.FinanceFixture.{Account, ApInvoice, JournalEntry, JournalLine, PostingAccount}
+
+  alias SamenCore.Support.FinanceFixture.{
+    Account,
+    ApInvoice,
+    JournalEntry,
+    JournalLine,
+    PostingAccount
+  }
+
   alias SamenCore.Support.InventoryFixture.{
     GoodsReceipt,
     Item,
@@ -93,10 +105,11 @@ defmodule Samen.InventoryProcurementTest do
       assert line.item_id == item.id
     end
 
-    test "a zero qty and a negative cost are refused (RED) — the positive twin lands (CONTROL)", %{
-      org: org,
-      scope: scope
-    } do
+    test "a zero qty and a negative cost are refused (RED) — the positive twin lands (CONTROL)",
+         %{
+           org: org,
+           scope: scope
+         } do
       item = new_item(scope, org)
       warehouse = new_warehouse(scope, org)
 
@@ -157,10 +170,11 @@ defmodule Samen.InventoryProcurementTest do
   # ── r2: the PO state machine (the ADR-040 Gate) ─────────────────────────────
 
   describe "r2 — the PO state machine (the Gate, committed-not-realized)" do
-    test "ungated :approve is refused with ApprovalRequired and opens the pending row (RED + CONTROL)", %{
-      org: org,
-      scope: scope
-    } do
+    test "ungated :approve is refused with ApprovalRequired and opens the pending row (RED + CONTROL)",
+         %{
+           org: org,
+           scope: scope
+         } do
       item = new_item(scope, org)
       warehouse = new_warehouse(scope, org)
       po = new_po(scope, org, warehouse.id, [%{item_id: item.id, qty: 2, unit_cost_cents: 5_000}])
@@ -175,10 +189,11 @@ defmodule Samen.InventoryProcurementTest do
       assert row.subject_ref == "samen:spo:#{po.id}"
     end
 
-    test "the DISTINCT approver lands :approved and the PO posts NOTHING (committed-not-realized)", %{
-      org: org,
-      scope: scope
-    } do
+    test "the DISTINCT approver lands :approved and the PO posts NOTHING (committed-not-realized)",
+         %{
+           org: org,
+           scope: scope
+         } do
       item = new_item(scope, org)
       warehouse = new_warehouse(scope, org)
       seed_posting_accounts(org)
@@ -251,11 +266,13 @@ defmodule Samen.InventoryProcurementTest do
   # ── r3: the ONE-TRANSACTION chokepoint ──────────────────────────────────────
 
   describe "r3 — GoodsReceipt :receive (the ONE-transaction chokepoint)" do
-    test "receiving lands lines + stock events + the POSTED GL entry + the receipt flip + the PO stamp", %{
-      org: org,
-      scope: scope
-    } do
-      {item, warehouse, po, po_line} = seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+    test "receiving lands lines + stock events + the POSTED GL entry + the receipt flip + the PO stamp",
+         %{
+           org: org,
+           scope: scope
+         } do
+      {item, warehouse, po, po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
 
       [received] = Ash.read!(GoodsReceipt, authorize?: false)
 
@@ -286,7 +303,8 @@ defmodule Samen.InventoryProcurementTest do
       _ = receipt_id
 
       # The GL entry — POSTED, balanced, anchored goods_receipt.
-      assert %JournalEntry{status: :posted} = entry =
+      assert %JournalEntry{status: :posted} =
+               entry =
                Ash.get!(JournalEntry, received.posted_entry_id, authorize?: false)
 
       assert entry.source_key == "goods_receipt"
@@ -349,7 +367,8 @@ defmodule Samen.InventoryProcurementTest do
     end
 
     test "a receipt posts exactly once — re-receive is refused (RED)", %{org: org, scope: scope} do
-      {_item, _warehouse, _po, po_line} = seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+      {_item, _warehouse, _po, po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
 
       # The seed helper already received; a second :receive on the POSTED
       # receipt is refused exactly-once.
@@ -432,6 +451,99 @@ defmodule Samen.InventoryProcurementTest do
     end
   end
 
+  # ── r9: the AP line-level three-way match ────────────────────────────────
+
+  describe "r9 — the AP line-level three-way match (approval control)" do
+    test "an exact PO/receipt-matched line approves (CONTROL)", %{org: org, scope: scope} do
+      {_item, _warehouse, po, po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+
+      [receipt_line] = receipt_lines_for_po_line(po_line.id)
+
+      bill =
+        new_ap_bill(scope, org, po.vendor_id, 25_000, %{
+          po_line_id: po_line.id,
+          receipt_line_id: receipt_line.id
+        })
+
+      {:gated, approval_id} = gate(bill, scope)
+      assert {:ok, _, _} = decide(approval_id)
+
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :approved
+
+      # The detail links are built from the engine's resolved parent ids.
+      assert {:ok, match} = ApInvoiceMatch.match(bill, org, @repo)
+      assert [line] = match.lines
+      assert line.purchase_order_id == po.id
+      assert line.goods_receipt_id == receipt_line.goods_receipt_id
+    end
+
+    test "an over-tolerance matched line is refused before the Gate (RED); tolerance admits it (CONTROL)",
+         %{org: org, scope: scope} do
+      {_item, _warehouse, po, po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+
+      over =
+        new_ap_bill(scope, org, po.vendor_id, 27_500, %{po_line_id: po_line.id})
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               over
+               |> Ash.Changeset.for_update(:approve, %{}, scope: scope)
+               |> Ash.update()
+
+      assert Exception.message(error) =~ "Three-way match failed"
+
+      within =
+        new_ap_bill(scope, org, po.vendor_id, 27_500, %{
+          po_line_id: po_line.id,
+          match_tolerance_pct: 10
+        })
+
+      {:gated, approval_id} = gate(within, scope)
+      assert {:ok, _, _} = decide(approval_id)
+      assert Ash.get!(ApInvoice, within.id, authorize?: false).status == :approved
+    end
+
+    test "a PO line with no receipt is refused (the GR side is required)", %{
+      org: org,
+      scope: scope
+    } do
+      item = new_item(scope, org)
+      warehouse = new_warehouse(scope, org)
+      seed_posting_accounts(org)
+
+      po =
+        new_po(scope, org, warehouse.id, [%{item_id: item.id, qty: 10, unit_cost_cents: 2_500}])
+
+      [po_line] = po_lines(po.id)
+      po = approve_po(po, scope)
+
+      bill = new_ap_bill(scope, org, po.vendor_id, 25_000, %{po_line_id: po_line.id})
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               bill
+               |> Ash.Changeset.for_update(:approve, %{}, scope: scope)
+               |> Ash.update()
+
+      assert Exception.message(error) =~ "Three-way match failed"
+    end
+
+    test "a PO line belonging to another vendor is refused", %{org: org, scope: scope} do
+      {_item, _warehouse, _po, po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+
+      bill =
+        new_ap_bill(scope, org, Ash.UUID.generate(), 25_000, %{po_line_id: po_line.id})
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               bill
+               |> Ash.Changeset.for_update(:approve, %{}, scope: scope)
+               |> Ash.update()
+
+      assert Exception.message(error) =~ "different vendor"
+    end
+  end
+
   # ── r6: the DB belts (raw SQL) ──────────────────────────────────────────────
 
   describe "r6 — the DB belts refuse raw-SQL facts" do
@@ -439,10 +551,13 @@ defmodule Samen.InventoryProcurementTest do
       org: org,
       scope: scope
     } do
-      {item, warehouse, po, _po_line} = seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+      {item, warehouse, po, _po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
 
       # CONTROL: while draft, the belt allows line edits.
-      draft_po = new_po(scope, org, warehouse.id, [%{item_id: item.id, qty: 1, unit_cost_cents: 100}])
+      draft_po =
+        new_po(scope, org, warehouse.id, [%{item_id: item.id, qty: 1, unit_cost_cents: 100}])
+
       [draft_line] = po_lines(draft_po.id)
 
       assert {:ok, _} =
@@ -470,11 +585,13 @@ defmodule Samen.InventoryProcurementTest do
                )
     end
 
-    test "a raw-SQL draft→received PO stamp and a raw-SQL draft→posted receipt are marker-refused (RED)", %{
-      org: org,
-      scope: scope
-    } do
-      {item, warehouse, _po, _po_line} = seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+    test "a raw-SQL draft→received PO stamp and a raw-SQL draft→posted receipt are marker-refused (RED)",
+         %{
+           org: org,
+           scope: scope
+         } do
+      {item, warehouse, _po, _po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
 
       # A FRESH approved PO (not the seed's already-:received one — the
       # belt's →received arm is a no-op on an already-received row).
@@ -504,7 +621,8 @@ defmodule Samen.InventoryProcurementTest do
     end
 
     test "ReceiptLine rows are append-only at the DB (RED)", %{org: org, scope: scope} do
-      {_item, _warehouse, _po, _po_line} = seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
+      {_item, _warehouse, _po, _po_line} =
+        seed_receiveable(scope, org, qty: 10, unit_cost_cents: 2_500)
 
       [%ReceiptLine{} = rl] = Ash.read!(ReceiptLine, authorize?: false)
 
@@ -527,16 +645,19 @@ defmodule Samen.InventoryProcurementTest do
   # ── r7: cross-org ───────────────────────────────────────────────────────────
 
   describe "r7 — cross-org discipline" do
-    test "a receipt line naming a FOREIGN org's po_line is refused (RED) — the same-org twin lands (CONTROL)", %{
-      org: org,
-      scope: scope
-    } do
+    test "a receipt line naming a FOREIGN org's po_line is refused (RED) — the same-org twin lands (CONTROL)",
+         %{
+           org: org,
+           scope: scope
+         } do
       item = new_item(scope, org)
       warehouse = new_warehouse(scope, org)
       seed_posting_accounts(org)
       link_inventory_account(scope, org, item.id)
 
-      po = new_po(scope, org, warehouse.id, [%{item_id: item.id, qty: 10, unit_cost_cents: 2_500}])
+      po =
+        new_po(scope, org, warehouse.id, [%{item_id: item.id, qty: 10, unit_cost_cents: 2_500}])
+
       [own_line] = po_lines(po.id)
       po = approve_po(po, scope)
       receipt = new_receipt(scope, org, po, warehouse)
@@ -557,13 +678,17 @@ defmodule Samen.InventoryProcurementTest do
       # RED: the foreign po_line does not exist for this org.
       assert {:error, %Ash.Error.Invalid{}} =
                receipt
-               |> Ash.Changeset.for_update(:receive, %{lines: [%{po_line_id: foreign_line.id, qty: 1}]})
+               |> Ash.Changeset.for_update(:receive, %{
+                 lines: [%{po_line_id: foreign_line.id, qty: 1}]
+               })
                |> Ash.update(scope: scope)
 
       # CONTROL: the same-org line receives.
       assert {:ok, _} =
                receipt
-               |> Ash.Changeset.for_update(:receive, %{lines: [%{po_line_id: own_line.id, qty: 5}]})
+               |> Ash.Changeset.for_update(:receive, %{
+                 lines: [%{po_line_id: own_line.id, qty: 5}]
+               })
                |> Ash.update(scope: scope)
     end
   end
@@ -642,7 +767,9 @@ defmodule Samen.InventoryProcurementTest do
         end
 
       {:ok, _} ->
-        flunk("the :approve action succeeded WITHOUT the Gate — the approval discipline is broken")
+        flunk(
+          "the :approve action succeeded WITHOUT the Gate — the approval discipline is broken"
+        )
 
       {:error, other} ->
         flunk("unexpected :approve failure: #{inspect(other)}")
@@ -728,6 +855,12 @@ defmodule Samen.InventoryProcurementTest do
   defp po_lines(po_id) do
     PoLine
     |> Ash.Query.filter(purchase_order_id == ^po_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp receipt_lines_for_po_line(po_line_id) do
+    ReceiptLine
+    |> Ash.Query.filter(po_line_id == ^po_line_id)
     |> Ash.read!(authorize?: false)
   end
 
@@ -826,9 +959,51 @@ defmodule Samen.InventoryProcurementTest do
       org,
       bill,
       Keyword.merge(
-        [po_resource: PurchaseOrder, po_line_resource: PoLine, receipt_line_resource: ReceiptLine],
+        [
+          po_resource: PurchaseOrder,
+          po_line_resource: PoLine,
+          receipt_line_resource: ReceiptLine
+        ],
         opts
       )
     )
   end
+
+  defp new_ap_bill(scope, org, vendor_id, amount_cents, opts) do
+    suffix = binary_part(Ash.UUID.generate(), 0, 6)
+
+    expense =
+      Account
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          code: "62" <> suffix,
+          name: "Matched purchases " <> suffix,
+          kind: :expense,
+          normal_side: :debit
+        },
+        scope: scope
+      )
+      |> Ash.create!()
+
+    line = %{account_id: expense.id, amount_cents: amount_cents}
+    line = maybe_put(line, :po_line_id, Map.get(opts, :po_line_id))
+    line = maybe_put(line, :receipt_line_id, Map.get(opts, :receipt_line_id))
+
+    ApInvoice
+    |> Ash.Changeset.for_create(:create, %{
+      org_id: org,
+      vendor_id: vendor_id,
+      number: "M-" <> binary_part(Ash.UUID.generate(), 0, 8),
+      bill_date: ~D[2026-09-12],
+      match_tolerance_cents: Map.get(opts, :match_tolerance_cents, 0),
+      match_tolerance_pct: Map.get(opts, :match_tolerance_pct, 0),
+      lines: [line]
+    })
+    |> Ash.create!(scope: scope)
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

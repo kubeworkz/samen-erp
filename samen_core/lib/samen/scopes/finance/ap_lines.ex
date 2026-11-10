@@ -4,9 +4,11 @@ defmodule Samen.Scopes.Finance.ApLines do
 
   * LINE SHAPE: a bill carries at least one line and every `amount_cents` is a
     POSITIVE integer (an AP bill is what the vendor demands; credits are
-    separate bills or the P2 credit-note carry, never a negative line). The
-    embedded-argument constraints type the fields; this guard owns the business
-    conditions the type system cannot express.
+    separate bills or the P2 credit-note carry, never a negative line). A
+    `receipt_line_id` without the matching `po_line_id` is malformed and
+    refused before the approval gate has to discover it. The
+    embedded-argument constraints type the fields; this guard owns the
+    business conditions the type system cannot express.
   * STATE: `lines`/`due_date`/`memo` are editable only while the bill is a
     DRAFT — `:approve`'s posted entry makes the bill a governed fact and
     immutability is the migration's trigger (the belt). A re-approval is
@@ -64,16 +66,30 @@ defmodule Samen.Scopes.Finance.ApLines do
           lines when is_list(lines) ->
             Enum.reduce(lines, changeset, fn line, acc ->
               amount = Map.get(line, :amount_cents) || Map.get(line, "amount_cents")
+              po_line_id = Map.get(line, :po_line_id) || Map.get(line, "po_line_id")
 
-              if is_integer(amount) and amount > 0 do
-                acc
-              else
-                Ash.Changeset.add_error(acc,
-                  field: :lines,
-                  message:
-                    "every AP line amount_cents must be a positive integer (credits are " <>
-                      "separate bills; the P2 credit-note carry) — got: #{inspect(amount)}"
-                )
+              receipt_line_id =
+                Map.get(line, :receipt_line_id) || Map.get(line, "receipt_line_id")
+
+              cond do
+                not (is_integer(amount) and amount > 0) ->
+                  Ash.Changeset.add_error(acc,
+                    field: :lines,
+                    message:
+                      "every AP line amount_cents must be a positive integer (credits are " <>
+                        "separate bills; the P2 credit-note carry) — got: #{inspect(amount)}"
+                  )
+
+                is_nil(po_line_id) and not is_nil(receipt_line_id) ->
+                  Ash.Changeset.add_error(acc,
+                    field: :lines,
+                    message:
+                      "an AP line may not carry receipt_line_id without po_line_id — got: " <>
+                        inspect(receipt_line_id)
+                  )
+
+                true ->
+                  acc
               end
             end)
 

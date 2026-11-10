@@ -66,6 +66,7 @@ defmodule Samen.Web.Erp do
           | :vendor_credits
           | :stock
           | :purchase_orders
+          | :goods_receipts
           | :work_orders
 
   @surfacedoc """
@@ -88,6 +89,9 @@ defmodule Samen.Web.Erp do
       quantity, reorder point. The warehouse view over the ledger's rollup.
     * `:purchase_orders` — the PO inbox (`PurchaseOrder`): number, dates,
       status, committed total. What is ordered and what has arrived.
+    * `:goods_receipts` — the receiving document (`GoodsReceipt`): number,
+      date, status and its materialized receipt lines. The received side of
+      the three-way match, linked from AP bills.
     * `:work_orders`     — the shop floor (`WorkOrder`): number, item, qty,
       status. What production has released and where it stands.
   """
@@ -100,6 +104,7 @@ defmodule Samen.Web.Erp do
     :vendor_credits,
     :stock,
     :purchase_orders,
+    :goods_receipts,
     :work_orders
   ]
 
@@ -328,6 +333,7 @@ defmodule Samen.Web.Erp do
   def resource(%Mount{} = mount, :vendor_credits), do: derived(mount, :VendorCredit)
   def resource(%Mount{} = mount, :stock), do: derived(mount, :Item)
   def resource(%Mount{} = mount, :purchase_orders), do: derived(mount, :PurchaseOrder)
+  def resource(%Mount{} = mount, :goods_receipts), do: derived(mount, :GoodsReceipt)
   def resource(%Mount{} = mount, :work_orders), do: derived(mount, :WorkOrder)
 
   defp derived(mount, name) do
@@ -358,6 +364,7 @@ defmodule Samen.Web.Erp do
   # planning floor, never a quantity that would go stale.
   def columns(:stock), do: [:sku, :name, :kind, :uom, :reorder_point]
   def columns(:purchase_orders), do: [:number, :order_date, :status]
+  def columns(:goods_receipts), do: [:number, :received_date, :status]
   def columns(:work_orders), do: [:number, :qty, :status]
 
   @doc "The surface's sortable fields (the bounded ListLive `:sortable` list)."
@@ -369,7 +376,13 @@ defmodule Samen.Web.Erp do
   def sortable(:vendor_credits), do: [:date, :status, :number]
   def sortable(:stock), do: [:sku, :qty_on_hand]
   def sortable(:purchase_orders), do: [:order_date, :status]
+  def sortable(:goods_receipts), do: [:received_date, :status]
   def sortable(:work_orders), do: [:number, :status]
+
+  @doc "The surface's bounded free-text filter fields (empty disables the filter box)."
+  @spec filter_fields(surface()) :: [atom()]
+  def filter_fields(:goods_receipts), do: [:number]
+  def filter_fields(_surface), do: []
 
   @doc """
   The singular human label for one record of a surface — the "New …" button,
@@ -383,6 +396,7 @@ defmodule Samen.Web.Erp do
   def record_label(:vendor_credits), do: "Vendor credit"
   def record_label(:stock), do: "Item"
   def record_label(:purchase_orders), do: "Purchase order"
+  def record_label(:goods_receipts), do: "Goods receipt"
   def record_label(:work_orders), do: "Work order"
 
   @doc """
@@ -398,7 +412,18 @@ defmodule Samen.Web.Erp do
     do: [:entry_date, :status, :memo, :source_key, :source_id, :posted_at, :inserted_at]
 
   def detail_fields(:ap_invoices),
-    do: [:number, :vendor_id, :bill_date, :due_date, :memo, :status, :posted_at, :inserted_at]
+    do: [
+      :number,
+      :vendor_id,
+      :bill_date,
+      :due_date,
+      :memo,
+      :match_tolerance_cents,
+      :match_tolerance_pct,
+      :status,
+      :posted_at,
+      :inserted_at
+    ]
 
   def detail_fields(:credit_notes),
     do: [
@@ -436,6 +461,18 @@ defmodule Samen.Web.Erp do
 
   def detail_fields(:purchase_orders),
     do: [:number, :vendor_id, :order_date, :memo, :status, :warehouse_id, :inserted_at]
+
+  def detail_fields(:goods_receipts),
+    do: [
+      :number,
+      :received_date,
+      :memo,
+      :status,
+      :purchase_order_id,
+      :warehouse_id,
+      :posted_entry_id,
+      :inserted_at
+    ]
 
   def detail_fields(:work_orders),
     do: [
@@ -479,7 +516,9 @@ defmodule Samen.Web.Erp do
       {:number, :text, []},
       {:bill_date, :date, []},
       {:due_date, :date, []},
-      {:memo, :text, []}
+      {:memo, :text, []},
+      {:match_tolerance_cents, :number, []},
+      {:match_tolerance_pct, :number, []}
     ]
   end
 
@@ -527,6 +566,8 @@ defmodule Samen.Web.Erp do
     ]
   end
 
+  def create_fields(:goods_receipts), do: []
+
   def create_fields(:work_orders) do
     [
       {:item_id, :text, [placeholder: "Item id (uuid)"]},
@@ -558,7 +599,14 @@ defmodule Samen.Web.Erp do
   end
 
   def edit_fields(:entries), do: [{:entry_date, :date, []}, {:memo, :text, []}]
-  def edit_fields(:ap_invoices), do: [{:due_date, :date, []}, {:memo, :text, []}]
+
+  def edit_fields(:ap_invoices),
+    do: [
+      {:due_date, :date, []},
+      {:memo, :text, []},
+      {:match_tolerance_cents, :number, []},
+      {:match_tolerance_pct, :number, []}
+    ]
 
   def edit_fields(:credit_notes),
     do: [{:due_date, :date, []}, {:memo, :text, []}, {:invoice_id, :text, []}]
@@ -582,6 +630,8 @@ defmodule Samen.Web.Erp do
       {:warehouse_id, :text, [placeholder: "Warehouse id (uuid)"]}
     ]
   end
+
+  def edit_fields(:goods_receipts), do: []
 
   def edit_fields(:work_orders) do
     [
@@ -613,13 +663,23 @@ defmodule Samen.Web.Erp do
     [
       {:account_id, :text, [placeholder: "Account id (uuid)"]},
       {:amount_cents, :number, []},
-      {:memo, :text, []}
+      {:memo, :text, []},
+      {:po_line_id, :text, [placeholder: "PO line id (uuid)"]},
+      {:receipt_line_id, :text, [placeholder: "Receipt line id (uuid)"]}
     ]
   end
 
   def line_fields(:purchase_orders) do
     [
       {:item_id, :text, [placeholder: "Item id (uuid)"]},
+      {:qty, :number, []},
+      {:unit_cost_cents, :number, []}
+    ]
+  end
+
+  def line_fields(:goods_receipts) do
+    [
+      {:po_line_id, :text, [placeholder: "PO line id (uuid)"]},
       {:qty, :number, []},
       {:unit_cost_cents, :number, []}
     ]
@@ -688,6 +748,7 @@ defmodule Samen.Web.Erp do
   def label(:vendor_credits), do: "Vendor Credits"
   def label(:stock), do: "Stock"
   def label(:purchase_orders), do: "Purchase Orders"
+  def label(:goods_receipts), do: "Goods Receipts"
   def label(:work_orders), do: "Work Orders"
 
   @doc """

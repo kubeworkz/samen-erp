@@ -906,6 +906,23 @@ defmodule Samen.Scopes.Finance.Blueprint do
           attribute(:due_date, :date, public?: true)
           attribute(:memo, :string, public?: true)
 
+          # Three-way-match tolerance is a BILL-level policy: one tolerance for
+          # every reference-bearing line on this document. Zero is the
+          # fail-honest default; a host/operator widens it explicitly.
+          attribute(:match_tolerance_cents, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0,
+            constraints: [min: 0]
+          )
+
+          attribute(:match_tolerance_pct, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0,
+            constraints: [min: 0, max: 100]
+          )
+
           attribute(:lines, {:array, :map},
             public?: true,
             allow_nil?: false,
@@ -914,7 +931,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 fields: [
                   account_id: [type: :uuid, allow_nil?: false],
                   amount_cents: [type: :integer, allow_nil?: false],
-                  memo: [type: :string]
+                  memo: [type: :string],
+                  # P2 bill-line→PO-line carry (WS-ERP gap #9). Optional: a
+                  # non-PO bill line (services, tax) has neither reference.
+                  po_line_id: [type: :uuid],
+                  receipt_line_id: [type: :uuid]
                 ]
               ]
             ]
@@ -944,7 +965,17 @@ defmodule Samen.Scopes.Finance.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :vendor_id, :number, :bill_date, :due_date, :memo, :lines])
+            accept([
+              :org_id,
+              :vendor_id,
+              :number,
+              :bill_date,
+              :due_date,
+              :memo,
+              :match_tolerance_cents,
+              :match_tolerance_pct,
+              :lines
+            ])
 
             # A bill is born a draft — the only route to :approved is :approve.
             change(set_attribute(:status, :draft))
@@ -954,7 +985,14 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # Draft edits only: re-pointing the due date/memo/lines of an
             # UNapproved bill. (ApLines refuses a non-draft data record, and
             # the migration's trigger refuses the raw-SQL twin.)
-            accept([:due_date, :memo, :lines])
+            accept([
+              :due_date,
+              :memo,
+              :match_tolerance_cents,
+              :match_tolerance_pct,
+              :lines
+            ])
+
             require_atomic?(false)
           end
 
@@ -966,6 +1004,12 @@ defmodule Samen.Scopes.Finance.Blueprint do
           update :approve do
             accept([])
             require_atomic?(false)
+
+            # Gap #9: the AP three-way match is an approval control. It is
+            # declared BEFORE the Gate so its before_transaction hook runs
+            # first: an over-tolerance bill never opens a pending approval.
+            # Lines without a PO reference remain non-PO lines.
+            change(Samen.Scopes.Finance.ApInvoiceMatch)
 
             change({Samen.Approvals.Gate, kind: unquote(Atom.to_string(module)) <> ":approve"})
 

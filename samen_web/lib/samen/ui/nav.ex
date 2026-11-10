@@ -122,7 +122,8 @@ defmodule Samen.UI.Nav do
       :erp_coa | :erp_entries | :erp_ap_invoices | :erp_credit_notes | :erp_vendor_credits |
       :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ar_receipts | :erp_ar_aging |
       :erp_ar_settings | :erp_stock |
-      :erp_purchase_orders | :erp_work_orders | :erp_grants | :erp_close | :erp_board` (or `nil`).
+      :erp_purchase_orders | :erp_goods_receipts | :erp_work_orders | :erp_grants | :erp_close |
+      :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
@@ -868,6 +869,12 @@ defmodule Samen.UI.Nav do
     do:
       Phoenix.HTML.raw(
         ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="20" r="1.6" /><circle cx="18" cy="20" r="1.6" /><path d="M3 4h2l2.5 11h10l2-7H6" /></svg>)
+      )
+
+  defp erp_icon(:goods_receipts),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 8l7-4 7 4v9H5z" /><path d="M5 8l7 4 7-4" /><path d="M9 14l2 2 4-4" /></svg>)
       )
 
   defp erp_icon(:work_orders),

@@ -946,6 +946,12 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             attribute_type(:uuid)
             allow_nil?(false)
           end
+
+          # The receipt's materialized lines — the receipt detail read.
+          has_many :lines, unquote(receipt_line_mod) do
+            public?(true)
+            destination_attribute(:goods_receipt_id)
+          end
         end
 
         changes do

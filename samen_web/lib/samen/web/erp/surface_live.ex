@@ -36,6 +36,8 @@ defmodule Samen.Web.Erp.SurfaceLive do
 
   use Samen.Web.Tenant.Live
 
+  require Ash.Query
+
   import Samen.UI
   import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
@@ -66,7 +68,9 @@ defmodule Samen.Web.Erp.SurfaceLive do
        show_new: false,
        new_form: nil,
        line_rows: [],
-       line_values: [%{}]
+       line_values: [%{}],
+       receipt_status: "",
+       receipt_received_date: ""
      )
      |> load()}
   end
@@ -107,7 +111,14 @@ defmodule Samen.Web.Erp.SurfaceLive do
   end
 
   defp load(socket) do
-    %{samen_mount: mount, surface: surface, org_id: org_id, list_state: state} = socket.assigns
+    %{
+      samen_mount: mount,
+      surface: surface,
+      org_id: org_id,
+      list_state: state,
+      receipt_status: receipt_status,
+      receipt_received_date: receipt_received_date
+    } = socket.assigns
 
     case Erp.resource(mount, surface) do
       nil ->
@@ -125,7 +136,8 @@ defmodule Samen.Web.Erp.SurfaceLive do
         page =
           resource
           |> Ash.Query.sort({:inserted_at, :desc})
-          |> Reads.page!(state, scope: scope)
+          |> apply_structured_filters(surface, receipt_status, receipt_received_date)
+          |> Reads.page!(state, scope: scope, filter_fields: Erp.filter_fields(surface))
 
         assign(socket,
           page: page,
@@ -157,6 +169,23 @@ defmodule Samen.Web.Erp.SurfaceLive do
 
   def handle_event("cancel_new", _params, socket) do
     {:noreply, assign(socket, show_new: false)}
+  end
+
+  def handle_event("filter", params, socket) when is_map(params) do
+    filter = Map.get(params, "filter", socket.assigns.list_state.filter)
+    status = Map.get(params, "status", socket.assigns.receipt_status)
+    received_date = Map.get(params, "received_date", socket.assigns.receipt_received_date)
+
+    state = %{socket.assigns.list_state | filter: filter, cursor: nil, cursor_stack: []}
+
+    {:noreply,
+     socket
+     |> assign(
+       list_state: state,
+       receipt_status: status,
+       receipt_received_date: received_date
+     )
+     |> load()}
   end
 
   def handle_event("add_line", _params, socket) do
@@ -307,6 +336,40 @@ defmodule Samen.Web.Erp.SurfaceLive do
           <h3>{Erp.label(@surface)}</h3>
           <span class="n">{length(@page.items)}</span>
           <span class="lane">· org-scoped · governed writes</span>
+          <form
+            :if={Erp.filter_fields(@surface) != []}
+            id="erp-filter"
+            phx-change="filter"
+            phx-submit="filter"
+            style="margin-left:auto"
+          >
+            <input
+              type="search"
+              name="filter"
+              value={@list_state.filter}
+              placeholder={"Filter " <> String.downcase(Erp.label(@surface)) <> "…"}
+              aria-label={"Filter " <> String.downcase(Erp.label(@surface))}
+              style="font-size:12px;padding:6px 8px;min-width:220px"
+            />
+            <input
+              :if={@surface == :goods_receipts}
+              type="date"
+              name="received_date"
+              value={@receipt_received_date}
+              aria-label="Filter by received date"
+              style="font-size:12px;padding:6px 8px"
+            />
+            <select
+              :if={@surface == :goods_receipts}
+              name="status"
+              aria-label="Filter by status"
+              style="font-size:12px;padding:6px 8px"
+            >
+              <option value="" selected={@receipt_status in [nil, ""]}>All statuses</option>
+              <option value="draft" selected={@receipt_status == "draft"}>Draft</option>
+              <option value="posted" selected={@receipt_status == "posted"}>Posted</option>
+            </select>
+          </form>
         </div>
         <%= if is_nil(@surface) or @unmounted do %>
           <div class="card" style="padding:16px;color:var(--muted)">
@@ -404,6 +467,32 @@ defmodule Samen.Web.Erp.SurfaceLive do
   defp crumbs(mount, org_id, surface) do
     [Crumbs.org(mount, org_id), "ERP"] ++ if(surface, do: [Erp.label(surface)], else: [])
   end
+
+  # Received-date and status are not free-text `contains` fields: the
+  # structured receipt controls apply exact predicates before the shared
+  # bounded read. The read itself remains org-scoped through `Reads.page!/3`.
+  defp apply_structured_filters(query, :goods_receipts, status, received_date) do
+    query
+    |> filter_receipt_status(status)
+    |> filter_receipt_date(received_date)
+  end
+
+  defp apply_structured_filters(query, _surface, _status, _received_date), do: query
+
+  defp filter_receipt_status(query, status) when status in ["draft", "posted"] do
+    Ash.Query.filter(query, status == ^String.to_existing_atom(status))
+  end
+
+  defp filter_receipt_status(query, _status), do: query
+
+  defp filter_receipt_date(query, value) when is_binary(value) and value != "" do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> Ash.Query.filter(query, received_date == ^date)
+      {:error, _reason} -> query
+    end
+  end
+
+  defp filter_receipt_date(query, _value), do: query
 
   defp detail_href(surface, row, org_id), do: "/erp/#{surface}/#{row.id}?org=#{org_id}"
 

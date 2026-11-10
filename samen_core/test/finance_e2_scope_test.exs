@@ -1432,6 +1432,43 @@ defmodule Samen.FinanceE2ScopeTest do
                  lines: [%{description: "Widgets", amount_cents: 4_000}]
                )
     end
+
+    test "capture preserves line PO/receipt references and the bill tolerance", %{
+      org: org,
+      scope: scope
+    } do
+      expense = seed_posting_accounts(org)
+      po_line_id = Ash.UUID.generate()
+      receipt_line_id = Ash.UUID.generate()
+
+      assert {:ok, bill} =
+               ApInvoiceCapture.confirm(
+                 ap_invoice: ApInvoice,
+                 scope: scope,
+                 org_id: org,
+                 vendor_id: Ash.UUID.generate(),
+                 account_id: expense.id,
+                 number: "CAP-MATCH-1",
+                 invoice_date: ~D[2026-09-05],
+                 total_cents: 5_000,
+                 match_tolerance_cents: 250,
+                 match_tolerance_pct: 5,
+                 lines: [
+                   %{
+                     description: "Widgets",
+                     amount_cents: 5_000,
+                     po_line_id: po_line_id,
+                     receipt_line_id: receipt_line_id
+                   }
+                 ]
+               )
+
+      [line] = bill.lines
+      assert Map.get(line, :po_line_id) == po_line_id
+      assert Map.get(line, :receipt_line_id) == receipt_line_id
+      assert bill.match_tolerance_cents == 250
+      assert bill.match_tolerance_pct == 5
+    end
   end
 
   # ── helpers ────────────────────────────────────────────────────────────────

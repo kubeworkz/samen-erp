@@ -336,8 +336,11 @@ defmodule Samen.Web.Erp.ApCaptureLive do
     if not writable?(mount) do
       {:noreply, assign(socket, error: "Capture is read-only on this plane.")}
     else
+      draft = put_line_refs(draft, params)
+
       socket =
         assign(socket,
+          draft: draft,
           vendor_id: params["vendor_id"] || "",
           memo: params["memo"] || socket.assigns.memo
         )
@@ -355,6 +358,8 @@ defmodule Samen.Web.Erp.ApCaptureLive do
              total_cents: draft.total_cents,
              lines: draft.lines,
              memo: params["memo"],
+             match_tolerance_cents: parse_non_negative_integer(params["match_tolerance_cents"]),
+             match_tolerance_pct: parse_non_negative_integer(params["match_tolerance_pct"]),
              allow_duplicate: truthy(params["allow_duplicate"])
            ) do
         {:ok, bill} ->
@@ -469,6 +474,12 @@ defmodule Samen.Web.Erp.ApCaptureLive do
   defp confirm_error(:invalid_total), do: "The parsed total is not a valid amount."
   defp confirm_error({:invalid_line, _line}), do: "Every captured line needs a positive amount."
 
+  defp confirm_error({:invalid_tolerance, :match_tolerance_cents}),
+    do: "Match tolerance in cents must be a non-negative whole number."
+
+  defp confirm_error({:invalid_tolerance, :match_tolerance_pct}),
+    do: "Match tolerance percent must be a whole number between 0 and 100."
+
   defp confirm_error({:lines_total_mismatch, total, sum}) do
     "The captured lines total #{money(sum)} but the invoice total is #{money(total)} — fix the lines before confirming."
   end
@@ -490,6 +501,42 @@ defmodule Samen.Web.Erp.ApCaptureLive do
   end
 
   defp parse_date(_value), do: nil
+
+  defp parse_non_negative_integer(nil), do: 0
+  defp parse_non_negative_integer(""), do: 0
+
+  defp parse_non_negative_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {integer, ""} -> integer
+      _other -> :invalid
+    end
+  end
+
+  defp parse_non_negative_integer(_value), do: :invalid
+
+  defp blank_to_nil(nil), do: nil
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(value), do: value
+
+  defp put_line_refs(draft, params) do
+    lines =
+      draft.lines
+      |> Enum.with_index()
+      |> Enum.map(fn {line, index} ->
+        line
+        |> Map.put(:po_line_id, blank_to_nil(params["line_po_line_id_#{index}"]))
+        |> Map.put(:receipt_line_id, blank_to_nil(params["line_receipt_line_id_#{index}"]))
+      end)
+
+    %{draft | lines: lines}
+  end
 
   defp money(nil), do: "—"
 
@@ -706,6 +753,29 @@ defmodule Samen.Web.Erp.ApCaptureLive do
                     style="font-size:12px;padding:6px 8px;font-weight:400"
                   />
                 </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Match tolerance (cents)
+                  <input
+                    type="number"
+                    name="match_tolerance_cents"
+                    value="0"
+                    min="0"
+                    step="1"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Match tolerance (%)
+                  <input
+                    type="number"
+                    name="match_tolerance_pct"
+                    value="0"
+                    min="0"
+                    max="100"
+                    step="1"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
               </div>
 
               <table id="ap-capture-lines" style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
@@ -713,13 +783,33 @@ defmodule Samen.Web.Erp.ApCaptureLive do
                   <tr>
                     <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Line</th>
                     <th scope="col" style="text-align:right;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Amount</th>
+                    <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">PO line</th>
+                    <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted)">Receipt line</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr :for={line <- @draft.lines}>
+                  <tr :for={{line, index} <- Enum.with_index(@draft.lines)}>
                     <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">{line.description}</td>
                     <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6);text-align:right">
                       {money(line.amount_cents)}
+                    </td>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                      <input
+                        type="text"
+                        name={"line_po_line_id_#{index}"}
+                        value={Map.get(line, :po_line_id, "")}
+                        placeholder="Optional"
+                        style="font-size:11px;padding:4px 6px;width:100%"
+                      />
+                    </td>
+                    <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                      <input
+                        type="text"
+                        name={"line_receipt_line_id_#{index}"}
+                        value={Map.get(line, :receipt_line_id, "")}
+                        placeholder="Optional"
+                        style="font-size:11px;padding:4px 6px;width:100%"
+                      />
                     </td>
                   </tr>
                 </tbody>

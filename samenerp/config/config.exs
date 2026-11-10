@@ -110,6 +110,15 @@ config :samen_core, Samen.Scopes.Finance.CollectionDunning,
   collection_case: Samenerp.Erp.CollectionCase,
   collection_cadence: Samenerp.Erp.CollectionCadence
 
+# Gap #9 — the AP approval-time three-way match. A bill line may reference a
+# PO/receipt line; approval refuses an over-tolerance line. Hosts without a
+# purchasing mount simply leave this unwired and can still approve non-PO bills
+# (a bill that claims a PO reference then fails closed).
+config :samen_core, Samen.Scopes.Finance.ApInvoiceMatch,
+  purchase_order: Samenerp.Erp.PurchaseOrder,
+  po_line: Samenerp.Erp.PoLine,
+  receipt_line: Samenerp.Erp.ReceiptLine
+
 config :ash, disable_async?: true
 config :ash, :missed_notifications, :ignore
 

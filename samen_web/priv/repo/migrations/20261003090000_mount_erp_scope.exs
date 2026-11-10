@@ -5,11 +5,12 @@ defmodule Samen.WebTest.Repo.Migrations.MountErpScope do
   at the scopes' DEFAULT abbrevs (`fca`/`fje`/`fjl`/`fai`/`ini`/`inw`/`ibo`/
   `ipo`/`ipl`/`iwo`) the `Samen.WebTest.Erp` domain mounts with.
 
-  DELIBERATE SUBSET: only the tables the six `Samen.Web.Erp` surfaces read and
+  DELIBERATE SUBSET: only the tables the `Samen.Web.Erp` surfaces read and
   write — CoA, journal (+ its lines), AP bill, item, warehouse, BOM (the work
-  order's FK target), PO (+ its lines), work order. The scope materializes the
-  full 26-resource domain; the resources never read here (budgets, stock
-  ledger/level, goods receipts, sales orders, production log, FX, …) stay
+  order's FK target), PO (+ its lines), and work order. Goods receipts are
+  tabled separately by `AddErpGoodsReceipts` for the receipt detail surface.
+  The scope materializes the full 26-resource domain; the resources never read
+  here (budgets, stock ledger/level, sales orders, production log, FX, …) stay
   untabled — the web tests never query them.
 
   NO BELT TRIGGERS (the posture of every samen_web scope mount — this repo

@@ -14,6 +14,8 @@ defmodule Samen.Web.ErpSurfaceTest do
   """
   use Samen.WebTest.DataCase, async: false
 
+  require Ash.Query
+
   alias Samen.Web.Erp.SurfaceLive
 
   @org "11111111-2222-3333-4444-555555555555"
@@ -37,6 +39,137 @@ defmodule Samen.Web.ErpSurfaceTest do
     # Registry-driven heading (topbar h1 + grid header) and breadcrumb trail.
     assert html =~ "Chart of Accounts"
     assert html =~ "ERP"
+  end
+
+  test "the goods receipts list renders seeded rows and filters them by number" do
+    {receipt_a, _line_a, _po_line_a} = Samen.WebTest.ErpFixtures.seed_goods_receipt(@org)
+    {receipt_b, _line_b, _po_line_b} = Samen.WebTest.ErpFixtures.seed_goods_receipt(@org)
+
+    socket = open(%{"org" => @org, "surface" => "goods_receipts"})
+    html = render(socket)
+
+    assert html =~ ~s(id="erp-filter")
+    assert html =~ receipt_a.number
+    assert html =~ receipt_b.number
+    assert html =~ ~s(href="/erp/goods_receipts/#{receipt_a.id}?org=#{@org}")
+
+    socket = event(socket, "filter", %{"filter" => receipt_a.number})
+    html = render(socket)
+
+    assert html =~ receipt_a.number
+    refute html =~ receipt_b.number
+    assert html =~ ~s(value="#{receipt_a.number}")
+  end
+
+  test "clearing the filter restores both rows and a no-match filter renders the empty state" do
+    {receipt_a, _line_a, _po_line_a} = Samen.WebTest.ErpFixtures.seed_goods_receipt(@org)
+    {receipt_b, _line_b, _po_line_b} = Samen.WebTest.ErpFixtures.seed_goods_receipt(@org)
+
+    socket = open(%{"org" => @org, "surface" => "goods_receipts"})
+    socket = event(socket, "filter", %{"filter" => receipt_a.number})
+    assert render(socket) =~ receipt_a.number
+    refute render(socket) =~ receipt_b.number
+
+    socket = event(socket, "filter", %{"filter" => ""})
+    html = render(socket)
+
+    assert html =~ receipt_a.number
+    assert html =~ receipt_b.number
+
+    socket = event(socket, "filter", %{"filter" => "NO-SUCH-RECEIPT"})
+    html = render(socket)
+
+    assert html =~ "Nothing here yet."
+    refute html =~ receipt_a.number
+    refute html =~ receipt_b.number
+  end
+
+  test "the goods receipts list filters by received date and status" do
+    {receipt_a, _line_a, _po_line_a} =
+      Samen.WebTest.ErpFixtures.seed_goods_receipt(@org,
+        received_date: ~D[2026-10-05],
+        status: :draft
+      )
+
+    {receipt_b, _line_b, _po_line_b} =
+      Samen.WebTest.ErpFixtures.seed_goods_receipt(@org,
+        received_date: ~D[2026-11-01],
+        status: :posted
+      )
+
+    socket = open(%{"org" => @org, "surface" => "goods_receipts"})
+    html = render(socket)
+
+    assert html =~ receipt_a.number
+    assert html =~ receipt_b.number
+
+    socket =
+      event(socket, "filter", %{
+        "filter" => "",
+        "received_date" => "2026-10-05",
+        "status" => ""
+      })
+
+    html = render(socket)
+    assert html =~ receipt_a.number
+    refute html =~ receipt_b.number
+    assert html =~ ~s(value="2026-10-05")
+
+    socket =
+      event(socket, "filter", %{
+        "filter" => "",
+        "received_date" => "",
+        "status" => "posted"
+      })
+
+    html = render(socket)
+    assert html =~ receipt_b.number
+    refute html =~ receipt_a.number
+  end
+
+  test "pagination over filtered goods receipts never leaks the unfiltered row" do
+    date = ~D[2026-10-05]
+
+    {draft_a, _line_a, _po_line_a} =
+      Samen.WebTest.ErpFixtures.seed_goods_receipt(@org, received_date: date, status: :draft)
+
+    {draft_b, _line_b, _po_line_b} =
+      Samen.WebTest.ErpFixtures.seed_goods_receipt(@org, received_date: date, status: :draft)
+
+    {posted, _line_c, _po_line_c} =
+      Samen.WebTest.ErpFixtures.seed_goods_receipt(@org,
+        received_date: ~D[2026-11-01],
+        status: :posted
+      )
+
+    mount = build_mount(:erp)
+    scope = Samen.Web.Mount.scope(mount, @org)
+
+    query =
+      Samen.WebTest.Erp.GoodsReceipt
+      |> Ash.Query.filter(status == :draft and received_date == ^date)
+
+    state = %Samen.Web.ListState{page_size: 1, filter: "GR-"}
+
+    first =
+      Samen.Web.Reads.page!(query, state, scope: scope, filter_fields: [:number])
+
+    assert [first_receipt] = first.items
+    assert first_receipt.id in [draft_a.id, draft_b.id]
+    assert first.has_more
+    assert first.next_cursor != nil
+
+    second =
+      Samen.Web.Reads.page!(query, %{state | cursor: first.next_cursor},
+        scope: scope,
+        filter_fields: [:number]
+      )
+
+    assert [second_receipt] = second.items
+    assert second_receipt.id in [draft_a.id, draft_b.id]
+    assert second_receipt.id != first_receipt.id
+    refute second.has_more
+    refute Enum.any?([first_receipt, second_receipt], &(&1.id == posted.id))
   end
 
   test "an unknown surface name renders the honest not-found state (no crash in the heading)" do
@@ -141,7 +274,12 @@ defmodule Samen.Web.ErpSurfaceTest do
     # Validate with the required `name` missing — the kit's inline-error path.
     socket =
       event(socket, "validate_new", %{
-        "form" => %{"code" => "1100", "kind" => "asset", "normal_side" => "debit", "currency" => "USD"}
+        "form" => %{
+          "code" => "1100",
+          "kind" => "asset",
+          "normal_side" => "debit",
+          "currency" => "USD"
+        }
       })
 
     assert render(socket) =~ "field-invalid"
@@ -149,7 +287,12 @@ defmodule Samen.Web.ErpSurfaceTest do
     # An invalid SUBMIT stays on the form and writes nothing.
     socket =
       event(socket, "save_new", %{
-        "form" => %{"code" => "1100", "kind" => "asset", "normal_side" => "debit", "currency" => "USD"}
+        "form" => %{
+          "code" => "1100",
+          "kind" => "asset",
+          "normal_side" => "debit",
+          "currency" => "USD"
+        }
       })
 
     assert render(socket) =~ "field-invalid"

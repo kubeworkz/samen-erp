@@ -163,6 +163,34 @@ defmodule Samen.Web.ErpApCaptureTest do
     refute html =~ ~s(id="ap-capture-review")
   end
 
+  test "confirming preserves line PO/receipt references and the tolerance" do
+    account = account!()
+    po_line_id = Ash.UUID.generate()
+    receipt_line_id = Ash.UUID.generate()
+    socket = event(open(), "capture", %{"text" => invoice_text("INV-CAP-MATCH", "80.00")})
+
+    confirmed =
+      event(socket, "confirm", %{
+        "vendor_id" => @vendor,
+        "account_id" => account.id,
+        "number" => "INV-CAP-MATCH",
+        "invoice_date" => "2026-10-14",
+        "match_tolerance_cents" => "125",
+        "match_tolerance_pct" => "2",
+        "line_po_line_id_0" => po_line_id,
+        "line_receipt_line_id_0" => receipt_line_id
+      })
+
+    bill = confirmed.assigns.created
+    assert bill
+    assert bill.match_tolerance_cents == 125
+    assert bill.match_tolerance_pct == 2
+
+    [line] = bill.lines
+    assert Map.get(line, :po_line_id) == po_line_id
+    assert Map.get(line, :receipt_line_id) == receipt_line_id
+  end
+
   test "a missing vendor is refused with a readable message" do
     account = account!()
     socket = event(open(), "capture", %{"text" => invoice_text("INV-CAP-3", "10.00")})

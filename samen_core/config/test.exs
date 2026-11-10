@@ -227,3 +227,10 @@ config :opentelemetry,
 # in-process) implementation explicitly — the same way Samen.Delivery.FakeProvider
 # is explicitly wired rather than silently defaulted to.
 config :samen_core, :fleet_local_credential, Samen.Fleet.LocalCredential.Agent
+
+# Gap #9 — the AP approval-time three-way match. The kernel names the fixture
+# procurement resources here; a host wires its own (see samenerp/config.exs).
+config :samen_core, Samen.Scopes.Finance.ApInvoiceMatch,
+  purchase_order: SamenCore.Support.InventoryFixture.PurchaseOrder,
+  po_line: SamenCore.Support.InventoryFixture.PoLine,
+  receipt_line: SamenCore.Support.InventoryFixture.ReceiptLine
