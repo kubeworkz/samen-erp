@@ -80,6 +80,7 @@ defmodule Samen.Web.MountSmokeTest do
        %{"org" => org, "id" => "99999999-9999-4999-8999-999999999999"}},
       {"erp/ar-receipts", Samen.Web.Erp.ArReceiptsLive, build_mount(:erp), %{"org" => org}},
       {"erp/ar-aging", Samen.Web.Erp.ArAgingLive, build_mount(:erp), %{"org" => org}},
+      {"erp/ar-settings", Samen.Web.Erp.ArSettingsLive, build_mount(:erp), %{"org" => org}},
       # Support
       {"support/tickets", Support.TicketsLive, build_mount(:support), %{"org" => org}},
       {"support/ticket", Support.TicketLive, build_mount(:support),

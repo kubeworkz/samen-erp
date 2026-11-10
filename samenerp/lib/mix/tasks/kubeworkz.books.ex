@@ -7,6 +7,7 @@ defmodule Mix.Tasks.Kubeworkz.Books do
 
       mix kubeworkz.books --org kubeworkz
       mix kubeworkz.books --org 0f00…-…      # by org uuid
+      mix kubeworkz.books --org kubeworkz --ar-demo
 
   `--org` takes a tenant org's **slug or id**. It is required on purpose: this
   seed writes a chart of accounts, a posting map and a budget, and opening them
@@ -16,27 +17,37 @@ defmodule Mix.Tasks.Kubeworkz.Books do
   Idempotent: a second run creates nothing. Rows that exist but disagree with
   the manual are REPORTED (never overwritten, never re-pointed) so an operator's
   edits survive a re-seed.
+
+  `--ar-demo` also seeds one overdue CAD invoice and an open collection case
+  through the real `ArAging`/`ArCollections` path, then lets scheduled dunning
+  advance it through the org cadence to `:collections`. That gives the AR aging
+  page a customer statement with a live, fully escalated collection timeline.
+  It is idempotent.
   """
 
   use Mix.Task
 
   require Ash.Query
 
-  alias Samenerp.Kubeworkz.Books
+  alias Samenerp.Kubeworkz.{ArDemo, Books}
   alias Samenerp.Operator, as: Op
 
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
 
-    {opts, rest, invalid} = OptionParser.parse(args, strict: [org: :string])
+    {opts, rest, invalid} = OptionParser.parse(args, strict: [org: :string, ar_demo: :boolean])
 
     if invalid != [] do
-      Mix.raise("unrecognised option(s): #{inspect(invalid)} — usage: mix kubeworkz.books --org <slug|uuid>")
+      Mix.raise(
+        "unrecognised option(s): #{inspect(invalid)} — usage: mix kubeworkz.books --org <slug|uuid>"
+      )
     end
 
     if rest != [] do
-      Mix.raise("unexpected argument(s): #{inspect(rest)} — usage: mix kubeworkz.books --org <slug|uuid>")
+      Mix.raise(
+        "unexpected argument(s): #{inspect(rest)} — usage: mix kubeworkz.books --org <slug|uuid>"
+      )
     end
 
     org = resolve_org!(Keyword.get(opts, :org))
@@ -50,7 +61,7 @@ defmodule Mix.Tasks.Kubeworkz.Books do
 
     Mix.shell().info(
       "budget            #{summary.budget.year} · " <>
-        (if summary.budget.created, do: "created", else: "already open")
+        if(summary.budget.created, do: "created", else: "already open")
     )
 
     Mix.shell().info(
@@ -58,8 +69,10 @@ defmodule Mix.Tasks.Kubeworkz.Books do
         "(the manual gives them no single account — see Samenerp.Kubeworkz.Books)"
     )
 
-    for drift <- summary.accounts.drifted ++ summary.posting_accounts.drifted ++
-                   summary.cost_objects.drifted do
+    for drift <-
+          summary.accounts.drifted ++
+            summary.posting_accounts.drifted ++
+            summary.cost_objects.drifted do
       Mix.shell().info("DRIFT (left as-is) #{drift}")
     end
 
@@ -70,6 +83,23 @@ defmodule Mix.Tasks.Kubeworkz.Books do
       {:error, gaps} ->
         Mix.raise("the books did not open cleanly:\n  " <> Enum.join(gaps, "\n  "))
     end
+
+    if opts[:ar_demo], do: report_ar_demo(ArDemo.seed!(org.id))
+  end
+
+  defp report_ar_demo(summary) do
+    created = fn
+      true -> "created"
+      false -> "existing"
+    end
+
+    Mix.shell().info(
+      "AR demo           customer #{created.(summary.customer_created)}, " <>
+        "invoice #{created.(summary.invoice_created)}, " <>
+        "case #{created.(summary.collection_case_created)} · " <>
+        "stage #{summary.collection_case_stage} · " <>
+        "#{summary.collection_case_events} timeline events"
+    )
   end
 
   defp report(label, %{created: created, existing: existing}) do
@@ -84,7 +114,9 @@ defmodule Mix.Tasks.Kubeworkz.Books do
   defp resolve_org!(nil) do
     Mix.raise(
       "--org is required (a tenant slug or uuid). This host's tenant orgs:\n" <>
-        Enum.map_join(tenant_orgs(), "\n", fn org -> "  #{org.id}  #{org.name}  #{org.slug || "—"}" end)
+        Enum.map_join(tenant_orgs(), "\n", fn org ->
+          "  #{org.id}  #{org.name}  #{org.slug || "—"}"
+        end)
     )
   end
 

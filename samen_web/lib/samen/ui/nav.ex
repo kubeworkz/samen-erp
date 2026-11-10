@@ -120,7 +120,8 @@ defmodule Samen.UI.Nav do
       :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
       :support_tickets | :notifications_settings | :settings | :automation | :erp_dashboard |
       :erp_coa | :erp_entries | :erp_ap_invoices | :erp_credit_notes | :erp_vendor_credits |
-      :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ar_receipts | :erp_ar_aging | :erp_stock |
+      :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ar_receipts | :erp_ar_aging |
+      :erp_ar_settings | :erp_stock |
       :erp_purchase_orders | :erp_work_orders | :erp_grants | :erp_close | :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
@@ -419,6 +420,15 @@ defmodule Samen.UI.Nav do
       >
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5M4 19h16" /><path d="M8 16v-6M13 16V6M18 16v-3" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.ar_settings_label()}
+        href={"#{@erp_path}/ar-settings?org=#{@org_id}"}
+        active={@active == :erp_ar_settings}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></svg>
         </:icon>
       </.nav_item>
       <.nav_item

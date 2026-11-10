@@ -225,6 +225,30 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert planned == expected
   end
 
+  test "opens a non-default AR collection cadence for the settings screen" do
+    org = create_org!("Kubeworkz Books AR Cadence")
+    summary = Books.seed!(org.id)
+
+    assert %{created: true, drifted: []} = summary.collection_cadence
+
+    id = to_string(org.id)
+
+    cadence =
+      Erp.CollectionCadence
+      |> Ash.Query.filter(org_id == ^id)
+      |> Ash.read_one!(authorize?: false)
+
+    assert cadence.notice_enabled
+    assert cadence.final_notice_enabled
+    assert cadence.collections_enabled
+    assert cadence.notice_days == 7
+    assert cadence.final_notice_days == 14
+    assert cadence.collections_days == 21
+
+    # A re-seed leaves the operator's cadence alone.
+    assert %{created: false, drifted: []} = Books.seed!(org.id).collection_cadence
+  end
+
   test "is idempotent — a second run creates nothing" do
     org = create_org!("Kubeworkz Books Idempotence")
 
@@ -234,6 +258,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert first.cost_objects.created == length(Books.cost_objects())
     assert first.assets.created == length(Books.assets())
     assert first.journal_approval.created
+    assert first.collection_cadence.created
     assert first.budget.created
 
     accounts_before = length(accounts(org.id))
@@ -247,6 +272,7 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert %{created: 0} = second.assets
     refute second.journal_approval.created
     assert second.journal_approval.enabled
+    refute second.collection_cadence.created
     refute second.budget.created
 
     # No duplicate rows, and the budget lines were not doubled.

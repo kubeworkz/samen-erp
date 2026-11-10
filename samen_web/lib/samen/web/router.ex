@@ -1199,10 +1199,11 @@ defmodule Samen.Web.Router do
         live("#{path}/journal-approval", Samen.Web.Erp.JournalApprovalLive)
         # The AP payment run (approved bills → one remittance batch), the AP
         # aging / vendor-statement page, the AR receipt intake, and the AR aging
-        # / customer-statement page. Literal segments declared BEFORE
-        # `:surface` for the same reason as journal-approval: a dynamic segment
-        # declared first would capture "ap-payments"/"ap-aging"/"ar-aging" as a
-        # surface name and these pages would never be reached.
+        # / customer-statement page, and the per-org AR collections cadence
+        # settings page. Literal segments declared BEFORE `:surface` for the
+        # same reason as journal-approval: a dynamic segment declared first
+        # would capture "ap-payments"/"ap-aging"/"ar-aging"/"ar-settings" as
+        # a surface name and these pages would never be reached.
         live("#{path}/ap-capture", Samen.Web.Erp.ApCaptureLive)
         live("#{path}/ap-payments", Samen.Web.Erp.ApPaymentsLive)
         live("#{path}/ap-aging", Samen.Web.Erp.ApAgingLive)
@@ -1213,6 +1214,7 @@ defmodule Samen.Web.Router do
         live("#{path}/ap-payments/:id", Samen.Web.Erp.ApPaymentRunLive)
         live("#{path}/ar-receipts", Samen.Web.Erp.ArReceiptsLive)
         live("#{path}/ar-aging", Samen.Web.Erp.ArAgingLive)
+        live("#{path}/ar-settings", Samen.Web.Erp.ArSettingsLive)
         # One parameterized route feeds the closed surface allowlist. The LiveView
         # validates `:surface` through `Samen.Web.Erp.surface/1`; expanding the
         # six literal paths here would bypass the LiveView's `%{"surface" => ...}`

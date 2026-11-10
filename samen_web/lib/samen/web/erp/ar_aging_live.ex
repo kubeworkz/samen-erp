@@ -15,18 +15,27 @@ defmodule Samen.Web.Erp.ArAgingLive do
   Billing mirror's `amount_paid_cents` is deliberately ignored there: provider
   state is not posted cash.
 
-  No write affordance exists on this page. `org_id` is the server-side fact and
-  the scope is the mount plane's, so an operator-plane mount reads masked and
-  every caller is pinned to its own org.
+  Delivery and collections write only Finance audit/workflow records: a
+  statement send goes through `Samen.Delivery.Chokepoint`, and a collection
+  action appends one timeline event. Neither posts a journal entry. Writes are
+  offered on the tenant plane only.
+
+  `org_id` is the server-side fact and the scope is the mount plane's, so an
+  operator-plane mount reads masked and every caller is pinned to its own org.
   """
 
   use Samen.Web.Tenant.Live
 
+  require Ash.Query
+
   import Samen.UI
-  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1]
+  import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
   alias Samen.Scopes.Finance.ArAging
+  alias Samen.Scopes.Finance.ArCollections
+  alias Samen.Scopes.Finance.ArStatementDelivery
+  alias Samen.Scopes.Finance.CollectionCadence, as: CadenceSettings
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
@@ -48,6 +57,11 @@ defmodule Samen.Web.Erp.ArAgingLive do
        selected_customer: nil,
        statement: nil,
        statement_error: nil,
+       statement_deliveries: [],
+       collection_cases: [],
+       cadence: nil,
+       work_notice: nil,
+       work_error: nil,
        missing: nil
      )
      |> load()}
@@ -75,6 +89,11 @@ defmodule Samen.Web.Erp.ArAgingLive do
     |> assign_new(:selected_customer, fn -> nil end)
     |> assign_new(:statement, fn -> nil end)
     |> assign_new(:statement_error, fn -> nil end)
+    |> assign_new(:statement_deliveries, fn -> [] end)
+    |> assign_new(:collection_cases, fn -> [] end)
+    |> assign_new(:cadence, fn -> CadenceSettings.defaults() end)
+    |> assign_new(:work_notice, fn -> nil end)
+    |> assign_new(:work_error, fn -> nil end)
     |> assign_new(:return_to, fn -> nil end)
     |> do_load()
   end
@@ -85,7 +104,12 @@ defmodule Samen.Web.Erp.ArAgingLive do
       missing: :no_org,
       aging: nil,
       customers: [],
-      statement: nil
+      statement: nil,
+      statement_deliveries: [],
+      collection_cases: [],
+      cadence: CadenceSettings.defaults(),
+      work_notice: nil,
+      work_error: nil
     )
   end
 
@@ -95,6 +119,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
     with invoice when not is_nil(invoice) <- Erp.billing_invoice(mount),
          receipt when not is_nil(receipt) <- Erp.payment_receipt(mount) do
       scope = TenantRole.authenticated_scope(mount, org_id)
+      cadence = effective_cadence(mount, org_id)
 
       case ArAging.for_org(
              invoice: invoice,
@@ -109,16 +134,48 @@ defmodule Samen.Web.Erp.ArAgingLive do
           assign(socket,
             aging: aging,
             customers: customers(aging),
+            cadence: cadence,
             missing: nil
           )
 
         {:error, _reason} ->
-          assign(socket, aging: nil, customers: [], missing: :unreadable)
+          assign(socket, aging: nil, customers: [], cadence: cadence, missing: :unreadable)
       end
     else
       _not_mounted ->
-        assign(socket, aging: nil, customers: [], missing: :unmounted)
+        assign(socket,
+          aging: nil,
+          customers: [],
+          cadence: CadenceSettings.defaults(),
+          missing: :unmounted
+        )
     end
+  end
+
+  defp effective_cadence(mount, org_id) do
+    case Erp.collection_cadence(mount) do
+      nil ->
+        CadenceSettings.defaults()
+
+      resource ->
+        resource
+        |> Ash.Query.filter(org_id == ^org_id)
+        |> Ash.Query.limit(1)
+        |> Ash.read_one(scope: TenantRole.authenticated_scope(mount, org_id))
+        |> case do
+          {:ok, nil} -> CadenceSettings.defaults()
+          {:ok, cadence} -> cadence
+          {:error, _reason} -> CadenceSettings.defaults()
+        end
+    end
+  end
+
+  defp cadence_rows(cadence) do
+    [
+      {:notice, "Notice", cadence.notice_enabled, cadence.notice_days},
+      {:final_notice, "Final notice", cadence.final_notice_enabled, cadence.final_notice_days},
+      {:collections, "Collections", cadence.collections_enabled, cadence.collections_days}
+    ]
   end
 
   defp customers(aging), do: aging.customer_ids
@@ -134,7 +191,15 @@ defmodule Samen.Web.Erp.ArAgingLive do
       date ->
         {:noreply,
          socket
-         |> assign(as_of: date, statement: nil, statement_error: nil)
+         |> assign(
+           as_of: date,
+           statement: nil,
+           statement_error: nil,
+           statement_deliveries: [],
+           collection_cases: [],
+           work_notice: nil,
+           work_error: nil
+         )
          |> load()}
     end
   end
@@ -149,7 +214,11 @@ defmodule Samen.Web.Erp.ArAgingLive do
          assign(socket,
            statement: nil,
            selected_customer: nil,
-           statement_error: "Choose a customer."
+           statement_error: "Choose a customer.",
+           statement_deliveries: [],
+           collection_cases: [],
+           work_notice: nil,
+           work_error: nil
          )}
 
       org_id == nil ->
@@ -159,6 +228,170 @@ defmodule Samen.Web.Erp.ArAgingLive do
         {:noreply, read_statement(socket, mount, org_id, customer_id, as_of)}
     end
   end
+
+  def handle_event("send_statement", %{"currency" => currency}, socket) do
+    %{samen_mount: mount, org_id: org_id, selected_customer: customer_id, statement: statement} =
+      socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply,
+         assign(socket,
+           work_error: "Statement delivery is read-only on this plane.",
+           work_notice: nil
+         )}
+
+      org_id == nil ->
+        {:noreply, assign(socket, work_error: "No workspace selected.", work_notice: nil)}
+
+      is_nil(Erp.statement_delivery(mount)) ->
+        {:noreply,
+         assign(socket, work_error: "Statement delivery is not mounted.", work_notice: nil)}
+
+      is_nil(statement) or customer_id in [nil, ""] ->
+        {:noreply,
+         assign(socket, work_error: "Open the customer statement first.", work_notice: nil)}
+
+      true ->
+        {:noreply, send_statement(socket, mount, org_id, customer_id, currency)}
+    end
+  end
+
+  def handle_event("open_collection_case", params, socket) do
+    %{samen_mount: mount, org_id: org_id, selected_customer: customer_id, statement: statement} =
+      socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply,
+         assign(socket, work_error: "Collections are read-only on this plane.", work_notice: nil)}
+
+      org_id == nil ->
+        {:noreply, assign(socket, work_error: "No workspace selected.", work_notice: nil)}
+
+      is_nil(Erp.collection_case(mount)) ->
+        {:noreply, assign(socket, work_error: "Collections are not mounted.", work_notice: nil)}
+
+      is_nil(statement) or customer_id in [nil, ""] ->
+        {:noreply,
+         assign(socket, work_error: "Open the customer statement first.", work_notice: nil)}
+
+      true ->
+        {:noreply,
+         open_collection_case(
+           socket,
+           mount,
+           org_id,
+           customer_id,
+           params["currency"],
+           params["notes"]
+         )}
+    end
+  end
+
+  def handle_event("collection_action", params, socket) do
+    %{samen_mount: mount, org_id: org_id, selected_customer: customer_id} = socket.assigns
+
+    with true <- writable?(mount),
+         false <- is_nil(Erp.collection_case(mount)),
+         {:ok, kind} <- collection_kind(params["kind"]),
+         {:ok, promise_on} <- parse_optional_date(params["promise_to_pay_on"]),
+         {:ok, promised_cents} <- parse_optional_cents(params["promised_cents"]) do
+      case ArCollections.record_action(
+             collection_case: Erp.collection_case(mount),
+             case_id: params["case_id"],
+             kind: kind,
+             note: params["note"],
+             promise_to_pay_on: promise_on,
+             promised_cents: promised_cents,
+             org_id: org_id,
+             scope: TenantRole.authenticated_scope(mount, org_id)
+           ) do
+        {:ok, collection_case} ->
+          socket =
+            socket
+            |> assign(
+              work_error: nil,
+              work_notice: "Collection action logged: #{stage_text(collection_case.stage)}."
+            )
+            |> load_customer_work(mount, org_id, customer_id)
+
+          {:noreply, socket}
+
+        {:error, reason} ->
+          {:noreply,
+           socket
+           |> assign(work_error: collection_error(reason), work_notice: nil)
+           |> load_customer_work(mount, org_id, customer_id)}
+      end
+    else
+      false ->
+        {:noreply,
+         assign(socket, work_error: "Collections are read-only on this plane.", work_notice: nil)}
+
+      true ->
+        {:noreply, assign(socket, work_error: "Collections are not mounted.", work_notice: nil)}
+
+      {:error, message} ->
+        {:noreply, assign(socket, work_error: message, work_notice: nil)}
+    end
+  end
+
+  defp send_statement(socket, mount, org_id, customer_id, currency) do
+    case ArStatementDelivery.deliver(
+           statement_delivery: Erp.statement_delivery(mount),
+           invoice: Erp.billing_invoice(mount),
+           receipt: Erp.payment_receipt(mount),
+           receipt_allocation: Erp.receipt_allocation(mount),
+           credit_note: Erp.credit_note(mount),
+           org_id: org_id,
+           scope: TenantRole.authenticated_scope(mount, org_id),
+           customer_id: customer_id,
+           as_of: socket.assigns.as_of,
+           currency: blank_to_nil(currency)
+         ) do
+      {:ok, delivery} ->
+        socket
+        |> assign(work_error: nil, work_notice: delivery_notice(delivery))
+        |> load_customer_work(mount, org_id, customer_id)
+
+      {:error, reason} ->
+        socket
+        |> assign(work_error: delivery_error(reason), work_notice: nil)
+        |> load_customer_work(mount, org_id, customer_id)
+    end
+  end
+
+  defp open_collection_case(socket, mount, org_id, customer_id, currency, notes) do
+    case ArCollections.open_case(
+           collection_case: Erp.collection_case(mount),
+           invoice: Erp.billing_invoice(mount),
+           receipt: Erp.payment_receipt(mount),
+           receipt_allocation: Erp.receipt_allocation(mount),
+           credit_note: Erp.credit_note(mount),
+           org_id: org_id,
+           scope: TenantRole.authenticated_scope(mount, org_id),
+           customer_id: customer_id,
+           as_of: socket.assigns.as_of,
+           currency: blank_to_nil(currency),
+           notes: notes
+         ) do
+      {:ok, collection_case} ->
+        socket
+        |> assign(
+          work_error: nil,
+          work_notice: "Collection case opened at #{stage_text(collection_case.stage)}."
+        )
+        |> load_customer_work(mount, org_id, customer_id)
+
+      {:error, reason} ->
+        socket
+        |> assign(work_error: collection_error(reason), work_notice: nil)
+        |> load_customer_work(mount, org_id, customer_id)
+    end
+  end
+
+  # -- helpers ----------------------------------------------------------------
 
   defp read_statement(socket, mount, org_id, customer_id, as_of) do
     invoice = Erp.billing_invoice(mount)
@@ -176,22 +409,130 @@ defmodule Samen.Web.Erp.ArAgingLive do
            as_of: as_of
          ) do
       {:ok, statement} ->
-        assign(socket,
+        socket
+        |> assign(
           statement: statement,
           selected_customer: customer_id,
-          statement_error: nil
+          statement_error: nil,
+          work_notice: nil,
+          work_error: nil
         )
+        |> load_customer_work(mount, org_id, customer_id)
 
       {:error, _reason} ->
         assign(socket,
           statement: nil,
           selected_customer: customer_id,
-          statement_error: "The statement could not be read. Try again."
+          statement_error: "The statement could not be read. Try again.",
+          statement_deliveries: [],
+          collection_cases: [],
+          work_error: nil,
+          work_notice: nil
         )
     end
   end
 
-  # -- helpers ----------------------------------------------------------------
+  defp load_customer_work(socket, mount, org_id, customer_id) do
+    scope = TenantRole.authenticated_scope(mount, org_id)
+
+    assign(socket,
+      statement_deliveries:
+        customer_rows(Erp.statement_delivery(mount), org_id, scope, customer_id),
+      collection_cases: customer_rows(Erp.collection_case(mount), org_id, scope, customer_id)
+    )
+  end
+
+  defp customer_rows(nil, _org_id, _scope, _customer_id), do: []
+
+  defp customer_rows(resource, org_id, scope, customer_id) do
+    resource
+    |> Ash.Query.filter(org_id == ^org_id and customer_id == ^customer_id)
+    |> Ash.Query.ensure_selected([:inserted_at, :updated_at])
+    |> Ash.Query.sort(inserted_at: :desc)
+    |> Ash.read(scope: scope)
+    |> case do
+      {:ok, rows} -> rows
+      {:error, _reason} -> []
+    end
+  end
+
+  defp collection_kind(value) when is_binary(value) do
+    Enum.find_value(ArCollections.kinds(), {:error, "Choose a collection action."}, fn kind ->
+      if Atom.to_string(kind) == value, do: {:ok, kind}
+    end)
+  end
+
+  defp collection_kind(_value), do: {:error, "Choose a collection action."}
+
+  defp parse_optional_date(nil), do: {:ok, nil}
+  defp parse_optional_date(""), do: {:ok, nil}
+  defp parse_optional_date(%Date{} = date), do: {:ok, date}
+
+  defp parse_optional_date(value) when is_binary(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> {:ok, date}
+      {:error, _reason} -> {:error, "Choose a valid promise date."}
+    end
+  end
+
+  defp parse_optional_date(_value), do: {:error, "Choose a valid promise date."}
+
+  defp parse_optional_cents(nil), do: {:ok, nil}
+  defp parse_optional_cents(""), do: {:ok, nil}
+  defp parse_optional_cents(cents) when is_integer(cents) and cents > 0, do: {:ok, cents}
+
+  defp parse_optional_cents(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {cents, ""} when cents > 0 -> {:ok, cents}
+      _other -> {:error, "Enter a positive promised amount in cents."}
+    end
+  end
+
+  defp parse_optional_cents(_value), do: {:error, "Enter a positive promised amount in cents."}
+
+  defp delivery_notice(%{status: :sent}), do: "Statement sent."
+  defp delivery_notice(%{status: :captured}), do: "Statement captured by the delivery sink."
+  defp delivery_notice(%{status: status}), do: "Statement delivery #{status}."
+
+  defp delivery_error(:adapter_unconfigured),
+    do: "Statement delivery is not configured for this workspace."
+
+  defp delivery_error(:suppressed), do: "The customer is suppressed from delivery."
+  defp delivery_error(:currency_required), do: "Choose a statement currency."
+  defp delivery_error(:unknown_currency), do: "That currency is not on the statement."
+  defp delivery_error(:nothing_to_deliver), do: "There is no statement to deliver."
+
+  defp delivery_error({:audit_failed, _reason}),
+    do: "The statement sent but its audit row failed."
+
+  defp delivery_error(_reason), do: "The statement could not be sent. Try again."
+
+  defp collection_error(:active_case_exists),
+    do: "An active case already covers this customer/currency."
+
+  defp collection_error(:nothing_outstanding),
+    do: "There is no positive outstanding balance to collect."
+
+  defp collection_error(:currency_required), do: "Choose a currency for the collection case."
+  defp collection_error(:case_resolved), do: "This collection case is resolved."
+  defp collection_error(:timeline_full), do: "This case's action timeline is full."
+  defp collection_error(:note_required), do: "Enter a note."
+  defp collection_error(:promise_required), do: "Enter a promise date or amount."
+  defp collection_error(:invalid_promised_cents), do: "Enter a positive promised amount."
+  defp collection_error(:title_too_long), do: "That note is too long."
+  defp collection_error(:note_too_long), do: "That note is too long."
+  defp collection_error(_reason), do: "The collection action could not be saved."
+
+  defp blank_to_nil(nil), do: nil
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(value), do: value
 
   defp parse_date(%Date{} = date), do: date
 
@@ -208,9 +549,50 @@ defmodule Samen.Web.Erp.ArAgingLive do
   defp short(id) when is_binary(id), do: String.slice(id, 0, 8)
   defp short(other), do: to_string(other)
 
+  defp stage_text(:reminder), do: "Reminder"
+  defp stage_text(:notice), do: "Notice"
+  defp stage_text(:final_notice), do: "Final notice"
+  defp stage_text(:collections), do: "Collections"
+  defp stage_text(other), do: to_string(other)
+
+  defp status_text(:open), do: "Open"
+  defp status_text(:paused), do: "Paused"
+  defp status_text(:resolved), do: "Resolved"
+  defp status_text(:sent), do: "Sent"
+  defp status_text(:captured), do: "Captured"
+  defp status_text(:blocked), do: "Blocked"
+  defp status_text(:suppressed), do: "Suppressed"
+  defp status_text(:failed), do: "Failed"
+  defp status_text(:queued), do: "Queued"
+  defp status_text(other), do: to_string(other)
+
+  defp collection_events(%{actions: actions}) when is_map(actions) do
+    case Map.get(actions, "events") do
+      events when is_list(events) -> events
+      _other -> []
+    end
+  end
+
+  defp collection_events(_collection_case), do: []
+
+  defp collection_actions(:paused), do: [note: "Note", resume: "Resume", resolve: "Resolve"]
+  defp collection_actions(_status), do: Erp.collection_actions()
+
   defp date_text(nil), do: "—"
   defp date_text(%Date{} = date), do: Date.to_iso8601(date)
   defp date_text(other), do: to_string(other)
+
+  defp event_next_action_text(%{"next_action_on" => next} = event)
+       when is_binary(next) and next != "" do
+    with {:ok, at, _offset} <- DateTime.from_iso8601(event["at"] || ""),
+         {:ok, next_on} <- Date.from_iso8601(next) do
+      "next action #{next} (#{Date.diff(next_on, DateTime.to_date(at))}d)"
+    else
+      _other -> "next action #{next}"
+    end
+  end
+
+  defp event_next_action_text(_event), do: nil
 
   defp days_text(nil), do: "—"
   defp days_text(0), do: "not due"
@@ -518,6 +900,210 @@ defmodule Samen.Web.Erp.ArAgingLive do
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              <div
+                :if={@work_notice}
+                id="ar-work-notice"
+                style="font-size:12px;color:var(--good, #047857);margin-top:10px"
+              >
+                {@work_notice}
+              </div>
+
+              <div
+                :if={@work_error}
+                id="ar-work-error"
+                style="font-size:12px;color:var(--bad, #b91c1c);margin-top:10px"
+              >
+                {@work_error}
+              </div>
+
+              <div
+                id="statement-delivery-panel"
+                class="card"
+                style="padding:12px;margin-top:12px;border:1px solid var(--border, #e5e7eb)"
+              >
+                <div style="font-size:12px;font-weight:700;margin-bottom:8px">Statement delivery</div>
+
+                <form
+                  :if={writable?(@samen_mount)}
+                  id="send-statement-form"
+                  phx-submit="send_statement"
+                  style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"
+                >
+                  <select name="currency" id="statement-currency" style="font-size:12px;padding:6px 8px">
+                    <option :for={currency <- @statement.currencies} value={currency}>{currency}</option>
+                  </select>
+                  <.button type="submit" id="send-statement-button">Send statement</.button>
+                </form>
+
+                <table
+                  :if={@statement_deliveries != []}
+                  id="statement-deliveries"
+                  style="width:100%;border-collapse:collapse;font-size:12px"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col" style="text-align:left;padding:4px 6px;color:var(--muted)">Attempted</th>
+                      <th scope="col" style="text-align:left;padding:4px 6px;color:var(--muted)">Status</th>
+                      <th scope="col" style="text-align:left;padding:4px 6px;color:var(--muted)">Currency</th>
+                      <th scope="col" style="text-align:right;padding:4px 6px;color:var(--muted)">Outstanding</th>
+                      <th scope="col" style="text-align:left;padding:4px 6px;color:var(--muted)">Provider ref</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr :for={delivery <- @statement_deliveries} id={"statement-delivery-#{delivery.id}"}>
+                      <td style="padding:4px 6px">{date_text(date_of(delivery.inserted_at))}</td>
+                      <td style="padding:4px 6px">{status_text(delivery.status)}</td>
+                      <td style="padding:4px 6px">{delivery.currency}</td>
+                      <td style="padding:4px 6px;text-align:right">{money(delivery.outstanding_cents)}</td>
+                      <td style="padding:4px 6px">{delivery.provider_message_id || "—"}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div
+                  :if={@statement_deliveries == []}
+                  id="statement-deliveries-empty"
+                  style="font-size:12px;color:var(--muted)"
+                >
+                  No statement delivery attempts yet.
+                </div>
+              </div>
+
+              <div
+                id="collections-panel"
+                class="card"
+                style="padding:12px;margin-top:12px;border:1px solid var(--border, #e5e7eb)"
+              >
+                <div
+                  style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px"
+                >
+                  <div style="font-size:12px;font-weight:700">Collections</div>
+                  <a
+                    id="ar-cadence-settings-link"
+                    href={"#{Samen.Web.Mount.label(@samen_mount, :erp_path, "/erp")}/ar-settings?org=#{@org_id}"}
+                    style="font-size:12px"
+                  >
+                    Cadence settings
+                  </a>
+                </div>
+
+                <div
+                  id="ar-cadence-summary"
+                  style="padding:8px 10px;margin-bottom:10px;background:var(--surface-2, #f9fafb);border-radius:6px"
+                >
+                  <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">
+                    Scheduled dunning
+                  </div>
+                  <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+                    <span :for={{key, label, enabled, days} <- cadence_rows(@cadence)} id={"ar-cadence-#{key}"}>
+                      <b>{label}:</b>
+                      {if enabled, do: "every #{days} days", else: "disabled"}
+                    </span>
+                  </div>
+                </div>
+
+                <%= if not Enum.any?(@collection_cases, &(&1.status != :resolved)) do %>
+                  <form
+                    :if={writable?(@samen_mount)}
+                    id="open-collection-case"
+                    phx-submit="open_collection_case"
+                    style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"
+                  >
+                    <select name="currency" id="collection-currency" style="font-size:12px;padding:6px 8px">
+                      <option :for={currency <- @statement.currencies} value={currency}>{currency}</option>
+                    </select>
+                    <input
+                      type="text"
+                      name="notes"
+                      id="collection-notes"
+                      placeholder="Opening note (optional)"
+                      style="font-size:12px;padding:6px 8px;min-width:200px"
+                    />
+                    <.button type="submit" id="open-collection-case-button">Open collection case</.button>
+                  </form>
+                  <div
+                    :if={@collection_cases == []}
+                    style="font-size:12px;color:var(--muted)"
+                  >
+                    No collection case for this customer.
+                  </div>
+                <% end %>
+
+                <div
+                  :for={collection_case <- @collection_cases}
+                    id={"collection-case-#{collection_case.id}"}
+                    style="padding:10px 0;border-top:1px solid var(--border, #f3f4f6)"
+                  >
+                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px">
+                      <b>{collection_case.currency}</b>
+                      <span>Status: <b>{status_text(collection_case.status)}</b></span>
+                      <span>Stage: <b>{stage_text(collection_case.stage)}</b></span>
+                      <span>Outstanding: <b>{money(collection_case.outstanding_cents)}</b></span>
+                      <span :if={collection_case.next_action_on}>Next: {date_text(collection_case.next_action_on)}</span>
+                      <span :if={collection_case.promise_to_pay_on}>
+                        Promise: {date_text(collection_case.promise_to_pay_on)}
+                        <span :if={collection_case.promised_cents}>({money(collection_case.promised_cents)})</span>
+                      </span>
+                    </div>
+
+                    <div :if={collection_events(collection_case) != []} style="margin-top:6px;font-size:12px">
+                      <div
+                        :for={event <- collection_events(collection_case)}
+                        style="color:var(--muted);padding:2px 0"
+                      >
+                        <b>{event["kind"]}</b>
+                        <span> · {event["at"]}</span>
+                        <span :if={event_next_action_text(event)}>
+                          · {event_next_action_text(event)}
+                        </span>
+                        <span :if={event["note"]}> · {event["note"]}</span>
+                      </div>
+                    </div>
+
+                    <form
+                      :if={writable?(@samen_mount) and collection_case.status != :resolved}
+                      id={"collection-action-form-#{collection_case.id}"}
+                      phx-submit="collection_action"
+                      style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"
+                    >
+                      <input type="hidden" name="case_id" value={collection_case.id} />
+                      <select
+                        name="kind"
+                        id={"collection-action-kind-#{collection_case.id}"}
+                        style="font-size:12px;padding:6px 8px"
+                      >
+                        <option :for={{kind, label} <- collection_actions(collection_case.status)} value={kind}>
+                          {label}
+                        </option>
+                      </select>
+                      <input
+                        type="text"
+                        name="note"
+                        id={"collection-action-note-#{collection_case.id}"}
+                        placeholder="Note"
+                        style="font-size:12px;padding:6px 8px;min-width:180px"
+                      />
+                      <input
+                        type="date"
+                        name="promise_to_pay_on"
+                        id={"collection-action-promise-date-#{collection_case.id}"}
+                        style="font-size:12px;padding:5px 7px"
+                      />
+                      <input
+                        type="number"
+                        name="promised_cents"
+                        id={"collection-action-promised-cents-#{collection_case.id}"}
+                        min="1"
+                        placeholder="Promised cents"
+                        style="font-size:12px;padding:6px 8px;width:130px"
+                      />
+                      <.button type="submit" id={"log-collection-action-#{collection_case.id}"}>
+                        Log action
+                      </.button>
+                    </form>
+                </div>
               </div>
             </div>
           </div>

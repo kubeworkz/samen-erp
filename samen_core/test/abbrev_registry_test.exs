@@ -175,14 +175,16 @@ defmodule Samen.AbbrevRegistryTest do
       # +3 in WS-ACCT Phase 16 (ADR-054): the Kubeworkz host's HR mount —
       # `she`/`seh`/`shl` (Employee/EmploymentEvent/LeaveRequest), every row
       # allocator-reserved.
-      # = 441 host entries across six hosts, including the three AP/AR
+      # +3 per-org collection cadence rows (`scq`/`fcf`/`ecq`).
+      # = 456 host entries across six hosts, including the three AP/AR
       # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`) and the #7 receipt
       # allocation rows (`sra`/`fra`/`eaa`).
       assert hosts["samenerp"] != nil
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
-      assert map_size(hosts["samenerp"]) == 131
-      assert map_size(hosts["samen_core"]) == 122
+      assert map_size(hosts["samenerp"]) == 134
+      assert map_size(hosts["samen_core"]) == 125
+      assert map_size(hosts["samen_web"]) == 107
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -544,6 +546,9 @@ defmodule Samen.AbbrevRegistryTest do
                  "sap" => "SamenCore.Support.FinanceFixture.ApInvoice",
                  "prc" => "SamenCore.Support.FinanceFixture.PaymentReceipt",
                  "sra" => "SamenCore.Support.FinanceFixture.ReceiptAllocation",
+                 "sdm" => "SamenCore.Support.FinanceFixture.StatementDelivery",
+                 "scl" => "SamenCore.Support.FinanceFixture.CollectionCase",
+                 "scq" => "SamenCore.Support.FinanceFixture.CollectionCadence",
                  "fav" => "SamenCore.Support.FinanceFixture.PostingAccount",
                  "sbp" => "SamenCore.Support.FinanceFixture.PaymentMirror",
                  # WS-ERP E3 (ADR-049 §3): the Inventory core's in-tree fixture
@@ -743,6 +748,9 @@ defmodule Samen.AbbrevRegistryTest do
                  "fai" => "Samen.WebTest.Erp.ApInvoice",
                  "frr" => "Samen.WebTest.Erp.PaymentReceipt",
                  "fra" => "Samen.WebTest.Erp.ReceiptAllocation",
+                 "fcl" => "Samen.WebTest.Erp.StatementDelivery",
+                 "fcc" => "Samen.WebTest.Erp.CollectionCase",
+                 "fcf" => "Samen.WebTest.Erp.CollectionCadence",
                  "fpa" => "Samen.WebTest.Erp.PostingAccount",
                  "fbg" => "Samen.WebTest.Erp.Budget",
                  "fbl" => "Samen.WebTest.Erp.BudgetLine",
@@ -817,6 +825,9 @@ defmodule Samen.AbbrevRegistryTest do
                  "ecp" => "Samenerp.Erp.ApInvoice",
                  "ecr" => "Samenerp.Erp.PaymentReceipt",
                  "eaa" => "Samenerp.Erp.ReceiptAllocation",
+                 "edm" => "Samenerp.Erp.StatementDelivery",
+                 "ecc" => "Samenerp.Erp.CollectionCase",
+                 "ecq" => "Samenerp.Erp.CollectionCadence",
                  "egr" => "Samenerp.Erp.GoodsReceipt",
                  "eni" => "Samenerp.Erp.Item",
                  "enl" => "Samenerp.Erp.StockLedger",
@@ -1105,7 +1116,10 @@ defmodule Samen.AbbrevRegistryTest do
       # three Finance hosts — samen_core `sdc`/`sdv`, samen_web `fcn`/`fvc`,
       # samenerp `ecn`/`evc` = 405 + 444 = 849 flat.)
       # (+3 #7 AR receipt allocations: `sra`/`fra`/`eaa` = 405 + 447 = 852 flat.)
-      assert map_size(Reg.load()) == 852
+      # (+6 #8 statement delivery + collections in the three Finance hosts:
+      # `sdm`/`scl`, `fcl`/`fcc`, `edm`/`ecc` = 405 + 453 = 858 flat.)
+      # (+3 per-org collection cadence: `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
+      assert map_size(Reg.load()) == 861
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

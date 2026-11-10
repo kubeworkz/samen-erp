@@ -24,7 +24,10 @@ defmodule Samen.WebTest.Erp do
     abbrevs: %{
       exchange_rate: "fex",
       org_fx_settings: "ofx",
-      journal_approval_policy: "wja"
+      journal_approval_policy: "wja",
+      statement_delivery: "fcl",
+      collection_case: "fcc",
+      collection_cadence: "fcf"
     },
     billing: [invoice: Samen.WebTest.Billing.Invoice],
     inventory: [

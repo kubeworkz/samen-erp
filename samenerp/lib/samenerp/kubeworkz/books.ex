@@ -51,6 +51,12 @@ defmodule Samenerp.Kubeworkz.Books do
       creates it only when missing; an operator's later disable/threshold edit
       is REPORTED as drift, never silently overwritten.
 
+    * **The AR collection cadence** — a non-default 7/14/21-day escalation
+      cadence (the kernel default is 14/21/30), all stages enabled. It gives
+      the demo org a realistic custom example on the AR settings screen. The
+      seed creates it only when missing; an operator's edit is reported as
+      drift, never silently overwritten.
+
     * **Functional currency CAD** (ADR-054 D15) on every account row.
 
   ## Idempotence and honesty
@@ -73,6 +79,17 @@ defmodule Samenerp.Kubeworkz.Books do
   alias Samenerp.Erp
 
   @currency "CAD"
+
+  # A deliberately non-default demo cadence: weekly notice, then final notice
+  # and collections on the next two weeks. The kernel defaults are 14/21/30.
+  @collection_cadence %{
+    notice_enabled: true,
+    final_notice_enabled: true,
+    collections_enabled: true,
+    notice_days: 7,
+    final_notice_days: 14,
+    collections_days: 21
+  }
 
   # ---------------------------------------------------------------------------
   # The chart of accounts — {code, name, kind, normal_side}
@@ -328,6 +345,9 @@ defmodule Samenerp.Kubeworkz.Books do
   @doc "The functional currency every account is opened in (ADR-054 D15)."
   def currency, do: @currency
 
+  @doc "The non-default collection cadence this seed opens (7/14/21 days, all stages enabled)."
+  def collection_cadence, do: @collection_cadence
+
   @doc """
   The fiscal year the seed's budget covers — the CURRENT calendar year, read at
   call time so a re-seed in January opens the new year's skeleton rather than
@@ -355,6 +375,7 @@ defmodule Samenerp.Kubeworkz.Books do
           threshold_cents: integer,
           drifted: [String.t()]
         },
+        collection_cadence: %{id: String.t(), created: boolean, drifted: [String.t()]},
         budget: %{id: String.t(), year: integer, created: boolean},
         unmapped: [atom()]
       }
@@ -369,6 +390,7 @@ defmodule Samenerp.Kubeworkz.Books do
     assets = seed_assets(org_id)
     reserves = seed_reserve_policies(org_id)
     approval = seed_journal_approval_policy(org_id)
+    cadence = seed_collection_cadence(org_id)
     budget = seed_budget(org_id)
 
     %{
@@ -379,6 +401,7 @@ defmodule Samenerp.Kubeworkz.Books do
       assets: assets,
       reserve_policies: reserves,
       journal_approval: approval,
+      collection_cadence: cadence,
       budget: budget,
       unmapped: @pending_meanings |> Map.keys() |> Enum.sort()
     }
@@ -632,6 +655,38 @@ defmodule Samenerp.Kubeworkz.Books do
     end
   end
 
+  defp seed_collection_cadence(org_id) do
+    case collection_cadence_by_org(org_id) do
+      nil ->
+        cadence =
+          Erp.CollectionCadence
+          |> Ash.Changeset.for_create(
+            :create,
+            Map.put(@collection_cadence, :org_id, org_id),
+            authorize?: false
+          )
+          |> Ash.create!(authorize?: false)
+
+        %{id: cadence.id, created: true, drifted: []}
+
+      existing ->
+        drift =
+          Enum.flat_map(@collection_cadence, fn {key, expected} ->
+            actual = Map.fetch!(existing, key)
+
+            if actual == expected do
+              []
+            else
+              [
+                "collection cadence #{key} #{inspect(actual)} ≠ #{inspect(expected)}"
+              ]
+            end
+          end)
+
+        %{id: existing.id, created: false, drifted: drift}
+    end
+  end
+
   defp seed_budget(org_id) do
     year = fiscal_year()
 
@@ -834,6 +889,12 @@ defmodule Samenerp.Kubeworkz.Books do
 
   defp journal_approval_policy(org_id) do
     Erp.JournalApprovalPolicy
+    |> Ash.Query.filter(org_id == ^org_id)
+    |> Ash.read_one!(authorize?: false)
+  end
+
+  defp collection_cadence_by_org(org_id) do
+    Erp.CollectionCadence
     |> Ash.Query.filter(org_id == ^org_id)
     |> Ash.read_one!(authorize?: false)
   end

@@ -7,8 +7,8 @@ defmodule Samen.Scopes.Finance do
   with the host's `otp_app`, `repo`, and `domain`.
 
   ## Resources — `account · journal_entry · journal_line · ap_invoice ·
-  ## payment_receipt · receipt_allocation · credit_note · vendor_credit ·
-  ## posting_account`
+  ## payment_receipt · receipt_allocation · statement_delivery · collection_case ·
+  ## collection_cadence · credit_note · vendor_credit · posting_account`
 
   - **`Account`** — the chart of accounts (Tier-0 config row): `code` (unique
     per org), `name`, `kind ∈ {asset, liability, equity, income, expense}`,
@@ -44,6 +44,19 @@ defmodule Samen.Scopes.Finance do
     receipt to a same-org Billing invoice. Cash already moved at receipt
     posting, so allocation only moves the subledger; the database keeps one
     row per `{org, receipt, invoice}`.
+  - **`StatementDelivery`** — one immutable AR statement send attempt: the
+    currency/totals snapshot, the token-only delivery id, and the honest
+    outcome. No email is stored; the delivery chokepoint resolves the
+    recipient.
+  - **`CollectionCase`** — a manual dunning case for one customer/currency,
+    derived from the ledger AR read when opened, with an append-only action
+    timeline. `CollectionDunningWorker` advances due cases on the canonical
+    daily cron, idempotently, through the same timeline. It never posts a
+    journal entry.
+  - **`CollectionCadence`** — per-org settings for the automated escalation
+    stages (`:notice`, `:final_notice`, `:collections`): whether each is
+    enabled and its interval in days. A missing row keeps the defaults. The
+    opening reminder is the case's first stage and is not automated.
   - **`CreditNote`** — an AR adjustment document (E12): `customer_id`,
     `number`, dates, `amount_cents`, `kind ∈ {credit, write_off}`, an optional
     `invoice_id`, and `status ∈ {draft, open, applied, void}`. `:open` posts
@@ -335,6 +348,9 @@ defmodule Samen.Scopes.Finance do
     ap_invoice: "fai",
     payment_receipt: "frr",
     receipt_allocation: "fra",
+    statement_delivery: "fcl",
+    collection_case: "fcc",
+    collection_cadence: "fcf",
     credit_note: "fcn",
     vendor_credit: "fvc",
     posting_account: "fpa",
@@ -423,6 +439,9 @@ defmodule Samen.Scopes.Finance do
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
     receipt_mod = Module.concat(namespace, PaymentReceipt)
     receipt_allocation_mod = Module.concat(namespace, ReceiptAllocation)
+    statement_delivery_mod = Module.concat(namespace, StatementDelivery)
+    collection_case_mod = Module.concat(namespace, CollectionCase)
+    collection_cadence_mod = Module.concat(namespace, CollectionCadence)
     credit_note_mod = Module.concat(namespace, CreditNote)
     vendor_credit_mod = Module.concat(namespace, VendorCredit)
     posting_account_mod = Module.concat(namespace, PostingAccount)
@@ -467,6 +486,8 @@ defmodule Samen.Scopes.Finance do
 
       require Samen.Scopes.Finance.ReceiptAllocationBlueprint
 
+      require Samen.Scopes.Finance.ArCollectionsBlueprint
+
       require Samen.Scopes.Finance.PeriodBlueprint
 
       require Samen.Scopes.Finance.RevenueBlueprint
@@ -495,6 +516,9 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(ap_invoice_mod))
         resource(unquote(receipt_mod))
         resource(unquote(receipt_allocation_mod))
+        resource(unquote(statement_delivery_mod))
+        resource(unquote(collection_case_mod))
+        resource(unquote(collection_cadence_mod))
         resource(unquote(credit_note_mod))
         resource(unquote(vendor_credit_mod))
         resource(unquote(posting_account_mod))
@@ -905,6 +929,32 @@ defmodule Samen.Scopes.Finance do
         unquote(domain),
         unquote(repo),
         unquote(abbrevs.receipt_allocation)
+      )
+
+      # AR statement delivery + collections (#8): the immutable send audit and
+      # the manual dunning case, both Finance-owned and ledger-derived.
+      Samen.Scopes.Finance.ArCollectionsBlueprint.define_statement_delivery(
+        unquote(statement_delivery_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.statement_delivery)
+      )
+
+      Samen.Scopes.Finance.ArCollectionsBlueprint.define_collection_case(
+        unquote(collection_case_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.collection_case)
+      )
+
+      Samen.Scopes.Finance.ArCollectionsBlueprint.define_collection_cadence(
+        unquote(collection_cadence_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.collection_cadence)
       )
 
       # WS-ERP E12: the AR/AP adjustment documents. Credit notes post against

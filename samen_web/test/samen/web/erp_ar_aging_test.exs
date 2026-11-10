@@ -11,10 +11,17 @@ defmodule Samen.Web.ErpArAgingTest do
   """
   use Samen.WebTest.DataCase, async: false
 
-  alias Samen.Scopes.Finance.ArReceiptApplication
+  alias Samen.Scopes.Finance.{ArReceiptApplication, CollectionDunning}
   alias Samen.Web.Erp.ArAgingLive
   alias Samen.WebTest.Billing.Invoice
-  alias Samen.WebTest.Erp.{Account, PaymentReceipt, PostingAccount}
+
+  alias Samen.WebTest.Erp.{
+    Account,
+    CollectionCadence,
+    CollectionCase,
+    PaymentReceipt,
+    PostingAccount
+  }
 
   @org "55555555-6666-7777-8888-999999999999"
   @as_of "2026-11-08"
@@ -272,5 +279,336 @@ defmodule Samen.Web.ErpArAgingTest do
     socket = event(open(), "statement", %{"customer_id" => ""})
 
     assert render(socket) =~ "Choose a customer."
+  end
+
+  test "sends a statement and renders the immutable delivery audit" do
+    previous_delivery_env = Application.get_env(:samen_core, :delivery_env)
+    Application.put_env(:samen_core, :delivery_env, :test)
+
+    on_exit(fn ->
+      if previous_delivery_env,
+        do: Application.put_env(:samen_core, :delivery_env, previous_delivery_env),
+        else: Application.delete_env(:samen_core, :delivery_env)
+    end)
+
+    customer_id = customer!()
+    invoice = invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket =
+      open()
+      |> event("statement", %{"customer_id" => customer_id})
+      |> event("send_statement", %{"currency" => "USD"})
+
+    assert socket.assigns.work_error == nil
+    assert socket.assigns.work_notice =~ "captured"
+    assert [delivery] = socket.assigns.statement_deliveries
+    assert delivery.status == :captured
+    assert delivery.invoice_ids == [invoice.id]
+    assert delivery.outstanding_cents == 10_000
+
+    html = render(socket)
+    assert html =~ ~s(id="statement-delivery-panel")
+    assert html =~ ~s(id="statement-deliveries")
+    assert html =~ ~s(id="statement-delivery-#{delivery.id}")
+    assert html =~ "Captured"
+  end
+
+  test "opens a collection case and appends a notice to its timeline" do
+    customer_id = customer!()
+    invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket =
+      open()
+      |> event("statement", %{"customer_id" => customer_id})
+      |> event("open_collection_case", %{"currency" => "USD", "notes" => "First call"})
+
+    assert socket.assigns.work_error == nil
+    assert [collection_case] = socket.assigns.collection_cases
+    assert collection_case.stage == :reminder
+    assert collection_case.outstanding_cents == 10_000
+
+    socket =
+      event(socket, "collection_action", %{
+        "case_id" => collection_case.id,
+        "kind" => "notice",
+        "note" => "Notice emailed",
+        "promise_to_pay_on" => "",
+        "promised_cents" => ""
+      })
+
+    assert socket.assigns.work_error == nil
+    assert [updated] = socket.assigns.collection_cases
+    assert updated.stage == :notice
+    assert length(updated.actions["events"]) == 2
+    notice_event = hd(updated.actions["events"])
+    assert notice_event["kind"] == "notice"
+    assert notice_event["next_action_on"]
+    {:ok, notice_at, _offset} = DateTime.from_iso8601(notice_event["at"])
+
+    notice_gap =
+      Date.diff(
+        Date.from_iso8601!(notice_event["next_action_on"]),
+        DateTime.to_date(notice_at)
+      )
+
+    html = render(socket)
+    assert html =~ ~s(id="collections-panel")
+    assert html =~ ~s(id="collection-case-#{updated.id}")
+    assert html =~ "Notice"
+    assert html =~ "Notice emailed"
+    assert html =~ "next action #{notice_event["next_action_on"]} (#{notice_gap}d)"
+    assert html =~ ~s(id="ar-cadence-summary")
+    assert html =~ "every 14 days"
+    assert html =~ "every 21 days"
+    assert html =~ "every 30 days"
+    assert html =~ ~s(id="ar-cadence-settings-link")
+    assert html =~ ~s(href="/erp/ar-settings?org=#{@org}")
+  end
+
+  test "renders the org's configured cadence in the collections panel" do
+    CollectionCadence
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        notice_enabled: false,
+        notice_days: 7,
+        final_notice_enabled: true,
+        final_notice_days: 10,
+        collections_enabled: true,
+        collections_days: 20
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+
+    customer_id = customer!()
+    invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket = open() |> event("statement", %{"customer_id" => customer_id})
+    html = render(socket)
+
+    assert html =~ ~s(id="ar-cadence-summary")
+    assert html =~ "disabled"
+    assert html =~ "every 10 days"
+    assert html =~ "every 20 days"
+    refute html =~ "every 14 days"
+    assert html =~ ~s(id="ar-cadence-settings-link")
+    assert html =~ ~s(href="/erp/ar-settings?org=#{@org}")
+  end
+
+  test "renders timeline gaps from the org's non-default cadence" do
+    CollectionCadence
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        notice_enabled: true,
+        notice_days: 3,
+        final_notice_enabled: true,
+        final_notice_days: 10,
+        collections_enabled: true,
+        collections_days: 25
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+
+    customer_id = customer!()
+    invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket =
+      open()
+      |> event("statement", %{"customer_id" => customer_id})
+      |> event("open_collection_case", %{"currency" => "USD", "notes" => "Custom cadence"})
+
+    assert [collection_case] = socket.assigns.collection_cases
+    assert collection_case.next_action_on == ~D[2026-11-15]
+
+    for {today, stage} <- [
+          {~D[2026-11-15], :notice},
+          {~D[2026-11-18], :final_notice},
+          {~D[2026-11-28], :collections}
+        ] do
+      assert {:ok, %{recorded: [%{stage: ^stage}]}} =
+               CollectionDunning.run(
+                 collection_case: CollectionCase,
+                 collection_cadence: CollectionCadence,
+                 case_id: collection_case.id,
+                 today: today,
+                 at: DateTime.new!(today, ~T[09:00:00], "Etc/UTC")
+               )
+    end
+
+    socket = event(socket, "statement", %{"customer_id" => customer_id})
+    assert socket.assigns.work_error == nil
+    assert [updated] = socket.assigns.collection_cases
+    assert updated.stage == :collections
+    assert updated.next_action_on == ~D[2026-12-23]
+
+    html = render(socket)
+    assert html =~ "next action 2026-11-18 (3d)"
+    assert html =~ "next action 2026-11-28 (10d)"
+    assert html =~ "next action 2026-12-23 (25d)"
+    assert html =~ "every 3 days"
+    assert html =~ "every 10 days"
+    assert html =~ "every 25 days"
+  end
+
+  test "skips a disabled custom stage without a stale timeline gap" do
+    CollectionCadence
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        notice_enabled: false,
+        notice_days: 3,
+        final_notice_enabled: true,
+        final_notice_days: 10,
+        collections_enabled: true,
+        collections_days: 25
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+
+    customer_id = customer!()
+    invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket =
+      open()
+      |> event("statement", %{"customer_id" => customer_id})
+      |> event("open_collection_case", %{"currency" => "USD", "notes" => "Skip notice"})
+
+    assert [collection_case] = socket.assigns.collection_cases
+
+    for {today, stage} <- [
+          {~D[2026-11-15], :final_notice},
+          {~D[2026-11-25], :collections}
+        ] do
+      assert {:ok, %{recorded: [%{stage: ^stage}]}} =
+               CollectionDunning.run(
+                 collection_case: CollectionCase,
+                 collection_cadence: CollectionCadence,
+                 case_id: collection_case.id,
+                 today: today,
+                 at: DateTime.new!(today, ~T[09:00:00], "Etc/UTC")
+               )
+    end
+
+    socket = event(socket, "statement", %{"customer_id" => customer_id})
+    assert socket.assigns.work_error == nil
+    assert [updated] = socket.assigns.collection_cases
+    assert updated.stage == :collections
+    assert updated.next_action_on == ~D[2026-12-20]
+
+    assert Enum.map(updated.actions["events"], & &1["kind"]) == [
+             "collections",
+             "final_notice",
+             "opened"
+           ]
+
+    html = render(socket)
+    assert html =~ "next action 2026-11-25 (10d)"
+    assert html =~ "next action 2026-12-20 (25d)"
+    refute html =~ "next action 2026-11-18 (3d)"
+    refute html =~ "<b>notice</b>"
+    refute html =~ "every 3 days"
+    assert html =~ "every 10 days"
+    assert html =~ "every 25 days"
+  end
+
+  test "records no event or gap label when every custom stage is disabled" do
+    CollectionCadence
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        notice_enabled: false,
+        notice_days: 3,
+        final_notice_enabled: false,
+        final_notice_days: 10,
+        collections_enabled: false,
+        collections_days: 25
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+
+    customer_id = customer!()
+    invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket =
+      open()
+      |> event("statement", %{"customer_id" => customer_id})
+      |> event("open_collection_case", %{"currency" => "USD", "notes" => "All stages off"})
+
+    assert [collection_case] = socket.assigns.collection_cases
+    assert collection_case.next_action_on == ~D[2026-11-15]
+
+    assert {:ok,
+            %{
+              recorded: [],
+              skipped: [%{id: skipped_id, reason: :no_enabled_stage}]
+            }} =
+             CollectionDunning.run(
+               collection_case: CollectionCase,
+               collection_cadence: CollectionCadence,
+               case_id: collection_case.id,
+               today: ~D[2026-11-15],
+               at: ~U[2026-11-15 09:00:00Z]
+             )
+
+    assert skipped_id == collection_case.id
+
+    socket = event(socket, "statement", %{"customer_id" => customer_id})
+    assert socket.assigns.work_error == nil
+    assert [updated] = socket.assigns.collection_cases
+    assert updated.stage == :reminder
+    assert updated.status == :open
+    assert updated.next_action_on == ~D[2026-11-15]
+    assert Enum.map(updated.actions["events"], & &1["kind"]) == ["opened"]
+
+    html = render(socket)
+    assert html =~ "Stage: <b>Reminder</b>"
+    refute html =~ "next action"
+    refute html =~ "every 3 days"
+    refute html =~ "every 10 days"
+    refute html =~ "every 25 days"
+    assert html =~ "disabled"
+  end
+
+  test "renders a paused case without a next-action gap label" do
+    customer_id = customer!()
+    invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
+
+    socket =
+      open()
+      |> event("statement", %{"customer_id" => customer_id})
+      |> event("open_collection_case", %{"currency" => "USD", "notes" => "Pause check"})
+
+    assert [collection_case] = socket.assigns.collection_cases
+
+    socket =
+      event(socket, "collection_action", %{
+        "case_id" => collection_case.id,
+        "kind" => "pause",
+        "note" => "Customer requested a pause",
+        "promise_to_pay_on" => "",
+        "promised_cents" => ""
+      })
+
+    assert socket.assigns.work_error == nil
+    assert [updated] = socket.assigns.collection_cases
+    assert updated.status == :paused
+    assert updated.next_action_on == nil
+    assert Enum.map(updated.actions["events"], & &1["kind"]) == ["pause", "opened"]
+
+    html = render(socket)
+    assert html =~ "Status: <b>Paused</b>"
+    assert html =~ "Stage: <b>Reminder</b>"
+    assert html =~ "Customer requested a pause"
+    refute html =~ "next action"
+    refute html =~ "Next: 2026-11-15"
   end
 end

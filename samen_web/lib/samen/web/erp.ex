@@ -206,6 +206,10 @@ defmodule Samen.Web.Erp do
   @spec ar_aging_label() :: String.t()
   def ar_aging_label, do: "AR aging"
 
+  @doc "The AR collections cadence settings page's label (the nav item + page heading)."
+  @spec ar_settings_label() :: String.t()
+  def ar_settings_label, do: "AR settings"
+
   @doc """
   The org's AP bill resource (`ApInvoice`), DERIVED from the host's mounted
   Finance namespace. `nil` when the host has not mounted that scope — the
@@ -228,6 +232,45 @@ defmodule Samen.Web.Erp do
   """
   @spec receipt_allocation(Mount.t()) :: module() | nil
   def receipt_allocation(%Mount{} = mount), do: derived(mount, :ReceiptAllocation)
+
+  @doc """
+  The immutable AR statement-delivery audit resource (`StatementDelivery`),
+  DERIVED from the host's mounted Finance namespace.
+  """
+  @spec statement_delivery(Mount.t()) :: module() | nil
+  def statement_delivery(%Mount{} = mount), do: derived(mount, :StatementDelivery)
+
+  @doc """
+  The manual AR collections resource (`CollectionCase`), DERIVED from the
+  host's mounted Finance namespace.
+  """
+  @spec collection_case(Mount.t()) :: module() | nil
+  def collection_case(%Mount{} = mount), do: derived(mount, :CollectionCase)
+
+  @doc """
+  The per-org scheduled dunning settings (`CollectionCadence`), DERIVED from
+  the host's mounted Finance namespace.
+  """
+  @spec collection_cadence(Mount.t()) :: module() | nil
+  def collection_cadence(%Mount{} = mount), do: derived(mount, :CollectionCadence)
+
+  @doc """
+  The collection action kinds the case timeline accepts, with display labels.
+  """
+  @spec collection_actions() :: [{atom(), String.t()}, ...]
+  def collection_actions do
+    [
+      note: "Note",
+      reminder: "Reminder",
+      notice: "Notice",
+      final_notice: "Final notice",
+      collections: "Send to collections",
+      promise: "Promise to pay",
+      pause: "Pause",
+      resume: "Resume",
+      resolve: "Resolve"
+    ]
+  end
 
   @doc """
   The org's chart-of-accounts resource (`Account`), DERIVED from the host's

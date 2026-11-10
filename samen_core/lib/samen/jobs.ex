@@ -196,6 +196,12 @@ defmodule Samen.Jobs do
       incurred-cost releases — through the governed `:recognize` action. Monthly on the
       1st at 00:30 UTC, after the month's activity is complete; a host with no books wired
       is a no-op, and a schedule with nothing due posts nothing.)
+
+    - `"10 1 * * *"` → `Samen.Scopes.Finance.CollectionDunningWorker` (the
+      daily AR collections sweep: advances every open `CollectionCase` whose
+      `next_action_on` is due to its next dunning step, with an idempotent
+      timeline key so a retry cannot duplicate the action. A host with no
+      collection case wired is a no-op.)
   """
   @spec default_crontab() :: [{String.t(), module()}]
   def default_crontab do
@@ -221,7 +227,11 @@ defmodule Samen.Jobs do
       # WS-ACCT Phase 8 (ADR-054 D9) — the monthly depreciation sweep, on the 1st
       # at 00:45 UTC. The run defaults to the month that just ended, and its
       # per-{asset, period} anchor makes a retry a clean no-op.
-      {"45 0 1 * *", Samen.Scopes.Finance.DepreciationWorker}
+      {"45 0 1 * *", Samen.Scopes.Finance.DepreciationWorker},
+      # AR collections dunning — daily at 01:10 UTC. The run advances only
+      # open cases whose next_action_on has arrived; its per-case/due-date
+      # idempotency key makes a retry a clean no-op.
+      {"10 1 * * *", Samen.Scopes.Finance.CollectionDunningWorker}
     ] ++ web_crontab()
   end
 

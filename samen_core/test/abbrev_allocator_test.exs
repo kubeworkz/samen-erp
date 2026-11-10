@@ -343,8 +343,12 @@ defmodule Samen.Abbrev.AllocatorTest do
       # -> 39_759 bytes, 849 flat (plus the six #6 adjustment-document rows).
       # +3 #7 AR receipt allocations (`sra`/`fra`/`eaa`)
       # -> 39_925 bytes, 852 flat.
-      assert byte_size(committed) == 39_925
-      assert map_size(R.load()) == 852
+      # +6 #8 statement delivery + collections in the three Finance hosts
+      # -> 40_248 bytes, 858 flat.
+      # +3 per-org collection cadence (`scq`/`fcf`/`ecq`)
+      # -> 40_414 bytes, 861 flat.
+      assert byte_size(committed) == 40_414
+      assert map_size(R.load()) == 861
     end
   end
 
