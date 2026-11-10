@@ -28,6 +28,7 @@ defmodule Samen.Web.ErpApPaymentsTest do
     ApAchArtifact,
     ApPaymentReversal,
     ApPaymentRun,
+    ApPaymentRunRecord,
     VendorPaymentProfile
   }
 
@@ -172,6 +173,37 @@ defmodule Samen.Web.ErpApPaymentsTest do
         payment_date: ~D[2026-11-08],
         reference: reference
       )
+
+    run
+  end
+
+  # A run recorded before each snapshot payment carried its own vendor ID.
+  # The bill is real so the page's approval path still executes normally.
+  defp legacy_pending_run!(bill, reference) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    {:ok, run} =
+      %ApPaymentRunRecord{}
+      |> ApPaymentRunRecord.changeset(%{
+        org_id: @org,
+        reference: reference,
+        vendor_id: bill.vendor_id,
+        payment_date: ~D[2026-11-08],
+        status: :pending_approval,
+        total_cents: 4_000,
+        bill_count: 1,
+        payments: [
+          %{
+            "bill_id" => bill.id,
+            "number" => bill.number,
+            "due_date" => bill.due_date,
+            "amount_cents" => 4_000
+          }
+        ],
+        requested_by: "requester:other",
+        requested_at: now
+      })
+      |> Samen.WebTest.Repo.insert()
 
     run
   end
@@ -816,5 +848,48 @@ defmodule Samen.Web.ErpApPaymentsTest do
     refute second_ach.assigns.ach_file =~ "BILL-7101"
 
     assert length(ApAchArtifact.list(Samen.WebTest.Repo, @org, run.id)) == 2
+  end
+
+  test "a legacy single-vendor run builds one ACH file from the header vendor" do
+    seed_posting_accounts()
+    bill = bill!(%{number: "LEGACY-ACH-1"})
+    run = legacy_pending_run!(bill, "LEGACY-ACH-1")
+
+    approved = event(open(), "approve", %{"run_id" => run.id})
+
+    assert approved.assigns.run.status == :paid
+    assert approved.assigns.run.vendor_id == bill.vendor_id
+    assert [payment] = approved.assigns.run.payments
+    refute Map.has_key?(payment, "vendor_id")
+
+    assert {:ok, profile} =
+             VendorPaymentProfile.register(
+               repo: Samen.WebTest.Repo,
+               scope: requester_scope(@org),
+               vendor_id: bill.vendor_id,
+               bank_name: "First Sample Bank",
+               account_holder: "Vendor Legacy",
+               account_number: "123456789",
+               routing_number: "011000015",
+               account_type: "checking"
+             )
+
+    assert profile.status == :unverified
+
+    verified = event(approved, "verify_profile", %{"vendor_id" => bill.vendor_id})
+    assert verified.assigns.vendor_profile.status == :verified
+
+    originator = %{
+      "originator_name" => "Sample Co",
+      "originator_id" => "1123456789",
+      "originator_dfi" => "021000021"
+    }
+
+    built = event(verified, "ach", originator)
+
+    assert built.assigns.ach_error == nil
+    assert built.assigns.ach_name == "ach-LEGACY-ACH-1.ach"
+    assert built.assigns.ach_file =~ "LEGACY-ACH-1"
+    assert length(ApAchArtifact.list(Samen.WebTest.Repo, @org, run.id)) == 1
   end
 end
