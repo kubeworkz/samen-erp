@@ -46,7 +46,13 @@ defmodule Samen.FinanceE2ScopeTest do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.{ApInvoiceCapture, ApPaymentReversal, ApPaymentRun}
+  alias Samen.Scopes.Finance.{
+    ApInvoiceCapture,
+    ApPaymentReversal,
+    ApPaymentRun,
+    ApPaymentRunRecord
+  }
+
   alias Samen.Scopes.Finance.ReconcilePayments
   alias Samen.Scopes.Finance.Reconcile
 
@@ -969,6 +975,35 @@ defmodule Samen.FinanceE2ScopeTest do
       assert csv =~ second_vendor
 
       assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
+    end
+
+    test "legacy snapshots without per-payment vendor IDs fall back to the header vendor" do
+      vendor_id = Ash.UUID.generate()
+      bill_id = Ash.UUID.generate()
+
+      run = %ApPaymentRunRecord{
+        reference: "LEGACY-RUN",
+        payment_date: ~D[2026-09-22],
+        vendor_id: vendor_id,
+        total_cents: 4_000,
+        bill_count: 1,
+        payments: [
+          %{
+            "bill_id" => bill_id,
+            "number" => "LEGACY-1",
+            "due_date" => ~D[2026-10-01],
+            "amount_cents" => 4_000
+          }
+        ]
+      }
+
+      assert ApPaymentRun.vendor_ids(run) == [vendor_id]
+      assert ApPaymentRun.payments_for_vendor(run, vendor_id) == run.payments
+      assert ApPaymentRun.payments_for_vendor(run, Ash.UUID.generate()) == []
+
+      csv = ApPaymentRun.remittance_csv(run)
+      assert csv =~ "LEGACY-1"
+      assert csv =~ vendor_id
     end
 
     test "a paid run is reversed only by a distinct admin, voiding the payment and restoring the bill",

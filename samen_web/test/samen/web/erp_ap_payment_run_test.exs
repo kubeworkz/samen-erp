@@ -14,7 +14,7 @@ defmodule Samen.Web.ErpApPaymentRunTest do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.{ApAchArtifact, ApPaymentReversal, ApPaymentRun}
+  alias Samen.Scopes.Finance.{ApAchArtifact, ApPaymentReversal, ApPaymentRun, ApPaymentRunRecord}
   alias Samen.Web.Erp.{ApPaymentRunLive, ApPaymentRunPrintLive}
   alias Samen.WebTest.Erp.{Account, ApInvoice, JournalEntry, PostingAccount}
 
@@ -165,6 +165,53 @@ defmodule Samen.Web.ErpApPaymentRunTest do
       )
 
     run
+  end
+
+  # Pre-per-payment-vendor snapshots keep the header vendor only. Build one
+  # through the schema so the print/audit fallbacks are exercised against a real
+  # persisted run, including the table's immutable-run trigger.
+  defp legacy_paid_run!(reference) do
+    vendor_id = Ash.UUID.generate()
+    bill_id = Ash.UUID.generate()
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    {:ok, pending} =
+      %ApPaymentRunRecord{}
+      |> ApPaymentRunRecord.changeset(%{
+        org_id: @org,
+        reference: reference,
+        vendor_id: vendor_id,
+        vendor_name: "Legacy Vendor",
+        remittance_address: "PO Box 1\nOld Town, IL 60000",
+        payment_date: ~D[2026-11-08],
+        status: :pending_approval,
+        total_cents: 4_000,
+        bill_count: 1,
+        payments: [
+          %{
+            "bill_id" => bill_id,
+            "number" => "LEGACY-1",
+            "due_date" => ~D[2026-11-30],
+            "amount_cents" => 4_000
+          }
+        ],
+        requested_by: "requester:other",
+        requested_at: now
+      })
+      |> Samen.WebTest.Repo.insert()
+
+    {:ok, paid} =
+      pending
+      |> Ecto.Changeset.change(
+        status: :paid,
+        approved_by: "approver:other",
+        approved_at: now,
+        executed_at: now,
+        remittance_csv: ApPaymentRun.remittance_csv(pending)
+      )
+      |> Samen.WebTest.Repo.update()
+
+    paid
   end
 
   # -- read -------------------------------------------------------------------
@@ -371,6 +418,32 @@ defmodule Samen.Web.ErpApPaymentRunTest do
     assert print_html =~ "BILL-7202"
     assert print_html =~ "$40.00"
     assert print_html =~ "$80.00"
+  end
+
+  test "legacy snapshots without vendor_id fall back to the header vendor" do
+    paid = legacy_paid_run!("LEGACY-RUN-1")
+
+    assert [payment] = paid.payments
+    refute Map.has_key?(payment, "vendor_id")
+
+    html = render(open(paid.id))
+
+    assert html =~ "Vendor account"
+    assert html =~ paid.vendor_id
+    assert html =~ "Legacy Vendor"
+    assert html =~ "LEGACY-1"
+    assert html =~ "$40.00"
+    assert html =~ ~s(id="ap-run-payment-0")
+
+    print_html = render_print(open_print(paid.id))
+
+    assert print_html =~ ~s(id="remittance-vendor-#{paid.vendor_id}")
+    assert print_html =~ ~s(class="payee-name")
+    assert print_html =~ "Legacy Vendor"
+    assert print_html =~ "PO Box 1"
+    assert print_html =~ "LEGACY-1"
+    assert print_html =~ "Total paid"
+    assert print_html =~ "$40.00"
   end
 
   test "printed advice falls back to the vendor account when no payee details were captured" do
