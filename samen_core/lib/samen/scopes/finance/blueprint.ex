@@ -731,6 +731,12 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 :ar_clearing,
                 :cash,
                 :income,
+                # WS-ERP E12: adjustment-document clearing and bad debt. The
+                # credit-note and vendor-credit legs balance against AR/AP;
+                # a direct write-off debits bad debt expense.
+                :credit_note_clearing,
+                :vendor_credit_clearing,
+                :bad_debt_expense,
                 # WIP and finished goods (fabless foundry/photonics/assembly legs)
                 :wip_foundry,
                 :wip_photonics,

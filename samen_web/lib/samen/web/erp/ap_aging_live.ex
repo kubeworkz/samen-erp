@@ -98,6 +98,7 @@ defmodule Samen.Web.Erp.ApAgingLive do
 
       case ApAging.for_org(
              ap_invoice: ap_invoice,
+             vendor_credit: Erp.vendor_credit(mount),
              org_id: org_id,
              scope: scope,
              as_of: as_of
@@ -161,6 +162,7 @@ defmodule Samen.Web.Erp.ApAgingLive do
 
     case ApAging.statement_for_vendor(
            ap_invoice: ap_invoice,
+           vendor_credit: Erp.vendor_credit(mount),
            repo: mount.repo,
            org_id: org_id,
            scope: scope,

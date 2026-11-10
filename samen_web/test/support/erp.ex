@@ -26,6 +26,7 @@ defmodule Samen.WebTest.Erp do
       org_fx_settings: "ofx",
       journal_approval_policy: "wja"
     },
+    billing: [invoice: Samen.WebTest.Billing.Invoice],
     inventory: [
       item: Samen.WebTest.Erp.Item,
       level: Samen.WebTest.Erp.StockLevel,

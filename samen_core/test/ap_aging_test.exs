@@ -179,6 +179,7 @@ defmodule Samen.ApAgingTest do
     assert statement.totals == %{
              billed_cents: 21_500,
              paid_cents: 7_500,
+             credited_cents: 0,
              outstanding_cents: 14_000
            }
 
@@ -193,6 +194,44 @@ defmodule Samen.ApAgingTest do
     assert statement.aging.buckets.days_31_60 == 4_000
 
     assert statement.aging.vendor_ids == ["vendor-1"]
+  end
+
+  test "posted vendor credits net the bill; draft and void credits do not" do
+    bills = [bill("credited", amount_cents: 10_000, due_date: ~D[2026-03-01])]
+
+    credits = [
+      %{id: "credit-1", bill_id: "credited", amount_cents: 3_000, status: :open},
+      %{id: "credit-2", bill_id: "credited", amount_cents: 1_000, status: :applied},
+      %{id: "draft", bill_id: "credited", amount_cents: 9_000, status: :draft},
+      %{id: "void", bill_id: "credited", amount_cents: 9_000, status: :void}
+    ]
+
+    result = ApAging.aging(bills, as_of: @as_of, vendor_credits: credits)
+    assert [row] = result.bills
+    assert row.credited_cents == 4_000
+    assert row.outstanding_cents == 6_000
+    assert result.total_cents == 6_000
+
+    statement =
+      ApAging.statement(bills, [], "vendor-1", as_of: @as_of, vendor_credits: credits)
+
+    assert [row] = statement.bills
+    assert row.credited_cents == 4_000
+    assert statement.totals.credited_cents == 4_000
+    assert statement.totals.outstanding_cents == 6_000
+    assert Enum.map(statement.vendor_credits, & &1.id) == ["credit-1", "credit-2"]
+  end
+
+  test "a fully credited bill is not aged" do
+    result =
+      ApAging.aging(
+        [bill("credited", amount_cents: 10_000)],
+        as_of: @as_of,
+        vendor_credits: [%{bill_id: "credited", amount_cents: 10_000, status: :open}]
+      )
+
+    assert result.bills == []
+    assert result.total_cents == 0
   end
 
   test "a legacy run snapshot without per-payment vendors falls back to its header" do

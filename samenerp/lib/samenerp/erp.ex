@@ -35,6 +35,8 @@ defmodule Samenerp.Erp do
       journal_line: "ecl",
       ap_invoice: "ecp",
       payment_receipt: "ecr",
+      credit_note: "ecn",
+      vendor_credit: "evc",
       posting_account: "ecf",
       budget: "ecb",
       budget_line: "ecd",
@@ -71,6 +73,7 @@ defmodule Samenerp.Erp do
       supplier_scorecard_dimension: "esj",
       supplier_risk: "esk"
     },
+    billing: [invoice: Samenerp.Billing.Invoice],
     labour: [
       timesheet: Samenerp.Work.Timesheet,
       timesheet_entry: Samenerp.Work.TimesheetEntry
@@ -125,6 +128,8 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.JournalApprovalPolicy)
     resource(Samenerp.Erp.ApInvoice)
     resource(Samenerp.Erp.PaymentReceipt)
+    resource(Samenerp.Erp.CreditNote)
+    resource(Samenerp.Erp.VendorCredit)
     resource(Samenerp.Erp.PostingAccount)
     resource(Samenerp.Erp.Budget)
     resource(Samenerp.Erp.BudgetLine)

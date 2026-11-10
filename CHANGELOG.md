@@ -8,6 +8,17 @@ All notable changes to Samen are recorded here. The format follows
 
 ### Added
 
+- **Credit notes, vendor credits and AR write-offs** (WS-ERP adjustment documents):
+  `Samen.Scopes.Finance` now mounts `CreditNote` and `VendorCredit` alongside the AP/AR
+  documents. A credit note opens with either a contra-revenue credit (`credit_note_clearing`
+  debit / `ar_clearing` credit) or a bad-debt write-off (`bad_debt_expense` debit /
+  `ar_clearing` credit); a vendor credit opens with an `ap_clearing` debit /
+  `vendor_credit_clearing` credit. Both follow draft → open → applied or void, refuse
+  opening without a same-org target document in an adjustable state, and refuse voiding an
+  applied adjustment. Voiding an open adjustment voids its posted entry through the
+  journal's linked reversal. The ERP surface registry adds `/erp/credit_notes` and
+  `/erp/vendor_credits` list/detail pages with create, edit and governed transitions, and
+  the AR/AP aging and statement reads net posted adjustments against their invoice/bill.
 - **Bank statement import and ranked match suggestions** (WS-ERP E9): CSV and OFX/QFX
   statements now import through the governed `StatementLine.:import` action. The parser accepts
   canonical columns and common bank aliases, including either a signed amount column or separate

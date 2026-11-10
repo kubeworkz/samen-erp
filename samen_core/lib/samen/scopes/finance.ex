@@ -7,7 +7,7 @@ defmodule Samen.Scopes.Finance do
   with the host's `otp_app`, `repo`, and `domain`.
 
   ## Resources — `account · journal_entry · journal_line · ap_invoice ·
-  ## payment_receipt · posting_account`
+  ## payment_receipt · credit_note · vendor_credit · posting_account`
 
   - **`Account`** — the chart of accounts (Tier-0 config row): `code` (unique
     per org), `name`, `kind ∈ {asset, liability, equity, income, expense}`,
@@ -36,13 +36,23 @@ defmodule Samen.Scopes.Finance do
     subledger anchor), `amount_cents`, `paid_at`; `:post_receipt` creates the
     anchored JournalEntry (`source_key: "billing_payment"`) in ONE transaction.
     Exactly-once per anchor (`prc_anchor_unique`).
+  - **`CreditNote`** — an AR adjustment document (E12): `customer_id`,
+    `number`, dates, `amount_cents`, `kind ∈ {credit, write_off}`, an optional
+    `invoice_id`, and `status ∈ {draft, open, applied, void}`. `:open` posts
+    **Dr** `credit_note_clearing` (or `bad_debt_expense` for a write-off),
+    **Cr** `ar_clearing`; `:apply` is state-only (the ledger already moved);
+    `:void` voids the linked entry through the journal's reversing entry.
+  - **`VendorCredit`** — the AP mirror (E12): `vendor_id`, `number`, dates,
+    `amount_cents`, an optional `bill_id`, and the same state machine. `:open`
+    posts **Dr** `ap_clearing`, **Cr** `vendor_credit_clearing`.
   - **`PostingAccount`** — the host's named GL posting accounts (Tier-0 config
     row; one per org): a CLOSED `key` enum + the same-org `account_id` FK. The
     base four meanings are `{ap_clearing, ar_clearing, cash, income}`; WS-ACCT
     Phase 1 widened the enum in place to the meanings the Kubeworkz books' flows
     need (`wip_foundry`, `finished_goods_chip`, `deferred_revenue`, `grant_deferred`,
-    `variance_*`, `mask_expense`, …) — ADR-054 D2. The enum stays closed and
-    fail-honest: an unmapped meaning refuses the posting.
+    `variance_*`, `mask_expense`, `credit_note_clearing`,
+    `vendor_credit_clearing`, `bad_debt_expense`, …) — ADR-054 D2. The enum stays
+    closed and fail-honest: an unmapped meaning refuses the posting.
   - **`CostObject`** — the cost/analysis registry (WS-ACCT Phase 1; ADR-054 D1):
     `{code, name, kind ∈ {project, chip, cost_pool, fund}}`, org-scoped, unique
     code per org, archivable. The ids the ledger's dimension seam may name.
@@ -316,6 +326,8 @@ defmodule Samen.Scopes.Finance do
     journal_approval_policy: "jap",
     ap_invoice: "fai",
     payment_receipt: "frr",
+    credit_note: "fcn",
+    vendor_credit: "fvc",
     posting_account: "fpa",
     budget: "fbg",
     budget_line: "fbl",
@@ -393,6 +405,7 @@ defmodule Samen.Scopes.Finance do
     inventory = resolve_inventory(Keyword.get(opts, :inventory), __CALLER__)
     labour = resolve_labour(Keyword.get(opts, :labour), __CALLER__)
     work = resolve_work(Keyword.get(opts, :work), __CALLER__)
+    billing = resolve_billing(Keyword.get(opts, :billing), __CALLER__)
 
     account_mod = Module.concat(namespace, Account)
     entry_mod = Module.concat(namespace, JournalEntry)
@@ -400,6 +413,8 @@ defmodule Samen.Scopes.Finance do
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
     receipt_mod = Module.concat(namespace, PaymentReceipt)
+    credit_note_mod = Module.concat(namespace, CreditNote)
+    vendor_credit_mod = Module.concat(namespace, VendorCredit)
     posting_account_mod = Module.concat(namespace, PostingAccount)
     budget_mod = Module.concat(namespace, Budget)
     budget_line_mod = Module.concat(namespace, BudgetLine)
@@ -438,6 +453,8 @@ defmodule Samen.Scopes.Finance do
 
       require Samen.Scopes.Finance.BudgetBlueprint
 
+      require Samen.Scopes.Finance.CreditNoteBlueprint
+
       require Samen.Scopes.Finance.PeriodBlueprint
 
       require Samen.Scopes.Finance.RevenueBlueprint
@@ -465,6 +482,8 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(journal_approval_policy_mod))
         resource(unquote(ap_invoice_mod))
         resource(unquote(receipt_mod))
+        resource(unquote(credit_note_mod))
+        resource(unquote(vendor_credit_mod))
         resource(unquote(posting_account_mod))
         resource(unquote(budget_mod))
         resource(unquote(budget_line_mod))
@@ -866,6 +885,32 @@ defmodule Samen.Scopes.Finance do
         unquote(posting_account_mod)
       )
 
+      # WS-ERP E12: the AR/AP adjustment documents. Credit notes post against
+      # the host's Billing invoice (when wired); vendor credits post against
+      # the host's AP bill. Both refuse fail-honest when their posting meanings
+      # are unmapped or their target resource is absent.
+      Samen.Scopes.Finance.CreditNoteBlueprint.define_credit_note(
+        unquote(credit_note_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.credit_note),
+        unquote(entry_mod),
+        unquote(posting_account_mod),
+        unquote(billing[:invoice])
+      )
+
+      Samen.Scopes.Finance.CreditNoteBlueprint.define_vendor_credit(
+        unquote(vendor_credit_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.vendor_credit),
+        unquote(entry_mod),
+        unquote(posting_account_mod),
+        unquote(ap_invoice_mod)
+      )
+
       Samen.Scopes.Finance.Blueprint.define_posting_account(
         unquote(posting_account_mod),
         unquote(otp_app),
@@ -912,6 +957,28 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.org_fx_settings)
       )
     end
+  end
+
+  # `billing:` wires the Billing invoice the AR adjustment reads to verify its
+  # target. Without it a credit note can still be drafted, but opening it
+  # refuses fail-honest rather than posting against an inventable id.
+  defp resolve_billing(nil, _caller), do: %{}
+
+  defp resolve_billing(opts, caller) when is_list(opts) do
+    case Keyword.fetch(opts, :invoice) do
+      {:ok, invoice} ->
+        %{invoice: Macro.expand(invoice, caller)}
+
+      :error ->
+        raise ArgumentError,
+              "use Samen.Scopes.Finance, billing: requires invoice: <Billing.Invoice module>"
+    end
+  end
+
+  defp resolve_billing(other, _caller) do
+    raise ArgumentError,
+          "use Samen.Scopes.Finance, billing: must be a compile-time keyword list " <>
+            "([invoice: MyApp.Billing.Invoice]). Got: #{Macro.to_string(other)}"
   end
 
   defp resolve_inventory(nil, _caller), do: %{}

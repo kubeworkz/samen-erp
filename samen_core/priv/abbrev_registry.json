@@ -527,6 +527,7 @@
       "swk": "SamenCore.Support.InventoryFixture.WorkOrder",
       "ast": "Samen.AI.Assistant",
       "arm": "SamenCore.Support.AutomationFixture.Reminder",
+      "sdv": "SamenCore.Support.FinanceFixture.VendorCredit",
       "fgt": "SamenCore.Support.FinanceFixture.GrantOpportunity",
       "cob": "SamenCore.Support.FinanceFixture.CostObject",
       "sos": "SamenCore.Support.OutreachFixture.Sequence",
@@ -598,11 +599,13 @@
       "fav": "SamenCore.Support.FinanceFixture.PostingAccount",
       "fgl": "SamenCore.Support.FinanceFixture.GrantMilestone",
       "sfr": "SamenCore.Support.FleetFixture.Report",
+      "sdc": "SamenCore.Support.FinanceFixture.CreditNote",
       "hev": "SamenCore.Support.HrFixture.EmploymentEvent",
       "apd": "SamenCore.Support.ApprovalsFixture.Document",
       "spo": "SamenCore.Support.InventoryFixture.PurchaseOrder",
       "sbg": "SamenCore.Support.FinanceFixture.Budget",
       "fgn": "SamenCore.Support.FinanceFixture.Grant",
+      "jap": "SamenCore.Support.FinanceFixture.JournalApprovalPolicy",
       "sim": "SamenCore.Support.FinanceFixture.InvoiceMirror",
       "sap": "SamenCore.Support.FinanceFixture.ApInvoice",
       "tsw": "SamenCore.Support.WorkFixture.TimesheetEntry",
@@ -623,8 +626,7 @@
       "sdl": "SamenCore.Support.DocsFixture.DocLink",
       "atn": "Samen.AI.Agent.Turn",
       "sfe": "SamenCore.Support.FleetFixture.EnrollmentToken",
-      "sol": "SamenCore.Support.InventoryFixture.SoLine",
-      "jap": "SamenCore.Support.FinanceFixture.JournalApprovalPolicy"
+      "sol": "SamenCore.Support.InventoryFixture.SoLine"
     },
     "samen_web": {
       "rti": "Samen.WebTest.RichTypes.Item",
@@ -695,6 +697,7 @@
       "war": "Samen.WebTest.Automation.Run",
       "wfc": "Samen.WebTest.Fleet.Credential",
       "wdl": "Samen.WebTest.Docs.DocLink",
+      "fcn": "Samen.WebTest.Erp.CreditNote",
       "woe": "Samen.WebTest.Outreach.Enrollment",
       "wle": "Samen.WebTest.Erp.LabourAllocationShare",
       "fpa": "Samen.WebTest.Erp.PostingAccount",
@@ -715,6 +718,8 @@
       "wdn": "Samen.WebTest.Docs.Note",
       "fca": "Samen.WebTest.Erp.Account",
       "fsu": "Samen.WebTest.Erp.CostStandardLine",
+      "wja": "Samen.WebTest.Erp.JournalApprovalPolicy",
+      "fvc": "Samen.WebTest.Erp.VendorCredit",
       "whe": "Samen.WebTest.Hr.Employee",
       "fad": "Samen.WebTest.Erp.AssetPosting",
       "wot": "Samen.WebTest.Operator.AuthToken",
@@ -726,8 +731,7 @@
       "wol": "Samen.WebTest.Operator.LoginFailure",
       "fas": "Samen.WebTest.Erp.Asset",
       "iol": "Samen.WebTest.Erp.SoLine",
-      "ipg": "Samen.WebTest.Erp.ProductionLog",
-      "wja": "Samen.WebTest.Erp.JournalApprovalPolicy"
+      "ipg": "Samen.WebTest.Erp.ProductionLog"
     },
     "samenerp": {
       "edn": "Samenerp.Docs.Note",
@@ -799,6 +803,8 @@
       "sbv": "Samenerp.Cms.Block.Version",
       "erv": "Samenerp.Billing.SubscriptionEvent",
       "cth": "Samenerp.Chat.ChatThread",
+      "ecn": "Samenerp.Erp.CreditNote",
+      "evc": "Samenerp.Erp.VendorCredit",
       "eso": "Samenerp.Erp.SalesOrder",
       "aaa": "Samenerp.Work.TimesheetEntry",
       "eav": "Samenerp.Erp.ReserveWriteDown",
@@ -809,6 +815,7 @@
       "erd": "Samenerp.Erp.ReceiptLine",
       "sct": "Samenerp.Cms.Post",
       "esi": "Samenerp.Erp.SupplierScorecard",
+      "ejp": "Samenerp.Erp.JournalApprovalPolicy",
       "efq": "Samenerp.Erp.CloseRun",
       "efc": "Samenerp.Fleet.Credential",
       "eoi": "Samenerp.Operator.UserIdentity",
@@ -856,8 +863,7 @@
       "eru": "Samenerp.Billing.Usage",
       "ewh": "Samenerp.Primitives.Webhook",
       "edd": "Samenerp.Docs.Doc",
-      "eql": "Samenerp.Operator.Sla",
-      "ejp": "Samenerp.Erp.JournalApprovalPolicy"
+      "eql": "Samenerp.Operator.Sla"
     }
   }
 }

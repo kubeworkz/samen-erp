@@ -277,6 +277,7 @@ defmodule Samen.Web.ErpApAgingTest do
     assert socket.assigns.statement.totals == %{
              billed_cents: 10_000,
              paid_cents: 0,
+             credited_cents: 0,
              outstanding_cents: 10_000
            }
 

@@ -128,6 +128,8 @@ defmodule Samen.AbbrevRegistryTest do
       # HuggingFace BYOK scope + the z-prefix re-nesting (9d751da/172057e) +
       # the samenerp Support/Settings/Automation mounts (c9d5272).
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
+      # WS-ERP adjustment documents (#6) add SIX host rows (`sdc`/`sdv`,
+      # `fcn`/`fvc`, `ecn`/`evc`) and no global rows.
       assert map_size(global) == 405
       # Host namespaces (per-host maps): demo 23, driftwood 25, pawchart 42,
       # samen_core 89, samen_web 73, samenerp 95 (the WS-ERP E8 host proof —
@@ -176,8 +178,10 @@ defmodule Samen.AbbrevRegistryTest do
       # = 438 host entries across six hosts, including the three AP/AR
       # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`).
       assert hosts["samenerp"] != nil
-      assert map_size(hosts["samenerp"]) == 128
-      assert map_size(hosts["samen_core"]) == 119
+      # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
+      # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
+      assert map_size(hosts["samenerp"]) == 130
+      assert map_size(hosts["samen_core"]) == 121
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -530,6 +534,8 @@ defmodule Samen.AbbrevRegistryTest do
                  # the demo host — allocator-reserved under the samen_core
                  # host namespace.
                  "sac" => "SamenCore.Support.FinanceFixture.Account",
+                 "sdc" => "SamenCore.Support.FinanceFixture.CreditNote",
+                 "sdv" => "SamenCore.Support.FinanceFixture.VendorCredit",
                  "sje" => "SamenCore.Support.FinanceFixture.JournalEntry",
                  "sjl" => "SamenCore.Support.FinanceFixture.JournalLine",
                  # WS-ERP E2 (ADR-049 §3): the AP/AR documents + the R2 mirror-leg
@@ -728,6 +734,8 @@ defmodule Samen.AbbrevRegistryTest do
                  # cross-host reuse, so the ADR-025 flatten tripwire stays clean).
                  # 26 entries, allocator-reserved.
                  "fca" => "Samen.WebTest.Erp.Account",
+                 "fcn" => "Samen.WebTest.Erp.CreditNote",
+                 "fvc" => "Samen.WebTest.Erp.VendorCredit",
                  "fje" => "Samen.WebTest.Erp.JournalEntry",
                  "fjl" => "Samen.WebTest.Erp.JournalLine",
                  "fai" => "Samen.WebTest.Erp.ApInvoice",
@@ -778,6 +786,8 @@ defmodule Samen.AbbrevRegistryTest do
                # three E7 Version abbrevs spv/stv/sbv), allocator-reserved.
                "samenerp" => %{
                  "ejp" => "Samenerp.Erp.JournalApprovalPolicy",
+                 "ecn" => "Samenerp.Erp.CreditNote",
+                 "evc" => "Samenerp.Erp.VendorCredit",
                  # Samenerp.Aggregate (1):
                  "era" => "Samenerp.Aggregate.RecordCountBySegment",
                  # Samenerp.Approvals (1):
@@ -1087,7 +1097,10 @@ defmodule Samen.AbbrevRegistryTest do
       # samenerp `tws`/`aaa`/`sel`/`sle`, samen_web `wel`/`wle`) = 405 + 402 = 807 flat.)
       # (+3 AP/AR JournalApprovalPolicy host rows (`jap`/`wja`/`ejp`)
       # = 405 + 438 = 843 flat.)
-      assert map_size(Reg.load()) == 843
+      # (+6 WS-ERP adjustment documents (#6): CreditNote + VendorCredit in the
+      # three Finance hosts — samen_core `sdc`/`sdv`, samen_web `fcn`/`fvc`,
+      # samenerp `ecn`/`evc` = 405 + 444 = 849 flat.)
+      assert map_size(Reg.load()) == 849
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

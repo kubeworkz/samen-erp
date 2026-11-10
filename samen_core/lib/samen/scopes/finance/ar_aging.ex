@@ -9,7 +9,11 @@ defmodule Samen.Scopes.Finance.ArAging do
     * an invoice contributes its `amount_due_cents`;
     * a POSTED `PaymentReceipt` contributes `amount_cents` for its
       `invoice_id` (`invoice_key: "billing_invoice"`);
-    * outstanding is `amount_due_cents - Σ(posted receipts)`, floored at zero.
+    * a POSTED (`:open` or `:applied`) `CreditNote` contributes its
+      `amount_cents` for its `invoice_id` — the AR adjustment (including a
+      `:write_off` bad-debt recognition) already reduced the ledger at open;
+    * outstanding is `amount_due_cents - Σ(posted receipts) - Σ(posted credits)`,
+      floored at zero.
 
   The Billing mirror's own `amount_paid_cents` is deliberately ignored: it is the
   provider's view, not the ledger's posted cash. A provider mirror that says
@@ -65,15 +69,17 @@ defmodule Samen.Scopes.Finance.ArAging do
 
   Invoice maps use `:id`, `:customer_id`, `:due_date`, `:amount_cents` (or
   `:amount_due_cents`). Receipt maps use `:invoice_id` and `:amount_cents`.
+  Credit maps use `:invoice_id`, `:amount_cents` and a posted `:status`.
   Only invoices with a positive outstanding amount appear in the result.
   """
   def aging(invoices, receipts, opts) do
     as_of = Keyword.fetch!(opts, :as_of)
     paid = paid_by_invoice(receipts)
+    credited = credited_by_invoice(Keyword.get(opts, :credit_notes, []))
 
     rows =
       invoices
-      |> Enum.map(&aging_row(&1, paid, as_of))
+      |> Enum.map(&aging_row(&1, paid, credited, as_of))
       |> Enum.reject(&is_nil/1)
       |> Enum.sort_by(&{&1.due_date || ~D[9999-12-31], &1.invoice_id})
 
@@ -94,7 +100,8 @@ defmodule Samen.Scopes.Finance.ArAging do
   Build a customer statement as of `opts[:as_of]`.
 
   Includes every invoice for the customer (paid or open), the posted receipts
-  that settled those invoices, the outstanding total and the customer's aging.
+  that settled those invoices, the posted credits that adjusted them, the
+  outstanding total and the customer's aging.
   """
   def statement(invoices, receipts, customer_id, opts) do
     as_of = Keyword.fetch!(opts, :as_of)
@@ -111,12 +118,21 @@ defmodule Samen.Scopes.Finance.ArAging do
       |> Enum.filter(&MapSet.member?(invoice_ids, &1.invoice_id))
       |> Enum.sort_by(&sort_time(&1.paid_at))
 
+    customer_credits =
+      opts
+      |> Keyword.get(:credit_notes, [])
+      |> Enum.filter(&posted_adjustment?/1)
+      |> Enum.filter(&MapSet.member?(invoice_ids, value_of(&1, :invoice_id)))
+      |> Enum.sort_by(&{date_of(value_of(&1, :date)) || ~D[9999-12-31], value_of(&1, :id)})
+
     paid = paid_by_invoice(customer_receipts)
+    credited = credited_by_invoice(customer_credits)
 
     rows =
       Enum.map(customer_invoices, fn invoice ->
         amount = amount_of(invoice)
         paid_cents = Map.get(paid, invoice.id, 0)
+        credited_cents = Map.get(credited, invoice.id, 0)
 
         %{
           invoice_id: invoice.id,
@@ -124,13 +140,15 @@ defmodule Samen.Scopes.Finance.ArAging do
           due_date: invoice.due_date,
           amount_cents: amount,
           paid_cents: paid_cents,
-          outstanding_cents: max(amount - paid_cents, 0),
+          credited_cents: credited_cents,
+          outstanding_cents: max(amount - paid_cents - credited_cents, 0),
           status: Map.get(invoice, :status)
         }
       end)
 
     total_invoiced = Enum.reduce(rows, 0, &(&1.amount_cents + &2))
     total_paid = Enum.reduce(customer_receipts, 0, &(&1.amount_cents + &2))
+    total_credited = Enum.reduce(rows, 0, &(&1.credited_cents + &2))
     outstanding = Enum.reduce(rows, 0, &(&1.outstanding_cents + &2))
 
     %{
@@ -138,12 +156,18 @@ defmodule Samen.Scopes.Finance.ArAging do
       as_of: as_of,
       invoices: rows,
       receipts: customer_receipts,
+      credit_notes: customer_credits,
       totals: %{
         invoiced_cents: total_invoiced,
         paid_cents: total_paid,
+        credited_cents: total_credited,
         outstanding_cents: outstanding
       },
-      aging: aging(customer_invoices, customer_receipts, as_of: as_of)
+      aging:
+        aging(customer_invoices, customer_receipts,
+          as_of: as_of,
+          credit_notes: customer_credits
+        )
     }
   end
 
@@ -153,8 +177,12 @@ defmodule Samen.Scopes.Finance.ArAging do
   `:as_of`.
   """
   def for_org(opts) do
-    with {:ok, invoices, receipts} <- load(opts) do
-      {:ok, aging(invoices, receipts, as_of: Keyword.fetch!(opts, :as_of))}
+    with {:ok, invoices, receipts, credit_notes} <- load(opts) do
+      {:ok,
+       aging(invoices, receipts,
+         as_of: Keyword.fetch!(opts, :as_of),
+         credit_notes: credit_notes
+       )}
     end
   end
 
@@ -163,10 +191,14 @@ defmodule Samen.Scopes.Finance.ArAging do
   same options as `for_org/1` plus `:customer_id`.
   """
   def statement_for_customer(opts) do
-    with {:ok, invoices, receipts} <- load(opts) do
+    with {:ok, invoices, receipts, credit_notes} <- load(opts) do
       customer_id = Keyword.fetch!(opts, :customer_id)
 
-      {:ok, statement(invoices, receipts, customer_id, as_of: Keyword.fetch!(opts, :as_of))}
+      {:ok,
+       statement(invoices, receipts, customer_id,
+         as_of: Keyword.fetch!(opts, :as_of),
+         credit_notes: credit_notes
+       )}
     end
   end
 
@@ -185,8 +217,25 @@ defmodule Samen.Scopes.Finance.ArAging do
            |> Ash.Query.filter(
              org_id == ^org_id and status == :posted and invoice_key == "billing_invoice"
            )
-           |> Ash.read(scope: scope) do
-      {:ok, Enum.map(invoices, &normalize_invoice/1), Enum.map(receipts, &normalize_receipt/1)}
+           |> Ash.read(scope: scope),
+         {:ok, credit_notes} <- load_credit_notes(opts) do
+      {:ok, Enum.map(invoices, &normalize_invoice/1), Enum.map(receipts, &normalize_receipt/1),
+       Enum.map(credit_notes, &normalize_credit/1)}
+    end
+  end
+
+  defp load_credit_notes(opts) do
+    case Keyword.get(opts, :credit_note) do
+      nil ->
+        {:ok, []}
+
+      resource ->
+        org_id = Keyword.fetch!(opts, :org_id)
+        scope = Keyword.fetch!(opts, :scope)
+
+        resource
+        |> Ash.Query.filter(org_id == ^org_id and status in [:open, :applied])
+        |> Ash.read(scope: scope)
     end
   end
 
@@ -210,10 +259,23 @@ defmodule Samen.Scopes.Finance.ArAging do
     }
   end
 
-  defp aging_row(invoice, paid, as_of) do
+  defp normalize_credit(credit) do
+    %{
+      id: credit.id,
+      invoice_id: Map.get(credit, :invoice_id),
+      number: Map.get(credit, :number),
+      kind: Map.get(credit, :kind),
+      date: date_of(Map.get(credit, :date)),
+      amount_cents: Map.get(credit, :amount_cents) || 0,
+      status: Map.get(credit, :status)
+    }
+  end
+
+  defp aging_row(invoice, paid, credited, as_of) do
     amount = amount_of(invoice)
     paid_cents = Map.get(paid, invoice.id, 0)
-    outstanding = amount - paid_cents
+    credited_cents = Map.get(credited, invoice.id, 0)
+    outstanding = amount - paid_cents - credited_cents
 
     if outstanding > 0 do
       due_date = date_of(Map.get(invoice, :due_date))
@@ -225,6 +287,7 @@ defmodule Samen.Scopes.Finance.ArAging do
         due_date: due_date,
         amount_cents: amount,
         paid_cents: paid_cents,
+        credited_cents: credited_cents,
         outstanding_cents: outstanding,
         days_overdue: days_overdue,
         bucket: bucket_for(due_date, days_overdue)
@@ -246,6 +309,35 @@ defmodule Samen.Scopes.Finance.ArAging do
       )
     end)
   end
+
+  defp credited_by_invoice(credits) do
+    credits
+    |> Enum.filter(&posted_adjustment?/1)
+    |> Enum.reduce(%{}, fn credit, acc ->
+      case value_of(credit, :invoice_id) do
+        nil ->
+          acc
+
+        invoice_id ->
+          Map.update(
+            acc,
+            invoice_id,
+            value_of(credit, :amount_cents) || 0,
+            &(&1 + (value_of(credit, :amount_cents) || 0))
+          )
+      end
+    end)
+  end
+
+  defp posted_adjustment?(credit) do
+    value_of(credit, :status) in [:open, :applied, "open", "applied"]
+  end
+
+  defp value_of(map, key) when is_map(map) do
+    Map.get(map, key) || Map.get(map, Atom.to_string(key))
+  end
+
+  defp value_of(_other, _key), do: nil
 
   defp days_overdue(nil, _as_of), do: nil
 

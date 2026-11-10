@@ -105,6 +105,35 @@ defmodule Samen.Web.ErpDetailTest do
     refute html =~ ~s(id="erp-transitions")
   end
 
+  test "a draft credit note offers its governed Open/Void transitions, not Apply" do
+    credit =
+      Samen.WebTest.Erp.CreditNote
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: @org,
+          customer_id: Ash.UUID.generate(),
+          invoice_id: Ash.UUID.generate(),
+          number: "CN-UI-1",
+          date: ~D[2026-10-01],
+          amount_cents: 1_000,
+          kind: :credit
+        },
+        authorize?: false
+      )
+      |> Ash.create!()
+
+    socket =
+      open(DetailLive, %{"org" => @org, "surface" => "credit_notes", "id" => credit.id})
+
+    html = render_html(DetailLive, socket.assigns)
+
+    assert html =~ "Credit note"
+    assert html =~ "Open credit note"
+    assert html =~ "Void credit note"
+    refute html =~ "Apply credit note"
+  end
+
   test "an id that resolves nothing renders the honest not-found card" do
     socket =
       open(DetailLive, %{

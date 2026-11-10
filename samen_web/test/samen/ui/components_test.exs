@@ -226,12 +226,12 @@ defmodule Samen.UI.ComponentsTest do
     assert prefs =~ ~s(href="/notifications/settings?org=ORG-123" class="on")
   end
 
-  # WS-ERP E8 — all six ERP surfaces were mounted (`samen_erp_routes/3`) but linked from
+  # WS-ERP E8 — every ERP surface was mounted (`samen_erp_routes/3`) but linked from
   # NOWHERE: a total nav island. The group renders ONLY when the host threads a non-nil
   # `erp_path` (the `:erp_path` mount label set alongside the macro), so a host that never
   # mounts `/erp/:surface` never emits it — the X1 posture for a route macro no generated
   # `--modules` subset selects (there is no `surfaces` atom for it).
-  test "module_nav/1 renders the six ERP surface items only when the host mounts ERP" do
+  test "module_nav/1 renders every ERP surface item only when the host mounts ERP" do
     # Default (no :erp_path label threaded): the whole group is absent — zero dead links.
     hidden =
       render_component(&Samen.UI.module_nav/1, %{

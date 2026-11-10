@@ -58,6 +58,8 @@ defmodule SamenCore.Support.FinanceFixture do
       journal_line: "sjl",
       ap_invoice: "sap",
       payment_receipt: "prc",
+      credit_note: "sdc",
+      vendor_credit: "sdv",
       posting_account: "fav",
       budget: "sbg",
       budget_line: "sbj",
@@ -97,6 +99,7 @@ defmodule SamenCore.Support.FinanceFixture do
       supplier_scorecard_dimension: "ssh",
       supplier_risk: "ssj"
     },
+    billing: [invoice: SamenCore.Support.FinanceFixture.InvoiceMirror],
     labour: [
       timesheet: SamenCore.Support.WorkFixture.Timesheet,
       timesheet_entry: SamenCore.Support.WorkFixture.TimesheetEntry

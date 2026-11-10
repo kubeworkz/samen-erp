@@ -340,9 +340,9 @@ defmodule Samen.Abbrev.AllocatorTest do
       # same three hosts -> 39_163 bytes, 837 flat.
       # +3 WS-ACCT Phase 16: the Kubeworkz host's HR mount -> 39_285 bytes.
       # +3 AP/AR JournalApprovalPolicy host rows (`jap`/`wja`/`ejp`)
-      # -> 39_463 bytes, 843 flat.
-      assert byte_size(committed) == 39_463
-      assert map_size(R.load()) == 843
+      # -> 39_759 bytes, 849 flat (plus the six #6 adjustment-document rows).
+      assert byte_size(committed) == 39_759
+      assert map_size(R.load()) == 849
     end
   end
 

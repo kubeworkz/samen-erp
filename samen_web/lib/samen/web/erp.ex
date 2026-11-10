@@ -3,7 +3,7 @@ defmodule Samen.Web.Erp do
   The WS-ERP E8 TENANT SURFACE REGISTRY (design §6.4; build-plan E8 — "mountable
   tenant surfaces … declared in the router macros").
 
-  TWO generic LiveViews serve the six ERP surfaces a host mounts with a
+  TWO generic LiveViews serve every ERP surface a host mounts with a
   single router line — `Samen.Web.Erp.SurfaceLive` (the bounded list at
   `<path>/<surface>`) and `Samen.Web.Erp.DetailLive` (the record page at
   `<path>/<surface>/<id>`). A THIRD page is not a list surface:
@@ -15,9 +15,10 @@ defmodule Samen.Web.Erp do
 
   The BOUNDARY is this module, not the caller:
 
-    * `surfaces/0` — the CLOSED surface allowlist (the six design surfaces). A
-      URL naming anything else is refused by `surface/1` (fail-closed — the
-      caller's input can never mint a surface or a module).
+    * `surfaces/0` — the CLOSED surface allowlist (the design §6.4 surfaces plus
+      the AP/AR adjustment documents). A URL naming anything else is refused by
+      `surface/1` (fail-closed — the caller's input can never mint a surface or
+      a module).
     * `resource/2` — each surface's resource is DERIVED from the host's mounted
       namespace by the ADR-004 `Module.concat(namespace, name)` convention (the
       `Samen.Web.Mount.resource/2` mechanism). The host brings the mount; the
@@ -30,7 +31,7 @@ defmodule Samen.Web.Erp do
 
   ## No PII on any surface
 
-  Every column across all six surfaces is a bounded id, enum, integer cents,
+  Every column across every surface is a bounded id, enum, integer cents,
   code/sku/number, or date. `Employee` (the one vault-routed ERP resource) has
   NO surface here — HR identity belongs to the E7 roster (`Samen.Web.Hr.Roster`)
   and its reveal-gated surface, never to a general ERP table. The headcount is
@@ -58,11 +59,18 @@ defmodule Samen.Web.Erp do
   alias Samen.Web.{Mount, TenantRole}
 
   @type surface ::
-          :coa | :entries | :ap_invoices | :stock | :purchase_orders | :work_orders
+          :coa
+          | :entries
+          | :ap_invoices
+          | :credit_notes
+          | :vendor_credits
+          | :stock
+          | :purchase_orders
+          | :work_orders
 
   @surfacedoc """
-  The six design §6.4 tenant surfaces, each a bounded read over the host's
-  mounted ERP namespaces:
+  The design §6.4 tenant surfaces plus the AP/AR adjustment documents, each a
+  bounded read over the host's mounted ERP namespaces:
 
     * `:coa`             — the Chart of Accounts (`Account`): code, name, kind,
       normal side, archived flag. The plan of record, read-only.
@@ -70,6 +78,12 @@ defmodule Samen.Web.Erp do
       memo, posted-at. The audit surface over the event-sourced GL.
     * `:ap_invoices`     — the AP inbox (`ApInvoice`): number, vendor, dates,
       amount, status — the bills awaiting action.
+    * `:credit_notes`    — the AR adjustments (`CreditNote`): number, customer,
+      date, kind (`credit` or `write_off`), amount, status. Draft → open →
+      applied, or void; opening posts the AR reduction.
+    * `:vendor_credits`  — the AP adjustments (`VendorCredit`): number, vendor,
+      date, amount, status. Draft → open → applied, or void; opening posts the
+      AP reduction, replacing void as the only bill adjustment.
     * `:stock`           — stock on hand (`Item`): SKU, name, kind, on-hand
       quantity, reorder point. The warehouse view over the ledger's rollup.
     * `:purchase_orders` — the PO inbox (`PurchaseOrder`): number, dates,
@@ -78,7 +92,16 @@ defmodule Samen.Web.Erp do
       status. What production has released and where it stands.
   """
 
-  @surfaces [:coa, :entries, :ap_invoices, :stock, :purchase_orders, :work_orders]
+  @surfaces [
+    :coa,
+    :entries,
+    :ap_invoices,
+    :credit_notes,
+    :vendor_credits,
+    :stock,
+    :purchase_orders,
+    :work_orders
+  ]
 
   @doc @surfacedoc
   @spec surfaces() :: [surface(), ...]
@@ -138,6 +161,22 @@ defmodule Samen.Web.Erp do
   """
   @spec journal_approval_policy(Mount.t()) :: module() | nil
   def journal_approval_policy(%Mount{} = mount), do: derived(mount, :JournalApprovalPolicy)
+
+  @doc """
+  The org's AR adjustment resource (`CreditNote`), DERIVED from the host's
+  mounted Finance namespace. `nil` when the host has not mounted it — the AR
+  aging and receipt pages simply do not net credits they cannot read.
+  """
+  @spec credit_note(Mount.t()) :: module() | nil
+  def credit_note(%Mount{} = mount), do: derived(mount, :CreditNote)
+
+  @doc """
+  The org's AP adjustment resource (`VendorCredit`), DERIVED from the host's
+  mounted Finance namespace. `nil` when the host has not mounted it — the AP
+  aging page simply does not net credits it cannot read.
+  """
+  @spec vendor_credit(Mount.t()) :: module() | nil
+  def vendor_credit(%Mount{} = mount), do: derived(mount, :VendorCredit)
 
   @doc "The journal-approval settings page's label (the nav item + page heading)."
   @spec journal_approval_label() :: String.t()
@@ -234,6 +273,8 @@ defmodule Samen.Web.Erp do
   def resource(%Mount{} = mount, :coa), do: derived(mount, :Account)
   def resource(%Mount{} = mount, :entries), do: derived(mount, :JournalEntry)
   def resource(%Mount{} = mount, :ap_invoices), do: derived(mount, :ApInvoice)
+  def resource(%Mount{} = mount, :credit_notes), do: derived(mount, :CreditNote)
+  def resource(%Mount{} = mount, :vendor_credits), do: derived(mount, :VendorCredit)
   def resource(%Mount{} = mount, :stock), do: derived(mount, :Item)
   def resource(%Mount{} = mount, :purchase_orders), do: derived(mount, :PurchaseOrder)
   def resource(%Mount{} = mount, :work_orders), do: derived(mount, :WorkOrder)
@@ -256,6 +297,11 @@ defmodule Samen.Web.Erp do
   # the document facts, the journal/GL carries the money.
   def columns(:ap_invoices), do: [:number, :vendor_id, :bill_date, :due_date, :status]
 
+  def columns(:credit_notes),
+    do: [:number, :customer_id, :date, :kind, :amount_cents, :status]
+
+  def columns(:vendor_credits), do: [:number, :vendor_id, :date, :amount_cents, :status]
+
   # On-hand is a (item, warehouse) fact on the DERIVED `StockLevel` (and the
   # `spw` WIP rollup serves the BI read) — the Item master row carries the
   # planning floor, never a quantity that would go stale.
@@ -268,6 +314,8 @@ defmodule Samen.Web.Erp do
   def sortable(:coa), do: [:code, :name]
   def sortable(:entries), do: [:entry_date, :status]
   def sortable(:ap_invoices), do: [:bill_date, :due_date]
+  def sortable(:credit_notes), do: [:date, :status, :number]
+  def sortable(:vendor_credits), do: [:date, :status, :number]
   def sortable(:stock), do: [:sku, :qty_on_hand]
   def sortable(:purchase_orders), do: [:order_date, :status]
   def sortable(:work_orders), do: [:number, :status]
@@ -280,6 +328,8 @@ defmodule Samen.Web.Erp do
   def record_label(:coa), do: "Account"
   def record_label(:entries), do: "Journal entry"
   def record_label(:ap_invoices), do: "AP invoice"
+  def record_label(:credit_notes), do: "Credit note"
+  def record_label(:vendor_credits), do: "Vendor credit"
   def record_label(:stock), do: "Item"
   def record_label(:purchase_orders), do: "Purchase order"
   def record_label(:work_orders), do: "Work order"
@@ -298,6 +348,38 @@ defmodule Samen.Web.Erp do
 
   def detail_fields(:ap_invoices),
     do: [:number, :vendor_id, :bill_date, :due_date, :memo, :status, :posted_at, :inserted_at]
+
+  def detail_fields(:credit_notes),
+    do: [
+      :number,
+      :customer_id,
+      :invoice_id,
+      :date,
+      :due_date,
+      :currency,
+      :amount_cents,
+      :kind,
+      :memo,
+      :status,
+      :posted_at,
+      :applied_at,
+      :inserted_at
+    ]
+
+  def detail_fields(:vendor_credits),
+    do: [
+      :number,
+      :vendor_id,
+      :bill_id,
+      :date,
+      :currency,
+      :amount_cents,
+      :memo,
+      :status,
+      :posted_at,
+      :applied_at,
+      :inserted_at
+    ]
 
   def detail_fields(:stock), do: [:sku, :name, :kind, :uom, :reorder_point, :inserted_at]
 
@@ -346,6 +428,30 @@ defmodule Samen.Web.Erp do
       {:number, :text, []},
       {:bill_date, :date, []},
       {:due_date, :date, []},
+      {:memo, :text, []}
+    ]
+  end
+
+  def create_fields(:credit_notes) do
+    [
+      {:customer_id, :text, [placeholder: "Customer id (uuid)"]},
+      {:invoice_id, :text, [placeholder: "Invoice id (uuid)"]},
+      {:number, :text, []},
+      {:date, :date, []},
+      {:due_date, :date, []},
+      {:amount_cents, :number, []},
+      {:kind, :select, [options: ~w(credit write_off)]},
+      {:memo, :text, []}
+    ]
+  end
+
+  def create_fields(:vendor_credits) do
+    [
+      {:vendor_id, :text, [placeholder: "Vendor id (uuid)"]},
+      {:bill_id, :text, [placeholder: "Bill id (uuid)"]},
+      {:number, :text, []},
+      {:date, :date, []},
+      {:amount_cents, :number, []},
       {:memo, :text, []}
     ]
   end
@@ -402,6 +508,12 @@ defmodule Samen.Web.Erp do
 
   def edit_fields(:entries), do: [{:entry_date, :date, []}, {:memo, :text, []}]
   def edit_fields(:ap_invoices), do: [{:due_date, :date, []}, {:memo, :text, []}]
+
+  def edit_fields(:credit_notes),
+    do: [{:due_date, :date, []}, {:memo, :text, []}, {:invoice_id, :text, []}]
+
+  def edit_fields(:vendor_credits),
+    do: [{:memo, :text, []}, {:bill_id, :text, []}]
 
   def edit_fields(:stock) do
     [
@@ -482,6 +594,22 @@ defmodule Samen.Web.Erp do
 
   def transitions(:ap_invoices), do: [{:approve, "Approve bill", [:draft]}]
 
+  def transitions(:credit_notes) do
+    [
+      {:open, "Open credit note", [:draft]},
+      {:apply, "Apply credit note", [:open]},
+      {:void, "Void credit note", [:draft, :open]}
+    ]
+  end
+
+  def transitions(:vendor_credits) do
+    [
+      {:open, "Open vendor credit", [:draft]},
+      {:apply, "Apply vendor credit", [:open]},
+      {:void, "Void vendor credit", [:draft, :open]}
+    ]
+  end
+
   def transitions(:purchase_orders) do
     [
       {:approve, "Approve PO", [:draft]},
@@ -505,6 +633,8 @@ defmodule Samen.Web.Erp do
   def label(:coa), do: "Chart of Accounts"
   def label(:entries), do: "Journal"
   def label(:ap_invoices), do: "AP Invoices"
+  def label(:credit_notes), do: "Credit Notes"
+  def label(:vendor_credits), do: "Vendor Credits"
   def label(:stock), do: "Stock"
   def label(:purchase_orders), do: "Purchase Orders"
   def label(:work_orders), do: "Work Orders"

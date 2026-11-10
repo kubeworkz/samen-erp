@@ -5,7 +5,7 @@ defmodule Samen.Web.Erp.SurfaceLive do
   `<path>/<surface>` where `<surface>` is validated against the CLOSED
   `Samen.Web.Erp` allowlist.
 
-  A host mounts all six surfaces with ONE router line:
+  A host mounts every surface with ONE router line:
 
       samen_erp_routes(:erp, MyApp.Erp, repo: MyApp.Repo)
 

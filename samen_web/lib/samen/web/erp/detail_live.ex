@@ -3,7 +3,7 @@ defmodule Samen.Web.Erp.DetailLive do
   The generic ERP record page (`/erp/:surface/:id`) — the detail twin of
   `Samen.Web.Erp.SurfaceLive` (WS-ERP E8).
 
-  One LiveView serves all six surfaces, addressed through the CLOSED
+  One LiveView serves every surface, addressed through the CLOSED
   `Samen.Web.Erp` allowlist exactly like the list: the surface name resolves
   through `Erp.surface/1`, the record's resource through `Erp.resource/2`
   (never caller input), and the single read is org-scope-pinned

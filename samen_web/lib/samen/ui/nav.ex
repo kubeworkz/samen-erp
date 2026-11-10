@@ -119,7 +119,8 @@ defmodule Samen.UI.Nav do
       :crm_calendar | :crm_dashboard | :crm_mailbox | :crm_sequences | :billing_overview |
       :billing_invoices | :billing_dunning | :billing_plans | :billing_settings |
       :support_tickets | :notifications_settings | :settings | :automation | :erp_dashboard |
-      :erp_coa | :erp_entries | :erp_ap_invoices | :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ar_receipts | :erp_ar_aging | :erp_stock |
+      :erp_coa | :erp_entries | :erp_ap_invoices | :erp_credit_notes | :erp_vendor_credits |
+      :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ar_receipts | :erp_ar_aging | :erp_stock |
       :erp_purchase_orders | :erp_work_orders | :erp_grants | :erp_close | :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
@@ -130,7 +131,7 @@ defmodule Samen.UI.Nav do
       keeps its historical `/settings` default; `automation_path` is LABEL-GATED (`nil` hides the
       item) because a shipped host mounts no automation route, so a defaulted link was a live
       dead link (see the attr's own doc).
-    * `erp_path` — the mount path prefix for the six WS-ERP E8 surfaces (default `nil` = the
+    * `erp_path` — the mount path prefix for the WS-ERP E8 surfaces (default `nil` = the
       ERP group is NOT rendered). Presence IS the X1 dead-link guard for ERP: a host threads
       its `:erp_path` mount label (set alongside `samen_erp_routes/3` in the router) through
       every sidebar, so a host that never mounts `/erp/:surface` never emits the group —
@@ -833,6 +834,18 @@ defmodule Samen.UI.Nav do
     do:
       Phoenix.HTML.raw(
         ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4" /><path d="M10 12h5M10 16h5" /></svg>)
+      )
+
+  defp erp_icon(:credit_notes),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></svg>)
+      )
+
+  defp erp_icon(:vendor_credits),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v10H4z" /><path d="M8 11h8M8 14h5" /></svg>)
       )
 
   defp erp_icon(:stock),

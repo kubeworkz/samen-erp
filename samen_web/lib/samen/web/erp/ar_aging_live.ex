@@ -99,6 +99,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
       case ArAging.for_org(
              invoice: invoice,
              receipt: receipt,
+             credit_note: Erp.credit_note(mount),
              org_id: org_id,
              scope: scope,
              as_of: as_of
@@ -172,6 +173,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
     case ArAging.statement_for_customer(
            invoice: invoice,
            receipt: receipt,
+           credit_note: Erp.credit_note(mount),
            org_id: org_id,
            scope: scope,
            customer_id: customer_id,

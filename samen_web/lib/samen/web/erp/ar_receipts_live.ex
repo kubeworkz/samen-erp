@@ -105,6 +105,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
 
   defp do_load(socket) do
     %{samen_mount: mount, org_id: org_id, as_of: as_of} = socket.assigns
+    credit_note = Erp.credit_note(mount)
 
     with invoice when not is_nil(invoice) <- Erp.billing_invoice(mount),
          receipt when not is_nil(receipt) <- Erp.payment_receipt(mount),
@@ -112,6 +113,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
            ArAging.for_org(
              invoice: invoice,
              receipt: receipt,
+             credit_note: credit_note,
              org_id: org_id,
              scope: TenantRole.authenticated_scope(mount, org_id),
              as_of: as_of
@@ -128,6 +130,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
       |> read_customer(
         invoice,
         receipt,
+        credit_note,
         org_id,
         TenantRole.authenticated_scope(mount, org_id),
         as_of
@@ -157,6 +160,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
          %{assigns: %{selected_customer: nil}} = socket,
          _invoice,
          _receipt,
+         _credit_note,
          _org_id,
          _scope,
          _as_of
@@ -169,12 +173,13 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
     )
   end
 
-  defp read_customer(socket, invoice, receipt, org_id, scope, as_of) do
+  defp read_customer(socket, invoice, receipt, credit_note, org_id, scope, as_of) do
     customer_id = socket.assigns.selected_customer
 
     case ArAging.statement_for_customer(
            invoice: invoice,
            receipt: receipt,
+           credit_note: credit_note,
            org_id: org_id,
            scope: scope,
            customer_id: customer_id,
@@ -247,6 +252,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
     case ArReceiptApplication.apply(
            invoice: Erp.billing_invoice(mount),
            receipt: Erp.payment_receipt(mount),
+           credit_note: Erp.credit_note(mount),
            repo: mount.repo,
            scope: TenantRole.authenticated_scope(mount, org_id),
            org_id: org_id,

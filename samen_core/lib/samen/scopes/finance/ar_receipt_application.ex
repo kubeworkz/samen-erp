@@ -56,8 +56,10 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
   Apply `:allocations` to the customer's open invoices.
 
   Required options: `:invoice`, `:receipt`, `:repo`, `:scope`, `:org_id`,
-  `:customer_id`, `:paid_at` and `:allocations`. Optional: `:reference`,
-  `:memo` and `:currency` (default `"USD"`).
+  `:customer_id`, `:paid_at` and `:allocations`. Optional: `:credit_note` (the
+  host's AR adjustment resource, so posted credits net the invoice before a
+  receipt can over-allocate), `:reference`, `:memo` and `:currency` (default
+  `"USD"`).
 
   Each allocation is `%{invoice_id: id, amount_cents: positive_integer}`.
   Returns `{:ok, run}` or `{:error, reason}`. On error no receipt is posted.
@@ -79,7 +81,15 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
          {:ok, paid_at} <- normalize_paid_at(paid_at),
          {:ok, allocations} <- normalize_allocations(Keyword.get(opts, :allocations)),
          {:ok, statement} <-
-           load_statement(invoice_resource, receipt_resource, org_id, scope, customer_id, paid_at),
+           load_statement(
+             invoice_resource,
+             receipt_resource,
+             Keyword.get(opts, :credit_note),
+             org_id,
+             scope,
+             customer_id,
+             paid_at
+           ),
          :ok <- validate_allocations(allocations, statement),
          :ok <- validate_not_posted(receipt_resource, org_id, scope, allocations) do
       reference = normalize_reference(reference, paid_at)
@@ -169,10 +179,19 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
     end
   end
 
-  defp load_statement(invoice_resource, receipt_resource, org_id, scope, customer_id, paid_at) do
+  defp load_statement(
+         invoice_resource,
+         receipt_resource,
+         credit_note_resource,
+         org_id,
+         scope,
+         customer_id,
+         paid_at
+       ) do
     case ArAging.statement_for_customer(
            invoice: invoice_resource,
            receipt: receipt_resource,
+           credit_note: credit_note_resource,
            org_id: org_id,
            scope: scope,
            customer_id: customer_id,

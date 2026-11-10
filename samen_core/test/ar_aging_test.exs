@@ -129,10 +129,76 @@ defmodule Samen.ArAgingTest do
     assert statement.totals == %{
              invoiced_cents: 17_500,
              paid_cents: 7_500,
+             credited_cents: 0,
              outstanding_cents: 10_000
            }
 
     assert statement.aging.total_cents == 10_000
     assert statement.aging.buckets.days_1_30 == 10_000
+  end
+
+  test "posted credit notes and write-offs net the invoice; voided or draft ones do not" do
+    invoices = [invoice("credited", amount_cents: 10_000, due_date: ~D[2026-03-01])]
+
+    credits = [
+      %{
+        id: "credit-1",
+        invoice_id: "credited",
+        amount_cents: 4_000,
+        status: :open,
+        date: ~D[2026-03-05]
+      },
+      %{
+        id: "write-off-1",
+        invoice_id: "credited",
+        amount_cents: 1_000,
+        status: :applied,
+        date: ~D[2026-03-06]
+      },
+      %{
+        id: "draft-1",
+        invoice_id: "credited",
+        amount_cents: 9_000,
+        status: :draft,
+        date: ~D[2026-03-07]
+      },
+      %{
+        id: "void-1",
+        invoice_id: "credited",
+        amount_cents: 9_000,
+        status: :void,
+        date: ~D[2026-03-08]
+      }
+    ]
+
+    result = ArAging.aging(invoices, [], as_of: @as_of, credit_notes: credits)
+    assert [row] = result.invoices
+    assert row.credited_cents == 5_000
+    assert row.outstanding_cents == 5_000
+    assert result.total_cents == 5_000
+
+    statement =
+      ArAging.statement(invoices, [], "customer-1", as_of: @as_of, credit_notes: credits)
+
+    assert [row] = statement.invoices
+    assert row.credited_cents == 5_000
+    assert statement.totals.credited_cents == 5_000
+    assert statement.totals.outstanding_cents == 5_000
+    assert Enum.map(statement.credit_notes, & &1.id) == ["credit-1", "write-off-1"]
+  end
+
+  test "a fully credited invoice is not aged" do
+    result =
+      ArAging.aging(
+        [invoice("written-off", amount_cents: 10_000)],
+        [],
+        as_of: @as_of,
+        credit_notes: [
+          %{invoice_id: "written-off", amount_cents: 10_000, status: :open}
+        ]
+      )
+
+    assert result.invoices == []
+    assert result.total_cents == 0
   end
 end

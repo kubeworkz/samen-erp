@@ -1,7 +1,7 @@
 defmodule Samen.Web.ErpSurfaceTest do
   @moduledoc """
   WS-ERP E8 UI proof — the generic ERP surface renders inside the SAME app shell as every
-  other module page (sidebar + topbar), with the six-item ERP nav group reachable FROM the
+  other module page (sidebar + topbar), with every ERP nav item reachable FROM the
   page (it used to serve a bare table with no navigation at all) and the current surface
   highlighted; an unknown surface name renders the honest not-found state instead of
   raising in the heading.
@@ -29,7 +29,7 @@ defmodule Samen.Web.ErpSurfaceTest do
     # The page's own surface is the active nav item...
     assert html =~ ~s(href="/erp/coa?org=#{@org}" class="on")
 
-    # ...and all six ERP surfaces are one click away, org-threaded (the nav island closed).
+    # ...and every ERP surface is one click away, org-threaded (the nav island closed).
     for surface <- Samen.Web.Erp.surfaces() do
       assert html =~ ~s(href="/erp/#{surface}?org=#{@org}")
     end
@@ -44,6 +44,39 @@ defmodule Samen.Web.ErpSurfaceTest do
 
     assert html =~ "Not found"
     assert html =~ "not available on this workspace's mounted modules"
+  end
+
+  test "the adjustment-document surfaces resolve to their mounted resources and render" do
+    mount = build_mount(:erp)
+
+    assert Samen.Web.Erp.resource(mount, :credit_notes) == Samen.WebTest.Erp.CreditNote
+    assert Samen.Web.Erp.resource(mount, :vendor_credits) == Samen.WebTest.Erp.VendorCredit
+
+    assert Samen.Web.Erp.columns(:credit_notes) == [
+             :number,
+             :customer_id,
+             :date,
+             :kind,
+             :amount_cents,
+             :status
+           ]
+
+    assert Samen.Web.Erp.transitions(:vendor_credits) == [
+             {:open, "Open vendor credit", [:draft]},
+             {:apply, "Apply vendor credit", [:open]},
+             {:void, "Void vendor credit", [:draft, :open]}
+           ]
+
+    for {surface, label} <- [
+          {"credit_notes", "Credit Notes"},
+          {"vendor_credits", "Vendor Credits"}
+        ] do
+      html = mount_smoke(SurfaceLive, mount, %{"org" => @org, "surface" => surface})
+
+      assert html =~ ~s(id="erp-surface")
+      assert html =~ label
+      assert html =~ ~s(href="/erp/#{surface}?org=#{@org}" class="on")
+    end
   end
 
   # -- write side (the bounded create affordance) ------------------------------

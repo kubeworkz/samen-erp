@@ -162,6 +162,7 @@ defmodule Samenerp.KubeworkzApAgingTest do
     assert statement.totals == %{
              billed_cents: 190_000,
              paid_cents: 40_000,
+             credited_cents: 0,
              outstanding_cents: 150_000
            }
 
