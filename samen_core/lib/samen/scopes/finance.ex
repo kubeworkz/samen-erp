@@ -7,7 +7,8 @@ defmodule Samen.Scopes.Finance do
   with the host's `otp_app`, `repo`, and `domain`.
 
   ## Resources — `account · journal_entry · journal_line · ap_invoice ·
-  ## payment_receipt · credit_note · vendor_credit · posting_account`
+  ## payment_receipt · receipt_allocation · credit_note · vendor_credit ·
+  ## posting_account`
 
   - **`Account`** — the chart of accounts (Tier-0 config row): `code` (unique
     per org), `name`, `kind ∈ {asset, liability, equity, income, expense}`,
@@ -35,7 +36,14 @@ defmodule Samen.Scopes.Finance do
     (AR document; E2): `invoice_key: "billing_invoice"` + `invoice_id` (the
     subledger anchor), `amount_cents`, `paid_at`; `:post_receipt` creates the
     anchored JournalEntry (`source_key: "billing_payment"`) in ONE transaction.
-    Exactly-once per anchor (`prc_anchor_unique`).
+    Exactly-once per anchor (`prc_anchor_unique`). An ON-ACCOUNT receipt has
+    no invoice anchor, names the customer and currency explicitly, and posts
+    the same cash+AR-clearing entry; `ReceiptAllocation` later applies that
+    credit to an invoice without a second entry.
+  - **`ReceiptAllocation`** — one immutable application of a posted on-account
+    receipt to a same-org Billing invoice. Cash already moved at receipt
+    posting, so allocation only moves the subledger; the database keeps one
+    row per `{org, receipt, invoice}`.
   - **`CreditNote`** — an AR adjustment document (E12): `customer_id`,
     `number`, dates, `amount_cents`, `kind ∈ {credit, write_off}`, an optional
     `invoice_id`, and `status ∈ {draft, open, applied, void}`. `:open` posts
@@ -326,6 +334,7 @@ defmodule Samen.Scopes.Finance do
     journal_approval_policy: "jap",
     ap_invoice: "fai",
     payment_receipt: "frr",
+    receipt_allocation: "fra",
     credit_note: "fcn",
     vendor_credit: "fvc",
     posting_account: "fpa",
@@ -413,6 +422,7 @@ defmodule Samen.Scopes.Finance do
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
     receipt_mod = Module.concat(namespace, PaymentReceipt)
+    receipt_allocation_mod = Module.concat(namespace, ReceiptAllocation)
     credit_note_mod = Module.concat(namespace, CreditNote)
     vendor_credit_mod = Module.concat(namespace, VendorCredit)
     posting_account_mod = Module.concat(namespace, PostingAccount)
@@ -455,6 +465,8 @@ defmodule Samen.Scopes.Finance do
 
       require Samen.Scopes.Finance.CreditNoteBlueprint
 
+      require Samen.Scopes.Finance.ReceiptAllocationBlueprint
+
       require Samen.Scopes.Finance.PeriodBlueprint
 
       require Samen.Scopes.Finance.RevenueBlueprint
@@ -482,6 +494,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(journal_approval_policy_mod))
         resource(unquote(ap_invoice_mod))
         resource(unquote(receipt_mod))
+        resource(unquote(receipt_allocation_mod))
         resource(unquote(credit_note_mod))
         resource(unquote(vendor_credit_mod))
         resource(unquote(posting_account_mod))
@@ -882,7 +895,16 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.payment_receipt),
         unquote(entry_mod),
-        unquote(posting_account_mod)
+        unquote(posting_account_mod),
+        unquote(billing[:invoice])
+      )
+
+      Samen.Scopes.Finance.ReceiptAllocationBlueprint.define_receipt_allocation(
+        unquote(receipt_allocation_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.receipt_allocation)
       )
 
       # WS-ERP E12: the AR/AP adjustment documents. Credit notes post against

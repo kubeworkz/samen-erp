@@ -393,7 +393,7 @@ defmodule Samen.Web.ErpArReceiptsTest do
 
   # -- refusals ---------------------------------------------------------------
 
-  test "an over-allocation is refused and posts nothing" do
+  test "over-allocating an invoice splits the excess into customer credit" do
     seed_posting_accounts()
     customer_id = customer!()
     invoice = invoice!(customer_id, ~U[2026-09-01 00:00:00Z], 10_000)
@@ -403,15 +403,22 @@ defmodule Samen.Web.ErpArReceiptsTest do
       |> select_customer(customer_id)
       |> apply_receipt(%{invoice.id => allocation(invoice.id, 10_001)})
 
-    assert socket.assigns.error =~ "exceeds"
-    assert socket.assigns.error =~ "$100.00"
-    assert socket.assigns.posted == nil
-    assert receipts!() == []
-    assert socket.assigns.aging.total_cents == 10_000
+    assert socket.assigns.error == nil
+
+    assert %{total_cents: 10_001, applied_cents: 10_000, unapplied_cents: 1} =
+             socket.assigns.posted
+
+    assert socket.assigns.posted.credit_receipt.amount_cents == 1
+    assert socket.assigns.aging.total_cents == 0
+    assert socket.assigns.aging.unapplied_by_currency["USD"] == 1
+    assert [credit] = socket.assigns.statement.unapplied_cash
+    assert credit.unapplied_cents == 1
+    assert length(receipts!()) == 2
 
     html = render(socket)
-    assert html =~ ~s(id="ar-receipt-error")
-    refute html =~ ~s(id="ar-receipt-result")
+    assert html =~ "Receipt posted"
+    assert html =~ ~s(id="ar-credit-panel")
+    assert html =~ "$0.01 available"
   end
 
   test "an invoice from another customer is refused and posts nothing" do
@@ -441,7 +448,7 @@ defmodule Samen.Web.ErpArReceiptsTest do
       |> select_customer(customer_id)
       |> apply_receipt(%{})
 
-    assert socket.assigns.error =~ "Select at least one invoice"
+    assert socket.assigns.error =~ "Select an invoice or enter unapplied cash"
     assert receipts!() == []
   end
 

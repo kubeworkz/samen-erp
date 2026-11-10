@@ -175,13 +175,14 @@ defmodule Samen.AbbrevRegistryTest do
       # +3 in WS-ACCT Phase 16 (ADR-054): the Kubeworkz host's HR mount —
       # `she`/`seh`/`shl` (Employee/EmploymentEvent/LeaveRequest), every row
       # allocator-reserved.
-      # = 438 host entries across six hosts, including the three AP/AR
-      # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`).
+      # = 441 host entries across six hosts, including the three AP/AR
+      # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`) and the #7 receipt
+      # allocation rows (`sra`/`fra`/`eaa`).
       assert hosts["samenerp"] != nil
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
-      assert map_size(hosts["samenerp"]) == 130
-      assert map_size(hosts["samen_core"]) == 121
+      assert map_size(hosts["samenerp"]) == 131
+      assert map_size(hosts["samen_core"]) == 122
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -542,6 +543,7 @@ defmodule Samen.AbbrevRegistryTest do
                  # fixture rows, allocator-reserved under the samen_core host.
                  "sap" => "SamenCore.Support.FinanceFixture.ApInvoice",
                  "prc" => "SamenCore.Support.FinanceFixture.PaymentReceipt",
+                 "sra" => "SamenCore.Support.FinanceFixture.ReceiptAllocation",
                  "fav" => "SamenCore.Support.FinanceFixture.PostingAccount",
                  "sbp" => "SamenCore.Support.FinanceFixture.PaymentMirror",
                  # WS-ERP E3 (ADR-049 §3): the Inventory core's in-tree fixture
@@ -732,7 +734,7 @@ defmodule Samen.AbbrevRegistryTest do
                  # 4 defaults already owned by the samen_core fixture legs
                  # (fxr/fxf/trn/lcd) get fresh test-host codes instead (no
                  # cross-host reuse, so the ADR-025 flatten tripwire stays clean).
-                 # 26 entries, allocator-reserved.
+                 # 27 entries, allocator-reserved.
                  "fca" => "Samen.WebTest.Erp.Account",
                  "fcn" => "Samen.WebTest.Erp.CreditNote",
                  "fvc" => "Samen.WebTest.Erp.VendorCredit",
@@ -740,6 +742,7 @@ defmodule Samen.AbbrevRegistryTest do
                  "fjl" => "Samen.WebTest.Erp.JournalLine",
                  "fai" => "Samen.WebTest.Erp.ApInvoice",
                  "frr" => "Samen.WebTest.Erp.PaymentReceipt",
+                 "fra" => "Samen.WebTest.Erp.ReceiptAllocation",
                  "fpa" => "Samen.WebTest.Erp.PostingAccount",
                  "fbg" => "Samen.WebTest.Erp.Budget",
                  "fbl" => "Samen.WebTest.Erp.BudgetLine",
@@ -802,7 +805,7 @@ defmodule Samen.AbbrevRegistryTest do
                  "eru" => "Samenerp.Billing.Usage",
                  "erv" => "Samenerp.Billing.SubscriptionEvent",
                  "ery" => "Samenerp.Billing.Payment",
-                 # Samenerp.Erp (22):
+                 # Samenerp.Erp (23):
                  "ebl" => "Samenerp.Erp.BomLine",
                  "ebm" => "Samenerp.Erp.Bom",
                  "eca" => "Samenerp.Erp.Account",
@@ -813,6 +816,7 @@ defmodule Samen.AbbrevRegistryTest do
                  "ecl" => "Samenerp.Erp.JournalLine",
                  "ecp" => "Samenerp.Erp.ApInvoice",
                  "ecr" => "Samenerp.Erp.PaymentReceipt",
+                 "eaa" => "Samenerp.Erp.ReceiptAllocation",
                  "egr" => "Samenerp.Erp.GoodsReceipt",
                  "eni" => "Samenerp.Erp.Item",
                  "enl" => "Samenerp.Erp.StockLedger",
@@ -1100,7 +1104,8 @@ defmodule Samen.AbbrevRegistryTest do
       # (+6 WS-ERP adjustment documents (#6): CreditNote + VendorCredit in the
       # three Finance hosts — samen_core `sdc`/`sdv`, samen_web `fcn`/`fvc`,
       # samenerp `ecn`/`evc` = 405 + 444 = 849 flat.)
-      assert map_size(Reg.load()) == 849
+      # (+3 #7 AR receipt allocations: `sra`/`fra`/`eaa` = 405 + 447 = 852 flat.)
+      assert map_size(Reg.load()) == 852
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

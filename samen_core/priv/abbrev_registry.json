@@ -535,6 +535,7 @@
       "fgk": "SamenCore.Support.FinanceFixture.GrantClaim",
       "svs": "SamenCore.Support.Versioning.Snapshot",
       "scc": "SamenCore.Support.CrmScopeFixture.Company",
+      "sra": "SamenCore.Support.FinanceFixture.ReceiptAllocation",
       "akl": "Samen.AI.Agent.Kill",
       "sfa": "SamenCore.Support.FleetFixture.App",
       "slf": "SamenCore.Support.FinanceFixture.LabourAllocationShare",
@@ -629,6 +630,7 @@
       "sol": "SamenCore.Support.InventoryFixture.SoLine"
     },
     "samen_web": {
+      "fra": "Samen.WebTest.Erp.ReceiptAllocation",
       "rti": "Samen.WebTest.RichTypes.Item",
       "fex": "Samen.WebTest.Erp.ExchangeRate",
       "fgc": "Samen.WebTest.Erp.GrantClaim",
@@ -765,6 +767,7 @@
       "evt": "Samenerp.Calendar.Event",
       "tws": "Samenerp.Work.Timesheet",
       "edl": "Samenerp.Docs.DocLink",
+      "eaa": "Samenerp.Erp.ReceiptAllocation",
       "egc": "Samenerp.Erp.GrantClaim",
       "ers": "Samenerp.Billing.Subscription",
       "efa": "Samenerp.Fleet.App",

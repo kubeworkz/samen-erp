@@ -127,14 +127,53 @@ defmodule Samen.ArAgingTest do
     assert Enum.map(statement.receipts, & &1.invoice_id) == ["a-paid"]
 
     assert statement.totals == %{
+             currency: "USD",
              invoiced_cents: 17_500,
              paid_cents: 7_500,
              credited_cents: 0,
-             outstanding_cents: 10_000
+             outstanding_cents: 10_000,
+             unapplied_cents: 0
            }
 
     assert statement.aging.total_cents == 10_000
     assert statement.aging.buckets.days_1_30 == 10_000
+  end
+
+  test "groups aging and unapplied cash by currency instead of summing cents" do
+    invoices = [
+      invoice("usd", amount_cents: 1_000, currency: "USD"),
+      invoice("eur", amount_cents: 2_000, currency: "EUR")
+    ]
+
+    receipts = [
+      receipt("usd", 400) |> Map.put(:currency, "USD"),
+      %{
+        id: "on-account-usd",
+        invoice_id: nil,
+        customer_id: "customer-1",
+        amount_cents: 300,
+        currency: "USD",
+        paid_at: ~U[2026-03-15 12:00:00Z]
+      }
+    ]
+
+    result = ArAging.aging(invoices, receipts, as_of: @as_of)
+
+    assert result.total_cents == nil
+    assert result.buckets == nil
+    assert result.by_currency["USD"].total_cents == 600
+    assert result.by_currency["EUR"].total_cents == 2_000
+    assert result.unapplied_by_currency == %{"USD" => 300}
+    assert result.unapplied_cents == nil
+
+    statement = ArAging.statement(invoices, receipts, "customer-1", as_of: @as_of)
+
+    assert statement.totals == nil
+    assert statement.by_currency["USD"].outstanding_cents == 600
+    assert statement.by_currency["USD"].unapplied_cents == 300
+    assert statement.by_currency["EUR"].outstanding_cents == 2_000
+    assert [credit] = statement.unapplied_cash
+    assert credit.receipt_id == "on-account-usd"
   end
 
   test "posted credit notes and write-offs net the invoice; voided or draft ones do not" do

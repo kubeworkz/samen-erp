@@ -222,6 +222,14 @@ defmodule Samen.Web.Erp do
   def payment_receipt(%Mount{} = mount), do: derived(mount, :PaymentReceipt)
 
   @doc """
+  The immutable AR receipt-allocation resource (`ReceiptAllocation`), DERIVED
+  from the host's mounted Finance namespace. `nil` when the host has not mounted
+  it — on-account cash can still be recorded, but cannot be applied later.
+  """
+  @spec receipt_allocation(Mount.t()) :: module() | nil
+  def receipt_allocation(%Mount{} = mount), do: derived(mount, :ReceiptAllocation)
+
+  @doc """
   The org's chart-of-accounts resource (`Account`), DERIVED from the host's
   mounted namespace — the capture page's expense picker. `nil` when the host
   has not mounted a scope carrying it.

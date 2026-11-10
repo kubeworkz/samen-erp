@@ -50,7 +50,9 @@ defmodule Samen.FinanceE2ScopeTest do
     ApInvoiceCapture,
     ApPaymentReversal,
     ApPaymentRun,
-    ApPaymentRunRecord
+    ApPaymentRunRecord,
+    ArAging,
+    ArReceiptApplication
   }
 
   alias Samen.Scopes.Finance.ReconcilePayments
@@ -59,11 +61,13 @@ defmodule Samen.FinanceE2ScopeTest do
   alias SamenCore.Support.FinanceFixture.{
     Account,
     ApInvoice,
+    InvoiceMirror,
     JournalEntry,
     JournalLine,
     PaymentMirror,
     PaymentReceipt,
-    PostingAccount
+    PostingAccount,
+    ReceiptAllocation
   }
 
   @repo SamenCore.TestRepo
@@ -427,6 +431,98 @@ defmodule Samen.FinanceE2ScopeTest do
                  paid_at: DateTime.utc_now() |> DateTime.truncate(:second)
                })
                |> Ash.create(scope: scope)
+    end
+  end
+
+  # ── d6b: AR cash edge cases ────────────────────────────────────────────────
+
+  describe "d6b — on-account cash and credit application" do
+    test "posts on-account cash once and applies it later without a second entry", %{
+      org: org,
+      scope: scope
+    } do
+      seed_posting_accounts(org)
+      customer_id = Ash.UUID.generate()
+
+      assert {:ok, run} =
+               ArReceiptApplication.apply(
+                 invoice: InvoiceMirror,
+                 receipt: PaymentReceipt,
+                 receipt_allocation: ReceiptAllocation,
+                 repo: @repo,
+                 scope: scope,
+                 org_id: org,
+                 customer_id: customer_id,
+                 paid_at: ~U[2026-11-08 00:00:00Z],
+                 reference: "CR-1",
+                 currency: "USD",
+                 unapplied_cents: 5_000
+               )
+
+      assert run.currency == "USD"
+      assert run.total_cents == 5_000
+      assert run.applied_cents == 0
+      assert run.unapplied_cents == 5_000
+      assert [credit] = run.receipts
+      assert credit.invoice_id == nil
+      assert credit.currency == "USD"
+      assert credit.status == :posted
+
+      invoice_id = Ash.UUID.generate()
+
+      InvoiceMirror
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          customer_id: customer_id,
+          status: :open,
+          amount_due_cents: 4_000,
+          amount_paid_cents: 0,
+          currency: "USD",
+          line_items: []
+        },
+        scope: admin_scope(org)
+      )
+      |> Ash.Changeset.force_change_attribute(:id, invoice_id)
+      |> Ash.create!()
+
+      assert {:ok, allocation} =
+               ArReceiptApplication.apply_credit(
+                 invoice: InvoiceMirror,
+                 receipt: PaymentReceipt,
+                 receipt_allocation: ReceiptAllocation,
+                 repo: @repo,
+                 scope: scope,
+                 org_id: org,
+                 customer_id: customer_id,
+                 receipt_id: credit.id,
+                 invoice_id: invoice_id,
+                 amount_cents: 3_000
+               )
+
+      assert allocation.amount_cents == 3_000
+      assert allocation.currency == "USD"
+
+      assert {:ok, aging} =
+               ArAging.for_org(
+                 invoice: InvoiceMirror,
+                 receipt: PaymentReceipt,
+                 receipt_allocation: ReceiptAllocation,
+                 org_id: org,
+                 scope: scope,
+                 as_of: ~D[2026-11-08]
+               )
+
+      assert aging.unapplied_by_currency["USD"] == 2_000
+      assert aging.by_currency["USD"].total_cents == 1_000
+
+      entries =
+        JournalEntry
+        |> Ash.Query.filter(source_id == ^credit.id)
+        |> Ash.read!(authorize?: false)
+
+      assert length(entries) == 1
     end
   end
 
@@ -1469,6 +1565,8 @@ defmodule Samen.FinanceE2ScopeTest do
     do: %{account_id: account.id, amount_cents: amount, memo: memo}
 
   defp new_receipt(scope, org, invoice_id, amount, attrs \\ %{}) do
+    ensure_invoice_anchor!(org, invoice_id)
+
     PaymentReceipt
     |> Ash.Changeset.for_create(
       :create,
@@ -1484,6 +1582,35 @@ defmodule Samen.FinanceE2ScopeTest do
       )
     )
     |> Ash.create!(scope: scope)
+  end
+
+  # The receipt guard now reads its invoice anchor (org, customer, currency).
+  # Give each test anchor a real Billing-shaped row with that exact id.
+  defp ensure_invoice_anchor!(org, invoice_id) do
+    case Ash.get(InvoiceMirror, invoice_id, authorize?: false) do
+      {:ok, _invoice} ->
+        :ok
+
+      _missing ->
+        InvoiceMirror
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            org_id: org,
+            customer_id: Ash.UUID.generate(),
+            status: :open,
+            amount_due_cents: 1_000_000,
+            amount_paid_cents: 0,
+            currency: "USD",
+            line_items: []
+          },
+          scope: admin_scope(org)
+        )
+        |> Ash.Changeset.force_change_attribute(:id, invoice_id)
+        |> Ash.create!()
+
+        :ok
+    end
   end
 
   defp new_mirror(org, amount, attrs) do

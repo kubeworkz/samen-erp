@@ -106,6 +106,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
   defp do_load(socket) do
     %{samen_mount: mount, org_id: org_id, as_of: as_of} = socket.assigns
     credit_note = Erp.credit_note(mount)
+    receipt_allocation = Erp.receipt_allocation(mount)
 
     with invoice when not is_nil(invoice) <- Erp.billing_invoice(mount),
          receipt when not is_nil(receipt) <- Erp.payment_receipt(mount),
@@ -113,6 +114,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
            ArAging.for_org(
              invoice: invoice,
              receipt: receipt,
+             receipt_allocation: Erp.receipt_allocation(mount),
              credit_note: credit_note,
              org_id: org_id,
              scope: TenantRole.authenticated_scope(mount, org_id),
@@ -130,6 +132,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
       |> read_customer(
         invoice,
         receipt,
+        receipt_allocation,
         credit_note,
         org_id,
         TenantRole.authenticated_scope(mount, org_id),
@@ -160,6 +163,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
          %{assigns: %{selected_customer: nil}} = socket,
          _invoice,
          _receipt,
+         _receipt_allocation,
          _credit_note,
          _org_id,
          _scope,
@@ -173,12 +177,22 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
     )
   end
 
-  defp read_customer(socket, invoice, receipt, credit_note, org_id, scope, as_of) do
+  defp read_customer(
+         socket,
+         invoice,
+         receipt,
+         receipt_allocation,
+         credit_note,
+         org_id,
+         scope,
+         as_of
+       ) do
     customer_id = socket.assigns.selected_customer
 
     case ArAging.statement_for_customer(
            invoice: invoice,
            receipt: receipt,
+           receipt_allocation: receipt_allocation,
            credit_note: credit_note,
            org_id: org_id,
            scope: scope,
@@ -240,18 +254,45 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
 
       true ->
         with {:ok, paid_at} <- parse_paid_at(params["paid_at"] || as_of),
-             {:ok, allocations} <- parse_allocations(params["allocations"]) do
-          apply_receipt(socket, mount, org_id, customer_id, paid_at, allocations, params)
+             {:ok, allocations} <- parse_allocations(params["allocations"]),
+             {:ok, unapplied} <- parse_unapplied(params["unapplied_cents"]) do
+          if allocations == [] and unapplied == 0 do
+            {:noreply, assign(socket, error: "Select an invoice or enter unapplied cash.")}
+          else
+            apply_receipt(
+              socket,
+              mount,
+              org_id,
+              customer_id,
+              paid_at,
+              allocations,
+              unapplied,
+              params
+            )
+          end
         else
           {:error, message} -> {:noreply, assign(socket, error: message)}
         end
     end
   end
 
-  defp apply_receipt(socket, mount, org_id, customer_id, paid_at, allocations, params) do
+  def handle_event("apply_credit", %{"credit" => params}, socket),
+    do: apply_credit_event(socket, params)
+
+  defp apply_receipt(
+         socket,
+         mount,
+         org_id,
+         customer_id,
+         paid_at,
+         allocations,
+         unapplied,
+         params
+       ) do
     case ArReceiptApplication.apply(
            invoice: Erp.billing_invoice(mount),
            receipt: Erp.payment_receipt(mount),
+           receipt_allocation: Erp.receipt_allocation(mount),
            credit_note: Erp.credit_note(mount),
            repo: mount.repo,
            scope: TenantRole.authenticated_scope(mount, org_id),
@@ -260,6 +301,8 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
            paid_at: paid_at,
            reference: blank_to_nil(params["reference"]),
            memo: blank_to_nil(params["memo"]),
+           currency: blank_to_nil(params["currency"]),
+           unapplied_cents: unapplied,
            allocations: allocations
          ) do
       {:ok, posted} ->
@@ -299,6 +342,39 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
 
   defp parse_paid_at(_value), do: {:error, "Choose a receipt date."}
 
+  defp apply_credit_event(socket, params) do
+    %{samen_mount: mount, org_id: org_id, selected_customer: customer_id} =
+      socket.assigns
+
+    with true <- writable?(mount),
+         {:ok, cents} <- parse_cents(params["amount_cents"]),
+         receipt_id when is_binary(receipt_id) <- blank_to_nil(params["receipt_id"]),
+         invoice_id when is_binary(invoice_id) <- blank_to_nil(params["invoice_id"]) do
+      case ArReceiptApplication.apply_credit(
+             invoice: Erp.billing_invoice(mount),
+             receipt: Erp.payment_receipt(mount),
+             receipt_allocation: Erp.receipt_allocation(mount),
+             credit_note: Erp.credit_note(mount),
+             repo: mount.repo,
+             scope: TenantRole.authenticated_scope(mount, org_id),
+             org_id: org_id,
+             customer_id: customer_id,
+             receipt_id: receipt_id,
+             invoice_id: invoice_id,
+             amount_cents: cents
+           ) do
+        {:ok, _allocation} ->
+          {:noreply, socket |> assign(posted: nil, error: nil) |> load()}
+
+        {:error, reason} ->
+          {:noreply, assign(socket, error: receipt_error(reason))}
+      end
+    else
+      false -> {:noreply, assign(socket, error: "Receipts are read-only on this plane.")}
+      _ -> {:noreply, assign(socket, error: "Choose an invoice and a positive amount.")}
+    end
+  end
+
   defp parse_allocations(allocations) when is_map(allocations) do
     allocations
     |> Enum.filter(fn {_invoice_id, row} ->
@@ -314,14 +390,33 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
       end
     end)
     |> case do
-      {:ok, []} -> {:error, "Select at least one invoice and enter an amount."}
+      {:ok, []} -> {:ok, []}
       {:ok, allocations} -> {:ok, Enum.reverse(allocations)}
       {:error, message} -> {:error, message}
     end
   end
 
-  defp parse_allocations(_allocations),
-    do: {:error, "Select at least one invoice and enter an amount."}
+  defp parse_allocations(_allocations), do: {:ok, []}
+
+  defp parse_unapplied(nil), do: {:ok, 0}
+
+  defp parse_unapplied(value) when is_binary(value) do
+    normalized = value |> String.trim() |> String.replace(",", "")
+
+    case normalized do
+      "" ->
+        {:ok, 0}
+
+      _other ->
+        case Integer.parse(normalized) do
+          {cents, ""} when cents >= 0 -> {:ok, cents}
+          _other -> {:error, "Enter a positive amount of unapplied cash."}
+        end
+    end
+  end
+
+  defp parse_unapplied(value) when is_integer(value) and value >= 0, do: {:ok, value}
+  defp parse_unapplied(_value), do: {:error, "Enter a positive amount of unapplied cash."}
 
   defp parse_cents(value) when is_integer(value) and value > 0, do: {:ok, value}
 
@@ -342,7 +437,32 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
   defp receipt_error(:paid_at_required), do: "Choose a receipt date."
 
   defp receipt_error(:allocations_required),
-    do: "Select at least one invoice and enter an amount."
+    do: "Select at least one invoice or enter unapplied cash."
+
+  defp receipt_error(:currency_required),
+    do: "Choose the currency for on-account cash."
+
+  defp receipt_error({:currency_mismatch, receipt_currency, invoice_currency}),
+    do:
+      "The receipt currency #{receipt_currency} does not match the invoice currency #{invoice_currency}."
+
+  defp receipt_error({:mixed_currencies, currencies}),
+    do: "Select invoices in one currency at a time (#{Enum.join(currencies, ", ")})."
+
+  defp receipt_error(:unapplied_amount_invalid),
+    do: "Enter a positive amount of unapplied cash."
+
+  defp receipt_error({:credit_exceeded, remaining_cents}),
+    do: "The credit exceeds the receipt's remaining balance (#{money(remaining_cents)})."
+
+  defp receipt_error(:not_on_account),
+    do: "That receipt is already tied to an invoice; only on-account cash can be applied."
+
+  defp receipt_error(:credit_not_posted),
+    do: "That receipt is not posted yet."
+
+  defp receipt_error(:receipt_not_found), do: "That receipt could not be found."
+  defp receipt_error(:customer_mismatch), do: "That receipt belongs to another customer."
 
   defp receipt_error(:duplicate_allocation), do: "Select each invoice once."
 
@@ -404,6 +524,11 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
   defp short(nil), do: "—"
   defp short(id) when is_binary(id), do: String.slice(id, 0, 8)
   defp short(other), do: to_string(other)
+
+  defp date_of(nil), do: nil
+  defp date_of(%DateTime{} = datetime), do: DateTime.to_date(datetime)
+  defp date_of(%NaiveDateTime{} = datetime), do: NaiveDateTime.to_date(datetime)
+  defp date_of(%Date{} = date), do: date
 
   defp date_text(nil), do: "—"
   defp date_text(%Date{} = date), do: Date.to_iso8601(date)
@@ -545,11 +670,11 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
 
           <%= if @selected_customer && @open_invoices == [] && @posted == nil do %>
             <div class="card" id="ar-receipt-empty" style="padding:16px;color:var(--muted)">
-              No open invoices for this customer.
+              No open invoices for this customer. You can still record on-account cash below.
             </div>
           <% end %>
 
-          <form :if={@open_invoices != []} id="ar-receipt-form" phx-submit="apply">
+          <form :if={@selected_customer} id="ar-receipt-form" phx-submit="apply">
             <div
               class="card"
               style="padding:12px 16px;margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:end"
@@ -589,6 +714,33 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
                   name="receipt[memo]"
                   value={@memo}
                   style="font-size:12px;padding:6px 8px"
+                />
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <label for="ar-receipt-currency" style="font-size:12px;font-weight:600">
+                  Currency
+                </label>
+                <input
+                  type="text"
+                  id="ar-receipt-currency"
+                  name="receipt[currency]"
+                  value=""
+                  placeholder="Derived; required on-account"
+                  maxlength="3"
+                  style="font-size:12px;padding:6px 8px;width:120px;text-transform:uppercase"
+                />
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <label for="ar-receipt-unapplied" style="font-size:12px;font-weight:600">
+                  Unapplied cash
+                </label>
+                <input
+                  type="number"
+                  id="ar-receipt-unapplied"
+                  name="receipt[unapplied_cents]"
+                  min="0"
+                  value="0"
+                  style="font-size:12px;padding:6px 8px;width:130px;text-align:right"
                 />
               </div>
             </div>
@@ -634,6 +786,11 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
                     />
                   </td>
                 </tr>
+                <tr :if={@open_invoices == []}>
+                  <td colspan="5" style="padding:10px 8px;color:var(--muted)">
+                    No open invoices. Enter an amount under Unapplied cash to record on-account cash.
+                  </td>
+                </tr>
               </tbody>
             </table>
 
@@ -641,7 +798,7 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
               style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px"
             >
               <span style="font-size:12px;color:var(--muted)">
-                Selected invoices post as one receipt and clear their aging immediately.
+                Selected invoices post as one receipt. Unapplied cash is held as customer credit; an allocation over an invoice's balance is split into credit.
               </span>
               <span style="font-size:13px">
                 <b>Open:</b> {money(total_outstanding(@open_invoices))}
@@ -649,6 +806,46 @@ defmodule Samen.Web.Erp.ArReceiptsLive do
               <.button type="submit" id="apply-receipt">Apply receipt</.button>
             </div>
           </form>
+
+          <div
+            :if={@statement && @statement.unapplied_cash != []}
+            id="ar-credit-panel"
+            class="card"
+            style="padding:14px 16px;margin-top:10px"
+          >
+            <div style="font-size:13px;font-weight:700;margin-bottom:6px">Unapplied cash</div>
+            <div
+              :for={credit <- @statement.unapplied_cash}
+              id={"ar-credit-#{credit.receipt_id}"}
+              style="padding:8px 0;border-bottom:1px solid var(--border, #f3f4f6)"
+            >
+              <div style="font-size:12px;margin-bottom:5px">
+                {credit.currency} {money(credit.unapplied_cents)} available
+                <span style="color:var(--muted)">· received {date_text(date_of(credit.paid_at))}</span>
+              </div>
+              <form phx-submit="apply_credit" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <input type="hidden" name="credit[receipt_id]" value={credit.receipt_id} />
+                <select name="credit[invoice_id]" style="font-size:12px;padding:5px 7px">
+                  <option value="">Apply to invoice…</option>
+                  <option
+                    :for={row <- @open_invoices}
+                    :if={row.currency == credit.currency}
+                    value={row.invoice_id}
+                  >
+                    {short(row.invoice_id)} · {money(row.outstanding_cents)} open
+                  </option>
+                </select>
+                <input
+                  type="number"
+                  name="credit[amount_cents]"
+                  min="1"
+                  value={credit.unapplied_cents}
+                  style="font-size:12px;padding:5px 7px;width:120px;text-align:right"
+                />
+                <.button type="submit">Apply credit</.button>
+              </form>
+            </div>
+          </div>
         <% end %>
       <% end %>
     </div>

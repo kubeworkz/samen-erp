@@ -99,6 +99,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
       case ArAging.for_org(
              invoice: invoice,
              receipt: receipt,
+             receipt_allocation: Erp.receipt_allocation(mount),
              credit_note: Erp.credit_note(mount),
              org_id: org_id,
              scope: scope,
@@ -120,13 +121,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
     end
   end
 
-  defp customers(aging) do
-    aging.invoices
-    |> Enum.map(& &1.customer_id)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
+  defp customers(aging), do: aging.customer_ids
 
   # -- events -----------------------------------------------------------------
 
@@ -173,6 +168,7 @@ defmodule Samen.Web.Erp.ArAgingLive do
     case ArAging.statement_for_customer(
            invoice: invoice,
            receipt: receipt,
+           receipt_allocation: Erp.receipt_allocation(mount),
            credit_note: Erp.credit_note(mount),
            org_id: org_id,
            scope: scope,
@@ -299,33 +295,61 @@ defmodule Samen.Web.Erp.ArAgingLive do
             <span class="lane">· posted cash only · as of {Date.to_iso8601(@as_of)}</span>
           </div>
 
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-            <div
-              :for={{key, label} <- Erp.aging_buckets()}
-              class="card"
-              style="padding:12px 16px;min-width:132px"
-            >
-              <div style="font-size:11px;color:var(--muted)">{label}</div>
+          <div
+            :for={{currency, group} <- @aging.by_currency}
+            id={"aging-currency-#{currency}"}
+            style="margin-bottom:12px"
+          >
+            <div style="font-size:12px;font-weight:700;margin-bottom:6px">{currency}</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
               <div
-                id={"aging-bucket-#{key}"}
-                style="font-size:16px;font-weight:700;margin-top:2px"
+                :for={{key, label} <- Erp.aging_buckets()}
+                class="card"
+                style="padding:12px 16px;min-width:132px"
               >
-                {money(Map.get(@aging.buckets, key, 0))}
+                <div style="font-size:11px;color:var(--muted)">{label}</div>
+                <div
+                  id={bucket_dom_id(@aging.currencies, currency, key)}
+                  style="font-size:16px;font-weight:700;margin-top:2px"
+                >
+                  {money(Map.get(group.buckets, key, 0))}
+                </div>
               </div>
             </div>
+          </div>
+
+          <div
+            :if={@aging.currencies == []}
+            class="card"
+            style="padding:12px 16px;margin-bottom:12px"
+          >
+            <span style="font-size:13px">
+              <b>Outstanding:</b> <span id="aging-total">{money(0)}</span>
+            </span>
           </div>
 
           <div
             class="card"
             style="padding:10px 16px;margin-bottom:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"
           >
-            <span style="font-size:13px">
-              <b>Outstanding:</b>
-              <span id="aging-total">{money(@aging.total_cents)}</span>
+            <span :for={{currency, group} <- @aging.by_currency} style="font-size:13px">
+              <b>{currency} outstanding:</b>
+              <span id={total_dom_id(@aging.currencies, currency)}>
+                {money(group.total_cents)}
+              </span>
             </span>
             <span style="font-size:12px;color:var(--muted)">
               open invoices only · zero-balance invoices are omitted
             </span>
+          </div>
+
+          <div
+            :for={{currency, cents} <- @aging.unapplied_by_currency}
+            id={"aging-unapplied-#{currency}"}
+            class="card"
+            style="padding:10px 16px;margin-bottom:12px;font-size:13px"
+          >
+            <b>Unapplied cash ({currency}):</b> {money(cents)}
           </div>
 
           <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -431,10 +455,15 @@ defmodule Samen.Web.Erp.ArAgingLive do
                 </a>
               </div>
 
-              <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:8px">
-                <span>Invoiced <b id="statement-invoiced">{money(@statement.totals.invoiced_cents)}</b></span>
-                <span>Paid <b id="statement-paid">{money(@statement.totals.paid_cents)}</b></span>
-                <span>Outstanding <b id="statement-outstanding">{money(@statement.totals.outstanding_cents)}</b></span>
+              <div
+                :for={{currency, totals} <- @statement.by_currency}
+                style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:8px"
+              >
+                <span><b>{currency}</b></span>
+                <span>Invoiced <b id={statement_total_id(@statement.currencies, currency, "invoiced")}>{money(totals.invoiced_cents)}</b></span>
+                <span>Paid <b id={statement_total_id(@statement.currencies, currency, "paid")}>{money(totals.paid_cents)}</b></span>
+                <span>Outstanding <b id={statement_total_id(@statement.currencies, currency, "outstanding")}>{money(totals.outstanding_cents)}</b></span>
+                <span>Unapplied <b id={statement_total_id(@statement.currencies, currency, "unapplied")}>{money(totals.unapplied_cents)}</b></span>
               </div>
 
               <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -498,6 +527,17 @@ defmodule Samen.Web.Erp.ArAgingLive do
     </div>
     """
   end
+
+  defp bucket_dom_id([_single], _currency, key), do: "aging-bucket-#{key}"
+  defp bucket_dom_id(_currencies, currency, key), do: "aging-bucket-#{currency}-#{key}"
+
+  defp total_dom_id([_single], _currency), do: "aging-total"
+  defp total_dom_id(_currencies, currency), do: "aging-total-#{currency}"
+
+  defp statement_total_id([_single], _currency, field), do: "statement-#{field}"
+
+  defp statement_total_id(_currencies, currency, field),
+    do: "statement-#{field}-#{currency}"
 
   defp date_of(nil), do: nil
   defp date_of(%DateTime{} = datetime), do: DateTime.to_date(datetime)

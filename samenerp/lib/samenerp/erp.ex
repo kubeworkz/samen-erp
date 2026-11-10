@@ -35,6 +35,7 @@ defmodule Samenerp.Erp do
       journal_line: "ecl",
       ap_invoice: "ecp",
       payment_receipt: "ecr",
+      receipt_allocation: "eaa",
       credit_note: "ecn",
       vendor_credit: "evc",
       posting_account: "ecf",

@@ -55,8 +55,7 @@ defmodule Samen.Scopes.Finance.ReceiptPosting do
       entry_attrs = %{
         org_id: org_id,
         entry_date: DateTime.to_date(receipt.paid_at),
-        memo: "Payment receipt #{receipt.invoice_key}:#{receipt.invoice_id}" <>
-                memo_suffix(receipt.memo),
+        memo: "Payment receipt #{anchor(receipt)}" <> memo_suffix(receipt.memo),
         source_key: @source_key,
         source_id: receipt.id,
         lines: [
@@ -130,10 +129,16 @@ defmodule Samen.Scopes.Finance.ReceiptPosting do
     do: "amount_cents must be a positive integer — got: #{inspect(amount)}"
 
   defp format({:unmapped_posting_account, key}),
-    do: "no PostingAccount row maps `#{key}` for this org (fail-honest — accounts are a " <>
-          "host decision; seed the org's posting accounts first)"
+    do:
+      "no PostingAccount row maps `#{key}` for this org (fail-honest — accounts are a " <>
+        "host decision; seed the org's posting accounts first)"
 
   defp format(reason), do: inspect(reason)
+
+  defp anchor(%{invoice_id: nil, customer_id: customer_id}),
+    do: "on-account customer #{customer_id}"
+
+  defp anchor(receipt), do: "#{receipt.invoice_key}:#{receipt.invoice_id}"
 
   defp memo_suffix(nil), do: ""
   defp memo_suffix(""), do: ""

@@ -122,10 +122,12 @@ defmodule Samenerp.KubeworkzArAgingTest do
              )
 
     assert statement.totals == %{
+             currency: "CAD",
              invoiced_cents: 150_000,
              paid_cents: 40_000,
              credited_cents: 0,
-             outstanding_cents: 110_000
+             outstanding_cents: 110_000,
+             unapplied_cents: 0
            }
 
     assert length(statement.invoices) == 2

@@ -1061,7 +1061,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
              repo,
              abbrev,
              entry_mod,
-             posting_account_mod
+             posting_account_mod,
+             invoice_mod
            ) do
     quote do
       defmodule unquote(module) do
@@ -1072,8 +1073,12 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
         `invoice_key`/`invoice_id` is the subledger anchor (the ADR-041 §3.2
         object-ref shape: the ledger names its upstream without coupling to
-        it — here `"billing_invoice"` + the mirror row's id; the design's
-        multi-invoice allocation is the documented P2 promote-if-hot carry).
+        it — here `"billing_invoice"` + the mirror row's id). Both are nil for
+        an ON-ACCOUNT receipt: cash received but not yet applied to an invoice.
+        `customer_id` is always present; invoice-bound receipts derive it (and
+        `currency`) from the invoice, and the guard refuses a mismatch.
+        Applying on-account cash later writes `ReceiptAllocation` rows — the
+        cash entry is never doubled.
 
         `:post_receipt` creates the cash+AR-clearing JournalEntry in ONE
         transaction (`Samen.Scopes.Finance.ReceiptPosting`), anchored
@@ -1102,10 +1107,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
         end
 
         attributes do
-          attribute(:invoice_key, :string, public?: true, allow_nil?: false)
-          attribute(:invoice_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:customer_id, :uuid, public?: true)
+          attribute(:invoice_key, :string, public?: true)
+          attribute(:invoice_id, :uuid, public?: true)
           attribute(:amount_cents, :integer, public?: true, allow_nil?: false)
-          attribute(:currency, :string, public?: true, allow_nil?: false, default: "USD")
+          attribute(:currency, :string, public?: true)
           attribute(:paid_at, :utc_datetime, public?: true, allow_nil?: false)
           attribute(:memo, :string, public?: true)
 
@@ -1131,6 +1137,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
           create :create do
             accept([
               :org_id,
+              :customer_id,
               :invoice_key,
               :invoice_id,
               :amount_cents,
@@ -1143,6 +1150,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # gets an Invalid, not a wrapped ConstraintError (the DB CHECK is
             # the belt over THIS brace).
             validate(numericality(:amount_cents, greater_than: 0))
+
+            change({Samen.Scopes.Finance.ArReceiptGuard, invoice: unquote(invoice_mod)})
           end
 
           update :post_receipt do
