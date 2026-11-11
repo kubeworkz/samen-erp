@@ -367,7 +367,7 @@ defmodule Samen.Web.Erp do
   def columns(:entries), do: [:entry_date, :status, :memo, :posted_at]
   # AP/PO totals are Σ lines (the subledger shape) — the header surface shows
   # the document facts, the journal/GL carries the money.
-  def columns(:ap_invoices), do: [:number, :vendor_id, :bill_date, :due_date, :status]
+  def columns(:ap_invoices), do: [:number, :vendor_id, :bill_date, :due_date, :currency, :status]
 
   def columns(:credit_notes),
     do: [:number, :customer_id, :date, :kind, :amount_cents, :status]
@@ -432,6 +432,10 @@ defmodule Samen.Web.Erp do
       :vendor_id,
       :bill_date,
       :due_date,
+      :currency,
+      :base_currency,
+      :base_total_cents,
+      :exchange_rate,
       :memo,
       :match_tolerance_cents,
       :match_tolerance_pct,
@@ -531,6 +535,7 @@ defmodule Samen.Web.Erp do
       {:number, :text, []},
       {:bill_date, :date, []},
       {:due_date, :date, []},
+      {:currency, :text, [placeholder: "ISO 4217; defaults to the functional currency"]},
       {:memo, :text, []},
       {:match_tolerance_cents, :number, []},
       {:match_tolerance_pct, :number, []}
@@ -618,6 +623,7 @@ defmodule Samen.Web.Erp do
   def edit_fields(:ap_invoices),
     do: [
       {:due_date, :date, []},
+      {:currency, :text, [placeholder: "ISO 4217; defaults to the functional currency"]},
       {:memo, :text, []},
       {:match_tolerance_cents, :number, []},
       {:match_tolerance_pct, :number, []}

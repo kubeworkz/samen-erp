@@ -61,6 +61,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRunRecord do
     field(:remittance_address, :string, source: :prn_remittance_address)
     field(:payment_date, :date, source: :prn_payment_date)
     field(:memo, :string, source: :prn_memo)
+    field(:currency, :string, default: "USD", source: :prn_currency)
 
     field(:status, Ecto.Enum, values: @statuses, default: :pending_approval, source: :prn_status)
     field(:total_cents, :integer, default: 0, source: :prn_total_cents)
@@ -110,6 +111,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRunRecord do
       :remittance_address,
       :payment_date,
       :memo,
+      :currency,
       :status,
       :total_cents,
       :bill_count,
@@ -121,6 +123,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRunRecord do
       :org_id,
       :reference,
       :payment_date,
+      :currency,
       :status,
       :total_cents,
       :bill_count,
@@ -129,6 +132,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRunRecord do
       :requested_at
     ])
     |> validate_inclusion(:status, @statuses)
+    |> validate_format(:currency, ~r/\A[A-Z]{3}\z/)
     |> validate_number(:total_cents, greater_than: 0)
     |> validate_number(:bill_count, greater_than: 0)
     |> unique_constraint(:reference, name: :prn_ap_payment_run_org_reference_index)

@@ -932,7 +932,9 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.ap_invoice),
         unquote(entry_mod),
         unquote(posting_account_mod),
-        unquote(approval_policy_mod)
+        unquote(approval_policy_mod),
+        unquote(org_fx_settings_mod),
+        unquote(exchange_rate_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_payment_receipt(

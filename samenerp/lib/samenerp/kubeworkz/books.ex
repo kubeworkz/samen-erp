@@ -151,6 +151,8 @@ defmodule Samenerp.Kubeworkz.Books do
     {"6040", "R&D – PCB Development", :expense, :debit},
     # -- amortization of the PDK license ------------------------------------
     {"7000", "Amortization – PDK License", :expense, :debit},
+    # -- realized FX on foreign-currency settlement -------------------------
+    {"7900", "Foreign Exchange Gain/Loss", :income, :credit},
     # -- write-downs ---------------------------------------------------------
     {"8000", "Inventory Write-Down – Obsolete Chips", :expense, :debit}
   ]
@@ -198,6 +200,7 @@ defmodule Samenerp.Kubeworkz.Books do
     depreciation_expense: "6030",
     accumulated_depreciation: "1520",
     write_down_expense: "8000",
+    fx_gain_loss: "7900",
     mask_expense: "6000",
     eda_expense: "6010",
     # WS-ACCT Phase 7 — the four variance families and the two disposition
@@ -384,6 +387,7 @@ defmodule Samenerp.Kubeworkz.Books do
   def seed!(org_id) do
     org_id = to_string(org_id)
 
+    org_fx = seed_org_fx_settings(org_id)
     accounts = seed_accounts(org_id)
     posting = seed_posting_accounts(org_id)
     objects = seed_cost_objects(org_id)
@@ -395,6 +399,7 @@ defmodule Samenerp.Kubeworkz.Books do
 
     %{
       org_id: org_id,
+      org_fx_settings: org_fx,
       accounts: accounts,
       posting_accounts: posting,
       cost_objects: objects,
@@ -405,6 +410,31 @@ defmodule Samenerp.Kubeworkz.Books do
       budget: budget,
       unmapped: @pending_meanings |> Map.keys() |> Enum.sort()
     }
+  end
+
+  defp seed_org_fx_settings(org_id) do
+    case org_fx_settings(org_id) do
+      nil ->
+        Erp.OrgFxSettings
+        |> Ash.Changeset.for_create(:create, %{org_id: org_id, base_currency: @currency},
+          authorize?: false
+        )
+        |> Ash.create!(authorize?: false)
+
+        %{created: true, base_currency: @currency, drifted: []}
+
+      %{base_currency: @currency} ->
+        %{created: false, base_currency: @currency, drifted: []}
+
+      %{base_currency: other} ->
+        %{
+          created: false,
+          base_currency: other,
+          drifted: [
+            "functional currency is #{inspect(other)}; the books are opened in #{@currency}"
+          ]
+        }
+    end
   end
 
   defp seed_accounts(org_id) do
@@ -729,7 +759,8 @@ defmodule Samenerp.Kubeworkz.Books do
     org_id = to_string(org_id)
 
     missing =
-      missing_accounts(org_id) ++
+      missing_org_fx_settings(org_id) ++
+        missing_accounts(org_id) ++
         missing_posting_accounts(org_id) ++
         missing_cost_objects(org_id) ++
         missing_assets(org_id) ++
@@ -740,6 +771,7 @@ defmodule Samenerp.Kubeworkz.Books do
       [] ->
         {:ok,
          %{
+           base_currency: @currency,
            accounts: length(@coa),
            posting_accounts: map_size(@posting_map),
            cost_objects: length(@cost_objects),
@@ -751,6 +783,19 @@ defmodule Samenerp.Kubeworkz.Books do
 
       gaps ->
         {:error, gaps}
+    end
+  end
+
+  defp missing_org_fx_settings(org_id) do
+    case org_fx_settings(org_id) do
+      %{base_currency: @currency} ->
+        []
+
+      nil ->
+        ["org FX settings (functional currency #{@currency}) are missing"]
+
+      %{base_currency: other} ->
+        ["functional currency is #{inspect(other)}, expected #{@currency}"]
     end
   end
 
@@ -856,6 +901,12 @@ defmodule Samenerp.Kubeworkz.Books do
   end
 
   # -- lookups ---------------------------------------------------------------
+
+  defp org_fx_settings(org_id) do
+    Erp.OrgFxSettings
+    |> Ash.Query.filter(org_id == ^org_id)
+    |> Ash.read_one!(authorize?: false)
+  end
 
   defp account_by_code(org_id, code) do
     Erp.Account

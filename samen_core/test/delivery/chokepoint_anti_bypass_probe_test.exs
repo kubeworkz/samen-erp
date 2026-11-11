@@ -38,6 +38,12 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
        outbound org-configured webhook delivery over the `webhooks_out`
        queue) that shares the English word "deliver" but has nothing to do
        with `Samen.Delivery.Provider`.
+    5. `ArStatementDelivery.deliver(` / `Samen.Scopes.Finance.ArStatementDelivery.deliver(`
+       — a Finance SERVICE, not an adapter: it builds a token-only
+       `Samen.Delivery.Message` and calls `Samen.Delivery.Chokepoint.send/2`.
+       The guard test below asserts that it still routes through the
+       chokepoint; any direct `adapter.deliver(...)` inside it would still be
+       caught by this probe.
 
   Every other `X.deliver(...)` call ANYWHERE under any app's `lib/` (or the
   generator template set) is a violation — proven anti-tautological below by
@@ -104,15 +110,19 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
     samen_core/lib/samen/delivery/chokepoint.ex
     samen_core/lib/samen/delivery/provider_conformance_case.ex
   )
-  |> Enum.map(&Path.join(Path.expand("../../..", __DIR__), &1))
+                  |> Enum.map(&Path.join(Path.expand("../../..", __DIR__), &1))
 
   # Matches an actual CALL (`something.deliver(`) — not a definition (`def
   # deliver(`, no leading dot) and not a callback/typespec (`deliver(message ::`).
   @deliver_call_re ~r/([A-Za-z_][A-Za-z0-9_.]*)\.deliver\(/
 
-  # The two DIFFERENT, non-adapter "deliver"-named functions documented above
-  # — matched by their EXACT qualified receiver name, not a wildcard.
-  @known_non_adapter_receivers ~w(Lifecycle Samen.Delivery.Lifecycle Webhook Samen.Webhook)
+  # The non-adapter "deliver"-named services documented above — matched by
+  # their EXACT qualified receiver name, not a wildcard.
+  @known_non_adapter_receivers ~w(
+    Lifecycle Samen.Delivery.Lifecycle
+    Webhook Samen.Webhook
+    ArStatementDelivery Samen.Scopes.Finance.ArStatementDelivery
+  )
 
   # `extra_roots` — additional absolute directories to fold into the scan
   # (used ONLY by the rogue-file proof below, which plants a synthetic file in
@@ -191,14 +201,20 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
       assert offenders != [], "sanity: Chokepoint must contain the real adapter.deliver(...) call"
     end
 
-    test "known non-adapter 'deliver' functions (Lifecycle/Webhook) are real, distinct functions" do
-      # Guards the exclusion list itself against silent drift: if either
-      # function were ever renamed/removed, or grew a real adapter dispatch,
-      # this fails loudly rather than the exclusion quietly widening.
+    test "known non-adapter 'deliver' functions (Lifecycle/Webhook/AR statement) are real, distinct functions" do
+      # Guards the exclusion list itself against silent drift: if any of these
+      # functions were renamed/removed, or the statement service grew a direct
+      # adapter dispatch, this fails loudly rather than the exclusion quietly
+      # widening.
       lifecycle_src =
         File.read!(Path.join(@repo_root, "samen_core/lib/samen/delivery/lifecycle.ex"))
 
       webhook_src = File.read!(Path.join(@repo_root, "samen_core/lib/samen/webhook.ex"))
+
+      statement_src =
+        File.read!(
+          Path.join(@repo_root, "samen_core/lib/samen/scopes/finance/ar_statement_delivery.ex")
+        )
 
       assert lifecycle_src =~ ~r/def deliver\(event, opts/,
              "Lifecycle.deliver/2 must remain the enqueue-only event API this exclusion documents"
@@ -219,6 +235,15 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
 
       assert webhook_src =~ ~r/def deliver\(event_type, resource, record/,
              "Webhook.deliver/4 must remain the unrelated outbound-webhook API this exclusion documents"
+
+      assert statement_src =~ ~r/def deliver\(opts\)/,
+             "ArStatementDelivery.deliver/1 must remain the service this exclusion documents"
+
+      assert statement_src =~ ~r/Chokepoint\.send\(/,
+             "ArStatementDelivery must keep routing its Message through Chokepoint.send/2"
+
+      refute statement_src =~ ~r/\badapter\.deliver\(/,
+             "ArStatementDelivery must never call an adapter directly"
     end
 
     test "ROGUE-FILE RED PROOF: a throwaway module calling adapter.deliver in a NEW file trips the probe" do
@@ -234,7 +259,9 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
       # which is the property that matters; `scan_paths/0`'s OWN "sanity"
       # test above independently proves the real app dirs are among the
       # roots actually scanned by default.
-      tmp_root = Path.join(System.tmp_dir!(), "t30_rogue_lib_#{System.unique_integer([:positive])}")
+      tmp_root =
+        Path.join(System.tmp_dir!(), "t30_rogue_lib_#{System.unique_integer([:positive])}")
+
       rogue_path = Path.join(tmp_root, "rogue_bypass_probe_tmp.ex")
       File.mkdir_p!(tmp_root)
 
@@ -268,7 +295,10 @@ defmodule Samen.Delivery.ChokepointAntiBypassProbeTest do
 
     test "ANTI-TAUTOLOGY: the matcher genuinely flags a synthetic violation outside the tree" do
       tmp =
-        Path.join(System.tmp_dir!(), "chokepoint_probe_sabotage_#{System.unique_integer([:positive])}.ex")
+        Path.join(
+          System.tmp_dir!(),
+          "chokepoint_probe_sabotage_#{System.unique_integer([:positive])}.ex"
+        )
 
       File.write!(tmp, """
       defmodule SabotageConsumer do

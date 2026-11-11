@@ -61,9 +61,11 @@ defmodule Samen.FinanceE2ScopeTest do
   alias SamenCore.Support.FinanceFixture.{
     Account,
     ApInvoice,
+    ExchangeRate,
     InvoiceMirror,
     JournalEntry,
     JournalLine,
+    OrgFxSettings,
     PaymentMirror,
     PaymentReceipt,
     PostingAccount,
@@ -1312,6 +1314,125 @@ defmodule Samen.FinanceE2ScopeTest do
       assert Ash.get!(ApInvoice, first.id, authorize?: false).status == :paid
       assert Ash.get!(ApInvoice, second.id, authorize?: false).status == :paid
     end
+
+    test "approval converts a USD bill to CAD and payment books the realized FX loss", %{
+      org: org,
+      scope: scope
+    } do
+      expense = seed_posting_accounts(org)
+      fx = new_account(scope, org, "7900", %{kind: :expense, normal_side: :debit})
+      add_posting_account(org, :fx_gain_loss, fx)
+      seed_cad_fx!(org, [{~U[2026-09-01 00:00:00Z], "1.35"}, {~U[2026-09-20 00:00:00Z], "1.40"}])
+
+      bill =
+        new_bill(scope, org, [bill_line(expense, 10_000)],
+          vendor_id: Ash.UUID.generate(),
+          number: "V-FX-1",
+          bill_date: ~D[2026-09-01],
+          currency: "USD"
+        )
+
+      assert {:gated, approval_id} = gate(bill, scope)
+      assert {:ok, _, _} = decide(approval_id)
+
+      approved = Ash.get!(ApInvoice, bill.id, authorize?: false)
+      assert approved.status == :approved
+      assert approved.currency == "USD"
+      assert approved.base_currency == "CAD"
+      assert approved.base_total_cents == 13_500
+      assert approved.exchange_rate == "1.35"
+
+      approval_entry =
+        JournalEntry
+        |> Ash.Query.filter(
+          org_id == ^org and source_key == "ap_invoice" and source_id == ^bill.id
+        )
+        |> Ash.read_one!(authorize?: false)
+
+      approval_lines = entry_lines(approval_entry.id)
+      assert Enum.sum(Enum.map(approval_lines, & &1.debit_cents)) == 13_500
+      assert Enum.sum(Enum.map(approval_lines, & &1.credit_cents)) == 13_500
+      assert Enum.find(approval_lines, &(&1.account_id == expense.id)).debit_cents == 13_500
+
+      assert {:ok, pending} =
+               ApPaymentRun.request(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [bill.id],
+                 payment_date: ~D[2026-09-20],
+                 reference: "RUN-FX-1"
+               )
+
+      assert pending.currency == "USD"
+
+      assert {:ok, run} =
+               ApPaymentRun.approve(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: admin_scope(org),
+                 run_id: pending.id
+               )
+
+      assert run.currency == "USD"
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :paid
+
+      payment = payment_entry!(org, bill.id)
+      payment_lines = entry_lines(payment.id)
+
+      assert Enum.find(payment_lines, &(&1.account_id == expense.id)) == nil
+
+      assert Enum.find(payment_lines, &(&1.account_id == fx.id)).debit_cents == 500
+
+      cash_credit =
+        payment_lines
+        |> Enum.filter(&(&1.credit_cents > 0))
+        |> Enum.map(& &1.credit_cents)
+
+      assert 14_000 in cash_credit
+
+      assert Enum.sum(Enum.map(payment_lines, & &1.debit_cents)) ==
+               Enum.sum(Enum.map(payment_lines, & &1.credit_cents))
+
+      assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
+    end
+
+    test "a run refuses a mixed-currency bill set", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      seed_cad_fx!(org, [{~U[2026-09-01 00:00:00Z], "1.35"}])
+
+      usd =
+        new_bill(scope, org, [bill_line(expense, 1_000)],
+          vendor_id: Ash.UUID.generate(),
+          number: "V-FX-MIX-USD",
+          bill_date: ~D[2026-09-01],
+          currency: "USD"
+        )
+
+      cad =
+        new_bill(scope, org, [bill_line(expense, 2_000)],
+          vendor_id: Ash.UUID.generate(),
+          number: "V-FX-MIX-CAD",
+          bill_date: ~D[2026-09-01],
+          currency: "CAD"
+        )
+
+      usd = approve_bill!(usd, scope)
+      cad = approve_bill!(cad, scope)
+
+      assert {:error, :mixed_currency} =
+               ApPaymentRun.request(
+                 ap_invoice: ApInvoice,
+                 repo: @repo,
+                 scope: scope,
+                 bill_ids: [usd.id, cad.id],
+                 payment_date: ~D[2026-09-20],
+                 reference: "RUN-FX-MIX"
+               )
+
+      assert payment_entries(org, usd.id) == []
+      assert payment_entries(org, cad.id) == []
+    end
   end
 
   describe "d14c — AP invoice capture" do
@@ -1565,6 +1686,41 @@ defmodule Samen.FinanceE2ScopeTest do
     end
 
     expense
+  end
+
+  defp add_posting_account(org, key, account) do
+    PostingAccount
+    |> Ash.Changeset.for_create(:create, %{org_id: org, key: key, account_id: account.id},
+      scope: admin_scope(org)
+    )
+    |> Ash.create!()
+  end
+
+  defp seed_cad_fx!(org, rates) do
+    OrgFxSettings
+    |> Ash.Changeset.for_create(:create, %{org_id: org, base_currency: "CAD"},
+      scope: admin_scope(org)
+    )
+    |> Ash.create!()
+
+    for {valid_at, rate} <- rates do
+      ExchangeRate
+      |> Ash.Changeset.for_create(
+        :create_rate,
+        %{
+          org_id: org,
+          from_currency: "USD",
+          to_currency: "CAD",
+          rate: rate,
+          source: :manual,
+          valid_at: valid_at
+        },
+        scope: admin_scope(org)
+      )
+      |> Ash.create!()
+    end
+
+    :ok
   end
 
   defp new_account(scope, org, code, attrs \\ %{}) do

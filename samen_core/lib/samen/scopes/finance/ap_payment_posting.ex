@@ -2,34 +2,20 @@ defmodule Samen.Scopes.Finance.ApPaymentPosting do
   @moduledoc """
   The AP payment cascade (the AP lifecycle's missing second half).
 
-  On `ApInvoice.:pay`, land a POSTED `JournalEntry` that debits the org's
-  `ap_clearing` account for the bill total and credits its `cash` account,
-  anchored `source_key: "ap_payment"`, `source_id: <bill id>`; then flip the
-  bill from `:approved` to `:paid` in the SAME transaction.
+  On `ApInvoice.:pay`, settle the liability at the functional amount stamped
+  by approval, credit cash at the payment-date rate, and post the difference to
+  the org's `fx_gain_loss` account. For a same-currency payment the difference
+  is zero and no FX account is required.
 
-  The bill's approval entry stays linked through `posted_entry_id` — paying a
-  bill must not erase the expense+liability fact that approval created. The
-  payment entry is the second, separately anchored fact; reads find it by the
-  `ap_payment` anchor.
-
-  ## Exactly-once
-
-  The action is a bounded `approved -> paid` transition. It locks the persisted
-  bill row with `SELECT ... FOR UPDATE` inside the action transaction, then
-  re-checks the stored status. Two concurrent payment attempts serialize; the
-  loser sees `:paid` and is refused. The `:pay` action's `ApLines` guard is the
-  cheap pre-check, and this row lock is the authoritative one. A duplicate
-  payment cannot be created through the sanctioned action even when the caller
-  holds a stale `:approved` record.
-
-  ## Accounts
-
-  `ap_clearing` and `cash` resolve from the org's `PostingAccount` rows. An
-  unmapped key refuses the payment fail-honest: accounts are a host decision,
-  never invented by the scope.
+  The payment entry is anchored `source_key: "ap_payment"` and the bill flips
+  `:approved → :paid` in the same transaction. The original approval entry
+  stays linked through `posted_entry_id`; this is a second, separately anchored
+  fact. The row lock makes the transition exactly-once.
   """
 
   use Ash.Resource.Change
+
+  alias Samen.Scopes.Finance.ApFx
 
   @source_key "ap_payment"
 
@@ -37,47 +23,66 @@ defmodule Samen.Scopes.Finance.ApPaymentPosting do
   def change(changeset, opts, _context) do
     entry_resource = Keyword.fetch!(opts, :entry)
     pa_resource = Keyword.fetch!(opts, :posting_account)
+    org_fx_settings = Keyword.fetch!(opts, :org_fx_settings)
+    exchange_rate = Keyword.fetch!(opts, :exchange_rate)
+    repo = Keyword.fetch!(opts, :repo)
 
-    org_id =
-      case Ash.Changeset.get_attribute(changeset, :org_id) do
-        %Ash.NotLoaded{} -> Ash.load!(changeset.data, [:org_id], authorize?: false).org_id
-        value -> value
-      end
+    org_id = loaded_org_id(changeset)
 
     Ash.Changeset.before_action(changeset, fn changeset ->
-      do_post(changeset, org_id, entry_resource, pa_resource)
+      do_post(
+        changeset,
+        org_id,
+        entry_resource,
+        pa_resource,
+        org_fx_settings,
+        exchange_rate,
+        repo
+      )
     end)
   end
 
-  defp do_post(changeset, org_id, entry_resource, pa_resource) do
+  defp do_post(
+         changeset,
+         org_id,
+         entry_resource,
+         pa_resource,
+         org_fx_settings,
+         exchange_rate,
+         repo
+       ) do
     bill = changeset.data
+    currency = bill.currency || ApFx.base_currency(org_fx_settings, org_id)
+    base_currency = bill.base_currency || ApFx.base_currency(org_fx_settings, org_id)
 
     with :ok <- lock_approved(changeset),
          {:ok, payment_date} <- payment_date(changeset),
          {:ok, total} <- total_of(bill),
+         {:ok, original_base} <- original_base(bill, total, currency, base_currency),
+         {:ok, cash_base, rate} <-
+           payment_base(total, currency, base_currency, payment_date, org_id, repo, exchange_rate),
          {:ok, ap_clearing} <- posting_account(pa_resource, org_id, :ap_clearing),
-         {:ok, cash} <- posting_account(pa_resource, org_id, :cash) do
+         {:ok, cash} <- posting_account(pa_resource, org_id, :cash),
+         {:ok, fx_lines, fx_account} <-
+           fx_lines(original_base, cash_base, pa_resource, org_id) do
       entry_attrs = %{
         org_id: org_id,
         entry_date: payment_date,
-        memo: memo(bill, changeset),
+        memo: memo(bill, changeset, currency, rate),
         source_key: @source_key,
         source_id: bill.id,
-        lines: [
-          %{account_id: ap_clearing.account_id, debit_cents: total, credit_cents: 0},
-          %{account_id: cash.account_id, debit_cents: 0, credit_cents: total}
-        ]
+        lines:
+          [
+            %{account_id: ap_clearing.account_id, debit_cents: original_base, credit_cents: 0},
+            %{account_id: cash.account_id, debit_cents: 0, credit_cents: cash_base}
+          ] ++ fx_lines
       }
 
       case entry_resource
-           # The posted-born internal factory: UnbalancedEntry + EntryLines +
-           # PostGuard run resource-wide, so the payment lands POSTED and R10
-           # applies exactly as it does to every other document posting.
            |> Ash.Changeset.for_create(:create_reversal, entry_attrs, authorize?: false)
            |> Ash.create(authorize?: false) do
         {:ok, _entry} ->
-          # The approval anchor (`posted_entry_id`/`posted_at`) is deliberately
-          # left intact; the payment is a separate, append-only fact.
+          _ = fx_account
           Ash.Changeset.force_change_attribute(changeset, :status, :paid)
 
         {:error, reason} ->
@@ -95,9 +100,58 @@ defmodule Samen.Scopes.Finance.ApPaymentPosting do
     end
   end
 
-  # The authoritative exactly-once check: lock the persisted row and read the
-  # status the database actually holds. A caller's stale `:approved` struct is
-  # not evidence that the bill is still payable.
+  defp original_base(bill, total, currency, base_currency) do
+    case bill.base_total_cents do
+      amount when is_integer(amount) and amount > 0 ->
+        {:ok, amount}
+
+      _ when currency == base_currency ->
+        {:ok, total}
+
+      _ ->
+        {:error, :missing_base_amount}
+    end
+  end
+
+  defp payment_base(total, currency, base_currency, payment_date, org_id, repo, exchange_rate) do
+    if currency == base_currency do
+      {:ok, total, "1.0"}
+    else
+      case ApFx.convert(total, currency, base_currency, payment_date, org_id, repo, exchange_rate) do
+        {:ok, {amount, rate}} -> {:ok, amount, rate}
+        {:error, reason} -> {:error, {reason, currency, base_currency}}
+      end
+    end
+  end
+
+  defp fx_lines(original_base, cash_base, pa_resource, org_id) do
+    difference = original_base - cash_base
+
+    case difference do
+      0 ->
+        {:ok, [], nil}
+
+      amount when amount > 0 ->
+        with {:ok, account} <- posting_account(pa_resource, org_id, :fx_gain_loss) do
+          {:ok, [%{account_id: account.account_id, debit_cents: 0, credit_cents: amount}],
+           account}
+        end
+
+      amount ->
+        with {:ok, account} <- posting_account(pa_resource, org_id, :fx_gain_loss) do
+          {:ok, [%{account_id: account.account_id, debit_cents: -amount, credit_cents: 0}],
+           account}
+        end
+    end
+  end
+
+  defp loaded_org_id(changeset) do
+    case Ash.Changeset.get_attribute(changeset, :org_id) do
+      %Ash.NotLoaded{} -> Ash.load!(changeset.data, [:org_id], authorize?: false).org_id
+      value -> value
+    end
+  end
+
   defp lock_approved(changeset) do
     resource = changeset.resource
     table = AshPostgres.DataLayer.Info.table(resource)
@@ -134,17 +188,16 @@ defmodule Samen.Scopes.Finance.ApPaymentPosting do
   defp total_of(bill) do
     case bill.lines do
       lines when is_list(lines) and lines != [] ->
-        total =
-          Enum.reduce(lines, 0, fn line, sum ->
-            sum + (Map.get(line, :amount_cents) || Map.get(line, "amount_cents") || 0)
-          end)
-
+        total = Enum.sum(Enum.map(lines, &line_amount/1))
         if total > 0, do: {:ok, total}, else: {:error, :zero_total}
 
       _ ->
         {:error, :no_lines}
     end
   end
+
+  defp line_amount(line) when is_map(line),
+    do: Map.get(line, :amount_cents) || Map.get(line, "amount_cents") || 0
 
   defp posting_account(pa_resource, org_id, key) do
     require Ash.Query
@@ -158,13 +211,14 @@ defmodule Samen.Scopes.Finance.ApPaymentPosting do
     end
   end
 
-  defp memo(bill, changeset) do
+  defp memo(bill, changeset, currency, rate) do
     reference = Ash.Changeset.get_argument(changeset, :reference)
     note = Ash.Changeset.get_argument(changeset, :memo)
 
     "AP payment #{bill.number}" <>
       if(is_binary(reference) and reference != "", do: " — ref #{reference}", else: "") <>
-      if(is_binary(note) and note != "", do: " — #{note}", else: "")
+      if(is_binary(note) and note != "", do: " — #{note}", else: "") <>
+      " (#{currency} @ #{rate})"
   end
 
   defp format({:not_approved, status}),
@@ -175,6 +229,12 @@ defmodule Samen.Scopes.Finance.ApPaymentPosting do
   defp format({:invalid_payment_date, value}), do: "invalid payment_date: #{inspect(value)}"
   defp format(:no_lines), do: "the bill carries no lines"
   defp format(:zero_total), do: "the bill total is zero"
+
+  defp format(:missing_base_amount),
+    do: "the bill has no functional-currency liability; re-approve it"
+
+  defp format({:rate_not_found, _from, _to}),
+    do: "no exchange rate is stored for the payment date; store the rate before paying"
 
   defp format({:unmapped_posting_account, key}),
     do:

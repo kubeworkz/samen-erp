@@ -53,6 +53,7 @@ defmodule Samen.Scopes.Finance.ApAchFile do
           required(:reference) => String.t(),
           required(:payment_date) => Date.t(),
           optional(:vendor_id) => String.t() | nil,
+          optional(:currency) => String.t() | nil,
           required(:total_cents) => non_neg_integer(),
           required(:payments) => [map()]
         }
@@ -68,6 +69,7 @@ defmodule Samen.Scopes.Finance.ApAchFile do
     payments = Map.get(run, :payments) || []
 
     with :ok <- require_payments(payments),
+         :ok <- supported_currency(run),
          {:ok, origin} <- origin_fields(opts),
          {:ok, receiver} <- receiver_fields(opts),
          {:ok, description} <- entry_description(opts),
@@ -109,6 +111,16 @@ defmodule Samen.Scopes.Finance.ApAchFile do
   def valid_routing?(_value), do: false
 
   # -- validation -------------------------------------------------------------
+
+  # NACHA is a USD rail. A CAD/EUR run must use its own file format; refusing
+  # here is the rail mismatch guard, not a silent amount conversion.
+  defp supported_currency(run) do
+    case Map.get(run, :currency) || "USD" do
+      "USD" -> :ok
+      currency when is_binary(currency) -> {:error, {:unsupported_currency, currency}}
+      _ -> {:error, {:unsupported_currency, "USD"}}
+    end
+  end
 
   defp require_payments([]), do: {:error, :no_payments}
   defp require_payments(payments) when is_list(payments), do: :ok

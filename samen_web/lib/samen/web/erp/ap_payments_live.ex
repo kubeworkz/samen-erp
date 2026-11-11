@@ -869,6 +869,10 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   defp payment_error(:vendor_required), do: "Every selected bill must have a vendor."
 
+  defp payment_error(:mixed_currency),
+    do:
+      "Select bills in one currency. A payment run cannot mix currencies; request a separate run per currency."
+
   defp payment_error(:bill_ids_required), do: "Select at least one approved bill."
   defp payment_error(:bill_ids_must_be_unique_uuids), do: "Select each bill once."
 
@@ -940,6 +944,9 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp ach_error(:no_payments), do: "The run has no payments to send."
   defp ach_error(:effective_date_required), do: "The run has no effective date."
 
+  defp ach_error({:unsupported_currency, currency}),
+    do: "NACHA is USD-only. This run is #{currency}; use a #{currency} payment rail."
+
   defp ach_error(:ach_vendor_required), do: "Choose which vendor's ACH file to build."
   defp ach_error(:ach_vendor_unknown), do: "Choose a vendor from this payment run."
 
@@ -967,6 +974,9 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
 
   defp ach_error(reason),
     do: "The ACH file could not be stored: #{inspect(reason)}"
+
+  defp ach_currency(%{currency: currency}) when is_binary(currency), do: currency
+  defp ach_currency(_run), do: "USD"
 
   defp profile_error(:vendor_id_required), do: "Enter the vendor id."
   defp profile_error(:vendor_id_invalid), do: "That vendor id is not a valid UUID."
@@ -1669,7 +1679,16 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               </p>
             <% end %>
 
-            <form id="ach-file-form" phx-submit="ach">
+            <p
+              :if={ach_currency(@run) != "USD"}
+              id="ach-currency-blocked"
+              style="margin:0 0 10px;padding:8px 10px;border:1px solid #f59e0b;border-radius:6px;font-size:12px;color:#92400e"
+            >
+              NACHA is a USD-only rail. This run is {ach_currency(@run)}; build a
+              {ach_currency(@run)} payment file instead of a NACHA file.
+            </p>
+
+            <form :if={ach_currency(@run) == "USD"} id="ach-file-form" phx-submit="ach">
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
                 <label
                   :if={length(run_vendor_ids(@run)) > 1}

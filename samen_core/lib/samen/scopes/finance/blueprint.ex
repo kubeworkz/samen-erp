@@ -772,7 +772,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 :rd_expense,
                 # R&D intangibles and services
                 :mask_expense,
-                :eda_expense
+                :eda_expense,
+                # realized foreign-exchange gain/loss on AP settlement. One
+                # account can carry both sides; the posting direction carries
+                # the gain (credit) or loss (debit).
+                :fx_gain_loss
               ]
             ]
           )
@@ -941,7 +945,9 @@ defmodule Samen.Scopes.Finance.Blueprint do
              abbrev,
              entry_mod,
              posting_account_mod,
-             policy_mod
+             policy_mod,
+             org_fx_settings_mod,
+             exchange_rate_mod
            ) do
     quote do
       defmodule unquote(module) do
@@ -1047,6 +1053,18 @@ defmodule Samen.Scopes.Finance.Blueprint do
             ]
           )
 
+          # The vendor-facing currency. A blank value is resolved from the
+          # org's functional currency on create/update; existing rows stay
+          # readable until re-saved.
+          attribute(:currency, :string, public?: true, allow_nil?: true)
+
+          # Functional-currency facts stamped at approval. `base_total_cents`
+          # is the liability the ledger posted; payment settles that amount and
+          # books the rate difference to the FX account.
+          attribute(:base_currency, :string, public?: true, allow_nil?: true)
+          attribute(:base_total_cents, :integer, public?: true, allow_nil?: true)
+          attribute(:exchange_rate, :string, public?: true, allow_nil?: true)
+
           attribute(:status, :atom,
             public?: true,
             allow_nil?: false,
@@ -1060,8 +1078,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
         changes do
           # Line-shape guard on every action that can touch `lines` (and the
-          # only-approved-bills-are-immutable state condition).
+          # only-approved-bills-are-immutable state condition). The currency
+          # change fills a blank code from the org's functional currency.
           change(Samen.Scopes.Finance.ApLines)
+          change({Samen.Scopes.Finance.ApCurrency, org_fx_settings: unquote(org_fx_settings_mod)})
         end
 
         actions do
@@ -1078,6 +1098,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
               :bill_date,
               :due_date,
               :memo,
+              :currency,
               :match_tolerance_cents,
               :match_tolerance_pct,
               :lines
@@ -1094,6 +1115,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
             accept([
               :due_date,
               :memo,
+              :currency,
               :match_tolerance_cents,
               :match_tolerance_pct,
               :lines
@@ -1126,7 +1148,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
             change(
               {Samen.Scopes.Finance.ApPosting,
-               entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               org_fx_settings: unquote(org_fx_settings_mod),
+               exchange_rate: unquote(exchange_rate_mod),
+               repo: unquote(repo)}
             )
           end
 
@@ -1154,7 +1180,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
             change(
               {Samen.Scopes.Finance.ApPaymentPosting,
-               entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               org_fx_settings: unquote(org_fx_settings_mod),
+               exchange_rate: unquote(exchange_rate_mod),
+               repo: unquote(repo)}
             )
           end
 

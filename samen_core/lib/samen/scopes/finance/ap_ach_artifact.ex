@@ -57,6 +57,7 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
     with {:ok, org_id} <- org_id(scope),
          {:ok, actor} <- member_id(scope),
          :ok <- paid_run(repo, org_id, run),
+         :ok <- usd_rail(run),
          :ok <- validate_file(file),
          {:ok, name} <- validate_name(name) do
       id = Ecto.UUID.generate()
@@ -163,6 +164,16 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
   end
 
   defp paid_run(_repo, _org_id, _run), do: {:error, :run_not_found}
+
+  # The artifact row is a NACHA file. Refuse a non-USD run even if a caller
+  # bypasses the renderer; the rail and the stored bytes must agree.
+  defp usd_rail(run) do
+    case Map.get(run, :currency) || "USD" do
+      "USD" -> :ok
+      currency when is_binary(currency) -> {:error, {:unsupported_currency, currency}}
+      _ -> {:error, {:unsupported_currency, "USD"}}
+    end
+  end
 
   defp validate_file(file) when is_binary(file) and byte_size(file) > 0, do: :ok
   defp validate_file(_file), do: {:error, :file_required}

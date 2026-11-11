@@ -494,7 +494,7 @@ defmodule Samen.Web.Erp.ApPaymentRunLive do
                       Snapshot total
                     </td>
                     <td style="padding:8px;text-align:right;font-weight:700">
-                      {money(@run.total_cents)}
+                      {money(@run.total_cents)} {@run.currency || "USD"}
                     </td>
                   </tr>
                 </tfoot>

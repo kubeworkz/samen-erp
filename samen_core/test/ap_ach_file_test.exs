@@ -7,6 +7,7 @@ defmodule SamenCore.ApAchFileTest do
     reference: "RUN-001",
     payment_date: ~D[2026-11-08],
     vendor_id: "vendor-1",
+    currency: "USD",
     total_cents: 10_500,
     payments: [
       %{bill_id: "b1", number: "INV-1", due_date: ~D[2026-10-01], amount_cents: 4_000},
@@ -115,6 +116,13 @@ defmodule SamenCore.ApAchFileTest do
     assert Enum.all?(savings, &(String.slice(&1, 0, 3) == "632"))
     assert length(file_lines) == 20
     assert Enum.take(file_lines, -3) == List.duplicate(String.duplicate("9", 94), 3)
+  end
+
+  test "refuses a non-USD run because NACHA is a USD rail" do
+    assert {:error, {:unsupported_currency, "CAD"}} =
+             ApAchFile.render(%{@run | currency: "CAD"}, @opts)
+
+    assert {:ok, _file} = ApAchFile.render(%{@run | currency: "USD"}, @opts)
   end
 
   test "invalid bank details are refused instead of written into the file" do

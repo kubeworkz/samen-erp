@@ -60,6 +60,10 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
   @doc """
   Request a run. Persists a `:pending_approval` record and pays nothing.
 
+  All bills in one run must share a currency; a mixed-currency batch is
+  refused rather than silently totaling unlike cents. The run snapshots that
+  currency so NACHA generation and remittance display cannot drift.
+
   Options:
 
     * `:ap_invoice` (required) — the mounted `ApInvoice` resource
@@ -96,6 +100,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
          :ok <- validate_payment_date(payment_date),
          {:ok, bills} <- load_bills(ap_invoice, bill_ids, scope),
          :ok <- validate_bills(bills, allow_duplicates),
+         {:ok, currency} <- single_currency(bills),
          :ok <- ensure_reference_free(repo, org_id, reference) do
       vendor_ids = bills |> Enum.map(& &1.vendor_id) |> Enum.uniq()
       single_vendor? = match?([_], vendor_ids)
@@ -121,6 +126,7 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
         vendor_name: vendor_name,
         remittance_address: remittance_address,
         status: :pending_approval,
+        currency: currency,
         total_cents: Enum.sum(Enum.map(payments, &payment_amount/1)),
         bill_count: length(payments),
         payments: payments,
@@ -441,6 +447,9 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
                 bill.vendor_id != payment_vendor_id(payment, run) ->
                   {:halt, {:error, :snapshot_mismatch}}
 
+                bill_currency(bill) != payment_currency(payment, run) ->
+                  {:halt, {:error, :snapshot_mismatch}}
+
                 bill_total(bill) != payment_amount(payment) ->
                   {:halt, {:error, {:snapshot_amount_mismatch, bill_id}}}
 
@@ -601,8 +610,24 @@ defmodule Samen.Scopes.Finance.ApPaymentRun do
       "vendor_id" => bill.vendor_id,
       "number" => bill.number,
       "due_date" => bill.due_date,
+      "currency" => bill_currency(bill),
       "amount_cents" => bill_total(bill)
     }
+  end
+
+  defp single_currency([]), do: {:error, :bill_ids_required}
+
+  defp single_currency(bills) do
+    case bills |> Enum.map(&bill_currency/1) |> Enum.uniq() do
+      [currency] when is_binary(currency) and currency != "" -> {:ok, currency}
+      _ -> {:error, :mixed_currency}
+    end
+  end
+
+  defp bill_currency(bill), do: Map.get(bill, :currency) || "USD"
+
+  defp payment_currency(payment, run) do
+    field(payment, :currency) || Map.get(run, :currency) || "USD"
   end
 
   defp bill_total(bill) do

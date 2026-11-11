@@ -33,7 +33,7 @@ defmodule Samen.Web.ErpApPaymentsTest do
   }
 
   alias Samen.Web.Erp.ApPaymentsLive
-  alias Samen.WebTest.Erp.{Account, ApInvoice, JournalEntry, PostingAccount}
+  alias Samen.WebTest.Erp.{Account, ApInvoice, JournalEntry, OrgFxSettings, PostingAccount}
 
   @org "55555555-6666-7777-8888-999999999999"
 
@@ -161,6 +161,12 @@ defmodule Samen.Web.ErpApPaymentsTest do
       active: :crm_dashboard,
       return_to: nil
     })
+  end
+
+  defp seed_cad_settings! do
+    OrgFxSettings
+    |> Ash.Changeset.for_create(:create, %{org_id: @org, base_currency: "CAD"}, authorize?: false)
+    |> Ash.create!()
   end
 
   defp pending_run!(bill, reference) do
@@ -672,6 +678,25 @@ defmodule Samen.Web.ErpApPaymentsTest do
     assert entry.voided_entry_id == nil
   end
 
+  test "a mixed-currency selection is refused with a currency-specific error" do
+    seed_posting_accounts()
+    seed_cad_settings!()
+    usd = bill!(%{number: "BILL-MIX-USD", currency: "USD"})
+    cad = bill!(%{number: "BILL-MIX-CAD", currency: "CAD"})
+
+    socket =
+      open()
+      |> event("request", %{
+        "bill_ids" => [usd.id, cad.id],
+        "payment_date" => "2026-11-08",
+        "reference" => "MIXED-RUN"
+      })
+
+    assert socket.assigns.error =~ "one currency"
+    assert socket.assigns.error =~ "separate run per currency"
+    assert socket.assigns.pending_runs == []
+  end
+
   # -- ACH / EFT file ---------------------------------------------------------
 
   test "builds an ACH file only from the vendor's VERIFIED bank profile" do
@@ -774,6 +799,25 @@ defmodule Samen.Web.ErpApPaymentsTest do
     assert html =~ "data:application/octet-stream;base64,"
     assert html =~ "ach-NOV-ACH-1.ach"
     refute html =~ ~s(id="ach-file-error")
+  end
+
+  test "a CAD run renders the rail mismatch and hides the NACHA form" do
+    seed_posting_accounts()
+    seed_cad_settings!()
+    bill = bill!(%{number: "BILL-CAD-1"})
+
+    assert bill.currency == "CAD"
+
+    pending = pending_run!(bill, "CAD-RUN-1")
+    approved = event(open(), "approve", %{"run_id" => pending.id})
+
+    assert approved.assigns.run.status == :paid
+    assert approved.assigns.run.currency == "CAD"
+
+    html = render(approved)
+    assert html =~ ~s(id="ach-currency-blocked")
+    assert html =~ "NACHA is a USD-only rail"
+    refute html =~ ~s(id="ach-file-form")
   end
 
   test "a multi-vendor run builds one ACH file per vendor from its own profile" do

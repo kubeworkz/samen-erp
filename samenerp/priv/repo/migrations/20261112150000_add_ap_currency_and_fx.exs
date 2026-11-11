@@ -1,0 +1,35 @@
+defmodule Samenerp.Repo.Migrations.AddApCurrencyAndFx do
+  @moduledoc """
+  AP bill currency and functional-FX facts, plus the single currency of an AP
+  payment run. Currency is nullable for legacy bills; the application resolves
+  a blank value from `OrgFxSettings` and stamps the base facts at approval.
+  """
+
+  use Samen.Migration
+
+  def up do
+    alter table(:ecp_ap_invoice) do
+      add(:ecp_currency, :text)
+      add(:ecp_base_currency, :text)
+      add(:ecp_base_total_cents, :bigint)
+      add(:ecp_exchange_rate, :text)
+    end
+
+    alter table(:prn_ap_payment_run) do
+      add(:prn_currency, :text, null: false, default: "USD")
+    end
+  end
+
+  def down do
+    alter table(:prn_ap_payment_run) do
+      remove(:prn_currency)
+    end
+
+    alter table(:ecp_ap_invoice) do
+      remove(:ecp_exchange_rate)
+      remove(:ecp_base_total_cents)
+      remove(:ecp_base_currency)
+      remove(:ecp_currency)
+    end
+  end
+end
