@@ -1138,8 +1138,11 @@ defmodule Samen.Web.Router do
   `/:surface/:id` over the SAME allowlist. The macro also mounts the
   journal-approval control at `<path>/journal-approval` — the admin settings
   page over the org's one `JournalApprovalPolicy` row, writing through that
-  resource's OWN admin-only actions — plus the AP payment run at
-  `<path>/ap-payments` (one `ApPaymentRun` batch over approved bills, with the
+  resource's OWN admin-only actions — and the AP approval-chain control at
+  `<path>/ap-approval` (the generic `ApprovalPolicy` row for
+  `"ap_invoice:approve"`, with ordered named-user/role steps), plus the AP
+  payment run at `<path>/ap-payments` (one `ApPaymentRun` batch over approved
+  bills, with the
   remittance CSV handed straight from the render), its read-only audit page
   at `<path>/ap-payments/:id` (the immutable snapshot and decision evidence),
   and the printable advice at `<path>/ap-payments/:id/remittance`, the AP aging /
@@ -1197,6 +1200,10 @@ defmodule Samen.Web.Router do
         # `/erp/journal-approval` reaches the page instead of resolving as an
         # unknown surface name.
         live("#{path}/journal-approval", Samen.Web.Erp.JournalApprovalLive)
+        # The AP approval-chain control (the generic `ApprovalPolicy` row for
+        # `"ap_invoice:approve"`). Declared BEFORE `:surface` for the same
+        # literal-segment reason as journal-approval.
+        live("#{path}/ap-approval", Samen.Web.Erp.ApApprovalLive)
         # The AP payment run (approved bills → one remittance batch), the AP
         # aging / vendor-statement page, the AR receipt intake, and the AR aging
         # / customer-statement page, and the per-org AR collections cadence

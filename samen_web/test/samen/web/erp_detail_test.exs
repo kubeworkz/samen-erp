@@ -20,8 +20,11 @@ defmodule Samen.Web.ErpDetailTest do
 
   alias Samen.Web.Erp.DetailLive
   alias Samen.Web.Erp.SurfaceLive
+  alias Samen.WebTest.Erp.ApprovalPolicy
+  alias Samen.WebTest.Operator.{Membership, User}
 
   @org "33333333-4444-5555-6666-777777777777"
+  @policy_kind "ap_invoice:approve"
 
   # -- harness ----------------------------------------------------------------
 
@@ -105,6 +108,119 @@ defmodule Samen.Web.ErpDetailTest do
   end
 
   defp count(mod), do: mod |> Ash.read!(authorize?: false) |> length()
+
+  defp seed_member(handle, role) do
+    credential_id = Ash.UUID.generate()
+
+    user =
+      User
+      |> Ash.Changeset.for_create(:create, %{org_id: @org, handle: handle})
+      |> Ash.Changeset.force_change_attribute(:credential_id, credential_id)
+      |> Ash.create!(authorize?: false)
+
+    Membership
+    |> Ash.Changeset.for_create(:create, %{
+      org_id: @org,
+      user_id: user.id,
+      role: role,
+      status: "active"
+    })
+    |> Ash.create!(authorize?: false)
+
+    {user, credential_id}
+  end
+
+  defp seed_ap_policy(steps) do
+    ApprovalPolicy
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        kind: @policy_kind,
+        threshold_cents: 0,
+        auto_approve_below: false,
+        steps: steps
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
+  defp open_as(module, params, credential_id) do
+    mount = build_mount(:erp)
+    session = mount_session(mount)
+
+    socket =
+      %Phoenix.LiveView.Socket{}
+      |> Phoenix.Component.assign(:samen_tenant_principal, credential_id)
+
+    {:ok, socket} = module.mount(params, session, socket)
+    {:noreply, socket} = module.handle_params(params, "http://localhost/erp/detail", socket)
+    socket
+  end
+
+  defp open_approval!(bill) do
+    scope = %Samen.Scope{
+      actor: %{
+        id: "requester:#{@org}",
+        org_id: @org,
+        role: :member,
+        kind: :tenant,
+        plane: :tenant
+      }
+    }
+
+    assert {:error, %Ash.Error.Forbidden{errors: errors}} =
+             bill
+             |> Ash.Changeset.for_update(:approve, %{}, scope: scope)
+             |> Ash.update()
+
+    approval_id =
+      Enum.find_value(errors, fn
+        %Samen.Approvals.ApprovalRequired{approval_id: id} -> id
+        _ -> nil
+      end) || flunk("expected an ApprovalRequired error, got: #{inspect(errors)}")
+
+    assert {:ok, approval} = Samen.Approvals.get(approval_id)
+    approval
+  end
+
+  defp clear_approvals do
+    Samen.WebTest.Approvals.Approval
+    |> Ash.read!(authorize?: false)
+    |> Enum.each(&Ash.destroy!(&1, authorize?: false))
+  end
+
+  defp with_approvals_wiring(fun) do
+    previous = Application.get_env(:samen_core, Samen.Approvals)
+    previous_registry = Application.get_env(:samen_core, Samen.Approvals.Registry)
+
+    Application.put_env(
+      :samen_core,
+      Samen.Approvals,
+      approval_resource: Samen.WebTest.Approvals.Approval,
+      repo: Samen.WebTest.Repo
+    )
+
+    Application.put_env(:samen_core, Samen.Approvals.Registry,
+      kinds: %{
+        (Atom.to_string(Samen.WebTest.Erp.ApInvoice) <> ":approve") =>
+          {:tenant, Samen.Approvals.Gate}
+      }
+    )
+
+    clear_approvals()
+
+    try do
+      fun.()
+    after
+      restore_env(:samen_core, Samen.Approvals, previous)
+      restore_env(:samen_core, Samen.Approvals.Registry, previous_registry)
+    end
+  end
+
+  defp restore_env(app, key, nil), do: Application.delete_env(app, key)
+  defp restore_env(app, key, value), do: Application.put_env(app, key, value)
 
   # -- the record page ----------------------------------------------------------
 
@@ -207,6 +323,100 @@ defmodule Samen.Web.ErpDetailTest do
     assert html =~ "Approval will be refused"
     assert html =~ "/erp/purchase_orders/po-1?org=#{@org}#po-line-po-line-1"
     assert html =~ "/erp/goods_receipts/gr-1?org=#{@org}#receipt-line-receipt-line-1"
+  end
+
+  test "the AP detail page decides a role-filtered step as the signed-in admin" do
+    with_approvals_wiring(fn ->
+      account = seed_account("6100")
+      {admin, admin_credential} = seed_member("ap-admin", :admin)
+      {_member, member_credential} = seed_member("ap-member", :member)
+
+      seed_ap_policy([
+        %{"approver_type" => "user", "approver" => admin.id, "role" => "admin"},
+        %{"approver_type" => "role", "approver" => "member"}
+      ])
+
+      bill = seed_ap_bill(account.id)
+      approval = open_approval!(bill)
+      params = %{"org" => @org, "surface" => "ap_invoices", "id" => bill.id}
+
+      member_socket = open_as(DetailLive, params, member_credential)
+      member_html = render_html(DetailLive, member_socket.assigns)
+
+      assert member_socket.assigns.decider_role == :member
+      assert member_socket.assigns.pending_approval.id == approval.id
+      assert member_html =~ "Pending AP approval"
+      assert member_html =~ "Step 1 of 2"
+      assert member_html =~ "admin only"
+      refute member_html =~ ~s(id="approve-ap-approval")
+
+      member_socket =
+        event(DetailLive, member_socket, "decide_approval", %{"decision" => "approve"})
+
+      assert member_socket.assigns.approval_error =~ "different member or role"
+      assert member_socket.assigns.pending_approval.state == :pending
+
+      admin_socket = open_as(DetailLive, params, admin_credential)
+      admin_html = render_html(DetailLive, admin_socket.assigns)
+
+      assert admin_socket.assigns.decider_role == :admin
+      assert admin_socket.assigns.pending_approval.id == approval.id
+      assert admin_html =~ ~s(id="approve-ap-approval")
+      assert admin_html =~ "Approve step"
+
+      admin_socket =
+        event(DetailLive, admin_socket, "decide_approval", %{"decision" => "approve"})
+
+      assert admin_socket.assigns.approval_error == nil
+      assert admin_socket.assigns.approval_notice =~ "Step approved"
+
+      assert [%{"state" => "approved"}, %{"state" => "pending"}] =
+               admin_socket.assigns.pending_approval.steps
+
+      assert admin_socket.assigns.pending_approval.state == :pending
+      assert Ash.get!(Samen.WebTest.Erp.ApInvoice, bill.id, authorize?: false).status == :draft
+    end)
+  end
+
+  test "opening an AP approval from the bill page reloads the chain and blocks the requester" do
+    with_approvals_wiring(fn ->
+      account = seed_account("6100")
+      {requester, requester_credential} = seed_member("ap-requester", :admin)
+      {approver, approver_credential} = seed_member("ap-approver", :admin)
+
+      seed_ap_policy([
+        %{"approver_type" => "user", "approver" => approver.id, "role" => "admin"},
+        %{"approver_type" => "role", "approver" => "member"}
+      ])
+
+      bill = seed_ap_bill(account.id)
+      params = %{"org" => @org, "surface" => "ap_invoices", "id" => bill.id}
+
+      requester_socket = open_as(DetailLive, params, requester_credential)
+
+      requester_socket =
+        event(DetailLive, requester_socket, "transition", %{"action" => "approve"})
+
+      assert requester_socket.assigns.action_error != nil
+      assert requester_socket.assigns.pending_approval.requested_by == requester.id
+
+      html = render_html(DetailLive, requester_socket.assigns)
+      assert html =~ "Pending AP approval"
+      assert html =~ "requester cannot decide"
+      refute html =~ ~s(id="approve-ap-approval")
+
+      approver_socket = open_as(DetailLive, params, approver_credential)
+
+      assert approver_socket.assigns.pending_approval.id ==
+               requester_socket.assigns.pending_approval.id
+
+      approver_socket =
+        event(DetailLive, approver_socket, "decide_approval", %{"decision" => "approve"})
+
+      assert approver_socket.assigns.approval_error == nil
+      assert approver_socket.assigns.approval_notice =~ "Step approved"
+      assert Ash.get!(Samen.WebTest.Erp.ApInvoice, bill.id, authorize?: false).status == :draft
+    end)
   end
 
   test "the goods-receipt detail page loads its receipt lines at stable anchors" do

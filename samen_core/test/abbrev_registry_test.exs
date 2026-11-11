@@ -176,15 +176,15 @@ defmodule Samen.AbbrevRegistryTest do
       # `she`/`seh`/`shl` (Employee/EmploymentEvent/LeaveRequest), every row
       # allocator-reserved.
       # +3 per-org collection cadence rows (`scq`/`fcf`/`ecq`).
-      # = 456 host entries across six hosts, including the three AP/AR
+      # = 459 host entries across six hosts, including the three AP/AR
       # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`) and the #7 receipt
       # allocation rows (`sra`/`fra`/`eaa`).
       assert hosts["samenerp"] != nil
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
-      assert map_size(hosts["samenerp"]) == 134
-      assert map_size(hosts["samen_core"]) == 125
-      assert map_size(hosts["samen_web"]) == 107
+      assert map_size(hosts["samenerp"]) == 135
+      assert map_size(hosts["samen_core"]) == 126
+      assert map_size(hosts["samen_web"]) == 108
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -371,6 +371,7 @@ defmodule Samen.AbbrevRegistryTest do
                },
                "samen_core" => %{
                  "jap" => "SamenCore.Support.FinanceFixture.JournalApprovalPolicy",
+                 "fps" => "SamenCore.Support.FinanceFixture.ApprovalPolicy",
                  # T75 (spec §I2 CRM sequences actually send): the new Outreach
                  # scope's samen_core-level fixture (Sequence/Enrollment/StepSend)
                  # plus a SECOND materialization of the existing T74 Mailbox scope
@@ -598,6 +599,7 @@ defmodule Samen.AbbrevRegistryTest do
                },
                "samen_web" => %{
                  "wja" => "Samen.WebTest.Erp.JournalApprovalPolicy",
+                 "wap" => "Samen.WebTest.Erp.ApprovalPolicy",
                  "wmv" => "Samen.WebTest.Marketing.ConsentEvent",
                  "woc" => "Samen.WebTest.Operator.Credential",
                  "wot" => "Samen.WebTest.Operator.AuthToken",
@@ -797,6 +799,7 @@ defmodule Samen.AbbrevRegistryTest do
                # three E7 Version abbrevs spv/stv/sbv), allocator-reserved.
                "samenerp" => %{
                  "ejp" => "Samenerp.Erp.JournalApprovalPolicy",
+                 "eap" => "Samenerp.Erp.ApprovalPolicy",
                  "ecn" => "Samenerp.Erp.CreditNote",
                  "evc" => "Samenerp.Erp.VendorCredit",
                  # Samenerp.Aggregate (1):
@@ -1119,7 +1122,8 @@ defmodule Samen.AbbrevRegistryTest do
       # (+6 #8 statement delivery + collections in the three Finance hosts:
       # `sdm`/`scl`, `fcl`/`fcc`, `edm`/`ecc` = 405 + 453 = 858 flat.)
       # (+3 per-org collection cadence: `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
-      assert map_size(Reg.load()) == 861
+      # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
+      assert map_size(Reg.load()) == 864
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

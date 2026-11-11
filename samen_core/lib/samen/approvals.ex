@@ -56,7 +56,11 @@ defmodule Samen.Approvals do
   and a PII-shaped `reason` at write. Writes an `approval_requested` audit.
 
   `attrs`: `%{org_id: id | nil, kind: String.t(), subject_ref: String.t(),
-  requested_by: id, reason: String.t() | nil, deadline_at: DateTime.t() | nil}`.
+  requested_by: id, reason: String.t() | nil, deadline_at: DateTime.t() | nil,
+  steps: [map()]}`. `steps` is optional; when present it is a snapshot of the
+  ordered chain (`%{"approver_type" => "user" | "role", "approver" => id}`,
+  optionally `"role" => "admin" | "member"` on a user step).
+  An empty list keeps the historical single-decision path.
   """
   @spec request(map(), keyword()) :: {:ok, struct()} | {:error, term()}
   def request(attrs, opts \\ []) do
@@ -82,9 +86,12 @@ defmodule Samen.Approvals do
   end
 
   @doc """
-  Approve `approval_id` as the DISTINCT party `decided_by`. Runs the registered handler's
-  `on_approve/2` inside the decision transaction. Returns `{:ok, approval, meta}` or
-  `{:error, :self_approval | :not_pending | :no_approvals_module | term()}`.
+  Approve `approval_id` as the DISTINCT party `decided_by`. For a chain, only the
+  current step advances; the registered handler runs only on the FINAL step. Role
+  steps require `role: :admin | :member` in `opts`; a user step carrying a `role`
+  constraint requires it too, and otherwise user steps match by id. Returns
+  `{:ok, approval, meta}` or `{:error, :self_approval | :not_pending |
+  :step_approver_mismatch | :no_approvals_module | term()}`.
   """
   @spec approve(term(), term(), keyword()) ::
           {:ok, struct(), map()} | {:error, term()}
@@ -131,7 +138,7 @@ defmodule Samen.Approvals do
             # A cancel is the requester WITHDRAWING, not a two-party decision — it never
             # sets `decided_by` (leaving it NULL keeps the distinct-party CHECK satisfied
             # even when the canceller is the requester). The canceller is recorded in audit.
-            case transition(approval, :cancel, %{}, opts) do
+            case transition(approval, :cancel, %{steps: skip_pending_steps(approval)}, opts) do
               {:ok, cancelled} ->
                 audit(repo, cancelled, "approval_cancelled", actor)
                 cancelled
@@ -217,7 +224,23 @@ defmodule Samen.Approvals do
           {:error, :self_approval}
 
         true ->
-          run_decision(repo, res, approval, decided_by, decision, handler, opts)
+          case pending_step(approval) do
+            nil ->
+              run_decision(repo, res, approval, decided_by, decision, handler, opts)
+
+            {step, index} ->
+              run_step_decision(
+                repo,
+                res,
+                approval,
+                decided_by,
+                decision,
+                handler,
+                opts,
+                step,
+                index
+              )
+          end
       end
     end
   end
@@ -245,6 +268,163 @@ defmodule Samen.Approvals do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  # A chain decision advances exactly one current step. Intermediate approvals do
+  # not invoke the handler; the domain action waits until the final step. The step
+  # status is stored in the same Approval row (a bounded policy snapshot, never the
+  # action's inputs), so the update is atomic with the audit row.
+  defp run_step_decision(
+         repo,
+         _res,
+         approval,
+         decided_by,
+         decision,
+         handler,
+         opts,
+         step,
+         index
+       ) do
+    if step_actor?(step, decided_by, opts) do
+      updated_steps = update_steps(approval, index, decision, decided_by)
+
+      result =
+        repo.transaction(fn ->
+          case decision do
+            :approve ->
+              if Enum.any?(updated_steps, &(step_state(&1) == "pending")) do
+                with {:ok, advanced} <-
+                       transition(approval, :advance, %{steps: updated_steps}, opts) do
+                  audit(
+                    repo,
+                    advanced,
+                    "approval_step_approved",
+                    decided_by,
+                    " step=#{index + 1}"
+                  )
+
+                  {advanced, %{step: index + 1, pending_step: index + 2}}
+                else
+                  {:error, reason} -> repo.rollback(reason)
+                end
+              else
+                with {:ok, decided} <-
+                       transition(
+                         approval,
+                         :approve,
+                         %{
+                           decided_by: decided_by,
+                           steps: updated_steps
+                         },
+                         opts
+                       ),
+                     {:ok, meta} <-
+                       run_handler(handler, decided, decided_by, :approve, repo, opts) do
+                  audit(repo, decided, "approval_step_approved", decided_by, " step=#{index + 1}")
+                  audit(repo, decided, "approval_approved", decided_by)
+                  {decided, meta}
+                else
+                  {:error, reason} -> repo.rollback(reason)
+                end
+              end
+
+            :reject ->
+              with {:ok, rejected} <-
+                     transition(
+                       approval,
+                       :reject,
+                       %{
+                         decided_by: decided_by,
+                         steps: updated_steps
+                       },
+                       opts
+                     ),
+                   {:ok, meta} <- run_handler(handler, rejected, decided_by, :reject, repo, opts) do
+                audit(repo, rejected, "approval_step_rejected", decided_by, " step=#{index + 1}")
+                audit(repo, rejected, "approval_rejected", decided_by)
+                {rejected, meta}
+              else
+                {:error, reason} -> repo.rollback(reason)
+              end
+          end
+        end)
+
+      case result do
+        {:ok, {decided, meta}} -> {:ok, decided, meta}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, :step_approver_mismatch}
+    end
+  end
+
+  defp pending_step(%{steps: steps}) when is_list(steps) do
+    steps
+    |> Enum.with_index()
+    |> Enum.find(fn {step, _index} -> step_state(step) == "pending" end)
+  end
+
+  defp pending_step(_approval), do: nil
+
+  defp step_actor?(step, decided_by, opts) do
+    case Map.get(step, "approver_type") do
+      "user" ->
+        to_actor_id(decided_by) == Map.get(step, "approver") and
+          step_role_allows?(step, opts)
+
+      "role" ->
+        role = Keyword.get(opts, :role) || Keyword.get(opts, :actor_role)
+        not is_nil(role) and to_string(role) == Map.get(step, "approver")
+
+      _ ->
+        false
+    end
+  end
+
+  defp step_role_allows?(step, opts) do
+    case Map.get(step, "role") do
+      role when role in ["admin", "member"] ->
+        actor_role = Keyword.get(opts, :role) || Keyword.get(opts, :actor_role)
+        not is_nil(actor_role) and to_string(actor_role) == role
+
+      _ ->
+        true
+    end
+  end
+
+  defp update_steps(approval, index, decision, decided_by) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond) |> DateTime.to_iso8601()
+
+    approval.steps
+    |> Enum.with_index()
+    |> Enum.map(fn {step, step_index} ->
+      cond do
+        step_index == index ->
+          step
+          |> Map.put("state", step_outcome(decision))
+          |> Map.put("decided_by", decided_by)
+          |> Map.put("decided_at", now)
+
+        decision == :reject and step_state(step) == "pending" ->
+          Map.put(step, "state", "skipped")
+
+        true ->
+          step
+      end
+    end)
+  end
+
+  defp skip_pending_steps(%{steps: steps}) when is_list(steps) do
+    Enum.map(steps, fn step ->
+      if step_state(step) == "pending", do: Map.put(step, "state", "skipped"), else: step
+    end)
+  end
+
+  defp skip_pending_steps(_approval), do: []
+
+  defp step_state(step), do: Map.get(step, "state") || "pending"
+
+  defp step_outcome(:approve), do: "approved"
+  defp step_outcome(:reject), do: "rejected"
 
   # Runs the registered handler INSIDE the decision transaction. on_approve is required;
   # on_reject is optional (default no-op). A handler error aborts the whole decision.
@@ -300,7 +480,8 @@ defmodule Samen.Approvals do
       requested_by: to_actor_id(fetch(attrs, :requested_by)),
       reason: fetch(attrs, :reason),
       deadline_at: fetch(attrs, :deadline_at),
-      requested_at: now
+      requested_at: now,
+      steps: normalize_steps(fetch(attrs, :steps))
     }
 
     result =
@@ -374,7 +555,7 @@ defmodule Samen.Approvals do
   # Audit — governance chain, token/id-only detail (§4.3). `reason` NEVER enters detail.
   # ==========================================================================
 
-  defp audit(repo, approval, event_type, actor_id) do
+  defp audit(repo, approval, event_type, actor_id, detail_suffix \\ "") do
     Samen.AuditChain.Writer.write(repo, %{
       org_id: approval.org_id || Samen.AuditChain.global_org(),
       event_type: event_type,
@@ -382,10 +563,37 @@ defmodule Samen.Approvals do
       subject_id: approval.subject_ref,
       actor_id: to_actor_id(actor_id),
       correlation_id: to_string(approval.id),
-      detail: "event=#{event_type} kind=#{approval.kind}",
+      detail: "event=#{event_type} kind=#{approval.kind}#{detail_suffix}",
       occurred_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
     })
   end
+
+  defp normalize_steps(nil), do: []
+
+  defp normalize_steps(steps) when is_list(steps) do
+    steps
+    |> Enum.with_index(1)
+    |> Enum.map(fn {step, step_number} ->
+      type = to_string(Map.get(step, "approver_type") || Map.get(step, :approver_type))
+      approver = to_string(Map.get(step, "approver") || Map.get(step, :approver))
+      role = Map.get(step, "role") || Map.get(step, :role)
+
+      %{
+        "step_number" => step_number,
+        "approver_type" => type,
+        "approver" => approver,
+        "state" => "pending"
+      }
+      |> maybe_put_step_role(type, role)
+    end)
+  end
+
+  defp normalize_steps(_steps), do: []
+
+  defp maybe_put_step_role(step, "user", role) when role in ["admin", "member"],
+    do: Map.put(step, "role", role)
+
+  defp maybe_put_step_role(step, _type, _role), do: step
 
   # ==========================================================================
   # Reason scan + wiring/seam resolution.

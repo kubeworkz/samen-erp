@@ -65,12 +65,24 @@ defmodule Samen.WebTest.DataCase do
     # surface can derive a `:cms`-kind mount and read/author `Post` (the KB article).
     labels =
       case scope_kind do
-        :marketing -> %{crm_namespace: Samen.WebTest.Crm}
-        :support -> %{kb_namespace: Samen.WebTest.Cms}
+        :marketing ->
+          %{crm_namespace: Samen.WebTest.Crm}
+
+        :support ->
+          %{kb_namespace: Samen.WebTest.Cms}
+
         # The ERP aging/statement page reads the Billing invoice — a SIBLING mount,
-        # so the host names it through the `:billing_invoice` label.
-        :erp -> %{billing_invoice: Samen.WebTest.Billing.Invoice}
-        _ -> nil
+        # so the host names it through the `:billing_invoice` label. The AP approval
+        # screen's named-user picker reads active org members through the Identity
+        # sibling mount (`:identity_namespace`).
+        :erp ->
+          %{
+            billing_invoice: Samen.WebTest.Billing.Invoice,
+            identity_namespace: Samen.WebTest.Operator
+          }
+
+        _ ->
+          nil
       end
 
     Samen.Web.Mount.new(scope_kind, namespace(scope_kind), Samen.WebTest.Repo,

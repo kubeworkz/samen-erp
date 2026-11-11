@@ -347,8 +347,11 @@ defmodule Samen.Abbrev.AllocatorTest do
       # -> 40_248 bytes, 858 flat.
       # +3 per-org collection cadence (`scq`/`fcf`/`ecq`)
       # -> 40_414 bytes, 861 flat.
-      assert byte_size(committed) == 40_414
-      assert map_size(R.load()) == 861
+      # +3 AP approval-policy rows (`fps`/`wap`/`eap`) — the generic policy
+      # module name is two bytes shorter per host.
+      # -> 40_571 bytes, 864 flat.
+      assert byte_size(committed) == 40_571
+      assert map_size(R.load()) == 864
     end
   end
 

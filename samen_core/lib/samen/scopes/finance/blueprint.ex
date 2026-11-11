@@ -823,6 +823,111 @@ defmodule Samen.Scopes.Finance.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
+  # ApprovalPolicy — one generic, admin-owned policy table keyed by approval
+  # kind. AP is its first consumer; the ordered steps are routing policy, not
+  # domain inputs, so the row stays token-safe.
+  # ---------------------------------------------------------------------------
+  defmacro define_approval_policy(module, otp_app, domain, repo, abbrev) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.ApprovalPolicy — one org policy per approval `kind`
+        (WS-ERP approval matrix).
+
+          * `kind` — the stable policy key (AP is `"ap_invoice:approve"`).
+          * `threshold_cents` — the amount at or above which the chain applies.
+          * `auto_approve_below` — when explicitly true, a subject whose
+            persisted amount is STRICTLY BELOW the threshold may be approved
+            directly. When false (the default), every subject goes through the
+            Gate.
+          * `steps` — ordered maps of `%{"approver_type" => "user" | "role",
+            "approver" => id_or_role}`. Empty preserves the historical
+            single-decision Gate.
+
+        One row per org and kind (`unique_org_kind`). A missing row means the old
+        always-gate behavior: a new policy never silently lowers an existing
+        control. Admin-owned: a member who could raise the auto-approval
+        threshold would make the control theatre.
+
+        No PII (INV-1): a tenant id, a kind, an integer, a boolean and routing
+        ids/roles.
+        """
+
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_approval_policy")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:org_id, :uuid, public?: true, allow_nil?: false)
+          attribute(:kind, :string, public?: true, allow_nil?: false)
+
+          attribute(:threshold_cents, :integer,
+            public?: true,
+            allow_nil?: false,
+            default: 0
+          )
+
+          attribute(:auto_approve_below, :boolean,
+            public?: true,
+            allow_nil?: false,
+            default: false
+          )
+
+          # Ordered chain snapshot. Empty means the historical one-decision Gate.
+          attribute(:steps, {:array, :map}, public?: true, allow_nil?: false, default: [])
+        end
+
+        identities do
+          identity(:unique_org_kind, [:org_id, :kind])
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :kind, :threshold_cents, :auto_approve_below, :steps])
+            validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
+            change(Samen.Scopes.Finance.ApprovalPolicySteps)
+          end
+
+          update :update do
+            accept([:threshold_cents, :auto_approve_below, :steps])
+            require_atomic?(false)
+            validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
+            change(Samen.Scopes.Finance.ApprovalPolicySteps)
+          end
+
+          # NO destroy: disabling is an auditable update, not a deletion that
+          # silently restores the old behavior.
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # ApInvoice — the AP vendor bill (E2). :approve rides the ADR-040 engine as
   # an ApprovalRequired GATE; the approval re-invokes :approve as the requester
   # INSIDE the decision transaction, where ApPosting lands the expense+
@@ -835,7 +940,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
              repo,
              abbrev,
              entry_mod,
-             posting_account_mod
+             posting_account_mod,
+             policy_mod
            ) do
     quote do
       defmodule unquote(module) do
@@ -1011,7 +1117,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # Lines without a PO reference remain non-PO lines.
             change(Samen.Scopes.Finance.ApInvoiceMatch)
 
-            change({Samen.Approvals.Gate, kind: unquote(Atom.to_string(module)) <> ":approve"})
+            # The amount matrix is declared AFTER the match and BEFORE the
+            # posting: a below-threshold policy can skip the Gate, but the
+            # ordinary posting guards still run in this transaction.
+            change({Samen.Scopes.Finance.ApApproval, policy: unquote(policy_mod)})
 
             change(Samen.Scopes.Finance.PostingMarker)
 

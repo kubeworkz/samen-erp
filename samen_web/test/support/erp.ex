@@ -25,6 +25,7 @@ defmodule Samen.WebTest.Erp do
       exchange_rate: "fex",
       org_fx_settings: "ofx",
       journal_approval_policy: "wja",
+      approval_policy: "wap",
       statement_delivery: "fcl",
       collection_case: "fcc",
       collection_cadence: "fcf"

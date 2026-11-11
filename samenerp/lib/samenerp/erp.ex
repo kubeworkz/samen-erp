@@ -32,6 +32,7 @@ defmodule Samenerp.Erp do
       account: "eca",
       journal_entry: "ecj",
       journal_approval_policy: "ejp",
+      approval_policy: "eap",
       journal_line: "ecl",
       ap_invoice: "ecp",
       payment_receipt: "ecr",
@@ -130,6 +131,7 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.JournalEntry)
     resource(Samenerp.Erp.JournalLine)
     resource(Samenerp.Erp.JournalApprovalPolicy)
+    resource(Samenerp.Erp.ApprovalPolicy)
     resource(Samenerp.Erp.ApInvoice)
     resource(Samenerp.Erp.PaymentReceipt)
     resource(Samenerp.Erp.CreditNote)

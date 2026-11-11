@@ -62,7 +62,8 @@ defmodule Samen.Approvals.Gate do
       kind: kind,
       subject_ref: subject_ref(changeset),
       requested_by: actor_id(context),
-      reason: opts[:reason]
+      reason: opts[:reason],
+      steps: opts[:steps] || []
     }
 
     case Approvals.request(attrs) do

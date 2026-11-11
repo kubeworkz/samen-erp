@@ -331,6 +331,15 @@ defmodule Samen.Scopes.Finance do
   posting. System cascades (no actor) and orgs without an enabled policy keep
   their existing path; the ledger invariants still run on every approved
   invocation.
+
+  ## Approval policy
+
+  Every mount also defines the generic `ApprovalPolicy` table. AP bills are its
+  first consumer: a policy keyed `"ap_invoice:approve"` can define an ordered
+  chain of named-user or role steps, with an optional below-threshold direct
+  approval. The chain is snapshotted onto the approval row at request time; a
+  later policy edit never rewrites an in-flight decision. Empty `steps` keeps
+  the historical one-decision Gate.
   """
 
   # Demo defaults are UNCLAIMED-in-the-registry abbrevs (ADR-025 discipline: a
@@ -345,6 +354,9 @@ defmodule Samen.Scopes.Finance do
     # WS-ACCT journal controls: the org's approval policy. Reserved under the
     # `samen_web` host (the fixture and samenerp pass their own overrides).
     journal_approval_policy: "jap",
+    # WS-ERP approval matrix: one generic policy row per org and kind. Reserved
+    # under the `samen_web` host (the fixture and samenerp pass their own overrides).
+    approval_policy: "fps",
     ap_invoice: "fai",
     payment_receipt: "frr",
     receipt_allocation: "fra",
@@ -436,6 +448,7 @@ defmodule Samen.Scopes.Finance do
     entry_mod = Module.concat(namespace, JournalEntry)
     line_mod = Module.concat(namespace, JournalLine)
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
+    approval_policy_mod = Module.concat(namespace, ApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
     receipt_mod = Module.concat(namespace, PaymentReceipt)
     receipt_allocation_mod = Module.concat(namespace, ReceiptAllocation)
@@ -513,6 +526,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(entry_mod))
         resource(unquote(line_mod))
         resource(unquote(journal_approval_policy_mod))
+        resource(unquote(approval_policy_mod))
         resource(unquote(ap_invoice_mod))
         resource(unquote(receipt_mod))
         resource(unquote(receipt_allocation_mod))
@@ -880,6 +894,14 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.journal_approval_policy)
       )
 
+      Samen.Scopes.Finance.Blueprint.define_approval_policy(
+        unquote(approval_policy_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.approval_policy)
+      )
+
       Samen.Scopes.Finance.Blueprint.define_journal_entry(
         unquote(entry_mod),
         unquote(otp_app),
@@ -909,7 +931,8 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.ap_invoice),
         unquote(entry_mod),
-        unquote(posting_account_mod)
+        unquote(posting_account_mod),
+        unquote(approval_policy_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_payment_receipt(

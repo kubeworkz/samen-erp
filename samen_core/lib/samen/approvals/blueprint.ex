@@ -107,6 +107,8 @@ defmodule Samen.Approvals.Blueprint do
 
           attribute(:kind, :string, public?: true, allow_nil?: false)
           attribute(:subject_ref, :string, public?: true, allow_nil?: false)
+          # Ordered chain snapshot. Empty means the historical one-decision path.
+          attribute(:steps, {:array, :map}, public?: true, allow_nil?: false, default: [])
           attribute(:requested_by, :string, public?: true, allow_nil?: false)
           attribute(:decided_by, :string, public?: true)
           # PiiReasonScan-gated at write (Samen.Approvals); freeform, NOT vault-routed.
@@ -137,26 +139,34 @@ defmodule Samen.Approvals.Blueprint do
               :requested_by,
               :reason,
               :deadline_at,
-              :requested_at
+              :requested_at,
+              :steps
             ])
           end
 
           update :approve do
-            accept([:decided_by])
+            accept([:decided_by, :steps])
             require_atomic?(false)
             change(set_attribute(:decided_at, &DateTime.utc_now/0))
             change(transition_state(:approved))
           end
 
           update :reject do
-            accept([:decided_by])
+            accept([:decided_by, :steps])
             require_atomic?(false)
             change(set_attribute(:decided_at, &DateTime.utc_now/0))
             change(transition_state(:rejected))
           end
 
+          # Intermediate chain step: records the step decision while the root
+          # stays pending. No state-machine transition here.
+          update :advance do
+            accept([:steps])
+            require_atomic?(false)
+          end
+
           update :cancel do
-            accept([])
+            accept([:steps])
             require_atomic?(false)
             change(transition_state(:cancelled))
           end

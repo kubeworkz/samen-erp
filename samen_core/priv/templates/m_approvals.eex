@@ -29,6 +29,7 @@ defmodule <%= module %>.Repo.Migrations.AddApprovals do
       add(:<%= approval_abbrev %>_deadline_at, :utc_datetime_usec)
       add(:<%= approval_abbrev %>_requested_at, :utc_datetime_usec)
       add(:<%= approval_abbrev %>_decided_at, :utc_datetime_usec)
+      add(:<%= approval_abbrev %>_steps, {:array, :map}, null: false, default: fragment("ARRAY[]::jsonb[]"))
       add(:<%= approval_abbrev %>_state, :text, null: false, default: "pending")
       add(:<%= approval_abbrev %>_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
       add(:<%= approval_abbrev %>_inserted_at, :utc_datetime, null: false)

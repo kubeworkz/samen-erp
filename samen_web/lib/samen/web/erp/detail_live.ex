@@ -41,10 +41,12 @@ defmodule Samen.Web.Erp.DetailLive do
   import Samen.Web.Erp.Live, only: [assign_mount: 2, erp_sidebar: 1, writable?: 1]
   import Samen.Web.CurrentOrg, only: [acting_as_banner: 1, no_org_card: 1, return_path: 1]
 
+  alias Samen.Approvals
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Erp
   alias Samen.Web.Mount
+  alias Samen.Web.TenantRole
   alias Samen.Scopes.Finance.ApInvoiceMatch
 
   @impl true
@@ -64,6 +66,11 @@ defmodule Samen.Web.Erp.DetailLive do
        edit_form: nil,
        action_error: nil,
        ap_match: nil,
+       pending_approval: nil,
+       approval_error: nil,
+       approval_notice: nil,
+       decider_id: nil,
+       decider_role: nil,
        return_to: nil
      )
      |> load()}
@@ -87,18 +94,26 @@ defmodule Samen.Web.Erp.DetailLive do
   # Every path assigns `:record` and `:missing` — the render branches read
   # them directly (the class of bug the old surface's `Map.get(@assigns, …)`
   # idiom raised on every real render).
-  defp load(%{assigns: %{org_id: nil}} = socket),
-    do: assign(socket, record: nil, missing: :no_org, resource: nil, ap_match: nil)
+  defp load(%{assigns: %{org_id: nil}} = socket) do
+    socket
+    |> assign(record: nil, missing: :no_org, resource: nil, ap_match: nil)
+    |> clear_approval()
+  end
 
-  defp load(%{assigns: %{surface: nil}} = socket),
-    do: assign(socket, record: nil, missing: :unknown_surface, resource: nil, ap_match: nil)
+  defp load(%{assigns: %{surface: nil}} = socket) do
+    socket
+    |> assign(record: nil, missing: :unknown_surface, resource: nil, ap_match: nil)
+    |> clear_approval()
+  end
 
   defp load(socket) do
     %{samen_mount: mount, surface: surface, org_id: org_id, record_id: record_id} = socket.assigns
 
     case Erp.resource(mount, surface) do
       nil ->
-        assign(socket, record: nil, missing: :unmounted, resource: nil, ap_match: nil)
+        socket
+        |> assign(record: nil, missing: :unmounted, resource: nil, ap_match: nil)
+        |> clear_approval()
 
       resource ->
         scope = Mount.scope(mount, org_id)
@@ -133,11 +148,15 @@ defmodule Samen.Web.Erp.DetailLive do
         socket
         |> assign(resource: resource)
         |> assign_record(record)
+        |> load_pending_approval()
     end
   end
 
-  defp assign_record(socket, nil),
-    do: assign(socket, record: nil, missing: :not_found, ap_match: nil)
+  defp assign_record(socket, nil) do
+    socket
+    |> assign(record: nil, missing: :not_found, ap_match: nil)
+    |> clear_approval()
+  end
 
   defp assign_record(socket, record) do
     socket =
@@ -229,13 +248,17 @@ defmodule Samen.Web.Erp.DetailLive do
          {^action, _label, from} <-
            Enum.find(Erp.transitions(surface), fn {a, _, _} -> a == action end),
          true <- Map.get(record, :status) in from do
-      scope = Mount.scope(mount, org_id)
+      scope =
+        if surface == :ap_invoices,
+          do: TenantRole.identity_scope(mount, org_id),
+          else: Mount.scope(mount, org_id)
 
       case record |> Ash.Changeset.for_update(action, %{}, scope: scope) |> Ash.update() do
         {:ok, _updated} ->
           {:noreply, load(socket)}
 
         {:error, error} ->
+          socket = load(socket)
           {:noreply, assign(socket, action_error: error_message(error))}
       end
     else
@@ -248,6 +271,32 @@ defmodule Samen.Web.Erp.DetailLive do
   def handle_event("dismiss_error", _params, socket) do
     {:noreply, assign(socket, action_error: nil)}
   end
+
+  def handle_event("decide_approval", %{"decision" => decision}, socket)
+      when decision in ["approve", "reject"] do
+    %{samen_mount: mount, pending_approval: approval, decider_id: user_id, decider_role: role} =
+      socket.assigns
+
+    cond do
+      not writable?(mount) ->
+        {:noreply,
+         assign(socket, approval_error: "Approval decisions are a tenant-plane action.")}
+
+      is_nil(approval) ->
+        {:noreply, assign(socket, approval_error: "That approval is no longer pending.")}
+
+      is_nil(user_id) ->
+        {:noreply,
+         assign(socket,
+           approval_error: "Sign in as an organization member to decide this approval."
+         )}
+
+      true ->
+        decide_approval(socket, approval, decision, user_id, role)
+    end
+  end
+
+  def handle_event("decide_approval", _params, socket), do: {:noreply, socket}
 
   # -- helpers ----------------------------------------------------------------
 
@@ -461,6 +510,16 @@ defmodule Samen.Web.Erp.DetailLive do
               org_id={@org_id}
             />
 
+            <.ap_approval_panel
+              :if={@pending_approval}
+              approval={@pending_approval}
+              samen_mount={@samen_mount}
+              decider_id={@decider_id}
+              decider_role={@decider_role}
+              error={@approval_error}
+              notice={@approval_notice}
+            />
+
             <div
               :if={writable?(@samen_mount) and allowed_transitions(@record, @surface) != []}
               id="erp-transitions"
@@ -499,6 +558,101 @@ defmodule Samen.Web.Erp.DetailLive do
         </:actions>
       </.simple_form>
     </.modal>
+    </div>
+    """
+  end
+
+  attr(:approval, :map, required: true)
+  attr(:samen_mount, :map, required: true)
+  attr(:decider_id, :string, default: nil)
+  attr(:decider_role, :atom, default: :member)
+  attr(:error, :string, default: nil)
+  attr(:notice, :string, default: nil)
+
+  defp ap_approval_panel(assigns) do
+    steps = approval_steps(assigns.approval)
+    current = pending_approval_step(steps)
+
+    assigns =
+      assign(assigns,
+        steps: steps,
+        current: current,
+        requester?: requester?(assigns.approval, assigns.decider_id),
+        can_decide:
+          writable?(assigns.samen_mount) and
+            can_decide?(assigns.approval, current, assigns.decider_id, assigns.decider_role)
+      )
+
+    ~H"""
+    <div id="erp-ap-approval-decision" class="card" style="padding:16px 18px;margin-top:10px">
+      <div class="gtitle" style="margin-bottom:6px">
+        <h3 style="font-size:13px">Pending AP approval</h3>
+        <span class="lane">· {chain_position(@approval, @current)}</span>
+      </div>
+
+      <p style="margin:6px 0 10px;font-size:12px;color:var(--muted)">
+        A distinct organization member must decide this bill. Role-filtered steps are checked
+        against that member's actual role.
+      </p>
+
+      <ol :if={@steps != []} id="ap-approval-chain" style="margin:0 0 10px 18px;padding:0;font-size:12px">
+        <li
+          :for={{step, index} <- Enum.with_index(@steps)}
+          id={"ap-approval-step-#{index}"}
+          style="padding:2px 0"
+        >
+          <b>Step {index + 1}</b>
+          <span> · {step_label(step)}</span>
+          <span> · {step_state(step)}</span>
+        </li>
+      </ol>
+
+      <p :if={@steps == []} style="margin:6px 0 10px;font-size:12px;color:var(--muted)">
+        Single decision — no chain steps.
+      </p>
+
+      <p :if={@notice} id="ap-approval-notice" style="margin:6px 0;font-size:12px;color:var(--ok, #047857)">
+        {@notice}
+      </p>
+
+      <p :if={@error} id="ap-approval-error" style="margin:6px 0;font-size:12px;color:var(--bad, #b91c1c)">
+        {@error}
+      </p>
+
+      <p :if={is_nil(@decider_id)} id="ap-approval-signed-out" style="margin:6px 0;font-size:12px;color:var(--muted)">
+        Sign in as an organization member to decide this approval.
+      </p>
+
+      <p :if={@requester?} id="ap-approval-requester" style="margin:6px 0;font-size:12px;color:var(--muted)">
+        The requester cannot decide their own approval.
+      </p>
+
+      <p
+        :if={not is_nil(@decider_id) and not @requester? and not @can_decide}
+        id="ap-approval-waiting"
+        style="margin:6px 0;font-size:12px;color:var(--muted)"
+      >
+        Waiting for the member assigned to the current step.
+      </p>
+
+      <div :if={@can_decide} style="display:flex;gap:8px;margin-top:10px">
+        <.button
+          id="approve-ap-approval"
+          type="button"
+          phx-click="decide_approval"
+          phx-value-decision="approve"
+        >
+          Approve step
+        </.button>
+        <.button
+          id="reject-ap-approval"
+          type="button"
+          phx-click="decide_approval"
+          phx-value-decision="reject"
+        >
+          Reject
+        </.button>
+      </div>
     </div>
     """
   end
@@ -634,4 +788,173 @@ defmodule Samen.Web.Erp.DetailLive do
   end
 
   defp money(other), do: to_string(other)
+
+  defp load_pending_approval(
+         %{
+           assigns: %{
+             surface: :ap_invoices,
+             org_id: org_id,
+             record: %{id: bill_id} = bill,
+             samen_mount: mount
+           }
+         } = socket
+       )
+       when is_binary(org_id) and is_binary(bill_id) do
+    {decider_id, decider_role} = decider(mount, org_id)
+    approval_kind = Samen.Approvals.Gate.kind_for(bill.__struct__, :approve)
+
+    pending_approval =
+      case Approvals.list_pending(org_id, approval_kind) do
+        {:ok, approvals} -> Enum.find(approvals, &approval_for_bill?(&1, bill_id))
+        {:error, _reason} -> nil
+      end
+
+    assign(socket,
+      pending_approval: pending_approval,
+      approval_error: nil,
+      approval_notice: nil,
+      decider_id: decider_id,
+      decider_role: decider_role
+    )
+  end
+
+  defp load_pending_approval(socket), do: clear_approval(socket)
+
+  defp clear_approval(socket) do
+    assign(socket,
+      pending_approval: nil,
+      approval_error: nil,
+      approval_notice: nil,
+      decider_id: nil,
+      decider_role: nil
+    )
+  end
+
+  defp decider(%Mount{} = mount, org_id) do
+    principal = Mount.label(mount, TenantRole.principal_label(), nil)
+
+    {
+      TenantRole.principal_actor_id(mount, org_id),
+      TenantRole.membership_role(mount, org_id, principal)
+    }
+  end
+
+  defp decider(_mount, _org_id), do: {nil, :member}
+
+  defp approval_for_bill?(%{subject_ref: ref}, bill_id) when is_binary(ref),
+    do: String.ends_with?(ref, ":" <> bill_id)
+
+  defp approval_for_bill?(_approval, _bill_id), do: false
+
+  defp decide_approval(socket, approval, "approve", user_id, role) do
+    case Approvals.approve(approval.id, user_id, role: role) do
+      {:ok, decided, _meta} ->
+        socket = load(socket)
+
+        notice =
+          if decided.state == :pending,
+            do: "Step approved. The bill is waiting for the next step.",
+            else: "Bill approved and posted."
+
+        {:noreply, assign(socket, approval_notice: notice)}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, approval_error: approval_error(reason))}
+    end
+  end
+
+  defp decide_approval(socket, approval, "reject", user_id, role) do
+    case Approvals.reject(approval.id, user_id, role: role) do
+      {:ok, _decided} ->
+        socket = load(socket)
+        {:noreply, assign(socket, approval_notice: "Approval rejected. The bill remains draft.")}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, approval_error: approval_error(reason))}
+    end
+  end
+
+  defp approval_error(:self_approval),
+    do: "The approver must be a different party than the requester."
+
+  defp approval_error(:step_approver_mismatch),
+    do: "This step is assigned to a different member or role."
+
+  defp approval_error(:not_pending), do: "That approval has already been decided."
+  defp approval_error(:not_found), do: "That approval no longer exists."
+  defp approval_error(:no_approver), do: "A signed-in organization member is required."
+
+  defp approval_error(:no_approvals_module),
+    do: "The approvals engine is not configured for this workspace."
+
+  defp approval_error({:gate_action_failed, _reason}),
+    do: "The bill action failed; the approval is still pending."
+
+  defp approval_error({:subject_unavailable, _reason}),
+    do: "The bill is no longer available; the approval is still pending."
+
+  defp approval_error(_reason), do: "Could not record that approval decision."
+
+  defp approval_steps(%{steps: steps}) when is_list(steps), do: steps
+  defp approval_steps(_approval), do: []
+
+  defp pending_approval_step([]), do: nil
+  defp pending_approval_step(steps), do: Enum.find(steps, &(step_state(&1) == "pending"))
+
+  defp chain_position(%{steps: []}, _current), do: "single decision"
+
+  defp chain_position(%{steps: steps}, current) when is_map(current) do
+    index = Enum.find_index(steps, &(&1 == current))
+    "Step #{index + 1} of #{length(steps)}"
+  end
+
+  defp chain_position(_approval, _current), do: "all steps decided"
+
+  defp step_label(%{"approver_type" => "role", "approver" => role}), do: "Role · #{role}"
+
+  defp step_label(%{"approver_type" => "user", "approver" => user, "role" => role}),
+    do: "User · #{user} · #{role} only"
+
+  defp step_label(%{"approver_type" => "user", "approver" => user}), do: "User · #{user}"
+  defp step_label(_step), do: "Unassigned"
+
+  defp step_state(%{"state" => state}) when is_binary(state), do: state
+  defp step_state(_step), do: "pending"
+
+  defp requester?(%{requested_by: requested_by}, decider_id) when is_binary(decider_id),
+    do: to_string(requested_by) == decider_id
+
+  defp requester?(_approval, _decider_id), do: false
+
+  defp can_decide?(_approval, _current, nil, _role), do: false
+
+  defp can_decide?(approval, current, decider_id, decider_role) do
+    not requester?(approval, decider_id) and
+      actor_matches_step?(current, decider_id, decider_role)
+  end
+
+  defp actor_matches_step?(nil, _decider_id, _decider_role), do: true
+
+  defp actor_matches_step?(
+         %{"approver_type" => "user", "approver" => approver} = step,
+         decider_id,
+         decider_role
+       ) do
+    approver == decider_id and step_role_matches?(step, decider_role)
+  end
+
+  defp actor_matches_step?(
+         %{"approver_type" => "role", "approver" => role},
+         _decider_id,
+         decider_role
+       ) do
+    to_string(decider_role) == role
+  end
+
+  defp actor_matches_step?(_step, _decider_id, _decider_role), do: false
+
+  defp step_role_matches?(%{"role" => role}, decider_role),
+    do: to_string(decider_role) == role
+
+  defp step_role_matches?(_step, _decider_role), do: true
 end

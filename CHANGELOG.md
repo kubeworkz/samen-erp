@@ -8,6 +8,13 @@ All notable changes to Samen are recorded here. The format follows
 
 ### Added
 
+- **AP approval-chain admin settings surface** (`/erp/ap-approval`, mounted by
+  `samen_erp_routes/3`): a tenant admin can set the AP bill threshold, choose whether
+  bills below it auto-approve, and edit the ordered named-user/role chain on the
+  generic `ApprovalPolicy` row keyed `"ap_invoice:approve"`. The page creates the row
+  when absent and updates it thereafter; clearing the chain restores the single-decision
+  Gate without deleting the policy. Reads are member-scoped, writes are submitted under
+  the resource's admin-only scope, and the operator plane renders no form.
 - **Credit notes, vendor credits and AR write-offs** (WS-ERP adjustment documents):
   `Samen.Scopes.Finance` now mounts `CreditNote` and `VendorCredit` alongside the AP/AR
   documents. A credit note opens with either a contra-revenue credit (`credit_note_clearing`

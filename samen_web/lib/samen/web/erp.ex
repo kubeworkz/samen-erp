@@ -9,7 +9,9 @@ defmodule Samen.Web.Erp do
   `<path>/<surface>/<id>`). A THIRD page is not a list surface:
   `Samen.Web.Erp.JournalApprovalLive` at `<path>/journal-approval` is the
   org's journal-approval control — one `JournalApprovalPolicy` row, created or
-  updated through its own governed admin-only actions:
+  updated through its own governed admin-only actions. `Samen.Web.Erp.ApApprovalLive`
+  at `<path>/ap-approval` is the AP-chain control over the generic
+  `ApprovalPolicy` row for `"ap_invoice:approve"`:
 
       samen_erp_routes(:erp, SamenCore.Support.FinanceFixture, repo: SamenCore.TestRepo)
 
@@ -168,6 +170,15 @@ defmodule Samen.Web.Erp do
   def journal_approval_policy(%Mount{} = mount), do: derived(mount, :JournalApprovalPolicy)
 
   @doc """
+  The org's generic approval-policy resource (`ApprovalPolicy`), DERIVED from
+  the host's mounted Finance namespace. `nil` when the host has not mounted the
+  Finance scope — the AP approval settings page renders its honest not-mounted
+  state, never a crash.
+  """
+  @spec approval_policy(Mount.t()) :: module() | nil
+  def approval_policy(%Mount{} = mount), do: derived(mount, :ApprovalPolicy)
+
+  @doc """
   The org's AR adjustment resource (`CreditNote`), DERIVED from the host's
   mounted Finance namespace. `nil` when the host has not mounted it — the AR
   aging and receipt pages simply do not net credits they cannot read.
@@ -186,6 +197,10 @@ defmodule Samen.Web.Erp do
   @doc "The journal-approval settings page's label (the nav item + page heading)."
   @spec journal_approval_label() :: String.t()
   def journal_approval_label, do: "Journal approval"
+
+  @doc "The AP approval-chain settings page's label (the nav item + page heading)."
+  @spec ap_approval_label() :: String.t()
+  def ap_approval_label, do: "AP approval"
 
   @doc "The ERP landing dashboard's label (the nav item + page heading)."
   @spec dashboard_label() :: String.t()

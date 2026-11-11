@@ -29,6 +29,7 @@ defmodule Acme.Repo.Migrations.AddApprovals do
       add(:acz_deadline_at, :utc_datetime_usec)
       add(:acz_requested_at, :utc_datetime_usec)
       add(:acz_decided_at, :utc_datetime_usec)
+      add(:acz_steps, {:array, :map}, null: false, default: fragment("ARRAY[]::jsonb[]"))
       add(:acz_state, :text, null: false, default: "pending")
       add(:acz_id, :uuid, null: false, default: fragment("gen_random_uuid()"), primary_key: true)
       add(:acz_inserted_at, :utc_datetime, null: false)
