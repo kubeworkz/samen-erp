@@ -104,3 +104,15 @@ config :samen_core, Samen.Scopes.Finance.ApInvoiceMatch,
   purchase_order: Samen.WebTest.Erp.PurchaseOrder,
   po_line: Samen.WebTest.Erp.PoLine,
   receipt_line: Samen.WebTest.Erp.ReceiptLine
+
+# The journal-approval policy update is itself gated. The web test host uses its
+# ETS approvals stand-in; production hosts wire their own Approval resource.
+config :samen_core, Samen.Approvals,
+  approval_resource: Samen.WebTest.Approvals.Approval,
+  repo: Samen.WebTest.Repo
+
+config :samen_core, Samen.Approvals.Registry,
+  kinds: %{
+    (Atom.to_string(Samen.WebTest.Erp.JournalApprovalPolicy) <> ":update") =>
+      {:tenant, Samen.Scopes.Finance.JournalApprovalPolicyApproval}
+  }

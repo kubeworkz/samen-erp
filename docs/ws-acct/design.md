@@ -352,9 +352,14 @@ Two new PII-adjacent surfaces, each needing the full **green / red / sabotage** 
 ## §4b Journal approval and segregation of duties
 
 Manual journal postings can be gated by an org-scoped `JournalApprovalPolicy` (one row per
-org, admin-owned): `enabled` turns the control on and `threshold_cents` exempts entries below
-the size threshold. The approval rides the existing ADR-040 `Samen.Approvals.Gate`; no second
-approval engine.
+org, admin-owned): `enabled` turns the control on, `threshold_cents` exempts entries below
+the size threshold, and the optional `account_ids` / `period_keys` (`YYYY-MM`) scopes narrow
+it further. Empty scope lists mean all accounts and all periods, so existing rows keep their
+original amount-only behavior. The approval rides the existing ADR-040 `Samen.Approvals.Gate`;
+no second approval engine. Changing the policy itself is a two-admin action: the update opens
+a Gate approval carrying the proposed values, and a distinct admin's approval applies exactly
+those values. Creating the first policy remains admin-only and ungated, because a missing
+policy gates nothing and creating one cannot weaken an existing control.
 
 The control is bound to the entry's `prepared_by`, not to whoever clicks Post. A different
 principal cannot submit another preparer's entry, and the Gate's distinct-party rule refuses
@@ -364,7 +369,12 @@ trigger still apply. The entry stamps `approved_by`/`approved_at`/`approval_id` 
 approval row is re-read and verified against the resource, action, org, subject and preparer;
 a forged `approval_ok` context is refused. Postings with no actor (system cascades) and orgs
 with no policy keep the pre-existing path — enabling the control is an explicit policy action,
-not a silent migration of historical books. The Kubeworkz books seed opens the policy enabled
+not a silent migration of historical books. The approval's `subject_ref` also carries a SHA-256
+digest of the entry's date, memo and persisted lines; an approved re-invocation recomputes it and
+refuses a changed draft, while `:update` refuses edits while a post/void approval is pending. A
+policy update is bound to the proposed enabled/threshold/account/period values in its approval
+subject; the approved handler reapplies those values, so an approval cannot be reused for a
+different change. The Kubeworkz books seed opens the policy enabled
 at threshold 0; `Books.verify/1` treats a missing or disabled policy as a gap, and a re-seed
 reports an operator's disable/threshold edit as drift instead of overwriting it.
 

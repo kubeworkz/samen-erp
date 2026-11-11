@@ -9,6 +9,10 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
       principal other than the entry's preparer?
     * `threshold_cents` — only entries whose debit total is at least this
       amount are gated. `0` means every manual entry.
+    * `account_ids` — optional account scope. Empty means all accounts;
+      otherwise at least one line must touch a listed account.
+    * `period_keys` — optional `"YYYY-MM"` periods. Empty means all periods;
+      otherwise the entry date must fall in a listed month.
 
   A missing row means the control is not configured, which leaves historical
   posting behavior intact. The page therefore offers CREATE when the org has no
@@ -58,6 +62,8 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
        resource: nil,
        policy: nil,
        form: nil,
+       account_scope_text: "",
+       period_scope_text: "",
        admin?: false,
        missing: nil,
        save_error: nil,
@@ -154,7 +160,13 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
             resource
             |> AshPhoenix.Form.for_create(:create,
               scope: scope,
-              params: %{org_id: org_id, enabled: true, threshold_cents: 0}
+              params: %{
+                org_id: org_id,
+                enabled: true,
+                threshold_cents: 0,
+                account_ids: [],
+                period_keys: []
+              }
             )
             |> to_form()
 
@@ -165,13 +177,23 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
         end
       end
 
-    assign(socket, form: form, admin?: admin?)
+    account_ids = if policy, do: Map.get(policy, :account_ids, []), else: []
+    period_keys = if policy, do: Map.get(policy, :period_keys, []), else: []
+
+    assign(socket,
+      form: form,
+      admin?: admin?,
+      account_scope_text: scope_text(account_ids),
+      period_scope_text: scope_text(period_keys)
+    )
   end
 
   # -- events -----------------------------------------------------------------
 
   @impl true
   def handle_event("validate", %{"form" => params}, socket) do
+    params = normalize_scope_params(params)
+
     case socket.assigns.form do
       nil ->
         {:noreply, socket}
@@ -180,6 +202,8 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
         {:noreply,
          assign(socket,
            form: AshPhoenix.Form.validate(form, params),
+           account_scope_text: scope_text(params["account_ids"]),
+           period_scope_text: scope_text(params["period_keys"]),
            save_error: nil,
            saved: false
          )}
@@ -188,6 +212,7 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
 
   def handle_event("save", %{"form" => params}, socket) do
     %{samen_mount: mount, org_id: org_id, policy: policy, form: form} = socket.assigns
+    params = normalize_scope_params(params)
 
     if form != nil and socket.assigns.admin? and writable?(mount) and org_id != nil do
       # `org_id` is the server-side fact for CREATE; UPDATE does not accept it.
@@ -198,7 +223,14 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
           {:noreply, socket |> assign(form: nil, policy: nil, saved: true) |> load()}
 
         {:error, form} ->
-          {:noreply, assign(socket, form: form, save_error: form_error(form), saved: false)}
+          {:noreply,
+           assign(socket,
+             form: form,
+             account_scope_text: scope_text(params["account_ids"]),
+             period_scope_text: scope_text(params["period_keys"]),
+             save_error: form_error(form),
+             saved: false
+           )}
       end
     else
       {:noreply,
@@ -219,6 +251,26 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
   defp status_variant(nil), do: "mut"
   defp status_variant(%{enabled: true}), do: "ok"
   defp status_variant(_), do: "mut"
+
+  defp normalize_scope_params(params) do
+    params
+    |> Map.put("account_ids", split_scope(params["account_ids"]))
+    |> Map.put("period_keys", split_scope(params["period_keys"]))
+  end
+
+  defp split_scope(value) do
+    value
+    |> List.wrap()
+    |> Enum.flat_map(fn item -> String.split(to_string(item), ~r/[\s,]+/, trim: true) end)
+  end
+
+  defp scope_text(value) when is_list(value), do: Enum.join(value, ", ")
+  defp scope_text(_), do: ""
+
+  defp scope_summary(nil, _all), do: "All"
+  defp scope_summary([], all), do: all
+  defp scope_summary(list, _all) when is_list(list), do: "#{length(list)} scoped"
+  defp scope_summary(_, all), do: all
 
   defp threshold_text(nil), do: "not set — a disabled/missing policy gates nothing"
   defp threshold_text(%{threshold_cents: 0}), do: "0 cents — every manual posting"
@@ -319,6 +371,12 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
           >
             <.pill variant={status_variant(@policy)}>{status_text(@policy)}</.pill>
             <span style="font-size:13px"><b>Threshold:</b> {threshold_text(@policy)}</span>
+            <span style="font-size:13px">
+              <b>Accounts:</b> {scope_summary(@policy && @policy.account_ids, "All accounts")}
+            </span>
+            <span style="font-size:13px">
+              <b>Periods:</b> {scope_summary(@policy && @policy.period_keys, "All periods")}
+            </span>
           </div>
 
           <div class="card" id="policy-body" style="padding:16px 18px">
@@ -366,6 +424,40 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
                     Entries whose debit total is at least this amount need approval.
                     <b>0</b> means every manual entry.
                   </p>
+
+                  <div class="field" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
+                    <label for={f[:account_ids].id} class="field-label" style="font-size:12px;font-weight:600">
+                      Scoped accounts (optional)
+                    </label>
+                    <input
+                      type="text"
+                      id={f[:account_ids].id}
+                      name={f[:account_ids].name}
+                      value={@account_scope_text}
+                      placeholder="Empty means all accounts"
+                    />
+                    <span style="font-size:12px;color:var(--muted)">
+                      Comma-separated account UUIDs. The policy applies when at least one line
+                      touches one of them.
+                    </span>
+                  </div>
+
+                  <div class="field" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
+                    <label for={f[:period_keys].id} class="field-label" style="font-size:12px;font-weight:600">
+                      Scoped periods (optional)
+                    </label>
+                    <input
+                      type="text"
+                      id={f[:period_keys].id}
+                      name={f[:period_keys].name}
+                      value={@period_scope_text}
+                      placeholder="Empty means all periods"
+                    />
+                    <span style="font-size:12px;color:var(--muted)">
+                      Comma-separated fiscal months in <code>YYYY-MM</code> form, for example
+                      <code>2026-11, 2026-12</code>.
+                    </span>
+                  </div>
 
                   <:actions>
                     <.button variant="primary" type="submit" id="save-policy">

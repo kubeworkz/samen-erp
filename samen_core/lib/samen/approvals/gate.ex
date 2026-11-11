@@ -60,7 +60,7 @@ defmodule Samen.Approvals.Gate do
       # the record's org; reading it off the actor avoids a NotLoaded record attribute.
       org_id: actor_org_id(context),
       kind: kind,
-      subject_ref: subject_ref(changeset),
+      subject_ref: resolve_subject_ref(changeset, opts),
       requested_by: actor_id(context),
       reason: opts[:reason],
       steps: opts[:steps] || []
@@ -145,6 +145,15 @@ defmodule Samen.Approvals.Gate do
     ArgumentError -> {:error, {:bad_gate_kind, kind}}
   end
 
+  defp resolve_subject_ref(changeset, opts) do
+    case Keyword.get(opts, :subject_ref) do
+      nil -> subject_ref(changeset)
+      fun when is_function(fun, 1) -> fun.(changeset)
+      {module, function} -> apply(module, function, [changeset])
+      ref when is_binary(ref) -> ref
+    end
+  end
+
   defp subject_ref(changeset) do
     abbrev = Samen.Info.abbrev(changeset.resource)
     id = changeset.data.id
@@ -152,8 +161,9 @@ defmodule Samen.Approvals.Gate do
   end
 
   defp parse_subject_ref(ref) do
-    case String.split(ref, ":", parts: 3) do
+    case String.split(ref, ":", parts: 4) do
       ["samen", _abbrev, id] -> {:ok, id}
+      ["samen", _abbrev, id, _revision] -> {:ok, id}
       _ -> {:error, {:bad_subject_ref, ref}}
     end
   end

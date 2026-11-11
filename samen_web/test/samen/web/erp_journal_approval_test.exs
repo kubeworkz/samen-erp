@@ -19,6 +19,8 @@ defmodule Samen.Web.ErpJournalApprovalTest do
   alias Samen.Web.Erp.JournalApprovalLive
 
   @org "55555555-6666-7777-8888-999999999999"
+  @approval_resource Samen.WebTest.Approvals.Approval
+  @repo Samen.WebTest.Repo
 
   # -- harness ----------------------------------------------------------------
 
@@ -54,11 +56,37 @@ defmodule Samen.Web.ErpJournalApprovalTest do
 
   defp policies do
     Samen.WebTest.Erp.JournalApprovalPolicy
-    |> Ash.Query.ensure_selected([:org_id, :enabled, :threshold_cents])
+    |> Ash.Query.ensure_selected([
+      :org_id,
+      :enabled,
+      :threshold_cents,
+      :account_ids,
+      :period_keys
+    ])
     |> Ash.read!(authorize?: false)
   end
 
   defp only_policy, do: policies() |> List.first()
+
+  defp approve_policy_change!(socket, approver \\ "policy-approver:#{@org}") do
+    kind = Atom.to_string(Samen.WebTest.Erp.JournalApprovalPolicy) <> ":update"
+
+    {:ok, [approval | _]} =
+      Samen.Approvals.list_pending(@org, kind,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    {:ok, _decided, _meta} =
+      Samen.Approvals.approve(approval.id, approver,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    socket
+    |> Phoenix.Component.assign(:saved, true)
+    |> JournalApprovalLive.load()
+  end
 
   # -- read -------------------------------------------------------------------
 
@@ -72,6 +100,9 @@ defmodule Samen.Web.ErpJournalApprovalTest do
     assert html =~ "Journal approval"
     assert html =~ "Enabled"
     assert html =~ "12500 cents ($125.00)"
+    assert html =~ "All accounts"
+    assert html =~ "All periods"
+    assert html =~ "Scoped accounts (optional)"
     assert html =~ ~s(id="journal-approval-form")
   end
 
@@ -86,7 +117,7 @@ defmodule Samen.Web.ErpJournalApprovalTest do
 
   # -- update -----------------------------------------------------------------
 
-  test "an admin can disable the control and set a threshold" do
+  test "an admin requests a policy change and a distinct admin approves it" do
     seed_policy()
     socket = open()
 
@@ -94,6 +125,9 @@ defmodule Samen.Web.ErpJournalApprovalTest do
       event(socket, "save", %{
         "form" => %{"enabled" => "false", "threshold_cents" => "25000"}
       })
+
+    assert only_policy().enabled
+    socket = approve_policy_change!(socket)
 
     policy = only_policy()
     refute policy.enabled
@@ -110,21 +144,31 @@ defmodule Samen.Web.ErpJournalApprovalTest do
 
   test "creates the org's policy when none exists, pinned to the resolved org" do
     assert policies() == []
+    account_a = Ash.UUID.generate()
+    account_b = Ash.UUID.generate()
     socket = open()
 
     socket =
       event(socket, "save", %{
-        "form" => %{"enabled" => "true", "threshold_cents" => "50000"}
+        "form" => %{
+          "enabled" => "true",
+          "threshold_cents" => "50000",
+          "account_ids" => "#{account_a}, #{account_b}",
+          "period_keys" => "2026-11, 2026-12"
+        }
       })
 
     assert [policy] = policies()
     assert policy.org_id == @org
     assert policy.enabled
     assert policy.threshold_cents == 50_000
+    assert policy.account_ids == [account_a, account_b]
+    assert policy.period_keys == ["2026-11", "2026-12"]
 
     html = render(socket)
     assert html =~ "Enabled"
     assert html =~ "50000 cents ($500.00)"
+    assert html =~ "2 scoped"
   end
 
   # -- kernel validation ------------------------------------------------------

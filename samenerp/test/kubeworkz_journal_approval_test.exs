@@ -133,7 +133,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
     socket
   end
 
-  defp save_policy(socket, enabled, threshold_cents) do
+  defp submit_policy(socket, enabled, threshold_cents) do
     {:noreply, socket} =
       JournalApprovalLive.handle_event(
         "save",
@@ -142,6 +142,28 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
       )
 
     socket
+  end
+
+  defp save_policy(socket, enabled, threshold_cents) do
+    socket = submit_policy(socket, enabled, threshold_cents)
+    org_id = socket.assigns.org_id
+    kind = Atom.to_string(Erp.JournalApprovalPolicy) <> ":update"
+
+    {:ok, [approval | _]} =
+      Samen.Approvals.list_pending(org_id, kind,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    {:ok, _decided, _meta} =
+      Samen.Approvals.approve(approval.id, "policy-approver:#{org_id}",
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    socket
+    |> Phoenix.Component.assign(:saved, true)
+    |> JournalApprovalLive.load()
   end
 
   defp render_settings(socket) do
@@ -212,7 +234,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
 
     assert pending.state == :pending
     assert pending.requested_by == "member:#{org_id}"
-    assert pending.subject_ref == "samen:ecj:#{entry.id}"
+    assert String.starts_with?(pending.subject_ref, "samen:ecj:#{entry.id}:")
     assert Ash.get!(Erp.JournalEntry, entry.id, authorize?: false).status == :draft
 
     assert {:error, :self_approval} =
@@ -658,7 +680,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
 
     assert pending.state == :pending
     assert pending.requested_by == "member:#{org_id}"
-    assert pending.subject_ref == "samen:ecj:#{while_enabled.id}"
+    assert String.starts_with?(pending.subject_ref, "samen:ecj:#{while_enabled.id}:")
   end
 
   test "a rejected gated posting stays draft and can be resubmitted" do
@@ -722,7 +744,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
 
     assert pending_again.state == :pending
     assert pending_again.requested_by == "member:#{org_id}"
-    assert pending_again.subject_ref == "samen:ecj:#{entry.id}"
+    assert String.starts_with?(pending_again.subject_ref, "samen:ecj:#{entry.id}:")
 
     assert {:ok, _decided, %{executed: "post"}} =
              Samen.Approvals.approve(resubmitted.approval_id, "approver:#{org_id}",
@@ -803,7 +825,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
 
     assert pending_again.state == :pending
     assert pending_again.requested_by == "member:#{org_id}"
-    assert pending_again.subject_ref == "samen:ecj:#{entry.id}"
+    assert String.starts_with?(pending_again.subject_ref, "samen:ecj:#{entry.id}:")
 
     assert {:ok, _decided, %{executed: "void"}} =
              Samen.Approvals.approve(resubmitted.approval_id, "approver:#{org_id}",
@@ -880,7 +902,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
 
     assert pending_again.state == :pending
     assert pending_again.requested_by == "member:#{org_id}"
-    assert pending_again.subject_ref == "samen:ecj:#{entry.id}"
+    assert String.starts_with?(pending_again.subject_ref, "samen:ecj:#{entry.id}:")
 
     assert {:ok, _decided, %{executed: "post"}} =
              Samen.Approvals.approve(resubmitted.approval_id, "approver:#{org_id}",
@@ -961,7 +983,7 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
 
     assert pending_again.state == :pending
     assert pending_again.requested_by == "member:#{org_id}"
-    assert pending_again.subject_ref == "samen:ecj:#{entry.id}"
+    assert String.starts_with?(pending_again.subject_ref, "samen:ecj:#{entry.id}:")
 
     assert {:ok, _decided, %{executed: "void"}} =
              Samen.Approvals.approve(resubmitted.approval_id, "approver:#{org_id}",
@@ -1055,9 +1077,20 @@ defmodule Samenerp.KubeworkzJournalApprovalTest do
       |> Ash.Query.filter(org_id == ^org_id)
       |> Ash.read_one!(authorize?: false)
 
-    existing
-    |> Ash.Changeset.for_update(:update, %{enabled: false}, authorize?: false)
-    |> Ash.update!(authorize?: false)
+    admin = scope(org_id, "admin", :admin)
+
+    assert {:error, %Ash.Error.Forbidden{errors: errors}} =
+             existing
+             |> Ash.Changeset.for_update(:update, %{enabled: false}, scope: admin)
+             |> Ash.update()
+
+    approval = approval_error!(errors)
+
+    assert {:ok, _decided, _meta} =
+             Samen.Approvals.approve(approval.approval_id, "policy-approver:#{org_id}",
+               approval_resource: @approval_resource,
+               repo: @repo
+             )
 
     drift = Books.seed!(org_id).journal_approval
     refute drift.created

@@ -25,6 +25,7 @@ defmodule Samen.FinanceJournalApprovalTest do
     {:ok,
      org: org,
      admin_scope: scope(org, "admin:#{org}", :admin),
+     other_admin_scope: scope(org, "admin2:#{org}", :admin),
      member_scope: scope(org, "member:#{org}", :member),
      other_member_scope: scope(org, "member2:#{org}", :member)}
   end
@@ -52,7 +53,7 @@ defmodule Samen.FinanceJournalApprovalTest do
 
       assert row.state == :pending
       assert row.requested_by == "member:#{org}"
-      assert row.subject_ref == "samen:sje:#{entry.id}"
+      assert String.starts_with?(row.subject_ref, "samen:sje:#{entry.id}:")
 
       assert Ash.get!(JournalEntry, entry.id, authorize?: false).status == :draft
     end
@@ -99,6 +100,68 @@ defmodule Samen.FinanceJournalApprovalTest do
       assert {:error, _} = post(posted, member_scope)
     end
 
+    test "an entry cannot be edited while its post approval is pending", %{
+      org: org,
+      admin_scope: admin_scope,
+      member_scope: member_scope
+    } do
+      {cash, sales} = accounts(admin_scope, org)
+      policy(admin_scope, org)
+      entry = entry(member_scope, org, cash, sales, 5_000)
+
+      assert {:error, %Ash.Error.Forbidden{errors: errors}} = post(entry, member_scope)
+      _approval = approval_error!(errors)
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               entry
+               |> Ash.Changeset.for_update(
+                 :update,
+                 %{
+                   lines: [
+                     %{account_id: sales.id, debit_cents: 5_000},
+                     %{account_id: cash.id, credit_cents: 5_000}
+                   ]
+                 },
+                 action_opts(member_scope)
+               )
+               |> Ash.update(action_opts(member_scope))
+
+      assert Exception.message(error) =~ "approval is pending"
+      assert length(Ash.load!(entry, [:lines], authorize?: false).lines) == 2
+    end
+
+    test "a changed draft cannot use an approval opened for the old revision", %{
+      org: org,
+      admin_scope: admin_scope,
+      member_scope: member_scope
+    } do
+      {cash, sales} = accounts(admin_scope, org)
+      policy(admin_scope, org)
+      entry = entry(member_scope, org, cash, sales, 5_000)
+
+      assert {:error, %Ash.Error.Forbidden{errors: errors}} = post(entry, member_scope)
+      approval_id = approval_error!(errors).approval_id
+
+      {:ok, entry_id} = Ecto.UUID.dump(entry.id)
+
+      # Line rows reject UPDATE at the DB; a permitted entry-level mutation
+      # still proves the approval is bound to the stored content.
+      @repo.query!(
+        "UPDATE sje_journal_entry SET sje_memo = $1 WHERE sje_id = $2",
+        ["tampered after approval", entry_id]
+      )
+
+      assert Ash.get!(JournalEntry, entry.id, authorize?: false).memo == "tampered after approval"
+
+      assert {:error, _reason} =
+               Samen.Approvals.approve(approval_id, "approver:#{org}",
+                 approval_resource: @approval_resource,
+                 repo: @repo
+               )
+
+      assert Ash.get!(JournalEntry, entry.id, authorize?: false).status == :draft
+    end
+
     test "a different principal cannot submit the preparer's entry", %{
       org: org,
       admin_scope: admin_scope,
@@ -130,14 +193,87 @@ defmodule Samen.FinanceJournalApprovalTest do
         |> Ash.Query.filter(org_id == ^org)
         |> Ash.read_one!(authorize?: false)
 
-      assert {:ok, _} =
-               policy_row
-               |> Ash.Changeset.for_update(:update, %{enabled: false}, scope: admin_scope)
-               |> Ash.update()
+      policy_row =
+        change_policy!(policy_row, %{enabled: false}, admin_scope, "admin2:#{org}")
+
+      refute policy_row.enabled
 
       large = entry(member_scope, org, cash, sales, 25_000)
       assert {:ok, posted_large} = post(large, member_scope)
       assert posted_large.status == :posted
+    end
+
+    test "policy changes need a distinct admin and apply the approved values", %{
+      org: org,
+      admin_scope: admin_scope,
+      other_admin_scope: other_admin_scope
+    } do
+      policy_row = policy(admin_scope, org)
+
+      assert {:error, %Ash.Error.Forbidden{errors: errors}} =
+               policy_row
+               |> Ash.Changeset.for_update(
+                 :update,
+                 %{enabled: false, threshold_cents: 12_500},
+                 scope: admin_scope
+               )
+               |> Ash.update()
+
+      approval = approval_error!(errors)
+      assert approval.kind == Atom.to_string(JournalApprovalPolicy) <> ":update"
+
+      assert {:error, :self_approval} =
+               Samen.Approvals.approve(approval.approval_id, admin_scope.actor.id,
+                 approval_resource: @approval_resource,
+                 repo: @repo
+               )
+
+      assert Ash.get!(JournalApprovalPolicy, policy_row.id, authorize?: false).enabled
+
+      assert {:ok, _decided, _meta} =
+               Samen.Approvals.approve(approval.approval_id, other_admin_scope.actor.id,
+                 approval_resource: @approval_resource,
+                 repo: @repo
+               )
+
+      updated = Ash.get!(JournalApprovalPolicy, policy_row.id, authorize?: false)
+      refute updated.enabled
+      assert updated.threshold_cents == 12_500
+    end
+
+    test "account scope only gates entries touching a scoped account", %{
+      org: org,
+      admin_scope: admin_scope,
+      member_scope: member_scope
+    } do
+      {cash, sales} = accounts(admin_scope, org)
+      other = account(admin_scope, org, "1001", "Other Cash", :asset, :debit)
+      policy(admin_scope, org, %{account_ids: [cash.id]})
+
+      scoped = entry(member_scope, org, cash, sales, 5_000)
+      assert {:error, %Ash.Error.Forbidden{errors: errors}} = post(scoped, member_scope)
+      assert approval_error!(errors).kind == Atom.to_string(JournalEntry) <> ":post"
+
+      outside = entry(member_scope, org, other, sales, 5_000)
+      assert {:ok, posted} = post(outside, member_scope)
+      assert posted.status == :posted
+    end
+
+    test "period scope only gates entries in a listed month", %{
+      org: org,
+      admin_scope: admin_scope,
+      member_scope: member_scope
+    } do
+      {cash, sales} = accounts(admin_scope, org)
+      policy(admin_scope, org, %{period_keys: ["2026-11"]})
+
+      matching = entry(member_scope, org, cash, sales, 5_000, ~D[2026-11-08])
+      assert {:error, %Ash.Error.Forbidden{errors: errors}} = post(matching, member_scope)
+      assert approval_error!(errors).kind == Atom.to_string(JournalEntry) <> ":post"
+
+      outside = entry(member_scope, org, cash, sales, 5_000, ~D[2026-12-08])
+      assert {:ok, posted} = post(outside, member_scope)
+      assert posted.status == :posted
     end
 
     test "a system posting without an actor is not sent to a human approval queue", %{
@@ -263,10 +399,20 @@ defmodule Samen.FinanceJournalApprovalTest do
     |> Ash.create()
   end
 
-  defp entry(scope, org, cash, sales, amount) do
+  defp account(scope, org, code, name, kind, normal_side) do
+    Account
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org, code: code, name: name, kind: kind, normal_side: normal_side},
+      scope: scope
+    )
+    |> Ash.create!()
+  end
+
+  defp entry(scope, org, cash, sales, amount, entry_date \\ ~D[2026-11-08]) do
     attrs = %{
       org_id: org,
-      entry_date: ~D[2026-11-08],
+      entry_date: entry_date,
       memo: "manual journal",
       lines: [
         %{account_id: cash.id, debit_cents: amount},
@@ -299,5 +445,22 @@ defmodule Samen.FinanceJournalApprovalTest do
       nil -> flunk("expected ApprovalRequired, got: #{inspect(errors)}")
       found -> found
     end
+  end
+
+  defp change_policy!(policy, attrs, scope, approver_id) do
+    assert {:error, %Ash.Error.Forbidden{errors: errors}} =
+             policy
+             |> Ash.Changeset.for_update(:update, attrs, scope: scope)
+             |> Ash.update()
+
+    approval = approval_error!(errors)
+
+    assert {:ok, _decided, _meta} =
+             Samen.Approvals.approve(approval.approval_id, approver_id,
+               approval_resource: @approval_resource,
+               repo: @repo
+             )
+
+    Ash.get!(JournalApprovalPolicy, policy.id, authorize?: false)
   end
 end

@@ -344,6 +344,11 @@ defmodule Samen.Scopes.Finance.Blueprint do
           update :update do
             accept([:entry_date, :memo])
 
+            change(
+              {Samen.Scopes.Finance.JournalApproval,
+               policy: unquote(policy_mod), mode: :edit_guard}
+            )
+
             argument(:lines, {:array, :map},
               allow_nil?: true,
               constraints: [
@@ -1449,13 +1454,21 @@ defmodule Samen.Scopes.Finance.Blueprint do
             must be approved by a principal other than the entry's preparer.
           * `threshold_cents` — only entries whose stored debit total is at
             least this amount need approval. `0` means every entry.
+          * `account_ids` — optional account scope. Empty means all accounts;
+            otherwise the policy applies only when at least one persisted line
+            touches one of the listed accounts.
+          * `period_keys` — optional `"YYYY-MM"` periods. Empty means all
+            periods; otherwise the policy applies only when the entry date is
+            in one of the listed fiscal months.
 
         One row per org (`unique_org`). A missing row means the control is not
         configured; that keeps historical/legacy posting behavior intact while
         making the control explicit for new tenants. Admin-owned: a member who
-        could switch approval off would make the control theatre.
+        could switch approval off would make the control theatre. Updates go
+        through the approvals Gate, so a second admin must consent to a change.
 
-        No PII (INV-1): a tenant id, a boolean and an integer.
+        No PII (INV-1): a tenant id, a boolean, integers, account ids and
+        bounded period keys.
         """
 
         use Samen.Resource,
@@ -1484,6 +1497,18 @@ defmodule Samen.Scopes.Finance.Blueprint do
             allow_nil?: false,
             default: 0
           )
+
+          attribute(:account_ids, {:array, :uuid},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
+
+          attribute(:period_keys, {:array, :string},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
         end
 
         identities do
@@ -1497,13 +1522,20 @@ defmodule Samen.Scopes.Finance.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :enabled, :threshold_cents])
+            accept([:org_id, :enabled, :threshold_cents, :account_ids, :period_keys])
             validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
           end
 
           update :update do
-            accept([:enabled, :threshold_cents])
+            accept([:enabled, :threshold_cents, :account_ids, :period_keys])
             require_atomic?(false)
+
+            change(
+              {Samen.Approvals.Gate,
+               reason: "a journal approval policy change requires a distinct admin",
+               subject_ref: {Samen.Scopes.Finance.JournalApprovalPolicyApproval, :subject_ref}}
+            )
+
             validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
           end
 

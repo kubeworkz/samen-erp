@@ -34,6 +34,16 @@ defmodule Samen.Scopes.Finance.JournalApproval do
   (sum of debit cents). `0` means every human posting. The total is read from
   the PERSISTED lines, the same source `PostBalance` uses, so an approver
   consents to the entry that is actually stored.
+
+  ## Revision binding
+
+  An approval is bound to the entry's material content, not just its id. The
+  Gate's `subject_ref` carries a SHA-256 digest of the entry date, memo and
+  persisted lines. The approved re-invocation recomputes that digest and
+  refuses if it differs, so a draft changed after the approver consented cannot
+  ride the old approval. The `:update` action also refuses any edit while a
+  post/void approval is pending, which keeps the approval and the stored entry
+  in sync at the source.
   """
 
   use Ash.Resource.Change
@@ -42,10 +52,15 @@ defmodule Samen.Scopes.Finance.JournalApproval do
 
   @impl true
   def change(changeset, opts, context) do
-    if approved_context?(changeset) do
-      stamp_approval(changeset, context)
-    else
-      maybe_gate(changeset, opts, context)
+    cond do
+      Keyword.get(opts, :mode) == :edit_guard ->
+        refuse_edits_while_pending(changeset)
+
+      approved_context?(changeset) ->
+        stamp_approval(changeset, context)
+
+      true ->
+        maybe_gate(changeset, opts, context)
     end
   end
 
@@ -62,12 +77,15 @@ defmodule Samen.Scopes.Finance.JournalApproval do
         with {:ok, policy} <- load_policy(changeset, opts),
              true <- policy_applies?(policy, changeset),
              {:ok, changeset} <- bind_preparer(changeset, actor_id) do
+          revision = entry_digest(changeset)
+
           Samen.Approvals.Gate.change(
             changeset,
             [
               reason:
                 "manual journal entry #{changeset.data.id} prepared by #{actor_id} " <>
-                  "requires a distinct approver"
+                  "requires a distinct approver",
+              subject_ref: revisioned_subject_ref(changeset, revision)
             ],
             context
           )
@@ -100,8 +118,11 @@ defmodule Samen.Scopes.Finance.JournalApproval do
 
   defp policy_applies?(%{enabled: false}, _changeset), do: false
 
-  defp policy_applies?(%{threshold_cents: threshold}, changeset) do
-    total_cents(changeset) >= threshold
+  defp policy_applies?(%{enabled: true} = policy, changeset) do
+    lines = load_lines(changeset)
+
+    total_cents(lines) >= Map.get(policy, :threshold_cents, 0) and
+      account_scope?(policy, lines) and period_scope?(policy, changeset)
   end
 
   defp policy_applies?(_, _changeset), do: false
@@ -149,6 +170,13 @@ defmodule Samen.Scopes.Finance.JournalApproval do
       |> Ash.Changeset.force_change_attribute(:approved_at, now())
       |> Ash.Changeset.force_change_attribute(:approval_id, approval_id)
     else
+      {:error, :entry_changed} ->
+        error(
+          changeset,
+          "the journal entry changed after approval was requested; request a new approval " <>
+            "for the current entry"
+        )
+
       _ ->
         error(
           changeset,
@@ -160,7 +188,7 @@ defmodule Samen.Scopes.Finance.JournalApproval do
   defp verify_approval(changeset, approval, approved_by) do
     org_id = loaded_attribute(changeset, :org_id)
     prepared_by = loaded_attribute(changeset, :prepared_by)
-    subject_ref = "samen:#{Samen.Info.abbrev(changeset.resource)}:#{changeset.data.id}"
+    expected_subject_ref = revisioned_subject_ref(changeset, entry_digest(changeset))
     kind = "#{changeset.resource}:#{changeset.action.name}"
 
     cond do
@@ -173,8 +201,8 @@ defmodule Samen.Scopes.Finance.JournalApproval do
       approval.kind != kind ->
         {:error, :wrong_kind}
 
-      approval.subject_ref != subject_ref ->
-        {:error, :wrong_subject}
+      approval.subject_ref != expected_subject_ref ->
+        {:error, :entry_changed}
 
       approval.decided_by != approved_by ->
         {:error, :wrong_approver}
@@ -197,9 +225,112 @@ defmodule Samen.Scopes.Finance.JournalApproval do
     end
   end
 
-  defp total_cents(changeset) do
-    %{lines: lines} = Ash.load!(changeset.data, [:lines], authorize?: false)
+  defp refuse_edits_while_pending(changeset) do
+    org_id = loaded_attribute(changeset, :org_id)
+    resource = changeset.resource
+    entry_id = changeset.data.id
 
+    kinds = [
+      Samen.Approvals.Gate.kind_for(resource, :post),
+      Samen.Approvals.Gate.kind_for(resource, :void)
+    ]
+
+    Enum.reduce_while(kinds, changeset, fn kind, current ->
+      case pending_for_entry?(org_id, kind, resource, entry_id) do
+        {:ok, true} ->
+          {:halt,
+           error(
+             current,
+             "a journal approval is pending for this entry; cancel or decide it before " <>
+               "editing the draft"
+           )}
+
+        {:ok, false} ->
+          {:cont, current}
+
+        {:error, :no_approvals_module} ->
+          {:cont, current}
+
+        {:error, reason} ->
+          {:halt,
+           error(
+             current,
+             "could not check pending journal approvals: #{inspect(reason)}"
+           )}
+      end
+    end)
+  end
+
+  defp pending_for_entry?(org_id, kind, resource, entry_id) do
+    case Samen.Approvals.list_pending(org_id, kind) do
+      {:ok, approvals} ->
+        prefix = "samen:#{Samen.Info.abbrev(resource)}:#{entry_id}"
+
+        {:ok,
+         Enum.any?(approvals, fn approval ->
+           approval.subject_ref == prefix or
+             String.starts_with?(approval.subject_ref, prefix <> ":")
+         end)}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp revisioned_subject_ref(changeset, revision) do
+    "samen:#{Samen.Info.abbrev(changeset.resource)}:#{changeset.data.id}:#{revision}"
+  end
+
+  defp entry_digest(changeset) do
+    entry = Ash.load!(changeset.data, [:lines], authorize?: false)
+
+    payload = [
+      entry_date: entry.entry_date && Date.to_iso8601(entry.entry_date),
+      memo: entry.memo,
+      lines: entry.lines |> Enum.map(&line_payload/1) |> Enum.sort_by(&elem(&1, 0))
+    ]
+
+    :crypto.hash(:sha256, :erlang.term_to_binary(payload))
+    |> Base.encode16(case: :lower)
+  end
+
+  defp line_payload(line) do
+    {
+      line.id,
+      line.account_id,
+      line.debit_cents,
+      line.credit_cents,
+      line.memo,
+      line.dimension_refs
+    }
+  end
+
+  defp load_lines(changeset), do: Ash.load!(changeset.data, [:lines], authorize?: false).lines
+
+  defp account_scope?(policy, lines) do
+    case Map.get(policy, :account_ids) do
+      ids when is_list(ids) and ids != [] ->
+        Enum.any?(lines, fn line -> line.account_id in ids end)
+
+      _ ->
+        true
+    end
+  end
+
+  defp period_scope?(policy, changeset) do
+    case Map.get(policy, :period_keys) do
+      keys when is_list(keys) and keys != [] ->
+        case loaded_attribute(changeset, :entry_date) do
+          %Date{} = date -> (date |> Date.to_iso8601() |> String.slice(0, 7)) in keys
+          _ -> false
+        end
+
+      _ ->
+        true
+    end
+  end
+
+  defp total_cents(lines) do
     Enum.reduce(lines, 0, fn line, sum ->
       sum + (line.debit_cents || 0)
     end)
