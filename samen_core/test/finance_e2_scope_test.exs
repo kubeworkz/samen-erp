@@ -1397,6 +1397,66 @@ defmodule Samen.FinanceE2ScopeTest do
       assert Reconcile.org_balance(org, @repo, line_resource: JournalLine) == {:ok, 0}
     end
 
+    test "approval fails closed when no USD-to-CAD rate exists", %{org: org, scope: scope} do
+      expense = seed_posting_accounts(org)
+      seed_cad_fx!(org, [])
+
+      bill =
+        new_bill(scope, org, [bill_line(expense, 10_000)],
+          number: "V-FX-MISSING",
+          bill_date: ~D[2026-09-10],
+          currency: "USD"
+        )
+
+      assert {:gated, approval_id} = gate(bill, scope)
+      reason = decide_error(approval_id)
+
+      assert inspect(reason) =~ "no exchange rate is stored for USD"
+      assert inspect(reason) =~ "at or before the bill date"
+      assert_pending_approval!(approval_id)
+
+      reloaded = Ash.get!(ApInvoice, bill.id, authorize?: false)
+      assert reloaded.status == :draft
+      assert reloaded.base_total_cents == nil
+      assert reloaded.exchange_rate == nil
+      assert reloaded.posted_entry_id == nil
+      assert ap_invoice_entries(org, bill.id) == []
+    end
+
+    test "approval never uses a future-dated rate, then uses the valid past rate", %{
+      org: org,
+      scope: scope
+    } do
+      expense = seed_posting_accounts(org)
+      seed_cad_fx!(org, [{~U[2026-09-20 00:00:00Z], "1.40"}])
+
+      bill =
+        new_bill(scope, org, [bill_line(expense, 10_000)],
+          number: "V-FX-FUTURE",
+          bill_date: ~D[2026-09-10],
+          currency: "USD"
+        )
+
+      assert {:gated, approval_id} = gate(bill, scope)
+      reason = decide_error(approval_id)
+
+      assert inspect(reason) =~ "no exchange rate is stored for USD"
+      assert_pending_approval!(approval_id)
+      assert Ash.get!(ApInvoice, bill.id, authorize?: false).status == :draft
+      assert ap_invoice_entries(org, bill.id) == []
+
+      # The future row alone cannot approve the bill; a genuinely past row can.
+      seed_fx_rate!(org, ~U[2026-09-05 00:00:00Z], "1.30")
+
+      assert {:ok, _, _} = decide(approval_id)
+
+      approved = Ash.get!(ApInvoice, bill.id, authorize?: false)
+      assert approved.status == :approved
+      assert approved.base_currency == "CAD"
+      assert approved.base_total_cents == 13_000
+      assert approved.exchange_rate == "1.30"
+    end
+
     test "a run refuses a mixed-currency bill set", %{org: org, scope: scope} do
       expense = seed_posting_accounts(org)
       seed_cad_fx!(org, [{~U[2026-09-01 00:00:00Z], "1.35"}])
@@ -1640,6 +1700,12 @@ defmodule Samen.FinanceE2ScopeTest do
     |> Ash.read!(authorize?: false)
   end
 
+  defp ap_invoice_entries(org, bill_id) do
+    JournalEntry
+    |> Ash.Query.filter(org_id == ^org and source_key == "ap_invoice" and source_id == ^bill_id)
+    |> Ash.read!(authorize?: false)
+  end
+
   defp entry_lines(entry_id) do
     JournalLine
     |> Ash.Query.filter(entry_id == ^entry_id)
@@ -1703,24 +1769,24 @@ defmodule Samen.FinanceE2ScopeTest do
     )
     |> Ash.create!()
 
-    for {valid_at, rate} <- rates do
-      ExchangeRate
-      |> Ash.Changeset.for_create(
-        :create_rate,
-        %{
-          org_id: org,
-          from_currency: "USD",
-          to_currency: "CAD",
-          rate: rate,
-          source: :manual,
-          valid_at: valid_at
-        },
-        scope: admin_scope(org)
-      )
-      |> Ash.create!()
-    end
+    Enum.each(rates, fn {valid_at, rate} -> seed_fx_rate!(org, valid_at, rate) end)
+  end
 
-    :ok
+  defp seed_fx_rate!(org, valid_at, rate) do
+    ExchangeRate
+    |> Ash.Changeset.for_create(
+      :create_rate,
+      %{
+        org_id: org,
+        from_currency: "USD",
+        to_currency: "CAD",
+        rate: rate,
+        source: :manual,
+        valid_at: valid_at
+      },
+      scope: admin_scope(org)
+    )
+    |> Ash.create!()
   end
 
   defp new_account(scope, org, code, attrs \\ %{}) do
@@ -1850,6 +1916,24 @@ defmodule Samen.FinanceE2ScopeTest do
       approval_resource: approval_resource(),
       repo: @repo
     )
+  end
+
+  defp decide_error(approval_id) do
+    case decide(approval_id) do
+      {:error, {:gate_action_failed, reason}} -> reason
+      {:error, reason} -> reason
+      {:ok, _, _} -> flunk("the decision unexpectedly succeeded")
+    end
+  end
+
+  defp assert_pending_approval!(approval_id) do
+    assert {:ok, approval} =
+             Samen.Approvals.get(approval_id,
+               approval_resource: approval_resource(),
+               repo: @repo
+             )
+
+    assert approval.state == :pending
   end
 
   defp new_posted_entry(org, cash, ar, amount) do
