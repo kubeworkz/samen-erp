@@ -44,9 +44,9 @@ defmodule Samen.Abbrev.AllocatorTest do
         %{global: g, hosts: h} = R.load_namespaced(path)
 
         assert get_in(h, ["widgetco", "wid"]) == "Widgetco.Vertical.Widget"
-        # global net unchanged (still the committed 405 rows; host rows are
+        # global net unchanged (305 rows after ADR-055 retirement; host rows are
         # namespaced — Phase 4's three Lot rows land under their hosts).
-        assert map_size(g) == 405
+        assert map_size(g) == 305
       after
         File.rm(path)
       end
@@ -351,9 +351,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # module name is two bytes shorter per host.
       # -> 40_571 bytes, 864 flat.
       # +9 WS-ERP E31 (#12) host rows (three hosts × category/card/report).
-      # -> 41_039 bytes, 873 flat.
-      assert byte_size(committed) == 41_039
-      assert map_size(R.load()) == 873
+      # -> 41_039 bytes, 873 flat before ADR-055 retirement.
+      # ADR-055 retired 100 rows: 36_474 bytes, 773 flat.
+      assert byte_size(committed) == 36_474
+      assert map_size(R.load()) == 773
     end
   end
 

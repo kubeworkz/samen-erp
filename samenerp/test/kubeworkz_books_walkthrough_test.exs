@@ -50,7 +50,6 @@ defmodule Samenerp.KubeworkzBooksWalkthroughTest do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.TrialBalance
   alias Samenerp.Erp
   alias Samenerp.Kubeworkz.Books
   alias Samenerp.Operator, as: Op
@@ -383,12 +382,14 @@ defmodule Samenerp.KubeworkzBooksWalkthroughTest do
 
     assert_balances!(org_id, after_close())
 
-    assert {:ok, tb} = trial_balance(org_id)
-    assert tb.balanced
+    balances = balances!(org_id)
+
     # The total includes the credit-side contra balances and the source's
     # negative 200.00 SoC inventory, so it is larger than net assets alone.
-    assert tb.total_debits == 38_375_600
-    assert tb.total_credits == 38_375_600
+    assert balances |> Map.values() |> Enum.filter(&(&1 > 0)) |> Enum.sum() == 38_375_600
+
+    assert balances |> Map.values() |> Enum.filter(&(&1 < 0)) |> Enum.map(&abs/1) |> Enum.sum() ==
+             38_375_600
 
     assert posted_entry_count(org_id) == @je_count
     assert closed_period!(org_id).status == :soft_closed
@@ -466,20 +467,36 @@ defmodule Samenerp.KubeworkzBooksWalkthroughTest do
     posted
   end
 
-  defp trial_balance(org_id) do
-    TrialBalance.generate(org_id, DateTime.utc_now(),
-      repo: Samenerp.Repo,
-      account_resource: Erp.Account,
-      line_resource: Erp.JournalLine,
-      entry_resource: Erp.JournalEntry
-    )
-  end
-
   defp balances!(org_id) do
-    assert {:ok, tb} = trial_balance(org_id)
-    assert tb.balanced, "trial balance is not balanced: #{inspect(tb)}"
+    accounts =
+      Erp.Account
+      |> Ash.Query.filter(org_id == ^org_id)
+      |> Ash.read!(authorize?: false)
 
-    Map.new(tb.accounts, &{&1.code, &1.balance})
+    entries =
+      Erp.JournalEntry
+      |> Ash.Query.filter(org_id == ^org_id and status == :posted)
+      |> Ash.read!(authorize?: false)
+
+    entry_ids = Enum.map(entries, & &1.id)
+
+    lines =
+      Erp.JournalLine
+      |> Ash.Query.filter(entry_id in ^entry_ids)
+      |> Ash.read!(authorize?: false)
+
+    account_codes = Map.new(accounts, &{&1.id, &1.code})
+
+    balances =
+      Enum.reduce(lines, Map.new(accounts, &{&1.code, 0}), fn line, acc ->
+        code = Map.fetch!(account_codes, line.account_id)
+        Map.update!(acc, code, &(&1 + line.debit_cents - line.credit_cents))
+      end)
+
+    total = balances |> Map.values() |> Enum.sum()
+    assert total == 0, "posted journal lines do not balance: #{total}"
+
+    balances
   end
 
   defp assert_balances!(org_id, expected) do

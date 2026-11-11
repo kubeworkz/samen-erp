@@ -122,7 +122,7 @@ defmodule Samen.AbbrevRegistryTest do
       path
     end
 
-    test "the COMMITTED registry: 405 global entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
+    test "the COMMITTED registry: 305 global entries + the F3 consent-ledger + ADR-035 Identity host allocations" do
       %{global: global, hosts: hosts} = Reg.load_namespaced()
       # +75 since the 328 pin (eb1de17): the WS-ERP E28–E38 scope batches + the
       # HuggingFace BYOK scope + the z-prefix re-nesting (9d751da/172057e) +
@@ -130,7 +130,8 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 collision fix: `fpo`/`mrg` reserved after restoring `cmp`/`dcm`.
       # WS-ERP adjustment documents (#6) add SIX host rows (`sdc`/`sdv`,
       # `fcn`/`fvc`, `ecn`/`evc`) and no global rows.
-      assert map_size(global) == 405
+      # ADR-055 retired 100 rows for deleted, never-migrated scope modules.
+      assert map_size(global) == 305
       # Host namespaces (per-host maps): demo 23, driftwood 25, pawchart 42,
       # samen_core 89, samen_web 73, samenerp 95 (the WS-ERP E8 host proof —
       # `mix samen.gen.app` prefix `er` — plus the E15 Work mount wsp/wst, the
@@ -1136,7 +1137,8 @@ defmodule Samen.AbbrevRegistryTest do
       # `sdm`/`scl`, `fcl`/`fcc`, `edm`/`ecc` = 405 + 453 = 858 flat.)
       # (+3 per-org collection cadence: `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
       # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
-      assert map_size(Reg.load()) == 873
+      # ADR-055 retired 100 global rows: 873 flat -> 773 flat.
+      assert map_size(Reg.load()) == 773
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -1,7 +1,7 @@
 # ADR-055 — The dormant ERP module sets: **delete** them rather than complete them, and
 retire the abbrevs they burned
 
-- **Status:** **ACCEPTED (2026-10-27) — decision taken.** The disposition is DELETE. Two calls
+- **Status:** **ACCEPTED (2026-10-27); EXECUTED (2026-11-11) — 105 modules deleted.** The disposition is DELETE. Two calls
   inside it are named as cheaply overrulable (§6 the E15 timesheet stub; §4 retire-vs-tombstone on
   the abbrev rows) — if the operator wants either the other way, it is a one-line change to this
   record and to the execution phase, not a re-audit.
@@ -91,8 +91,9 @@ cannot be trusted on its own.
    and `warehouse_transfers` are the same pathology on live modules (35 tests between the three).
    Deleting those would remove a file without closing the hole, so the execution phase **replaces**
    them with real coverage that reaches the module, or removes the file if the module itself is
-   unmounted (E11's `TrialBalance`/`BalanceSheet`/`ProfitLoss` are unreferenced and unmigrated, so
-   they fall under decision 1 and their 8 tests go with them).
+   unmounted. E11 is split: `BalanceSheet` and `ProfitLoss` are live through the board-pack read and
+   keep their coverage; `TrialBalance` is unreferenced and unmigrated, so it falls under decision 1
+   and its tests go with it.
 
 4. **The 89 abbrev rows are RETIRED — under a rule that keeps permanence intact.** The registry's
    rule is that an abbrev is permanent because it is projected into physical column names: *"once
@@ -142,9 +143,9 @@ cannot be trusted on its own.
      10 additionally reuses `LandedCostAllocator` as a **pattern** — so deleting "the E13/E14 files"
      by directory would break a ratified plan.
    - **E10 (FX) is live** (`ExchangeRate`, `OrgFxSettings` are defined by the Finance blueprint);
-     **E11 is not** (`TrialBalance`/`BalanceSheet`/`ProfitLoss` are referenced by nothing and
-     `stb_trial_balance` is unmigrated) — E11 therefore falls under decision 1 despite living inside
-     the mounted Finance directory.
+     **E11 is split** — `BalanceSheet` and `ProfitLoss` are live through `Samen.Web.Finance.BoardPack`,
+     while `TrialBalance` alone is unreferenced and `stb_trial_balance` is unmigrated. Only
+     `TrialBalance` falls under decision 1, despite living inside the mounted Finance directory.
    The rule is applied to the **module**, never to the folder, and the execution phase computes the
    frontier with the verifier in decision 9 rather than from any hand list — **including this one**.
 
@@ -170,22 +171,79 @@ cannot be trusted on its own.
    adversarial gate** (full `./ci.sh` before and after), **not** folded into a WS-ACCT phase, so a
    large mechanical deletion never shares a commit with feature work.
 
+## Execution reconciliation (2026-11-11)
+
+The execution ran the verifier against the tree and reconciled its frontier before deleting anything.
+The frontier was **116 modules** — the ADR's 89 baseline plus **27 extras** the original audit did
+not name. Four modules were outside the frontier under §7's ratified exceptions
+(`Inventory.TransferGuard`, `Inventory.LandedCostAllocator`, `Finance.FxConvert`,
+`Finance.FxConversionGuard`), and three more were false positives from grouped aliases. Of the 27
+extras, **11 are live and preserved**; the remaining **16 are deleted**. The deletion set is
+therefore **105 modules = 116 − 11**.
+
+**The 11 preserved extras.** Finance: `ApAchArtifact`, `ApAchArtifactRecord`,
+`ApInvoiceCapture`, `AssetRegister`, `BudgetVsActual`, `GrantReconcile`,
+`ReconcileRecognition`, `TaxCalculator`. Inventory: `ReconcileFulfillment`,
+`ReconcileProcurement`, `ReconcileProduction`. These are preserved test-oracle modules: the
+focused AP, asset, budget, grant, recognition, tax and inventory tests exercise them, but the
+static verifier does not count test references, so they are ratified in `@ratified_live`. Grouped
+`alias Samen.Scopes.Finance.{...}` forms are why the first pass missed the Finance ones.
+
+**The 16 deleted extras.**
+
+| Scope | Modules | Count |
+|---|---|---|
+| Banking | `BankReconcile`, `Categorize` | 2 |
+| Cms | `Audit`, `Page`, `Template`, `Theme` | 4 |
+| Hr | `LeaveBalance`, `LeaveRequest`, `LeaveType`, `PayRun`, `Payslip`, `SalaryStructure` | 6 |
+| Support | `TicketCategory`, `TicketEscalation` | 2 |
+| Finance | `SupplierOnboarding`, `TrialBalance` | 2 |
+| **Total** | | **16** |
+
+The mounted `Cms`, `Hr`, `Support` and `Banking` scopes materialize host-namespaced resources
+through their blueprints; the deleted `Samen.Scopes.*` files were co-located strays, not members of
+those mounts.
+
+**E11 correction.** The Context/§7 statement that E11 is wholly dead was wrong. `BalanceSheet` and
+`ProfitLoss` are live: `Samen.Web.Finance.BoardPack` reads them, and the board-pack test exercises
+that read. Neither was in the 116-module frontier, and both are preserved. `TrialBalance` is the
+only dead E11 report; it is in the 105 and is deleted. `financial_statements_test.exs` was
+tautological (literal maps; it never called `TrialBalance`), so it is removed. The close walkthrough
+retains its real `BalanceSheet`/`ProfitLoss` assertions, and the Kubeworkz walkthrough now derives
+per-account balances directly from posted journal lines instead of calling `TrialBalance`.
+
+**Tests and claims.** The tautological E-series test files identified by the audit are removed,
+along with the `SupplierOnboarding`-specific test. `warehouse_transfers_test.exs` was also
+literals-only despite its live E13 subject, so it is removed with the other fake E-series files; the
+live E13/E14 modules themselves remain. Genuine coverage for inventory reconciliations,
+assets/grants/recognition, budget-vs-actual, tax, AP capture/payment, expenses, E13/E14 allocation
+and the board pack is retained. The standing verifier lives in
+`samen_core/lib/mix/tasks/samen.verify.no_dormant_modules.ex` with its own tests; after the sweep it
+reports no dormant module.
+
+**Abbrev retirement.** `mix samen.abbrev.retire` now implements §4's sanctioned path: a dry run by
+default, `--apply` only after every targeted owner is absent from the source tree, its table is not
+created by any migration, no migration names the owner, and no `schema.dict.json` entry names the
+owner or table. The execution retired **100 global rows across 98 owners**; the other seven deleted
+modules had no registry row. The registry now has 305 global entries (773 flat), and the four
+remaining `Samen.Scopes.*` rows are live AI resources, not deleted modules.
+
 ## Consequences
 
-- The estate becomes diagnosable again: `consolidation`, `expenses`, `timesheet`, `pos`,
-  `esign` and the rest stop reading as shipped features. ADR-054 §1's "dormant code is not reuse"
+- The estate becomes diagnosable again: `consolidation`, `timesheet`, `pos`, `esign` and the
+  rest stop reading as shipped features; finance expenses now ship through Finance. ADR-054 §1's "dormant code is not reuse"
   becomes mechanically true rather than a note a reader must remember.
 - Deletion must be preceded by the verifier (decision 9) so the frontier is computed, not guessed —
   and the verifier then outlives the deletion as the reason it cannot recur.
 - Abbrev permanence is narrowed for exactly these rows, under proof, via a new sanctioned task. The
   registry stops meaning "every row names a live owner" and starts meaning "every row names an owner
   that either exists or provably never had data" — a rule with a test rather than a convention.
-- 509 tests disappear from the samen_core count and must not be replaced by count-padding: the
-  README's totals move **down**, and the honest number is a smaller one. Any future "test count"
+- The tautological tests disappear from the samen_core count and must not be replaced by
+  count-padding: the README's totals move **down**, and the honest number is a smaller one. Any future "test count"
   claim in the README or the claim ledger is expected to move with them.
 - `samenerp`'s landing page and the README lose ~30 advertised capabilities. That subtraction is the
   point: what remains advertised will be what a user can actually click, per the fail-honest
   posture (`CLAUDE.md`; ADR-014/024/026).
 - If any of these sets is chartered later, it starts from a packaged scope, a migration, a real test,
   a red twin and a sabotage patch — i.e. from this codebase's definition of "shipped" — rather than
-  from these 89 files.
+  from these deleted files.

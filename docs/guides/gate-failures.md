@@ -930,6 +930,27 @@ own twins: `173-pp8-pp9-settings-automation-nav-items-removed.patch` (the whole 
 ---
 
 
+## `mix samen.verify.no_dormant_modules` — the ADR-055 dormancy guard
+
+**Errors** (`samen_core/lib/mix/tasks/samen.verify.no_dormant_modules.ex`):
+
+```text
+dormant module: <Module> (<path>) — unreachable from <Scope>'s mounted surface, no table is declared, and no live code references it (ADR-055)
+dormant module: <Module> (<path>) — unreachable from <Scope>'s mounted surface, table <table> has no migration, and no live code references it (ADR-055)
+```
+
+**Meaning:** ADR-055 decision 9's standing guard found a module under
+`samen_core/lib/samen/scopes/` that is simultaneously unmounted, unmigrated and
+unreferenced. The walk is static and deliberately does not count test files as live
+references; the ADR's four §7 exceptions and the 11 execution preserves are the only
+names in `@ratified_live`. `--root PATH` points the walk at a fixture tree.
+**Fix:** delete the module (and its tautological test) if it is dormant, or make it
+live by mounting/referencing it and giving it a real test. Add a name to
+`@ratified_live` only when there is a documented, ratified reason (never to silence
+a real finding).
+
+---
+
 ## Any step — `mix samen.verify.fleet` (the tree-scoped aggregate)
 
 **Shared failure shape** (`samen_core/lib/mix/tasks/samen.verify.fleet.ex`), one line per member:

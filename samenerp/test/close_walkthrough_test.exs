@@ -42,8 +42,7 @@ defmodule Samenerp.CloseWalkthroughTest do
     PeriodReconcile,
     ProfitLoss,
     Reconcile,
-    ReconcileVariance,
-    TrialBalance
+    ReconcileVariance
   }
 
   alias Samenerp.Erp
@@ -502,18 +501,6 @@ defmodule Samenerp.CloseWalkthroughTest do
     # ── Phase 8 · Financial Statements ───────────────────────────────────────
     as_of = DateTime.utc_now()
 
-    assert {:ok, tb} =
-             TrialBalance.generate(org_id, as_of,
-               repo: @repo,
-               account_resource: Erp.Account,
-               line_resource: Erp.JournalLine,
-               entry_resource: Erp.JournalEntry
-             )
-
-    assert tb.balanced
-    assert tb.total_debits == tb.total_credits
-    assert tb.total_debits > 0
-
     assert {:ok, bs} =
              BalanceSheet.generate(org_id, as_of,
                repo: @repo,
@@ -557,11 +544,28 @@ defmodule Samenerp.CloseWalkthroughTest do
     # ── Phase 9 · Rolling Forecast Update (actuals roll-in) ──────────────────
     # Phase 14 owns the forecast store. What the close certifies here is the
     # actuals packet the roll-in consumes — every figure a posted fact.
-    cash =
-      Enum.find(tb.accounts, &(&1.code == "1000")) ||
-        flunk("the trial balance carries no cash account")
+    cash_account =
+      Erp.Account
+      |> Ash.Query.filter(org_id == ^org_id and code == "1000")
+      |> Ash.read!(authorize?: false)
+      |> List.first()
 
-    assert cash.balance != 0
+    assert cash_account, "the chart of accounts carries no cash account"
+    cash_account_id = cash_account.id
+
+    posted_entry_ids =
+      Erp.JournalEntry
+      |> Ash.Query.filter(org_id == ^org_id and status == :posted)
+      |> Ash.read!(authorize?: false)
+      |> Enum.map(& &1.id)
+
+    cash_balance =
+      Erp.JournalLine
+      |> Ash.Query.filter(account_id == ^cash_account_id and entry_id in ^posted_entry_ids)
+      |> Ash.read!(authorize?: false)
+      |> Enum.reduce(0, fn line, acc -> acc + line.debit_cents - line.credit_cents end)
+
+    assert cash_balance != 0
     assert pl.total_revenue == 1_400_000
     assert is_integer(pl.total_expenses)
 

@@ -24,7 +24,7 @@ defmodule Samen.AbbrevFlattenConflictTest do
       assert Reg.flatten_conflicts(Reg.load_namespaced()) == []
     end
 
-    test "load/0 does not raise and returns the full lossless union (405 global + 459 host)" do
+    test "load/0 does not raise and returns the full lossless union (305 global + 459 host)" do
       flat = Reg.load()
       # + 3 T109 (ADR-038 §6.4) host reservations (dil/dol/wol — the durable
       # brute-force failure counter, allocator-proposed) = 355; +7 in T119 = 362;
@@ -128,7 +128,8 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # (+3 per-org collection cadence `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
       # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
       # (+9 WS-ERP E31 (#12) rows = 405 + 468 = 873 flat.)
-      assert map_size(flat) == 873
+      # ADR-055 retired 100 global rows: 873 flat -> 773 flat.
+      assert map_size(flat) == 773
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

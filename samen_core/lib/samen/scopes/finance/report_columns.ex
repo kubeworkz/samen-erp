@@ -3,7 +3,7 @@ defmodule Samen.Scopes.Finance.ReportColumns do
   Physical-name resolution for the Finance scope's raw-SQL statement reads
   (WS-ACCT Phase 12).
 
-  `TrialBalance`/`BalanceSheet`/`ProfitLoss` read with SQL because a grouped
+  `BalanceSheet`/`ProfitLoss` read with SQL because a grouped
   balance is the database's job, but their column names must be the ones that
   actually exist. A host's `Samen.Resource` transformer abbrev-prefixes every
   column (`org_id` → `ecl_org_id`, `account_id` → `ecl_account_id`), so a
