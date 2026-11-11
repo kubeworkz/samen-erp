@@ -892,6 +892,24 @@ defmodule Samen.UI.Nav do
         ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.5 4.5l5 5-2.5 2.5-5-5z" /><path d="M12.5 9.5L4 18v2.5h2.5L15 12" /></svg>)
       )
 
+  defp erp_icon(:expense_reports),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6M9 16h4" /></svg>)
+      )
+
+  defp erp_icon(:expense_categories),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="18" cy="18" r="2" /></svg>)
+      )
+
+  defp erp_icon(:corporate_cards),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M7 15h3" /></svg>)
+      )
+
   # ---------------------------------------------------------------------------
   # Host nav extra (PP-10) — data-driven vertical nav, rendered identically from
   # every framework sidebar

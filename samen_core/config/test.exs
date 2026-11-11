@@ -173,6 +173,9 @@ config :samen_core, Samen.Approvals.Registry,
       {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(SamenCore.Support.FinanceFixture.ApInvoice) <> ":approve") =>
       {:tenant, Samen.Approvals.Gate},
+    # WS-ERP E31 (#12): the productized expense report's gated approval.
+    (Atom.to_string(SamenCore.Support.FinanceFixture.ExpenseReport) <> ":approve") =>
+      {:tenant, Samen.Approvals.Gate},
     # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence write-down's gated post.
     (Atom.to_string(SamenCore.Support.FinanceFixture.ReserveWriteDown) <> ":post") =>
       {:tenant, Samen.Approvals.Gate},

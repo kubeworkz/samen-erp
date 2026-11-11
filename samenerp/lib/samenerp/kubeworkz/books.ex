@@ -195,6 +195,7 @@ defmodule Samenerp.Kubeworkz.Books do
     deferred_revenue: "2200",
     grant_deferred: "2200",
     accrued_liabilities: "2100",
+    employee_reimbursement_payable: "2100",
     amortization_expense: "7000",
     accumulated_amortization: "1510",
     depreciation_expense: "6030",

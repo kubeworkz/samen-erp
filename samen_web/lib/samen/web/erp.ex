@@ -70,6 +70,9 @@ defmodule Samen.Web.Erp do
           | :purchase_orders
           | :goods_receipts
           | :work_orders
+          | :expense_reports
+          | :expense_categories
+          | :corporate_cards
 
   @surfacedoc """
   The design §6.4 tenant surfaces plus the AP/AR adjustment documents, each a
@@ -107,7 +110,10 @@ defmodule Samen.Web.Erp do
     :stock,
     :purchase_orders,
     :goods_receipts,
-    :work_orders
+    :work_orders,
+    :expense_reports,
+    :expense_categories,
+    :corporate_cards
   ]
 
   @doc @surfacedoc
@@ -350,6 +356,9 @@ defmodule Samen.Web.Erp do
   def resource(%Mount{} = mount, :purchase_orders), do: derived(mount, :PurchaseOrder)
   def resource(%Mount{} = mount, :goods_receipts), do: derived(mount, :GoodsReceipt)
   def resource(%Mount{} = mount, :work_orders), do: derived(mount, :WorkOrder)
+  def resource(%Mount{} = mount, :expense_reports), do: derived(mount, :ExpenseReport)
+  def resource(%Mount{} = mount, :expense_categories), do: derived(mount, :ExpenseCategory)
+  def resource(%Mount{} = mount, :corporate_cards), do: derived(mount, :CorporateCard)
 
   defp derived(mount, name) do
     mod = Mount.resource(mount, name)
@@ -381,6 +390,13 @@ defmodule Samen.Web.Erp do
   def columns(:purchase_orders), do: [:number, :order_date, :status]
   def columns(:goods_receipts), do: [:number, :received_date, :status]
   def columns(:work_orders), do: [:number, :qty, :status]
+  def columns(:expense_reports), do: [:title, :employee_id, :currency, :total_cents, :status]
+
+  def columns(:expense_categories),
+    do: [:name, :account_id, :requires_receipt, :max_amount_cents, :is_active]
+
+  def columns(:corporate_cards),
+    do: [:name, :last4, :cardholder_id, :currency, :is_active]
 
   @doc "The surface's sortable fields (the bounded ListLive `:sortable` list)."
   @spec sortable(surface()) :: [atom()]
@@ -393,10 +409,14 @@ defmodule Samen.Web.Erp do
   def sortable(:purchase_orders), do: [:order_date, :status]
   def sortable(:goods_receipts), do: [:received_date, :status]
   def sortable(:work_orders), do: [:number, :status]
+  def sortable(:expense_reports), do: [:title, :total_cents, :status]
+  def sortable(:expense_categories), do: [:name]
+  def sortable(:corporate_cards), do: [:name]
 
   @doc "The surface's bounded free-text filter fields (empty disables the filter box)."
   @spec filter_fields(surface()) :: [atom()]
   def filter_fields(:goods_receipts), do: [:number]
+  def filter_fields(:expense_reports), do: [:title]
   def filter_fields(_surface), do: []
 
   @doc """
@@ -413,6 +433,9 @@ defmodule Samen.Web.Erp do
   def record_label(:purchase_orders), do: "Purchase order"
   def record_label(:goods_receipts), do: "Goods receipt"
   def record_label(:work_orders), do: "Work order"
+  def record_label(:expense_reports), do: "Expense report"
+  def record_label(:expense_categories), do: "Expense category"
+  def record_label(:corporate_cards), do: "Corporate card"
 
   @doc """
   The DETAIL page's bounded field list — the same mask-by-omission discipline
@@ -509,6 +532,35 @@ defmodule Samen.Web.Erp do
       :completed_at
     ]
 
+  def detail_fields(:expense_reports),
+    do: [
+      :title,
+      :employee_id,
+      :currency,
+      :total_cents,
+      :status,
+      :submitted_at,
+      :approved_at,
+      :reimbursed_at,
+      :rejected_reason,
+      :posted_entry_id,
+      :settlement_entry_id,
+      :inserted_at
+    ]
+
+  def detail_fields(:expense_categories),
+    do: [
+      :name,
+      :account_id,
+      :requires_receipt,
+      :max_amount_cents,
+      :is_active,
+      :inserted_at
+    ]
+
+  def detail_fields(:corporate_cards),
+    do: [:name, :last4, :cardholder_id, :currency, :is_active, :inserted_at]
+
   @doc """
   A form field spec `{field, type, opts}` for the create modal — `type` is one
   of `:text | :number | :date | :select` (`opts` carries `options:` for a
@@ -602,6 +654,35 @@ defmodule Samen.Web.Erp do
     ]
   end
 
+  def create_fields(:expense_reports) do
+    [
+      {:employee_id, :text, [placeholder: "Employee id (uuid)"]},
+      {:title, :text, []},
+      {:currency, :text, [placeholder: "ISO 4217"]}
+    ]
+  end
+
+  def create_fields(:expense_categories) do
+    [
+      {:name, :text, []},
+      {:account_id, :text, [placeholder: "Expense account id (uuid)"]},
+      {:requires_receipt, :select, [options: ~w(false true)]},
+      {:max_amount_cents, :number, []},
+      {:is_active, :select, [options: ~w(true false)]}
+    ]
+  end
+
+  def create_fields(:corporate_cards) do
+    [
+      {:name, :text, []},
+      {:last4, :text, [placeholder: "Last four digits only"]},
+      {:cardholder_id, :text, [placeholder: "Cardholder id (uuid)"]},
+      {:account_id, :text, [placeholder: "Card liability account id (uuid)"]},
+      {:currency, :text, [placeholder: "ISO 4217"]},
+      {:is_active, :select, [options: ~w(true false)]}
+    ]
+  end
+
   @doc """
   The bounded field list for the DETAIL page's Edit form — again exactly the
   surface's `:update` action's `accept`. Deliberately narrower than
@@ -663,6 +744,35 @@ defmodule Samen.Web.Erp do
     ]
   end
 
+  def edit_fields(:expense_reports) do
+    [
+      {:title, :text, []},
+      {:employee_id, :text, [placeholder: "Employee id (uuid)"]},
+      {:currency, :text, [placeholder: "ISO 4217"]}
+    ]
+  end
+
+  def edit_fields(:expense_categories) do
+    [
+      {:name, :text, []},
+      {:account_id, :text, [placeholder: "Expense account id (uuid)"]},
+      {:requires_receipt, :select, [options: ~w(false true)]},
+      {:max_amount_cents, :number, []},
+      {:is_active, :select, [options: ~w(true false)]}
+    ]
+  end
+
+  def edit_fields(:corporate_cards) do
+    [
+      {:name, :text, []},
+      {:last4, :text, []},
+      {:cardholder_id, :text, [placeholder: "Cardholder id (uuid)"]},
+      {:account_id, :text, [placeholder: "Card liability account id (uuid)"]},
+      {:currency, :text, []},
+      {:is_active, :select, [options: ~w(true false)]}
+    ]
+  end
+
   @doc """
   The bounded column spec for one LINE row — used BOTH by the detail page's
   line table and the create form's line repeater. The three line-bearing
@@ -703,6 +813,18 @@ defmodule Samen.Web.Erp do
       {:po_line_id, :text, [placeholder: "PO line id (uuid)"]},
       {:qty, :number, []},
       {:unit_cost_cents, :number, []}
+    ]
+  end
+
+  def line_fields(:expense_reports) do
+    [
+      {:category_id, :text, [placeholder: "Expense category id (uuid)"]},
+      {:corporate_card_id, :text, [placeholder: "Card id (uuid, card lines only)"]},
+      {:description, :text, []},
+      {:amount_cents, :number, []},
+      {:spent_on, :date, []},
+      {:payment_method, :select, [options: ~w(cash personal_card corporate_card)]},
+      {:receipt_ref, :text, [placeholder: "Opaque receipt reference"]}
     ]
   end
 
@@ -758,6 +880,15 @@ defmodule Samen.Web.Erp do
     ]
   end
 
+  def transitions(:expense_reports) do
+    [
+      {:submit, "Submit report", [:draft]},
+      {:approve, "Approve report", [:submitted]},
+      {:reimburse, "Settle report", [:approved]},
+      {:cancel, "Cancel report", [:draft, :submitted]}
+    ]
+  end
+
   def transitions(_surface), do: []
 
   @doc "The human label for a surface (the nav + heading)."
@@ -771,6 +902,9 @@ defmodule Samen.Web.Erp do
   def label(:purchase_orders), do: "Purchase Orders"
   def label(:goods_receipts), do: "Goods Receipts"
   def label(:work_orders), do: "Work Orders"
+  def label(:expense_reports), do: "Expense Reports"
+  def label(:expense_categories), do: "Expense Categories"
+  def label(:corporate_cards), do: "Corporate Cards"
 
   @doc """
   The CLOSED allowlist of REPORT surfaces (WS-ACCT Phase 13; ADR-054 D12).

@@ -350,8 +350,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +3 AP approval-policy rows (`fps`/`wap`/`eap`) — the generic policy
       # module name is two bytes shorter per host.
       # -> 40_571 bytes, 864 flat.
-      assert byte_size(committed) == 40_571
-      assert map_size(R.load()) == 864
+      # +9 WS-ERP E31 (#12) host rows (three hosts × category/card/report).
+      # -> 41_039 bytes, 873 flat.
+      assert byte_size(committed) == 41_039
+      assert map_size(R.load()) == 873
     end
   end
 

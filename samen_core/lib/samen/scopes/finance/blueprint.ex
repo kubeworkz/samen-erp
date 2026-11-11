@@ -776,7 +776,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 # realized foreign-exchange gain/loss on AP settlement. One
                 # account can carry both sides; the posting direction carries
                 # the gain (credit) or loss (debit).
-                :fx_gain_loss
+                :fx_gain_loss,
+                # WS-ERP E31 (#12): cash/personal expense lines accrue to the
+                # employee until reimbursement.
+                :employee_reimbursement_payable
               ]
             ]
           )

@@ -76,7 +76,11 @@ defmodule Samenerp.Erp do
       # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
       supplier_scorecard: "esi",
       supplier_scorecard_dimension: "esj",
-      supplier_risk: "esk"
+      supplier_risk: "esk",
+      # WS-ERP E31 (#12): expenses and corporate cards.
+      expense_category: "ecg",
+      corporate_card: "ecy",
+      expense_report: "ecz"
     },
     billing: [invoice: Samenerp.Billing.Invoice],
     labour: [

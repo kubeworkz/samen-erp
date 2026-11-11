@@ -242,6 +242,8 @@ config :samen_core, Samen.Approvals.Registry,
     # fail-honest, but these actions are governed-approve by design.
     (Atom.to_string(Samenerp.Erp.ApInvoice) <> ":approve") => {:tenant, Samen.Approvals.Gate},
     (Atom.to_string(Samenerp.Erp.PurchaseOrder) <> ":approve") => {:tenant, Samen.Approvals.Gate},
+    # WS-ERP E31 (#12): the expense report's gated approval.
+    (Atom.to_string(Samenerp.Erp.ExpenseReport) <> ":approve") => {:tenant, Samen.Approvals.Gate},
     # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence write-down's gated post.
     (Atom.to_string(Samenerp.Erp.ReserveWriteDown) <> ":post") => {:tenant, Samen.Approvals.Gate},
     # WS-ACCT journal controls: the manual journal's gated post/void. The

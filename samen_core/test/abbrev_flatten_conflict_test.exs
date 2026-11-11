@@ -127,7 +127,8 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # `sdm`/`scl`, `fcl`/`fcc`, `edm`/`ecc` = 405 + 453 = 858 flat.)
       # (+3 per-org collection cadence `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
       # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
-      assert map_size(flat) == 864
+      # (+9 WS-ERP E31 (#12) rows = 405 + 468 = 873 flat.)
+      assert map_size(flat) == 873
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

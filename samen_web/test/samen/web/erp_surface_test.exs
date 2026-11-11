@@ -250,6 +250,86 @@ defmodule Samen.Web.ErpSurfaceTest do
     Samen.WebTest.Erp.Account |> Ash.read!(authorize?: false) |> length()
   end
 
+  defp seed_expense_report do
+    expense =
+      seed_expense_account("6000", "Travel expense", :expense, :debit)
+
+    card_liability = seed_expense_account("2100", "Card liability", :liability, :credit)
+
+    category =
+      Samen.WebTest.Erp.ExpenseCategory
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: @org,
+          name: "Travel",
+          account_id: expense.id,
+          requires_receipt: false,
+          is_active: true
+        },
+        authorize?: false
+      )
+      |> Ash.create!()
+
+    card =
+      Samen.WebTest.Erp.CorporateCard
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: @org,
+          name: "Travel card",
+          last4: "4242",
+          cardholder_id: Ash.UUID.generate(),
+          account_id: card_liability.id,
+          currency: "USD",
+          is_active: true
+        },
+        authorize?: false
+      )
+      |> Ash.create!()
+
+    Samen.WebTest.Erp.ExpenseReport
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        employee_id: Ash.UUID.generate(),
+        title: "Q4 travel",
+        currency: "USD",
+        lines: [
+          %{
+            "category_id" => category.id,
+            "corporate_card_id" => card.id,
+            "description" => "Flight",
+            "amount_cents" => 12_345,
+            "spent_on" => "2026-11-10",
+            "payment_method" => "corporate_card",
+            "receipt_ref" => "receipt-1"
+          }
+        ]
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
+  defp seed_expense_account(code, name, kind, side) do
+    Samen.WebTest.Erp.Account
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: @org,
+        code: code,
+        name: name,
+        kind: kind,
+        normal_side: side,
+        currency: "USD"
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+  end
+
   test "a seeded row's first cell links to its record detail page" do
     account = seed_account("1000")
     socket = open(%{"org" => @org, "surface" => "coa"})
@@ -327,6 +407,38 @@ defmodule Samen.Web.ErpSurfaceTest do
     refute html =~ ~s(id="new-record-modal")
     assert html =~ ~s(href="/erp/coa/#{account.id}?org=#{@org}")
     assert html =~ "Accounts Receivable"
+  end
+
+  test "the expense surfaces resolve and render a seeded report" do
+    mount = build_mount(:erp)
+
+    assert Samen.Web.Erp.resource(mount, :expense_reports) == Samen.WebTest.Erp.ExpenseReport
+    assert Samen.Web.Erp.resource(mount, :expense_categories) == Samen.WebTest.Erp.ExpenseCategory
+    assert Samen.Web.Erp.resource(mount, :corporate_cards) == Samen.WebTest.Erp.CorporateCard
+
+    assert Samen.Web.Erp.transitions(:expense_reports) == [
+             {:submit, "Submit report", [:draft]},
+             {:approve, "Approve report", [:submitted]},
+             {:reimburse, "Settle report", [:approved]},
+             {:cancel, "Cancel report", [:draft, :submitted]}
+           ]
+
+    assert {:category_id, :text, _} =
+             Enum.find(
+               Samen.Web.Erp.line_fields(:expense_reports),
+               &(elem(&1, 0) == :category_id)
+             )
+
+    _report = seed_expense_report()
+
+    html = mount_smoke(SurfaceLive, mount, %{"org" => @org, "surface" => "expense_reports"})
+
+    assert html =~ ~s(id="erp-surface")
+    assert html =~ "Expense Reports"
+    assert html =~ "Q4 travel"
+    assert html =~ "12345"
+    assert html =~ "draft"
+    assert html =~ ~s(href="/erp/expense_reports?org=#{@org}" class="on")
   end
 
   test "the operator plane carries no write affordance" do

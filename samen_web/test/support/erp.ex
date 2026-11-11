@@ -28,7 +28,10 @@ defmodule Samen.WebTest.Erp do
       approval_policy: "wap",
       statement_delivery: "fcl",
       collection_case: "fcc",
-      collection_cadence: "fcf"
+      collection_cadence: "fcf",
+      expense_category: "wex",
+      corporate_card: "wcc",
+      expense_report: "wer"
     },
     billing: [invoice: Samen.WebTest.Billing.Invoice],
     inventory: [

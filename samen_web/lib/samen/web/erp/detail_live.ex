@@ -19,10 +19,12 @@ defmodule Samen.Web.Erp.DetailLive do
     * **Transitions** — `Erp.transitions/1` names only `accept([])` state
       actions (`:post`/`:void`/`:approve`/`:release`/`:complete`/`:cancel`/
       `:close`), offered when the record's status is in the action's
-      `from_statuses` — re-checked SERVER-side against the registry, never
-      trusting the click. A Gate-guarded `:approve` that opens an approval is
-      surfaced honestly as the inline banner (the approval id included), not
-      as a silent success.
+      `from_statuses` AND the acting scope passes the action's own policy
+      (`Ash.can?`) — an admin-only action is never offered to a member, and a
+      read-only note names what the member cannot perform — and re-checked
+      SERVER-side against the registry, never trusting the click. A
+      Gate-guarded `:approve` that opens an approval is surfaced honestly as
+      the inline banner (the approval id included), not as a silent success.
     * **Posture** — buttons/forms render only under
       `Samen.Web.Erp.Live.writable?/1` (tenant plane); the kernel's
       `OrgScope` + `RoleAtLeast :member` govern the write regardless. There
@@ -128,9 +130,13 @@ defmodule Samen.Web.Erp.DetailLive do
               Enum.map(Erp.edit_fields(surface), fn {field, _, _} -> field end)
           )
 
-        # The AP match panel reads the embedded lines even though they are not
-        # a fact-grid field. Select them explicitly for this surface.
-        selected = if surface == :ap_invoices, do: Enum.uniq([:lines | selected]), else: selected
+        # The AP match panel and the agent-expense line table read the embedded
+        # lines even though they are not a fact-grid field. Select them
+        # explicitly for these surfaces.
+        selected =
+          if surface in [:ap_invoices, :expense_reports],
+            do: Enum.uniq([:lines | selected]),
+            else: selected
 
         record =
           resource
@@ -248,10 +254,7 @@ defmodule Samen.Web.Erp.DetailLive do
          {^action, _label, from} <-
            Enum.find(Erp.transitions(surface), fn {a, _, _} -> a == action end),
          true <- Map.get(record, :status) in from do
-      scope =
-        if surface == :ap_invoices,
-          do: TenantRole.identity_scope(mount, org_id),
-          else: Mount.scope(mount, org_id)
+      scope = transition_scope(mount, surface, org_id)
 
       case record |> Ash.Changeset.for_update(action, %{}, scope: scope) |> Ash.update() do
         {:ok, _updated} ->
@@ -274,8 +277,13 @@ defmodule Samen.Web.Erp.DetailLive do
 
   def handle_event("decide_approval", %{"decision" => decision}, socket)
       when decision in ["approve", "reject"] do
-    %{samen_mount: mount, pending_approval: approval, decider_id: user_id, decider_role: role} =
-      socket.assigns
+    %{
+      samen_mount: mount,
+      surface: surface,
+      pending_approval: approval,
+      decider_id: user_id,
+      decider_role: role
+    } = socket.assigns
 
     cond do
       not writable?(mount) ->
@@ -292,7 +300,7 @@ defmodule Samen.Web.Erp.DetailLive do
          )}
 
       true ->
-        decide_approval(socket, approval, decision, user_id, role)
+        decide_approval(socket, surface, approval, decision, user_id, role)
     end
   end
 
@@ -366,12 +374,47 @@ defmodule Samen.Web.Erp.DetailLive do
   defp input_type(:date), do: "date"
   defp input_type(:select), do: "select"
 
-  defp allowed_transitions(record, surface) do
-    status = record && Map.get(record, :status)
+  # The authority scope for a surface's governed transitions: the SAME scope
+  # the write runs under, so the rendered affordance and the kernel can never
+  # disagree about the acting role.
+  defp transition_scope(mount, :ap_invoices, org_id),
+    do: TenantRole.identity_scope(mount, org_id)
 
-    Enum.filter(Erp.transitions(surface), fn {_action, _label, from} ->
-      status != nil and status in from
+  defp transition_scope(mount, :expense_reports, org_id),
+    do: TenantRole.attributed_admin_scope(mount, org_id)
+
+  defp transition_scope(mount, _surface, org_id), do: Mount.scope(mount, org_id)
+
+  # Offered actions must be in the record's pre-state AND authorized for the
+  # acting scope by the resource's OWN policy (`Ash.can?` — no duplicated role
+  # list). Filter-only checks (the org scope) resolve to `:maybe` without a
+  # query, which `can?` treats as allowed; a `RoleAtLeast` refusal is a hard
+  # `false`, so an armed member never sees an admin-only action. The blocked
+  # half is rendered as an honest read-only note instead of silence.
+  defp available_transitions(record, surface, mount, org_id) do
+    status = record && Map.get(record, :status)
+    scope = transition_scope(mount, surface, org_id)
+
+    Erp.transitions(surface)
+    |> Enum.filter(fn {_action, _label, from} -> status != nil and status in from end)
+    |> Enum.split_with(fn {action, _label, _from} ->
+      can_transition?(record, action, scope)
     end)
+  end
+
+  defp transition_note([]), do: nil
+
+  defp transition_note(blocked) do
+    labels = Enum.map_join(blocked, ", ", fn {_action, label, _from} -> label end)
+    verb = if length(blocked) == 1, do: "requires", else: "require"
+
+    "#{labels} #{verb} an organization admin."
+  end
+
+  defp can_transition?(record, action, %Samen.Scope{actor: actor}) do
+    Ash.can?({record, action}, actor, run_queries?: false)
+  rescue
+    _ -> false
   end
 
   # Surface the first leaf error's message (Ash errors nest; a Gate-guarded
@@ -403,6 +446,15 @@ defmodule Samen.Web.Erp.DetailLive do
 
   @impl Samen.Web.Tenant.Live
   def tenant_page(assigns) do
+    {allowed, blocked} =
+      available_transitions(assigns.record, assigns.surface, assigns.samen_mount, assigns.org_id)
+
+    assigns =
+      assign(assigns,
+        allowed_transitions: allowed,
+        transition_note: transition_note(blocked)
+      )
+
     ~H"""
     <div id="erp-detail">
     <.topbar
@@ -514,6 +566,7 @@ defmodule Samen.Web.Erp.DetailLive do
               :if={@pending_approval}
               approval={@pending_approval}
               samen_mount={@samen_mount}
+              surface={@surface}
               decider_id={@decider_id}
               decider_role={@decider_role}
               error={@approval_error}
@@ -521,14 +574,14 @@ defmodule Samen.Web.Erp.DetailLive do
             />
 
             <div
-              :if={writable?(@samen_mount) and allowed_transitions(@record, @surface) != []}
+              :if={writable?(@samen_mount) and @allowed_transitions != []}
               id="erp-transitions"
               class="card"
               style="padding:12px 16px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"
             >
               <span style="font-size:12px;font-weight:600;color:var(--muted)">Status actions</span>
               <.button
-                :for={{action, label, _from} <- allowed_transitions(@record, @surface)}
+                :for={{action, label, _from} <- @allowed_transitions}
                 id={"transition-#{action}"}
                 type="button"
                 phx-click="transition"
@@ -536,6 +589,16 @@ defmodule Samen.Web.Erp.DetailLive do
               >
                 {label}
               </.button>
+            </div>
+
+            <div
+              :if={writable?(@samen_mount) and @transition_note != nil}
+              id="erp-transitions-readonly"
+              class="card"
+              style="padding:12px 16px;margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--muted)"
+            >
+              <span style="font-size:12px;font-weight:600">Read-only</span>
+              <span style="font-size:12px">{@transition_note}</span>
             </div>
           </div>
         <% end %>
@@ -564,6 +627,7 @@ defmodule Samen.Web.Erp.DetailLive do
 
   attr(:approval, :map, required: true)
   attr(:samen_mount, :map, required: true)
+  attr(:surface, :atom, default: :ap_invoices)
   attr(:decider_id, :string, default: nil)
   attr(:decider_role, :atom, default: :member)
   attr(:error, :string, default: nil)
@@ -577,6 +641,8 @@ defmodule Samen.Web.Erp.DetailLive do
       assign(assigns,
         steps: steps,
         current: current,
+        subject: approval_subject(assigns.surface),
+        subject_key: approval_subject_key(assigns.surface),
         requester?: requester?(assigns.approval, assigns.decider_id),
         can_decide:
           writable?(assigns.samen_mount) and
@@ -586,12 +652,12 @@ defmodule Samen.Web.Erp.DetailLive do
     ~H"""
     <div id="erp-ap-approval-decision" class="card" style="padding:16px 18px;margin-top:10px">
       <div class="gtitle" style="margin-bottom:6px">
-        <h3 style="font-size:13px">Pending AP approval</h3>
+        <h3 style="font-size:13px">Pending {approval_heading(@surface)} approval</h3>
         <span class="lane">· {chain_position(@approval, @current)}</span>
       </div>
 
       <p style="margin:6px 0 10px;font-size:12px;color:var(--muted)">
-        A distinct organization member must decide this bill. Role-filtered steps are checked
+        A distinct organization member must decide this {@subject}. Role-filtered steps are checked
         against that member's actual role.
       </p>
 
@@ -637,7 +703,7 @@ defmodule Samen.Web.Erp.DetailLive do
 
       <div :if={@can_decide} style="display:flex;gap:8px;margin-top:10px">
         <.button
-          id="approve-ap-approval"
+          id={"approve-#{@subject_key}-approval"}
           type="button"
           phx-click="decide_approval"
           phx-value-decision="approve"
@@ -645,7 +711,7 @@ defmodule Samen.Web.Erp.DetailLive do
           Approve step
         </.button>
         <.button
-          id="reject-ap-approval"
+          id={"reject-#{@subject_key}-approval"}
           type="button"
           phx-click="decide_approval"
           phx-value-decision="reject"
@@ -792,20 +858,21 @@ defmodule Samen.Web.Erp.DetailLive do
   defp load_pending_approval(
          %{
            assigns: %{
-             surface: :ap_invoices,
+             surface: surface,
              org_id: org_id,
-             record: %{id: bill_id} = bill,
+             record: %{id: record_id} = record,
              samen_mount: mount
            }
          } = socket
        )
-       when is_binary(org_id) and is_binary(bill_id) do
+       when surface in [:ap_invoices, :expense_reports] and is_binary(org_id) and
+              is_binary(record_id) do
     {decider_id, decider_role} = decider(mount, org_id)
-    approval_kind = Samen.Approvals.Gate.kind_for(bill.__struct__, :approve)
+    approval_kind = Samen.Approvals.Gate.kind_for(record.__struct__, :approve)
 
     pending_approval =
       case Approvals.list_pending(org_id, approval_kind) do
-        {:ok, approvals} -> Enum.find(approvals, &approval_for_bill?(&1, bill_id))
+        {:ok, approvals} -> Enum.find(approvals, &approval_for_record?(&1, record_id))
         {:error, _reason} -> nil
       end
 
@@ -841,20 +908,20 @@ defmodule Samen.Web.Erp.DetailLive do
 
   defp decider(_mount, _org_id), do: {nil, :member}
 
-  defp approval_for_bill?(%{subject_ref: ref}, bill_id) when is_binary(ref),
-    do: String.ends_with?(ref, ":" <> bill_id)
+  defp approval_for_record?(%{subject_ref: ref}, record_id) when is_binary(ref),
+    do: String.ends_with?(ref, ":" <> record_id)
 
-  defp approval_for_bill?(_approval, _bill_id), do: false
+  defp approval_for_record?(_approval, _record_id), do: false
 
-  defp decide_approval(socket, approval, "approve", user_id, role) do
+  defp decide_approval(socket, surface, approval, "approve", user_id, role) do
     case Approvals.approve(approval.id, user_id, role: role) do
       {:ok, decided, _meta} ->
         socket = load(socket)
 
         notice =
           if decided.state == :pending,
-            do: "Step approved. The bill is waiting for the next step.",
-            else: "Bill approved and posted."
+            do: "Step approved. The #{approval_subject(surface)} is waiting for the next step.",
+            else: "#{String.capitalize(approval_subject(surface))} approved and posted."
 
         {:noreply, assign(socket, approval_notice: notice)}
 
@@ -863,11 +930,17 @@ defmodule Samen.Web.Erp.DetailLive do
     end
   end
 
-  defp decide_approval(socket, approval, "reject", user_id, role) do
+  defp decide_approval(socket, surface, approval, "reject", user_id, role) do
     case Approvals.reject(approval.id, user_id, role: role) do
       {:ok, _decided} ->
         socket = load(socket)
-        {:noreply, assign(socket, approval_notice: "Approval rejected. The bill remains draft.")}
+
+        {:noreply,
+         assign(socket,
+           approval_notice:
+             "Approval rejected. The #{approval_subject(surface)} remains " <>
+               "#{rejected_state(surface)}."
+         )}
 
       {:error, reason} ->
         {:noreply, assign(socket, approval_error: approval_error(reason))}
@@ -909,6 +982,20 @@ defmodule Samen.Web.Erp.DetailLive do
   end
 
   defp chain_position(_approval, _current), do: "all steps decided"
+
+  # The decision panel is shared by the two Gate-guarded document surfaces; the
+  # copy and the button ids follow the surface (the ids stay stable per surface).
+  defp approval_heading(:expense_reports), do: "expense"
+  defp approval_heading(_surface), do: "AP"
+
+  defp approval_subject(:expense_reports), do: "report"
+  defp approval_subject(_surface), do: "bill"
+
+  defp approval_subject_key(:expense_reports), do: "expense"
+  defp approval_subject_key(_surface), do: "ap"
+
+  defp rejected_state(:expense_reports), do: "submitted"
+  defp rejected_state(_surface), do: "draft"
 
   defp step_label(%{"approver_type" => "role", "approver" => role}), do: "Role · #{role}"
 

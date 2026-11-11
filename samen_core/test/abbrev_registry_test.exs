@@ -182,9 +182,10 @@ defmodule Samen.AbbrevRegistryTest do
       assert hosts["samenerp"] != nil
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
-      assert map_size(hosts["samenerp"]) == 135
-      assert map_size(hosts["samen_core"]) == 126
-      assert map_size(hosts["samen_web"]) == 108
+      # +3 each in WS-ERP E31 (#12): expense category/card/report tables.
+      assert map_size(hosts["samenerp"]) == 138
+      assert map_size(hosts["samen_core"]) == 129
+      assert map_size(hosts["samen_web"]) == 111
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -595,7 +596,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
                  "ssg" => "SamenCore.Support.FinanceFixture.SupplierScorecard",
                  "ssh" => "SamenCore.Support.FinanceFixture.SupplierScorecardDimension",
-                 "ssj" => "SamenCore.Support.FinanceFixture.SupplierRisk"
+                 "ssj" => "SamenCore.Support.FinanceFixture.SupplierRisk",
+                 # WS-ERP E31 (#12): expense category, card and report.
+                 "exk" => "SamenCore.Support.FinanceFixture.ExpenseCategory",
+                 "ccd" => "SamenCore.Support.FinanceFixture.CorporateCard",
+                 "exr" => "SamenCore.Support.FinanceFixture.ExpenseReport"
                },
                "samen_web" => %{
                  "wja" => "Samen.WebTest.Erp.JournalApprovalPolicy",
@@ -787,7 +792,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
                  "fsg" => "Samen.WebTest.Erp.SupplierScorecard",
                  "fsi" => "Samen.WebTest.Erp.SupplierScorecardDimension",
-                 "fsj" => "Samen.WebTest.Erp.SupplierRisk"
+                 "fsj" => "Samen.WebTest.Erp.SupplierRisk",
+                 # WS-ERP E31 (#12): expense category, card and report.
+                 "wex" => "Samen.WebTest.Erp.ExpenseCategory",
+                 "wcc" => "Samen.WebTest.Erp.CorporateCard",
+                 "wer" => "Samen.WebTest.Erp.ExpenseReport"
                },
                # WS-ERP E8 (ADR-049): the samenerp HOST PROOF — `mix samen.gen.app`,
                # prefix `er`. The full E1–E7 ERP scope set re-materialized under the
@@ -978,7 +987,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 16: the Kubeworkz host's HR mount.
                  "she" => "Samenerp.Hr.Employee",
                  "seh" => "Samenerp.Hr.EmploymentEvent",
-                 "shl" => "Samenerp.Hr.LeaveRequest"
+                 "shl" => "Samenerp.Hr.LeaveRequest",
+                 # WS-ERP E31 (#12): expense category, card and report.
+                 "ecg" => "Samenerp.Erp.ExpenseCategory",
+                 "ecy" => "Samenerp.Erp.CorporateCard",
+                 "ecz" => "Samenerp.Erp.ExpenseReport"
                }
              }
 
@@ -1123,7 +1136,7 @@ defmodule Samen.AbbrevRegistryTest do
       # `sdm`/`scl`, `fcl`/`fcc`, `edm`/`ecc` = 405 + 453 = 858 flat.)
       # (+3 per-org collection cadence: `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
       # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
-      assert map_size(Reg.load()) == 864
+      assert map_size(Reg.load()) == 873
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

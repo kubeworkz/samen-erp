@@ -101,7 +101,11 @@ defmodule SamenCore.Support.FinanceFixture do
       # WS-ACCT Phase 15 (ADR-054 D18): supplier governance.
       supplier_scorecard: "ssg",
       supplier_scorecard_dimension: "ssh",
-      supplier_risk: "ssj"
+      supplier_risk: "ssj",
+      # WS-ERP E31 (#12): the productized expense slice.
+      expense_category: "exk",
+      corporate_card: "ccd",
+      expense_report: "exr"
     },
     billing: [invoice: SamenCore.Support.FinanceFixture.InvoiceMirror],
     labour: [

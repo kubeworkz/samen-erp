@@ -423,7 +423,12 @@ defmodule Samen.Scopes.Finance do
     # the `samen_web` host; the fixture and samenerp pass their own overrides.
     supplier_scorecard: "fsg",
     supplier_scorecard_dimension: "fsi",
-    supplier_risk: "fsj"
+    supplier_risk: "fsj",
+    # WS-ERP E31 (#12) — the productized expense slice. The defaults are the
+    # fixture-reserved codes; hosts pass their own allocator reservations.
+    expense_category: "exk",
+    corporate_card: "ccd",
+    expense_report: "exr"
   }
 
   @doc false
@@ -489,6 +494,9 @@ defmodule Samen.Scopes.Finance do
     supplier_scorecard_mod = Module.concat(namespace, SupplierScorecard)
     supplier_scorecard_dimension_mod = Module.concat(namespace, SupplierScorecardDimension)
     supplier_risk_mod = Module.concat(namespace, SupplierRisk)
+    expense_category_mod = Module.concat(namespace, ExpenseCategory)
+    corporate_card_mod = Module.concat(namespace, CorporateCard)
+    expense_report_mod = Module.concat(namespace, ExpenseReport)
 
     quote do
       require Samen.Scopes.Finance.Blueprint
@@ -520,6 +528,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.ForecastBlueprint
 
       require Samen.Scopes.Finance.SupplierBlueprint
+
+      require Samen.Scopes.Finance.ExpenseBlueprint
 
       resources do
         resource(unquote(account_mod))
@@ -567,6 +577,9 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(supplier_scorecard_mod))
         resource(unquote(supplier_scorecard_dimension_mod))
         resource(unquote(supplier_risk_mod))
+        resource(unquote(expense_category_mod))
+        resource(unquote(corporate_card_mod))
+        resource(unquote(expense_report_mod))
       end
 
       # WS-ACCT Phase 9 (ADR-054 D10) — the obsolescence policy, its derived
@@ -1015,6 +1028,40 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.posting_account),
         unquote(account_mod)
+      )
+
+      # WS-ERP E31 (#12) — expenses and corporate cards. The report's approval
+      # posts through this host's entry + posting-account resources; card
+      # liabilities settle against each card's own account.
+      Samen.Scopes.Finance.ExpenseBlueprint.define_expense_category(
+        unquote(expense_category_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.expense_category),
+        unquote(account_mod)
+      )
+
+      Samen.Scopes.Finance.ExpenseBlueprint.define_corporate_card(
+        unquote(corporate_card_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.corporate_card),
+        unquote(account_mod)
+      )
+
+      Samen.Scopes.Finance.ExpenseBlueprint.define_expense_report(
+        unquote(expense_report_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.expense_report),
+        unquote(expense_category_mod),
+        unquote(corporate_card_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod),
+        unquote(org_fx_settings_mod)
       )
 
       # WS-ERP E8: the budget plan (Tier-0 config; budget-vs-actual is the
