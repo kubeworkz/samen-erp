@@ -1222,6 +1222,11 @@ defmodule Samen.Web.Router do
         live("#{path}/ar-receipts", Samen.Web.Erp.ArReceiptsLive)
         live("#{path}/ar-aging", Samen.Web.Erp.ArAgingLive)
         live("#{path}/ar-settings", Samen.Web.Erp.ArSettingsLive)
+        # The reconciliation workbench — the org balance, per-account posted
+        # balances with an account-line drill-down, and the month-over-month
+        # flux read. A literal segment, so it is declared BEFORE `:surface` for
+        # the same reason as the other operations pages above.
+        live("#{path}/reconciliation", Samen.Web.Finance.Reconciliation.Live)
         # One parameterized route feeds the closed surface allowlist. The LiveView
         # validates `:surface` through `Samen.Web.Erp.surface/1`; expanding the
         # six literal paths here would bypass the LiveView's `%{"surface" => ...}`
