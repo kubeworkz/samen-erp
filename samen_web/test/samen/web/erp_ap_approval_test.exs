@@ -6,7 +6,9 @@ defmodule Samen.Web.ErpApApprovalTest do
     * the page renders the current threshold, auto-approval flag and ordered
       named-user/role chain inside the ERP shell;
     * an admin can create the policy when the org has none;
-    * an admin can reorder and update the chain;
+    * an admin can reorder/update the chain only through a distinct admin's
+      approval;
+    * account and period scopes are editable and persisted;
     * named-user steps use a searchable org-member picker (handle search,
       non-PII) instead of a raw principal-id field;
     * a role outside the supported set is refused inline and persists nothing;
@@ -24,6 +26,8 @@ defmodule Samen.Web.ErpApApprovalTest do
   @org "55555555-6666-7777-8888-999999999999"
   @other_org "66666666-7777-8888-9999-000000000000"
   @kind "ap_invoice:approve"
+  @approval_resource Samen.WebTest.Approvals.Approval
+  @repo Samen.WebTest.Repo
 
   # -- harness ----------------------------------------------------------------
 
@@ -125,21 +129,46 @@ defmodule Samen.Web.ErpApApprovalTest do
       :kind,
       :threshold_cents,
       :auto_approve_below,
-      :steps
+      :steps,
+      :account_ids,
+      :period_keys
     ])
     |> Ash.read!(authorize?: false)
   end
 
   defp only_policy, do: policies() |> List.first()
 
+  defp approve_policy_change!(socket, approver \\ "policy-approver:#{@org}") do
+    kind = Atom.to_string(ApprovalPolicy) <> ":update"
+
+    {:ok, [approval | _]} =
+      Samen.Approvals.list_pending(@org, kind,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    {:ok, _decided, _meta} =
+      Samen.Approvals.approve(approval.id, approver,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    socket
+    |> Phoenix.Component.assign(:saved, true)
+    |> ApApprovalLive.load()
+  end
+
   # -- read -------------------------------------------------------------------
 
-  test "renders the current threshold, auto-approval flag and chain in the ERP shell" do
+  test "renders the current threshold, scopes, auto-approval flag and chain in the ERP shell" do
     dana = seed_member("dana", :member)
+    scoped_account = Ash.UUID.generate()
 
     seed_policy(%{
       threshold_cents: 12_500,
       auto_approve_below: true,
+      account_ids: [scoped_account],
+      period_keys: ["2026-11"],
       steps: [
         %{"approver_type" => "role", "approver" => "admin"},
         %{"approver_type" => "user", "approver" => dana.id}
@@ -154,6 +183,11 @@ defmodule Samen.Web.ErpApApprovalTest do
     assert html =~ "AP approval"
     assert html =~ "Chain configured"
     assert html =~ "12500 cents ($125.00)"
+    assert html =~ "1 scoped"
+    assert html =~ "Scoped expense accounts (optional)"
+    assert html =~ "Scoped bill periods (optional)"
+    assert html =~ scoped_account
+    assert html =~ "2026-11"
     assert html =~ "Role · admin"
     assert html =~ "User · dana (member)"
     assert html =~ ~s(id="ap-approval-form")
@@ -174,9 +208,10 @@ defmodule Samen.Web.ErpApApprovalTest do
 
   # -- create -----------------------------------------------------------------
 
-  test "creates the org's AP policy with ordered role and user steps" do
+  test "creates the org's AP policy with ordered steps and scopes" do
     riley = seed_member("riley", :member)
     riley_id = riley.id
+    scoped_account = Ash.UUID.generate()
 
     assert policies() == []
     socket = open()
@@ -188,6 +223,8 @@ defmodule Samen.Web.ErpApApprovalTest do
         "form" => %{
           "threshold_cents" => "50000",
           "auto_approve_below" => "true",
+          "account_ids" => scoped_account,
+          "period_keys" => "2026-11, 2026-12",
           "steps" => %{
             "0" => %{"approver_type" => "role", "approver" => "admin"},
             "1" => %{"approver_type" => "user", "approver" => riley.id}
@@ -203,6 +240,8 @@ defmodule Samen.Web.ErpApApprovalTest do
     assert policy.kind == @kind
     assert policy.threshold_cents == 50_000
     assert policy.auto_approve_below
+    assert policy.account_ids == [scoped_account]
+    assert policy.period_keys == ["2026-11", "2026-12"]
 
     assert [
              %{"approver_type" => "role", "approver" => "admin"},
@@ -244,6 +283,11 @@ defmodule Samen.Web.ErpApApprovalTest do
         }
       })
 
+    # The save is only a request; the live policy is unchanged until a distinct
+    # admin approves it.
+    assert only_policy().threshold_cents == 1_000
+    socket = approve_policy_change!(socket)
+
     assert socket.assigns.save_error == nil
     policy = only_policy()
     assert policy.threshold_cents == 2_500
@@ -276,6 +320,9 @@ defmodule Samen.Web.ErpApApprovalTest do
           "steps" => %{}
         }
       })
+
+    assert only_policy().steps == [%{"approver_type" => "role", "approver" => "admin"}]
+    socket = approve_policy_change!(socket)
 
     assert socket.assigns.save_error == nil
     assert only_policy().steps == []
@@ -523,6 +570,61 @@ defmodule Samen.Web.ErpApApprovalTest do
   end
 
   # -- kernel validation ------------------------------------------------------
+
+  test "a scoped update waits for a distinct admin and then applies the scope" do
+    seed_policy(%{threshold_cents: 1_000})
+    scoped_account = Ash.UUID.generate()
+    socket = open()
+
+    socket =
+      event(socket, "save", %{
+        "form" => %{
+          "threshold_cents" => "5000",
+          "auto_approve_below" => "false",
+          "account_ids" => scoped_account,
+          "period_keys" => "2026-11, 2026-12",
+          "steps" => %{}
+        }
+      })
+
+    unchanged = only_policy()
+    assert unchanged.threshold_cents == 1_000
+    assert unchanged.account_ids == []
+    assert unchanged.period_keys == []
+    refute socket.assigns.saved
+
+    socket = approve_policy_change!(socket)
+    policy = only_policy()
+    assert policy.threshold_cents == 5_000
+    assert policy.account_ids == [scoped_account]
+    assert policy.period_keys == ["2026-11", "2026-12"]
+    assert render(socket) =~ "1 scoped"
+  end
+
+  test "an invalid period is refused inline and opens no approval" do
+    seed_policy(%{threshold_cents: 1_000})
+
+    socket =
+      event(open(), "save", %{
+        "form" => %{
+          "threshold_cents" => "5000",
+          "auto_approve_below" => "false",
+          "period_keys" => "2026-13",
+          "steps" => %{}
+        }
+      })
+
+    assert render(socket) =~ "period keys must be YYYY-MM"
+    assert only_policy().threshold_cents == 1_000
+
+    kind = Atom.to_string(ApprovalPolicy) <> ":update"
+
+    assert {:ok, []} =
+             Samen.Approvals.list_pending(@org, kind,
+               approval_resource: @approval_resource,
+               repo: @repo
+             )
+  end
 
   test "an unsupported role is refused inline and persists nothing" do
     seed_policy(%{

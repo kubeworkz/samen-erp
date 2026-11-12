@@ -50,9 +50,13 @@ defmodule Samenerp.NotesOrgProvisioningTest do
   # 1. the wiring itself
   # ---------------------------------------------------------------------------
 
-  test "this host wires the Pages-index hook, and the seam resolves it from the MOUNT" do
-    assert OrgProvisioning.hooks(:samenerp) == [{Seeds, :ensure_notes_search_index!, []}],
-           "config :samenerp, :org_provisioning does not name the Pages search hook"
+  test "this host wires the search, journal-policy and AP-policy hooks from the MOUNT" do
+    assert OrgProvisioning.hooks(:samenerp) == [
+             {Seeds, :ensure_notes_search_index!, []},
+             {Seeds, :ensure_journal_approval_policy!, []},
+             {Seeds, :ensure_approval_policy!, []}
+           ],
+           "config :samenerp, :org_provisioning does not name all org-creation hooks"
 
     assert OrgProvisioning.configured?(:samenerp)
 
@@ -107,9 +111,61 @@ defmodule Samenerp.NotesOrgProvisioningTest do
     assert html =~ "/pages/#{doc_id}?org=#{org.id}", "the hit does not deep-link to the page"
   end
 
+  test "signup provisions explicit disabled journal and AP policy defaults, idempotently" do
+    org = signup!("Provisioned Policy QA")
+
+    policy = journal_policy!(org.id)
+
+    refute policy.enabled,
+           "enabling threshold-0 approval before a second admin exists would block postings"
+
+    assert policy.threshold_cents == 0
+    assert policy.steps == []
+
+    ap_policy = approval_policy!(org.id)
+    assert ap_policy.threshold_cents == 0
+    refute ap_policy.auto_approve_below
+    assert ap_policy.steps == []
+
+    assert :ok = Seeds.ensure_journal_approval_policy!(org.id)
+    assert :ok = Seeds.ensure_approval_policy!(org.id)
+    assert length(journal_policies(org.id)) == 1
+    assert length(approval_policies(org.id)) == 1
+  end
+
   # ---------------------------------------------------------------------------
   # 5. the backfill half (orgs that predate the wiring)
   # ---------------------------------------------------------------------------
+
+  test "the policy backfill creates both defaults for an org that predates the hook" do
+    org = create_org!("Provisioned Policy Backfill QA")
+
+    assert journal_policies(org.id) == [],
+           "the control org already had a journal policy, so the backfill would be vacuous"
+
+    assert approval_policies(org.id) == [],
+           "the control org already had an AP policy, so the backfill would be vacuous"
+
+    assert :ok = Seeds.backfill_policy_defaults!()
+
+    policy = journal_policy!(org.id)
+
+    refute policy.enabled,
+           "a legacy org must not be retroactively gated by the backfill"
+
+    assert policy.threshold_cents == 0
+    assert policy.steps == []
+
+    ap_policy = approval_policy!(org.id)
+    assert ap_policy.threshold_cents == 0
+    refute ap_policy.auto_approve_below
+    assert ap_policy.steps == []
+
+    # A replayed boot must never overwrite an existing policy.
+    assert :ok = Seeds.backfill_policy_defaults!()
+    assert length(journal_policies(org.id)) == 1
+    assert length(approval_policies(org.id)) == 1
+  end
 
   test "the seed BACKFILL registers an org that predates the hook" do
     org = create_org!("Provisioned Backfill QA")
@@ -196,6 +252,32 @@ defmodule Samenerp.NotesOrgProvisioningTest do
   defp index_rows(org_id) do
     SearchIndex
     |> Ash.Query.filter(org_id == ^org_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp journal_policy!(org_id) do
+    case journal_policies(org_id) do
+      [policy] -> policy
+      [] -> flunk("the org has no journal approval policy")
+    end
+  end
+
+  defp journal_policies(org_id) do
+    Samenerp.Erp.JournalApprovalPolicy
+    |> Ash.Query.filter(org_id == ^org_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp approval_policy!(org_id) do
+    case approval_policies(org_id) do
+      [policy] -> policy
+      [] -> flunk("the org has no AP approval policy")
+    end
+  end
+
+  defp approval_policies(org_id) do
+    Samenerp.Erp.ApprovalPolicy
+    |> Ash.Query.filter(org_id == ^org_id and kind == "ap_invoice:approve")
     |> Ash.read!(authorize?: false)
   end
 end

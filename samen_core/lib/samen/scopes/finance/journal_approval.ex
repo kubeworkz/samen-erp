@@ -35,6 +35,14 @@ defmodule Samen.Scopes.Finance.JournalApproval do
   the PERSISTED lines, the same source `PostBalance` uses, so an approver
   consents to the entry that is actually stored.
 
+  ## Approver chain
+
+  `JournalApprovalPolicy.steps` is an optional ordered chain of named-user or
+  role steps. The chain is snapshotted onto the approval row when the entry is
+  submitted, so later policy edits cannot re-route an in-flight decision. Only
+  the final step re-invokes `:post`/`:void`; empty steps keep the historical
+  single distinct-approver decision.
+
   ## Revision binding
 
   An approval is bound to the entry's material content, not just its id. The
@@ -49,6 +57,8 @@ defmodule Samen.Scopes.Finance.JournalApproval do
   use Ash.Resource.Change
 
   require Ash.Query
+
+  alias Samen.Scopes.Finance.ApprovalPolicySteps
 
   @impl true
   def change(changeset, opts, context) do
@@ -78,14 +88,17 @@ defmodule Samen.Scopes.Finance.JournalApproval do
              true <- policy_applies?(policy, changeset),
              {:ok, changeset} <- bind_preparer(changeset, actor_id) do
           revision = entry_digest(changeset)
+          steps = ApprovalPolicySteps.step_specs(policy)
+          approver_text = approver_text(steps)
 
           Samen.Approvals.Gate.change(
             changeset,
             [
               reason:
                 "manual journal entry #{changeset.data.id} prepared by #{actor_id} " <>
-                  "requires a distinct approver",
-              subject_ref: revisioned_subject_ref(changeset, revision)
+                  "requires #{approver_text}",
+              subject_ref: revisioned_subject_ref(changeset, revision),
+              steps: steps
             ],
             context
           )
@@ -126,6 +139,12 @@ defmodule Samen.Scopes.Finance.JournalApproval do
   end
 
   defp policy_applies?(_, _changeset), do: false
+
+  defp approver_text([]), do: "a distinct approver"
+
+  defp approver_text(steps) do
+    "#{length(steps)} sequential approvals"
+  end
 
   # The approval requester is the preparer. A different principal may not
   # submit someone else's entry: otherwise B could open the approval and A

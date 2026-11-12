@@ -61,6 +61,104 @@ defmodule Samen.FinanceApApprovalTest do
     assert Ash.get!(ApInvoice, at_threshold.id, authorize?: false).status == :approved
   end
 
+  test "account scope selects the configured chain and never auto-approves outside it", %{
+    org: org,
+    admin_scope: admin_scope,
+    member_scope: member_scope
+  } do
+    expense = seed_posting_accounts(org)
+    other_expense = new_account(org, "6100")
+
+    policy(admin_scope, org, %{
+      threshold_cents: 0,
+      auto_approve_below: true,
+      account_ids: [expense.id],
+      steps: [%{"approver_type" => "role", "approver" => "admin"}]
+    })
+
+    inside = new_bill(member_scope, org, [line(expense, 5_000)])
+    assert {:error, %Ash.Error.Forbidden{errors: inside_errors}} = approve(inside, member_scope)
+
+    assert {:ok, inside_pending} =
+             Samen.Approvals.get(approval_id!(inside_errors), approval_opts())
+
+    assert [%{"approver" => "admin"}] = inside_pending.steps
+
+    outside = new_bill(member_scope, org, [line(other_expense, 1_000)])
+    assert {:error, %Ash.Error.Forbidden{errors: outside_errors}} = approve(outside, member_scope)
+
+    assert {:ok, outside_pending} =
+             Samen.Approvals.get(approval_id!(outside_errors), approval_opts())
+
+    assert outside_pending.steps == []
+    assert Ash.get!(ApInvoice, outside.id, authorize?: false).status == :draft
+  end
+
+  test "period scope applies auto-approval only inside the listed bill month", %{
+    org: org,
+    admin_scope: admin_scope,
+    member_scope: member_scope
+  } do
+    expense = seed_posting_accounts(org)
+
+    policy(admin_scope, org, %{
+      threshold_cents: 10_000,
+      auto_approve_below: true,
+      period_keys: ["2026-11"]
+    })
+
+    inside = new_bill(member_scope, org, [line(expense, 1_000)], ~D[2026-11-12])
+    assert {:ok, approved} = approve(inside, member_scope)
+    assert approved.status == :approved
+
+    outside = new_bill(member_scope, org, [line(expense, 1_000)], ~D[2026-12-12])
+    assert {:error, %Ash.Error.Forbidden{errors: errors}} = approve(outside, member_scope)
+
+    assert {:ok, pending} = Samen.Approvals.get(approval_id!(errors), approval_opts())
+    assert pending.steps == []
+    assert Ash.get!(ApInvoice, outside.id, authorize?: false).status == :draft
+  end
+
+  test "a policy update needs a distinct admin and applies the approved scope and chain", %{
+    org: org,
+    admin_scope: admin_scope
+  } do
+    expense = seed_posting_accounts(org)
+    policy_row = policy(admin_scope, org, %{threshold_cents: 0})
+
+    attrs = %{
+      threshold_cents: 25_000,
+      auto_approve_below: true,
+      account_ids: [expense.id],
+      period_keys: ["2026-11"],
+      steps: [%{"approver_type" => "role", "approver" => "admin"}]
+    }
+
+    assert {:error, %Ash.Error.Forbidden{errors: errors}} =
+             policy_row
+             |> Ash.Changeset.for_update(:update, attrs, scope: admin_scope)
+             |> Ash.update()
+
+    approval_id = approval_id!(errors)
+    unchanged = Ash.get!(ApprovalPolicy, policy_row.id, authorize?: false)
+    assert unchanged.threshold_cents == 0
+    assert unchanged.account_ids == []
+    assert unchanged.period_keys == []
+
+    assert {:error, :self_approval} =
+             Samen.Approvals.approve(approval_id, "admin:#{org}", approval_opts())
+
+    assert {:ok, _decided, _meta} =
+             Samen.Approvals.approve(approval_id, "admin2:#{org}", approval_opts())
+
+    updated = Ash.get!(ApprovalPolicy, policy_row.id, authorize?: false)
+    assert updated.threshold_cents == 25_000
+    assert updated.auto_approve_below
+    assert updated.account_ids == [expense.id]
+    assert updated.period_keys == ["2026-11"]
+    assert updated.steps == [%{"approver_type" => "role", "approver" => "admin"}]
+  end
+
   test "no policy and an opt-out policy both preserve the Gate", %{
     org: org,
     admin_scope: admin_scope,
@@ -333,7 +431,7 @@ defmodule Samen.FinanceApApprovalTest do
     |> Ash.create!()
   end
 
-  defp new_bill(scope, org, lines) do
+  defp new_bill(scope, org, lines, bill_date \\ ~D[2026-11-12]) do
     ApInvoice
     |> Ash.Changeset.for_create(
       :create,
@@ -341,7 +439,7 @@ defmodule Samen.FinanceApApprovalTest do
         org_id: org,
         vendor_id: Ash.UUID.generate(),
         number: "V-" <> binary_part(Ash.UUID.generate(), 0, 8),
-        bill_date: ~D[2026-11-12],
+        bill_date: bill_date,
         lines: lines
       },
       scope: scope

@@ -13,10 +13,14 @@ defmodule Samen.Web.Erp.ApApprovalLive do
       the historical single-decision Gate. A named-user step is chosen from an
       org-member search (by non-PII `handle`) and stores that member's user id —
       never a hand-typed principal id.
+    * `account_ids` / `period_keys` — optional scope for the configured threshold
+      and chain. Empty means all accounts/periods. An out-of-scope bill still
+      uses the ordinary single-decision Gate.
 
   A missing row means the old always-gate behavior, so the page offers CREATE
-  when the org has no policy and UPDATE when it has one. It never deletes:
-  clearing the chain is an auditable update.
+  when the org has no policy and UPDATE when it has one. UPDATE is a two-admin
+  control: the save opens an approval, and only a distinct admin's approval
+  applies the proposed threshold/scope/chain. The page never deletes.
 
   ## Authorization (kernel, not posture)
 
@@ -65,6 +69,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
        policy: nil,
        threshold_text: "0",
        auto_approve_below: false,
+       account_scope_text: "",
+       period_scope_text: "",
        policy_steps: [],
        step_values: [],
        user_labels: %{},
@@ -107,6 +113,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
       policy: nil,
       threshold_text: "0",
       auto_approve_below: false,
+      account_scope_text: "",
+      period_scope_text: "",
       policy_steps: [],
       step_values: [],
       user_labels: %{},
@@ -129,6 +137,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
           policy: nil,
           threshold_text: "0",
           auto_approve_below: false,
+          account_scope_text: "",
+          period_scope_text: "",
           policy_steps: [],
           step_values: [],
           user_labels: %{},
@@ -152,6 +162,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
               policy: nil,
               threshold_text: "0",
               auto_approve_below: false,
+              account_scope_text: "",
+              period_scope_text: "",
               policy_steps: [],
               step_values: [],
               user_labels: %{},
@@ -183,6 +195,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
     policy_steps = policy_steps(policy)
     threshold_text = if policy, do: Integer.to_string(policy.threshold_cents), else: "0"
     auto_approve_below = if policy, do: policy.auto_approve_below == true, else: false
+    account_scope_text = scope_text(policy && Map.get(policy, :account_ids, []))
+    period_scope_text = scope_text(policy && Map.get(policy, :period_keys, []))
 
     form =
       if admin? do
@@ -196,7 +210,9 @@ defmodule Samen.Web.Erp.ApApprovalLive do
                 kind: ApApproval.policy_kind(),
                 threshold_cents: 0,
                 auto_approve_below: false,
-                steps: []
+                steps: [],
+                account_ids: [],
+                period_keys: []
               }
             )
             |> to_form()
@@ -218,7 +234,9 @@ defmodule Samen.Web.Erp.ApApprovalLive do
       member_results: %{},
       member_highlights: %{},
       threshold_text: threshold_text,
-      auto_approve_below: auto_approve_below
+      auto_approve_below: auto_approve_below,
+      account_scope_text: account_scope_text,
+      period_scope_text: period_scope_text
     )
   end
 
@@ -252,6 +270,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
            threshold_text: param_text(params["threshold_cents"], socket.assigns.threshold_text),
            auto_approve_below:
              param_bool(params["auto_approve_below"], socket.assigns.auto_approve_below),
+           account_scope_text: scope_text(params["account_ids"]),
+           period_scope_text: scope_text(params["period_keys"]),
            save_error: nil,
            saved: false
          )}
@@ -383,6 +403,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
            assign(socket,
              form: form,
              step_values: params["steps"],
+             account_scope_text: scope_text(params["account_ids"]),
+             period_scope_text: scope_text(params["period_keys"]),
              save_error: form_error(form),
              saved: false
            )}
@@ -419,7 +441,9 @@ defmodule Samen.Web.Erp.ApApprovalLive do
     %{
       "threshold_cents" => socket.assigns.threshold_text,
       "auto_approve_below" => if(socket.assigns.auto_approve_below, do: "true", else: "false"),
-      "steps" => socket.assigns.step_values
+      "steps" => socket.assigns.step_values,
+      "account_ids" => socket.assigns.account_scope_text,
+      "period_keys" => socket.assigns.period_scope_text
     }
   end
 
@@ -449,6 +473,8 @@ defmodule Samen.Web.Erp.ApApprovalLive do
       params
       |> Map.reject(fn {key, _value} -> match?("_unused_" <> _, key) end)
       |> Map.put("steps", normalize_step_rows(Map.get(params, "steps", [])))
+      |> Map.put("account_ids", split_scope(Map.get(params, "account_ids", [])))
+      |> Map.put("period_keys", split_scope(Map.get(params, "period_keys", [])))
 
     if socket.assigns.policy == nil do
       params
@@ -795,6 +821,21 @@ defmodule Samen.Web.Erp.ApApprovalLive do
 
   # -- display ----------------------------------------------------------------
 
+  defp split_scope(value) do
+    value
+    |> List.wrap()
+    |> Enum.flat_map(fn item -> String.split(to_string(item), ~r/[\s,]+/, trim: true) end)
+  end
+
+  defp scope_text(nil), do: ""
+  defp scope_text(value) when is_list(value), do: Enum.join(value, ", ")
+  defp scope_text(value), do: scope_text(split_scope(value))
+
+  defp scope_summary(nil, all), do: all
+  defp scope_summary([], all), do: all
+  defp scope_summary(list, _all) when is_list(list), do: "#{length(list)} scoped"
+  defp scope_summary(_, all), do: all
+
   defp status_text(nil), do: "Not configured"
   defp status_text(%{steps: steps}) when is_list(steps) and steps != [], do: "Chain configured"
   defp status_text(_policy), do: "Single decision"
@@ -858,14 +899,16 @@ defmodule Samen.Web.Erp.ApApprovalLive do
     end
   end
 
-  defp step_errors(form) do
-    case form[:steps] do
+  defp field_errors(form, field) do
+    case form[field] do
       %{errors: errors} -> errors
       _field -> []
     end
   rescue
     _ -> []
   end
+
+  defp step_errors(form), do: field_errors(form, :steps)
 
   defp form_error(form) do
     case Enum.reject(form.errors, &(&1 in [nil, ""])) do
@@ -954,6 +997,12 @@ defmodule Samen.Web.Erp.ApApprovalLive do
                 <.pill variant={status_variant(@policy)}>{status_text(@policy)}</.pill>
                 <span style="font-size:13px"><b>Threshold:</b> {threshold_text(@policy)}</span>
                 <span style="font-size:13px"><b>Auto-approve below:</b> {auto_approve_text(@policy)}</span>
+                <span style="font-size:13px">
+                  <b>Accounts:</b> {scope_summary(@policy && @policy.account_ids, "All accounts")}
+                </span>
+                <span style="font-size:13px">
+                  <b>Periods:</b> {scope_summary(@policy && @policy.period_keys, "All periods")}
+                </span>
               </div>
 
               <div id="ap-approval-chain" style="font-size:13px">
@@ -1018,6 +1067,63 @@ defmodule Samen.Web.Erp.ApApprovalLive do
                           goes through the Gate.
                         </span>
                       </label>
+                    </div>
+
+                    <div class="field" style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
+                      <label
+                        for={f[:account_ids].id}
+                        class="field-label"
+                        style="font-size:12px;font-weight:600"
+                      >
+                        Scoped expense accounts (optional)
+                      </label>
+                      <input
+                        type="text"
+                        id={f[:account_ids].id}
+                        name={f[:account_ids].name}
+                        value={@account_scope_text}
+                        placeholder="Empty means all accounts"
+                      />
+                      <span style="font-size:12px;color:var(--muted)">
+                        Comma-separated account UUIDs. The threshold and chain apply when at
+                        least one bill line touches one of them; other bills keep the ordinary
+                        single-decision Gate.
+                      </span>
+                      <p
+                        :for={msg <- field_errors(@form, :account_ids)}
+                        class="field-error"
+                        style="margin:0;color:var(--bad, #b91c1c);font-size:12px"
+                      >
+                        {error_text(msg)}
+                      </p>
+                    </div>
+
+                    <div class="field" style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px">
+                      <label
+                        for={f[:period_keys].id}
+                        class="field-label"
+                        style="font-size:12px;font-weight:600"
+                      >
+                        Scoped bill periods (optional)
+                      </label>
+                      <input
+                        type="text"
+                        id={f[:period_keys].id}
+                        name={f[:period_keys].name}
+                        value={@period_scope_text}
+                        placeholder="Empty means all periods"
+                      />
+                      <span style="font-size:12px;color:var(--muted)">
+                        Comma-separated months in <code>YYYY-MM</code> form, for example
+                        <code>2026-11, 2026-12</code>.
+                      </span>
+                      <p
+                        :for={msg <- field_errors(@form, :period_keys)}
+                        class="field-error"
+                        style="margin:0;color:var(--bad, #b91c1c);font-size:12px"
+                      >
+                        {error_text(msg)}
+                      </p>
                     </div>
 
                     <div id="ap-approval-steps" style="margin-bottom:12px">

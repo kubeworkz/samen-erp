@@ -188,6 +188,10 @@ config :samen_core, Samen.Approvals.Registry,
     # WS-ACCT journal controls: changing the control itself is a two-admin act.
     (Atom.to_string(SamenCore.Support.FinanceFixture.JournalApprovalPolicy) <> ":update") =>
       {:tenant, Samen.Scopes.Finance.JournalApprovalPolicyApproval},
+    # The generic approval policy is also a two-admin control: its update
+    # handler reapplies the approved threshold/scope/chain snapshot.
+    (Atom.to_string(SamenCore.Support.FinanceFixture.ApprovalPolicy) <> ":update") =>
+      {:tenant, Samen.Scopes.Finance.ApprovalPolicyApproval},
     # WS-ERP E7: the LeaveRequest's gated `:approve` — the Gate re-invokes the
     # action as the requester inside the decision transaction; the governed
     # decision schedules the employee's leave reminder (fail-soft).

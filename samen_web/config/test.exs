@@ -114,5 +114,7 @@ config :samen_core, Samen.Approvals,
 config :samen_core, Samen.Approvals.Registry,
   kinds: %{
     (Atom.to_string(Samen.WebTest.Erp.JournalApprovalPolicy) <> ":update") =>
-      {:tenant, Samen.Scopes.Finance.JournalApprovalPolicyApproval}
+      {:tenant, Samen.Scopes.Finance.JournalApprovalPolicyApproval},
+    (Atom.to_string(Samen.WebTest.Erp.ApprovalPolicy) <> ":update") =>
+      {:tenant, Samen.Scopes.Finance.ApprovalPolicyApproval}
   }

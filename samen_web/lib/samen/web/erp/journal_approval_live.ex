@@ -13,6 +13,8 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
       otherwise at least one line must touch a listed account.
     * `period_keys` — optional `"YYYY-MM"` periods. Empty means all periods;
       otherwise the entry date must fall in a listed month.
+    * `steps` — optional ordered user/role approvers. Empty means one distinct
+      approver; a configured chain must be completed in order.
 
   A missing row means the control is not configured, which leaves historical
   posting behavior intact. The page therefore offers CREATE when the org has no
@@ -165,14 +167,18 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
                 enabled: true,
                 threshold_cents: 0,
                 account_ids: [],
-                period_keys: []
+                period_keys: [],
+                steps_text: "[]"
               }
             )
             |> to_form()
 
           policy ->
             policy
-            |> AshPhoenix.Form.for_update(:update, scope: scope)
+            |> AshPhoenix.Form.for_update(:update,
+              scope: scope,
+              params: %{steps_text: steps_text(policy)}
+            )
             |> to_form()
         end
       end
@@ -271,6 +277,22 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
   defp scope_summary([], all), do: all
   defp scope_summary(list, _all) when is_list(list), do: "#{length(list)} scoped"
   defp scope_summary(_, all), do: all
+
+  defp step_summary(nil), do: "Single distinct approver"
+
+  defp step_summary(%{steps: steps}) when is_list(steps) and steps != [] do
+    "#{length(steps)}-step chain"
+  end
+
+  defp step_summary(_), do: "Single distinct approver"
+
+  defp steps_text(policy) do
+    policy
+    |> Map.get(:steps, [])
+    |> then(fn steps -> Jason.encode!(steps, pretty: true) end)
+  rescue
+    _ -> "[]"
+  end
 
   defp threshold_text(nil), do: "not set — a disabled/missing policy gates nothing"
   defp threshold_text(%{threshold_cents: 0}), do: "0 cents — every manual posting"
@@ -377,6 +399,9 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
             <span style="font-size:13px">
               <b>Periods:</b> {scope_summary(@policy && @policy.period_keys, "All periods")}
             </span>
+            <span style="font-size:13px">
+              <b>Approvers:</b> {step_summary(@policy)}
+            </span>
           </div>
 
           <div class="card" id="policy-body" style="padding:16px 18px">
@@ -458,6 +483,23 @@ defmodule Samen.Web.Erp.JournalApprovalLive do
                       <code>2026-11, 2026-12</code>.
                     </span>
                   </div>
+
+                  <.form_field
+                    field={f[:steps_text]}
+                    label="Approver steps (optional JSON)"
+                    type="textarea"
+                    rows="5"
+                    placeholder="[]"
+                  />
+
+                  <p style="margin:0 0 14px;font-size:12px;color:var(--muted)">
+                    Empty <code>[]</code> keeps one distinct-approver decision. Otherwise list
+                    ordered steps such as
+                    <code><%= ~s([{"approver_type":"role","approver":"admin"}]) %></code>
+                    or <code><%= ~s([{"approver_type":"user","approver":"<uuid>"}]) %></code>.
+                    User steps may add an optional <code>"role"</code> filter of
+                    <code>admin</code> or <code>member</code>.
+                  </p>
 
                   <:actions>
                     <.button variant="primary" type="submit" id="save-policy">

@@ -26,6 +26,7 @@ defmodule Samenerp.Seeds do
 
   # The well-known operator org id (fixed so config resolution works).
   @operator_org_id "0f000000-0000-4000-8000-0000000000aa"
+  @ap_policy_kind "ap_invoice:approve"
 
   # The seeded operator admin's defaults (`seed!/0,1` and `ensure_admin!/1`).
   @default_email "admin@samenerp.kubeworkz.io"
@@ -141,6 +142,167 @@ defmodule Samenerp.Seeds do
   end
 
   @doc """
+  Provision the org's journal-approval control row explicitly.
+
+  A missing row has historically meant "not configured" and left manual
+  postings ungated. Provisioning writes an explicitly DISABLED, all-scope row,
+  so a new org has a visible control record rather than an implicit absence.
+  It does not enable approval automatically: enabling threshold-0 dual control
+  before the org has a second admin would make manual postings impossible.
+  Enabling remains a two-admin policy change. Idempotent: an existing row is
+  never overwritten, because an admin may have configured a threshold, scopes
+  or an approver chain.
+
+  Called by `Samen.Web.OrgProvisioning` at org creation; the boot backfill uses
+  the same disabled default for orgs that predate this wiring.
+  """
+  @spec ensure_journal_approval_policy!(String.t()) :: :ok
+  def ensure_journal_approval_policy!(org_id \\ @operator_org_id) do
+    ensure_journal_approval_policy!(org_id, false)
+  end
+
+  defp ensure_journal_approval_policy!(org_id, enabled) do
+    case journal_approval_policy(org_id) do
+      %{} ->
+        :ok
+
+      nil ->
+        create_journal_approval_policy!(org_id, enabled)
+
+      {:error, reason} ->
+        raise "could not read the journal approval policy for #{org_id}: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Provision the disabled journal-approval control row for every tenant org on
+  this host — the backfill half of the org-creation hook.
+
+  New orgs are provisioned at creation. Existing orgs would otherwise keep the
+  implicit "no row" state forever, which is indistinguishable from an
+  unconfigured control; this sweep makes the default explicit. It never enables
+  approval and never changes an existing policy, so replaying it on every boot
+  is safe.
+  """
+  @spec backfill_journal_approval_policies!() :: :ok
+  def backfill_journal_approval_policies! do
+    [@operator_org_id | Enum.map(Samenerp.Directory.orgs(), &elem(&1, 0))]
+    |> Enum.uniq()
+    |> Enum.each(&ensure_legacy_journal_approval_policy!/1)
+  end
+
+  defp ensure_legacy_journal_approval_policy!(org_id) do
+    ensure_journal_approval_policy!(org_id, false)
+  end
+
+  @doc """
+  Provision the AP approval policy's explicit default row.
+
+  The generic policy has no `enabled` flag: its empty/default state already
+  means "every bill goes through the Gate", exactly like an absent row. Writing
+  the row makes that baseline visible and editable instead of implicit, while
+  `auto_approve_below: false` ensures provisioning can never weaken the control.
+  Existing rows are never changed, so this is safe to replay.
+  """
+  @spec ensure_approval_policy!(String.t()) :: :ok
+  def ensure_approval_policy!(org_id \\ @operator_org_id) do
+    case approval_policy(org_id) do
+      %{} ->
+        :ok
+
+      nil ->
+        create_approval_policy!(org_id)
+
+      {:error, reason} ->
+        raise "could not read the AP approval policy for #{org_id}: #{inspect(reason)}"
+    end
+  end
+
+  @doc """
+  Backfill BOTH policy defaults for every tenant org on this host. New orgs are
+  provisioned at creation; existing orgs get explicit baselines on the next
+  boot. The journal row is DISABLED (never retroactively gate history); the AP
+  row matches the always-gate baseline. Neither call overwrites a configured
+  policy.
+  """
+  @spec backfill_policy_defaults!() :: :ok
+  def backfill_policy_defaults! do
+    [@operator_org_id | Enum.map(Samenerp.Directory.orgs(), &elem(&1, 0))]
+    |> Enum.uniq()
+    |> Enum.each(fn org_id ->
+      :ok = ensure_legacy_journal_approval_policy!(org_id)
+      :ok = ensure_approval_policy!(org_id)
+    end)
+  end
+
+  defp approval_policy(org_id) do
+    Samenerp.Erp.ApprovalPolicy
+    |> Ash.Query.filter(org_id == ^org_id and kind == ^@ap_policy_kind)
+    |> Ash.Query.limit(1)
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, policy} -> policy
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp create_approval_policy!(org_id) do
+    Samenerp.Erp.ApprovalPolicy
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: org_id,
+        kind: @ap_policy_kind,
+        threshold_cents: 0,
+        auto_approve_below: false,
+        steps: []
+      },
+      authorize?: false
+    )
+    |> Ash.create!()
+
+    :ok
+  rescue
+    error in Ash.Error.Invalid ->
+      case approval_policy(org_id) do
+        %{} -> :ok
+        _ -> reraise error, __STACKTRACE__
+      end
+  end
+
+  defp journal_approval_policy(org_id) do
+    Samenerp.Erp.JournalApprovalPolicy
+    |> Ash.Query.filter(org_id == ^org_id)
+    |> Ash.Query.limit(1)
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, policy} -> policy
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp create_journal_approval_policy!(org_id, enabled) do
+    Samenerp.Erp.JournalApprovalPolicy
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org_id, enabled: enabled, threshold_cents: 0},
+      authorize?: false
+    )
+    |> Ash.create!()
+
+    :ok
+  rescue
+    error in Ash.Error.Invalid ->
+      # Two provisioning paths can race for the same org (signup and the boot
+      # backfill). The unique org index means the loser should confirm the row
+      # now exists rather than unwind an already-created account.
+      case journal_approval_policy(org_id) do
+        %{} -> :ok
+        _ -> reraise error, __STACKTRACE__
+      end
+  end
+
+  @doc """
   Seed the Pages demo page for `org_id` (default: the seeded operator tenant) and register the
   block-search index. Idempotent: a page with this title is reused and its blocks are only
   inserted when it has none, so re-running never duplicates content.
@@ -243,6 +405,7 @@ defmodule Samenerp.Seeds do
     # the last seed is repaired here too. Idempotent, and it seeds NO content: the demo page is
     # dev data (`run/0`), not a deploy side effect.
     :ok = backfill_notes_search_index!()
+    :ok = backfill_policy_defaults!()
 
     result
   end
@@ -269,6 +432,7 @@ defmodule Samenerp.Seeds do
       end
 
     :ok = backfill_notes_search_index!()
+    :ok = backfill_policy_defaults!()
 
     result
   end

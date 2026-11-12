@@ -259,6 +259,95 @@ defmodule Samen.FinanceJournalApprovalTest do
       assert posted.status == :posted
     end
 
+    test "a role-based chain advances in order and posts only after the final step", %{
+      org: org,
+      admin_scope: admin_scope,
+      member_scope: member_scope
+    } do
+      {cash, sales} = accounts(admin_scope, org)
+
+      policy(admin_scope, org, %{
+        steps: [
+          %{"approver_type" => "role", "approver" => "admin"},
+          %{"approver_type" => "role", "approver" => "member"}
+        ]
+      })
+
+      entry = entry(member_scope, org, cash, sales, 5_000)
+
+      assert {:error, %Ash.Error.Forbidden{errors: errors}} = post(entry, member_scope)
+      approval_id = approval_error!(errors).approval_id
+
+      # A role step is not a plain id match: the caller must present its role.
+      assert {:error, :step_approver_mismatch} =
+               Samen.Approvals.approve(approval_id, "approver:#{org}",
+                 approval_resource: @approval_resource,
+                 repo: @repo
+               )
+
+      assert {:ok, _intermediate, %{step: 1, pending_step: 2}} =
+               Samen.Approvals.approve(approval_id, "approver:#{org}",
+                 approval_resource: @approval_resource,
+                 repo: @repo,
+                 role: :admin
+               )
+
+      assert Ash.get!(JournalEntry, entry.id, authorize?: false).status == :draft
+
+      assert {:ok, _final, %{executed: "post"}} =
+               Samen.Approvals.approve(approval_id, "member2:#{org}",
+                 approval_resource: @approval_resource,
+                 repo: @repo,
+                 role: :member
+               )
+
+      posted = Ash.get!(JournalEntry, entry.id, authorize?: false)
+      assert posted.status == :posted
+      assert posted.approved_by == "member2:#{org}"
+      assert posted.approval_id == approval_id
+    end
+
+    test "a JSON step chain is accepted on create and on the dual-controlled update", %{
+      org: org,
+      admin_scope: admin_scope
+    } do
+      steps = [%{"approver_type" => "user", "approver" => "user-1", "role" => "admin"}]
+
+      policy =
+        policy(admin_scope, org, %{steps_text: Jason.encode!(steps)})
+
+      assert policy.steps == steps
+
+      updated =
+        change_policy!(
+          policy,
+          %{steps_text: Jason.encode!([%{"approver_type" => "role", "approver" => "admin"}])},
+          admin_scope,
+          "admin2:#{org}"
+        )
+
+      assert updated.steps == [%{"approver_type" => "role", "approver" => "admin"}]
+
+      cleared = change_policy!(updated, %{steps_text: ""}, admin_scope, "admin2:#{org}")
+      assert cleared.steps == []
+
+      invalid_org = Ash.UUID.generate()
+
+      assert {:error, _} =
+               create_policy(scope(invalid_org, "admin:#{invalid_org}", :admin), invalid_org, %{
+                 steps_text: "not-json"
+               })
+
+      unknown_role_org = Ash.UUID.generate()
+
+      assert {:error, _} =
+               create_policy(
+                 scope(unknown_role_org, "admin:#{unknown_role_org}", :admin),
+                 unknown_role_org,
+                 %{steps: [%{"approver_type" => "role", "approver" => "owner"}]}
+               )
+    end
+
     test "period scope only gates entries in a listed month", %{
       org: org,
       admin_scope: admin_scope,
@@ -349,6 +438,22 @@ defmodule Samen.FinanceJournalApprovalTest do
 
       assert {:error, _} = create_policy(admin_scope, org, %{threshold_cents: -1})
       assert {:error, _} = create_policy(admin_scope, org, %{})
+
+      invalid_org = Ash.UUID.generate()
+
+      assert {:error, _} =
+               create_policy(scope(invalid_org, "admin:#{invalid_org}", :admin), invalid_org, %{
+                 period_keys: ["2026-13"]
+               })
+
+      scoped_org = Ash.UUID.generate()
+
+      assert {:ok, scoped} =
+               create_policy(scope(scoped_org, "admin:#{scoped_org}", :admin), scoped_org, %{
+                 period_keys: ["2026-11", "2026-11"]
+               })
+
+      assert scoped.period_keys == ["2026-11"]
     end
   end
 

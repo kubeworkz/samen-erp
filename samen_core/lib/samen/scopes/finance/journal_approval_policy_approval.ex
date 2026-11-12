@@ -4,15 +4,16 @@ defmodule Samen.Scopes.Finance.JournalApprovalPolicyApproval do
 
   `Samen.Approvals.Gate` deliberately re-invokes a gated action with no
   arguments: it is designed for bounded transitions on an existing record, not
-  for freeform input. A policy change *is* input, so the proposed values ride
-  in the approval's `subject_ref` and this handler reapplies exactly those
-  values after a distinct admin approves. The approval row remains the durable
-  record of what was requested and decided.
+  for freeform input. A policy change *is* input, so the proposed enabled,
+  threshold, account, period and approver-step values ride in the approval's
+  `subject_ref` and this handler reapplies exactly those values after a distinct
+  admin approves. The approval row remains the durable record of what was
+  requested and decided.
   """
 
   @behaviour Samen.Approvals.Handler
 
-  @allowed [:enabled, :threshold_cents, :account_ids, :period_keys]
+  @allowed [:enabled, :threshold_cents, :account_ids, :period_keys, :steps]
 
   @impl Samen.Approvals.Handler
   def on_approve(approval, _ctx) do

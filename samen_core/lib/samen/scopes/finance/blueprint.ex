@@ -855,14 +855,21 @@ defmodule Samen.Scopes.Finance.Blueprint do
           * `steps` — ordered maps of `%{"approver_type" => "user" | "role",
             "approver" => id_or_role}`. Empty preserves the historical
             single-decision Gate.
+          * `account_ids` — optional expense-account scope. Empty means every
+            account; otherwise the configured threshold/chain applies only when
+            at least one bill line touches a listed account.
+          * `period_keys` — optional `"YYYY-MM"` bill-date periods. Empty means
+            every period; otherwise the configured threshold/chain applies only
+            when the bill date is in a listed month.
 
         One row per org and kind (`unique_org_kind`). A missing row means the old
         always-gate behavior: a new policy never silently lowers an existing
-        control. Admin-owned: a member who could raise the auto-approval
-        threshold would make the control theatre.
+        control. Updates go through the approvals Gate, so a distinct admin must
+        consent to a change. Admin-owned: a member who could raise the
+        auto-approval threshold would make the control theatre.
 
-        No PII (INV-1): a tenant id, a kind, an integer, a boolean and routing
-        ids/roles.
+        No PII (INV-1): a tenant id, a kind, an integer, a boolean, routing
+        ids/roles and bounded account/period ids.
         """
 
         use Samen.Resource,
@@ -895,6 +902,18 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
           # Ordered chain snapshot. Empty means the historical one-decision Gate.
           attribute(:steps, {:array, :map}, public?: true, allow_nil?: false, default: [])
+
+          attribute(:account_ids, {:array, :uuid},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
+
+          attribute(:period_keys, {:array, :string},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
         end
 
         identities do
@@ -908,16 +927,40 @@ defmodule Samen.Scopes.Finance.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :kind, :threshold_cents, :auto_approve_below, :steps])
+            accept([
+              :org_id,
+              :kind,
+              :threshold_cents,
+              :auto_approve_below,
+              :steps,
+              :account_ids,
+              :period_keys
+            ])
+
             validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
             change(Samen.Scopes.Finance.ApprovalPolicySteps)
+            change(Samen.Scopes.Finance.ApprovalPolicyPeriods)
           end
 
           update :update do
-            accept([:threshold_cents, :auto_approve_below, :steps])
+            accept([
+              :threshold_cents,
+              :auto_approve_below,
+              :steps,
+              :account_ids,
+              :period_keys
+            ])
+
             require_atomic?(false)
             validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
             change(Samen.Scopes.Finance.ApprovalPolicySteps)
+            change(Samen.Scopes.Finance.ApprovalPolicyPeriods)
+
+            change(
+              {Samen.Approvals.Gate,
+               reason: "an AP approval policy change requires a distinct admin",
+               subject_ref: {Samen.Scopes.Finance.ApprovalPolicyApproval, :subject_ref}}
+            )
           end
 
           # NO destroy: disabling is an auditable update, not a deletion that
@@ -1460,6 +1503,9 @@ defmodule Samen.Scopes.Finance.Blueprint do
           * `period_keys` — optional `"YYYY-MM"` periods. Empty means all
             periods; otherwise the policy applies only when the entry date is
             in one of the listed fiscal months.
+          * `steps` — optional ordered named-user / tenant-role approvers. Empty
+            keeps the historical single-decision Gate; a configured chain is
+            snapshotted onto the approval row.
 
         One row per org (`unique_org`). A missing row means the control is not
         configured; that keeps historical/legacy posting behavior intact while
@@ -1509,6 +1555,12 @@ defmodule Samen.Scopes.Finance.Blueprint do
             allow_nil?: false,
             default: []
           )
+
+          attribute(:steps, {:array, :map},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
         end
 
         identities do
@@ -1522,21 +1574,34 @@ defmodule Samen.Scopes.Finance.Blueprint do
           end
 
           create :create do
-            accept([:org_id, :enabled, :threshold_cents, :account_ids, :period_keys])
+            accept([
+              :org_id,
+              :enabled,
+              :threshold_cents,
+              :account_ids,
+              :period_keys,
+              :steps
+            ])
+
+            argument(:steps_text, :string, allow_nil?: true, constraints: [allow_empty?: true])
             validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
+            change({Samen.Scopes.Finance.ApprovalPolicySteps, text_argument: :steps_text})
+            change(Samen.Scopes.Finance.ApprovalPolicyPeriods)
           end
 
           update :update do
-            accept([:enabled, :threshold_cents, :account_ids, :period_keys])
+            accept([:enabled, :threshold_cents, :account_ids, :period_keys, :steps])
+            argument(:steps_text, :string, allow_nil?: true, constraints: [allow_empty?: true])
             require_atomic?(false)
+            validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
+            change({Samen.Scopes.Finance.ApprovalPolicySteps, text_argument: :steps_text})
+            change(Samen.Scopes.Finance.ApprovalPolicyPeriods)
 
             change(
               {Samen.Approvals.Gate,
                reason: "a journal approval policy change requires a distinct admin",
                subject_ref: {Samen.Scopes.Finance.JournalApprovalPolicyApproval, :subject_ref}}
             )
-
-            validate(numericality(:threshold_cents, greater_than_or_equal_to: 0))
           end
 
           # NO destroy: disabling the control is an auditable update, not a

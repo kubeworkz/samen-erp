@@ -61,7 +61,8 @@ defmodule Samen.Web.ErpJournalApprovalTest do
       :enabled,
       :threshold_cents,
       :account_ids,
-      :period_keys
+      :period_keys,
+      :steps
     ])
     |> Ash.read!(authorize?: false)
   end
@@ -103,6 +104,8 @@ defmodule Samen.Web.ErpJournalApprovalTest do
     assert html =~ "All accounts"
     assert html =~ "All periods"
     assert html =~ "Scoped accounts (optional)"
+    assert html =~ "Approver steps (optional JSON)"
+    assert html =~ "Single distinct approver"
     assert html =~ ~s(id="journal-approval-form")
   end
 
@@ -142,10 +145,49 @@ defmodule Samen.Web.ErpJournalApprovalTest do
 
   # -- create -----------------------------------------------------------------
 
+  test "saving a threshold-only change preserves the configured approver chain" do
+    steps = [%{"approver_type" => "role", "approver" => "admin"}]
+    seed_policy(%{steps: steps})
+    socket = open()
+
+    socket =
+      event(socket, "save", %{
+        "form" => %{"enabled" => "true", "threshold_cents" => "2500"}
+      })
+
+    socket = approve_policy_change!(socket)
+    policy = only_policy()
+    assert policy.threshold_cents == 2_500
+    assert policy.steps == steps
+
+    html = render(socket)
+    assert html =~ "1-step chain"
+  end
+
+  test "an admin can replace the approver chain through the settings form" do
+    seed_policy()
+    steps = [%{"approver_type" => "role", "approver" => "admin"}]
+    socket = open()
+
+    socket =
+      event(socket, "save", %{
+        "form" => %{
+          "enabled" => "true",
+          "threshold_cents" => "0",
+          "steps_text" => Jason.encode!(steps)
+        }
+      })
+
+    socket = approve_policy_change!(socket)
+    assert only_policy().steps == steps
+    assert render(socket) =~ "1-step chain"
+  end
+
   test "creates the org's policy when none exists, pinned to the resolved org" do
     assert policies() == []
     account_a = Ash.UUID.generate()
     account_b = Ash.UUID.generate()
+    steps = [%{"approver_type" => "role", "approver" => "admin"}]
     socket = open()
 
     socket =
@@ -154,7 +196,8 @@ defmodule Samen.Web.ErpJournalApprovalTest do
           "enabled" => "true",
           "threshold_cents" => "50000",
           "account_ids" => "#{account_a}, #{account_b}",
-          "period_keys" => "2026-11, 2026-12"
+          "period_keys" => "2026-11, 2026-12",
+          "steps_text" => Jason.encode!(steps)
         }
       })
 
@@ -164,6 +207,7 @@ defmodule Samen.Web.ErpJournalApprovalTest do
     assert policy.threshold_cents == 50_000
     assert policy.account_ids == [account_a, account_b]
     assert policy.period_keys == ["2026-11", "2026-12"]
+    assert policy.steps == steps
 
     html = render(socket)
     assert html =~ "Enabled"

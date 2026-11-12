@@ -13,8 +13,12 @@ defmodule Samen.Scopes.Finance.ApApproval do
       named-user step may also require a tenant role, and the engine enforces
       the id and the role together. Only the final step executes the gated
       `:approve` action and posting;
-    * an absent policy, empty steps, a disabled auto-approval flag, or an
-      unreadable policy all fall back to the historical single-decision Gate.
+    * `account_ids` / `period_keys` scope the configured threshold and chain.
+      An out-of-scope bill keeps the ordinary single-decision Gate and is never
+      auto-approved by the scoped policy;
+    * an absent policy, empty steps, a disabled auto-approval flag, an
+      out-of-scope bill, or an unreadable policy all fall back to the historical
+      single-decision Gate.
 
   This change runs AFTER `ApInvoiceMatch`, so an over-tolerance bill is refused
   before any approval is opened. It runs BEFORE `PostingMarker` and `ApPosting`,
@@ -27,6 +31,7 @@ defmodule Samen.Scopes.Finance.ApApproval do
   require Ash.Query
 
   alias Samen.Approvals.Gate
+  alias Samen.Scopes.Finance.ApprovalPolicySteps
 
   @policy_kind "ap_invoice:approve"
 
@@ -48,11 +53,21 @@ defmodule Samen.Scopes.Finance.ApApproval do
     total_cents = total_cents(changeset)
 
     case load_policy(policy_mod, org_id) do
+      {:ok, nil} ->
+        gate(changeset, context, total_cents, nil)
+
       {:ok, policy} ->
-        if auto_approve?(policy, total_cents) do
-          changeset
+        if policy_applies?(policy, changeset) do
+          if auto_approve?(policy, total_cents) do
+            changeset
+          else
+            gate(changeset, context, total_cents, policy)
+          end
         else
-          gate(changeset, context, total_cents, policy)
+          # Scoped policy: outside its account/period scope the bill keeps the
+          # ordinary one-decision Gate. Never auto-approve merely because a
+          # configured condition did not match.
+          gate(changeset, context, total_cents, nil)
         end
 
       {:error, _reason} ->
@@ -76,9 +91,45 @@ defmodule Samen.Scopes.Finance.ApApproval do
 
   defp auto_approve?(_policy, _total_cents), do: false
 
+  defp policy_applies?(policy, changeset) do
+    account_scope_matches?(Map.get(policy, :account_ids, []), lines(changeset)) and
+      period_scope_matches?(Map.get(policy, :period_keys, []), changeset)
+  end
+
+  defp account_scope_matches?([], _lines), do: true
+
+  defp account_scope_matches?(account_ids, lines) when is_list(account_ids) do
+    scoped = MapSet.new(account_ids, &to_string/1)
+
+    Enum.any?(lines, fn line ->
+      account_id = Map.get(line, :account_id) || Map.get(line, "account_id")
+      is_binary(account_id) and MapSet.member?(scoped, account_id)
+    end)
+  end
+
+  defp account_scope_matches?(_account_ids, _lines), do: false
+
+  defp period_scope_matches?([], _changeset), do: true
+
+  defp period_scope_matches?(period_keys, changeset) when is_list(period_keys) do
+    case loaded_attribute(changeset, :bill_date) do
+      %Date{} = date -> Calendar.strftime(date, "%Y-%m") in period_keys
+      _ -> false
+    end
+  end
+
+  defp period_scope_matches?(_period_keys, _changeset), do: false
+
+  defp lines(changeset) do
+    case loaded_attribute(changeset, :lines) do
+      lines when is_list(lines) -> lines
+      _ -> []
+    end
+  end
+
   defp gate(changeset, context, total_cents, policy) do
     threshold = if is_map(policy), do: Map.get(policy, :threshold_cents), else: nil
-    steps = if is_map(policy), do: step_specs(policy), else: []
+    steps = if is_map(policy), do: ApprovalPolicySteps.step_specs(policy), else: []
 
     reason =
       case {threshold, length(steps)} do
@@ -100,43 +151,10 @@ defmodule Samen.Scopes.Finance.ApApproval do
     Gate.change(changeset, [reason: reason, steps: steps], context)
   end
 
-  defp step_specs(%{steps: steps}) when is_list(steps) do
-    steps
-    |> Enum.map(fn step ->
-      type = to_string(Map.get(step, "approver_type") || Map.get(step, :approver_type))
-      approver = to_string(Map.get(step, "approver") || Map.get(step, :approver))
-      role = Map.get(step, "role") || Map.get(step, :role)
-
-      %{"approver_type" => type, "approver" => approver}
-      |> maybe_put_step_role(type, role)
-    end)
-    |> Enum.filter(fn
-      %{"approver_type" => type, "approver" => approver}
-      when type in ["user", "role"] and is_binary(approver) and approver != "" ->
-        true
-
-      _ ->
-        false
-    end)
-  end
-
-  defp step_specs(_policy), do: []
-
-  defp maybe_put_step_role(spec, "user", role) when role in ["admin", "member"],
-    do: Map.put(spec, "role", role)
-
-  defp maybe_put_step_role(spec, _type, _role), do: spec
-
   defp total_cents(changeset) do
-    case loaded_attribute(changeset, :lines) do
-      lines when is_list(lines) ->
-        Enum.reduce(lines, 0, fn line, sum ->
-          sum + (Map.get(line, :amount_cents) || Map.get(line, "amount_cents") || 0)
-        end)
-
-      _ ->
-        0
-    end
+    Enum.reduce(lines(changeset), 0, fn line, sum ->
+      sum + (Map.get(line, :amount_cents) || Map.get(line, "amount_cents") || 0)
+    end)
   end
 
   defp loaded_attribute(changeset, name) do

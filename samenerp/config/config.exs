@@ -253,6 +253,10 @@ config :samen_core, Samen.Approvals.Registry,
     # WS-ACCT journal controls: changing the control itself is a two-admin act.
     (Atom.to_string(Samenerp.Erp.JournalApprovalPolicy) <> ":update") =>
       {:tenant, Samen.Scopes.Finance.JournalApprovalPolicyApproval},
+    # The generic AP approval policy (threshold/auto-approval/scopes/chain) is
+    # also a two-admin control; the handler reapplies the approved snapshot.
+    (Atom.to_string(Samenerp.Erp.ApprovalPolicy) <> ":update") =>
+      {:tenant, Samen.Scopes.Finance.ApprovalPolicyApproval},
     # Phase 7 (ADR-043 §6.3 D5) — the AI support operator's human-gated send.
     # Operator plane; the requester (the AI service principal) is never the
     # decider (distinct-party by construction).
@@ -313,7 +317,19 @@ config :samenerp, :operator_org_id, "0f000000-0000-4000-8000-0000000000aa"
 # `Samenerp.Seeds.seed!/0,1` backfills orgs that predate this wiring on every boot. The hook is
 # idempotent and guard-first: `SearchIndexGuard` refuses the vaulted `text_secure` column, so a
 # searchable Pages surface can never mean an indexed vault.
-config :samenerp, :org_provisioning, [{Samenerp.Seeds, :ensure_notes_search_index!, []}]
+#
+# The SAME creation seam now provisions the two finance approval-policy defaults. A missing
+# policy row is an implicit policy — easy to overlook and impossible to audit as a decision —
+# so every org receives an explicit baseline at creation: journal approval DISABLED at threshold
+# 0 (enabling it before a second admin exists would block manual postings), and AP approval at
+# threshold 0 with `auto_approve_below: false`. The boot backfill writes the same disabled row
+# for existing orgs, so a deploy never retroactively gates their history. Both are admin changes
+# (journal changes are additionally two-admin), and neither path overwrites a configured row.
+config :samenerp, :org_provisioning, [
+  {Samenerp.Seeds, :ensure_notes_search_index!, []},
+  {Samenerp.Seeds, :ensure_journal_approval_policy!, []},
+  {Samenerp.Seeds, :ensure_approval_policy!, []}
+]
 
 # ADR-031/ADR-045 §2 — the launch AUTH gate, ARMED BY DEFAULT IN PROD (V-F1, Option A). The
 # router's tenant/shared mounts carry `authn: {:app_env, :samenerp, :auth_required?}`;
