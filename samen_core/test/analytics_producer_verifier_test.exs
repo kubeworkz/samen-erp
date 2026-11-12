@@ -174,6 +174,11 @@ defmodule Mix.Tasks.Samen.Verify.AnalyticsProducerTest do
              "example) — neither is a mount, so its shipped lib/ mounts no reader"
   end
 
+  # This test walks the entire monorepo. It takes ~10s alone, but the default
+  # 60s timeout is too tight when the full async suite is saturating the
+  # filesystem; give the I/O-bound scan enough headroom to avoid a load-related
+  # false failure.
+  @tag timeout: 300_000
   test "the real monorepo tree satisfies its own gate (samenerp's mount is seen + fed)" do
     widgets = Path.join(@repo_root, "samenerp")
     [scan] = V.scan(root: widgets).apps
