@@ -538,14 +538,16 @@ in DOM/CSV/API.
 ## Phase 12 — The close run, executed end to end · default · 2 sessions
 
 `CloseRun` + the doc's ten phases as Work tasks anchored to it, with the twelve role assignments.
-The deliverable is an **executable walkthrough** (`samenerp/test/close_walkthrough_test.exs`) that
+Each phase also carries Docs evidence UUIDs and a separate reviewer sign-off; completion requires
+task, evidence, an independent reviewer and the phase sign-off to agree. The deliverable is an
+**executable walkthrough** (`samenerp/test/close_walkthrough_test.exs`) that
 drives one real month through the checklist: cut-off → AP/AR → inventory & WIP → accruals →
 grants → variance → reconciliations → statements → forecast roll-in → reporting, with the close
 dashboard read at the end. Soft-close must block new documents and admit adjustments (Phase 3).
 
 **AC:** the walkthrough passes on the host; a document posted after soft-close is refused; the
-close dashboard reports the period's completeness honestly (an open task shows as open, never as
-done).
+close dashboard reports the period's completeness honestly (an open task, missing evidence, or a
+reviewer who is also the signer shows as open, never as done).
 
 ---
 

@@ -425,7 +425,7 @@ defmodule Samen.Web.Notes.TrashLive do
   @impl Samen.Web.Tenant.Live
   def tenant_page(assigns) do
     ~H"""
-    <div id="notes-trash">
+    <div id="notes-trash" phx-hook="TrashTarget">
       <.topbar title="Trash" crumbs={crumbs(@samen_mount, @org_id)} />
 
       <.acting_as_banner mount={@samen_mount} org_id={@org_id} acting_as={@samen_acting_as} />

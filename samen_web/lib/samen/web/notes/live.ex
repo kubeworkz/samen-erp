@@ -98,6 +98,19 @@ defmodule Samen.Web.Notes.Live do
   end
 
   @doc """
+  The trash href naming ONE row — `/pages/trash?org=…#note-trash-item-<id>`.
+
+  A caller that already knows which page was deleted (the close dashboard's archived evidence, a
+  delete notice, a search hit that is no longer live) should use this instead of the bare trash
+  href: the fragment is what lets the `.note-trash-item:target` style highlight the row and bring
+  the Restore control into view.
+  """
+  @spec trash_item_href(Mount.t(), String.t() | nil, term()) :: String.t()
+  def trash_item_href(mount, org_id, doc_id) do
+    trash_href(mount, org_id) <> "#note-trash-item-" <> to_string(doc_id)
+  end
+
+  @doc """
   The index href carrying the page that was JUST deleted — `/pages?org=…&deleted=<id>`.
 
   This is the editor's way of handing the "Page deleted — Undo" notice to the index after a

@@ -1198,6 +1198,12 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   border-radius: 8px; color: var(--ink);
 }
 .note-trash-item:hover { background: var(--card); }
+/* Arriving from a close-dashboard evidence link: the fragment names this row, so it stays
+ * highlighted while the reviewer finds the Restore control. */
+.note-trash-item:target {
+  background: #FFFBEB; box-shadow: inset 0 0 0 1px #FDE68A; scroll-margin-top: 16px;
+}
+.note-trash-item:target:hover { background: #FEF3C7; }
 
 .note-editor { display: flex; flex-direction: column; gap: 2px; }
 .note-block {

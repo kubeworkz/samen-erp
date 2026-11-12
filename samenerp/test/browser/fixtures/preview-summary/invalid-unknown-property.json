@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "outcome": "success",
+  "threshold": 96,
+  "threshold_source": "repository variable",
+  "duration_seconds": 12,
+  "metrics_artifact": {
+    "name": "browser-metrics-123-1",
+    "size_bytes": 1287,
+    "size": "1.3 KB",
+    "retention_days": 30,
+    "url": "https://github.com/example/samen/actions/runs/123/artifacts/1"
+  },
+  "failure_artifact": {
+    "name": "browser-failure-123-1",
+    "produced": false,
+    "retention_days": 7,
+    "files": []
+  },
+  "unexpected": true
+}

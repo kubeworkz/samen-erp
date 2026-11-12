@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:samen:browser-metrics",
+  "x-schema-version": 1,
+  "title": "Samen browser test metrics",
+  "description": "Machine-readable metadata emitted by the browser focus-handoff test.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "browser_test"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Must equal the schema's x-schema-version; the validator and CI writer read that value."
+    },
+    "browser_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "duration_seconds",
+        "threshold",
+        "threshold_source",
+        "commit_sha",
+        "run_url",
+        "run_attempt",
+        "job_url"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "success",
+            "failure",
+            "cancelled",
+            "skipped",
+            "not run"
+          ]
+        },
+        "duration_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "threshold_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64}|unknown)$"
+        },
+        "run_url": {
+          "type": "string",
+          "pattern": "^(?:https?://\\S+|unknown)$"
+        },
+        "run_attempt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "job_url": {
+          "type": "string",
+          "pattern": "^(?:https?://\\S+|unknown)$"
+        }
+      }
+    }
+  }
+}

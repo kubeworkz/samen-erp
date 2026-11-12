@@ -162,7 +162,8 @@ defmodule Samen.Web.NotesSurfaceTest do
       assert html =~ "note-delete-#{doc.id}"
       assert html =~ ~s(phx-value-id="#{doc.id}")
 
-      operator_html = render_live(IndexLive, notes_mount(Plane.operator("op-1", org_id)), [org_id])
+      operator_html =
+        render_live(IndexLive, notes_mount(Plane.operator("op-1", org_id)), [org_id])
 
       refute operator_html =~ "note-delete-#{doc.id}",
              "the operator plane must not be OFFERED a delete it cannot be given"
@@ -175,7 +176,12 @@ defmodule Samen.Web.NotesSurfaceTest do
       org_id = Ash.UUID.generate()
       doc = seed_doc!(org_id, %{title: "Retire me"})
 
-      {:noreply, confirming} = IndexLive.handle_event("confirm_archive", %{"id" => doc.id}, index_socket(notes_mount(), org_id))
+      {:noreply, confirming} =
+        IndexLive.handle_event(
+          "confirm_archive",
+          %{"id" => doc.id},
+          index_socket(notes_mount(), org_id)
+        )
 
       assert confirming.assigns.confirm == doc.id
       assert archived_ids(org_id) == [], "asking must not delete anything"
@@ -199,9 +205,14 @@ defmodule Samen.Web.NotesSurfaceTest do
       doc = seed_doc!(org_id, %{title: "Retire me"})
 
       {:noreply, confirming} =
-        IndexLive.handle_event("confirm_archive", %{"id" => doc.id}, index_socket(notes_mount(), org_id))
+        IndexLive.handle_event(
+          "confirm_archive",
+          %{"id" => doc.id},
+          index_socket(notes_mount(), org_id)
+        )
 
-      {:noreply, after_delete} = IndexLive.handle_event("archive_page", %{"id" => doc.id}, confirming)
+      {:noreply, after_delete} =
+        IndexLive.handle_event("archive_page", %{"id" => doc.id}, confirming)
 
       # Gone from every read the tree uses…
       assert after_delete.assigns.pages == []
@@ -225,7 +236,9 @@ defmodule Samen.Web.NotesSurfaceTest do
       assert html =~ "note-delete-page"
       refute html =~ "note-delete-page-confirm", "the confirm must not be open before it is asked"
 
-      operator_html = render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
+      operator_html =
+        render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
+
       refute operator_html =~ "note-delete-page", "the operator plane is not OFFERED the delete"
       assert operator_html =~ "Retire me", "the page itself still renders on that plane"
     end
@@ -275,9 +288,14 @@ defmodule Samen.Web.NotesSurfaceTest do
       _block = insert!(org_id, doc.id, %{type: :paragraph, text: "Undo keeps my content"})
 
       {:noreply, confirming} =
-        IndexLive.handle_event("confirm_archive", %{"id" => doc.id}, index_socket(notes_mount(), org_id))
+        IndexLive.handle_event(
+          "confirm_archive",
+          %{"id" => doc.id},
+          index_socket(notes_mount(), org_id)
+        )
 
-      {:noreply, after_delete} = IndexLive.handle_event("archive_page", %{"id" => doc.id}, confirming)
+      {:noreply, after_delete} =
+        IndexLive.handle_event("archive_page", %{"id" => doc.id}, confirming)
 
       assert after_delete.assigns.deleted == doc.id
 
@@ -285,6 +303,10 @@ defmodule Samen.Web.NotesSurfaceTest do
       assert notice =~ "notes-deleted-notice"
       assert notice =~ "Page deleted."
       assert notice =~ "notes-undo-delete"
+
+      assert notice =~
+               ~s(href="/pages/trash?org=#{org_id}#note-trash-item-#{doc.id}"),
+             "the durable Trash link must name the row the delete notice is about"
 
       {:noreply, undone} = IndexLive.handle_event("undo_delete", %{}, after_delete)
 
@@ -312,7 +334,11 @@ defmodule Samen.Web.NotesSurfaceTest do
       uri = "/pages?org=#{org_id}&deleted=#{doc.id}"
 
       {:noreply, landing} =
-        IndexLive.handle_params(%{"org" => org_id, "deleted" => doc.id}, uri, index_socket(notes_mount(), org_id))
+        IndexLive.handle_params(
+          %{"org" => org_id, "deleted" => doc.id},
+          uri,
+          index_socket(notes_mount(), org_id)
+        )
 
       assert landing.assigns.deleted == doc.id
       assert html_of(landing) =~ "notes-deleted-notice"
@@ -340,7 +366,8 @@ defmodule Samen.Web.NotesSurfaceTest do
       theirs = Ash.UUID.generate()
       foreign = seed_doc!(theirs, %{title: "Foreign secret title"})
 
-      assert {:error, :not_found} = Writes.archive_page(notes_mount(), scope_for(mine), foreign.id)
+      assert {:error, :not_found} =
+               Writes.archive_page(notes_mount(), scope_for(mine), foreign.id)
 
       # Nothing moved, and the page is still readable in its own org.
       assert archived_ids(theirs) == []
@@ -444,7 +471,9 @@ defmodule Samen.Web.NotesSurfaceTest do
         })
 
       tenant_html = render_live(PageLive, notes_mount(), [org_id, doc.id])
-      operator_html = render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
+
+      operator_html =
+        render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
 
       assert tenant_html =~ @secret,
              "the tenant plane reads its own org's vaulted block in the clear"
@@ -473,7 +502,8 @@ defmodule Samen.Web.NotesSurfaceTest do
           text_secure: @secret
         })
 
-      operator_html = render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
+      operator_html =
+        render_live(PageLive, notes_mount(Plane.operator("op-1", org_id)), [org_id, doc.id])
 
       refute operator_html =~ ~s(phx-hook="NoteBlock")
       refute operator_html =~ "note-add-block"
@@ -532,6 +562,21 @@ defmodule Samen.Web.NotesSurfaceTest do
 
       assert html =~ "Page not found"
       refute html =~ "Foreign secret title"
+    end
+
+    test "a page archived since a Docs search offers its trash row" do
+      org_id = Ash.UUID.generate()
+      doc = seed_doc!(org_id, %{title: "Archived after search"})
+      {:ok, _deleted} = Writes.archive_page(notes_mount(), scope_for(org_id), doc.id)
+
+      html = render_live(PageLive, notes_mount(), [org_id, doc.id])
+
+      assert html =~ "Page not found"
+      assert html =~ "Look in trash"
+
+      assert html =~
+               ~s(href="/pages/trash?org=#{org_id}#note-trash-item-#{doc.id}"),
+             "a stale search hit must land on the exact Restore row"
     end
 
     test "the editor's blocks are the ordered list the ONE read seam returns" do

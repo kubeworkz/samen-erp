@@ -114,9 +114,14 @@ defmodule Samenerp.CloseWalkthroughTest do
     assert phase(board(run, period), "pre_close").status == :open
     assert board(run, period).completeness.done == 0
 
-    # The sign-off and the task now agree, so the phase is done.
+    # The sign-off and the task now agree, so the phase is done — but only after
+    # evidence and an independent reviewer are recorded.
+    run = review!(run, reviewer_scope(org_id), "pre_close")
     run = sign!(run, admin, "pre_close")
-    assert phase(board(run, period), "pre_close").status == :done
+    pre_close = phase(board(run, period), "pre_close")
+    assert pre_close.status == :done
+    assert pre_close.evidence_files != []
+    assert pre_close.reviewed_by == "reviewer:#{org_id}"
     assert board(run, period).completeness.done == 1
 
     # ── Phase 2 · Transaction Processing (AP / AR) ───────────────────────────
@@ -626,6 +631,16 @@ defmodule Samenerp.CloseWalkthroughTest do
     |> Ash.create!()
   end
 
+  defp review!(run, reviewer, key) do
+    run
+    |> Ash.Changeset.for_update(
+      :review_phase,
+      %{phase: key, evidence_files: [Ash.UUID.generate()]},
+      scope: reviewer
+    )
+    |> Ash.update!()
+  end
+
   defp sign!(run, admin, key) do
     run
     |> Ash.Changeset.for_update(:complete_phase, %{phase: key}, scope: admin)
@@ -634,6 +649,7 @@ defmodule Samenerp.CloseWalkthroughTest do
 
   defp finish_phase!(run, admin, key) do
     complete_task!(run, key)
+    run = review!(run, reviewer_scope(admin.actor.org_id), key)
     sign!(run, admin, key)
   end
 
@@ -671,6 +687,18 @@ defmodule Samenerp.CloseWalkthroughTest do
   defp admin_scope(org_id) do
     %Samen.Scope{
       actor: %{id: "a:#{org_id}", org_id: org_id, role: :admin, kind: :tenant, plane: :tenant}
+    }
+  end
+
+  defp reviewer_scope(org_id) do
+    %Samen.Scope{
+      actor: %{
+        id: "reviewer:#{org_id}",
+        org_id: org_id,
+        role: :admin,
+        kind: :tenant,
+        plane: :tenant
+      }
     }
   end
 

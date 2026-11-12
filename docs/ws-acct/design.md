@@ -219,7 +219,17 @@ receipts land) while still admitting journal-only close adjustments. **Why soft-
 close is not an instant; the checklist's Days 1–7 need the document window shut before the
 adjustment window is.
 `CloseRun` = one row per period + the doc's ten phases as **Work tasks anchored to it**
-(ADR-041 object-ref — no new task engine), with the doc's twelve role assignments.
+(ADR-041 object-ref — no new task engine), with the doc's twelve role assignments. Each phase
+carries `evidence_files` (Docs file UUIDs), `reviewed_by`/`reviewed_at` and `done_at`/`done_by`;
+`:review_phase` stamps the authenticated reviewer and `:complete_phase` requires the task to be
+complete, the evidence to be non-empty, and the reviewer to be someone other than the signer.
+`CloseBoard` derives `:done` only when those four facts agree and reports any missing fact as a
+discrepancy; phases signed before this gate existed are grandfathered as legacy signed facts.
+When the host names its mounted Docs namespace, the dashboard resolves evidence UUIDs to live
+Docs titles and offers a picker; titles link to the host's mounted Pages route when one exists.
+Archived evidence titles are flagged with a direct link to their Docs trash row for restore,
+where the target row is highlighted; missing evidence is flagged and unlinked. A host without
+Docs keeps the manual ID path.
 
 ### D8 — Grants are a document plus a fund dimension, not a fund-accounting subsystem
 `Grant` `{funder, program, award_ref, award_cents, period_start/end, restricted?: true, status,

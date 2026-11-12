@@ -27,13 +27,13 @@ defmodule Samen.FinancePeriodsTest do
       before the close reads CLEAN (CONTROL), and a posting that lands after its
       period closed is DETECTED (anti-tautology: the row is forced in with the
       belt disabled);
-    * p7 the close run — the doc's ten phases seed, complete by key, refuse an
-      unknown key, refuse to finish with phases open, and are final once
-      completed.
+    * p7 the close run — the doc's ten phases seed, require evidence and an
+      independent reviewer before completion, complete by key, refuse an unknown
+      key, refuse to finish with phases open, and are final once completed.
   """
   use ExUnit.Case, async: false
 
-  alias Samen.Scopes.Finance.ClosePhases
+  alias Samen.Scopes.Finance.{CloseBoard, ClosePhases}
   alias Samen.Scopes.Finance.PeriodReconcile
   alias Samen.Scopes.Finance.PostingMarker
 
@@ -66,6 +66,18 @@ defmodule Samen.FinancePeriodsTest do
     }
   end
 
+  defp reviewer_scope(org_id) do
+    %Samen.Scope{
+      actor: %{
+        id: "reviewer:#{org_id}",
+        org_id: org_id,
+        role: :admin,
+        kind: :tenant,
+        plane: :tenant
+      }
+    }
+  end
+
   defp new_account(scope, org, code) do
     Account
     |> Ash.Changeset.for_create(
@@ -81,7 +93,8 @@ defmodule Samen.FinancePeriodsTest do
     |> Ash.Changeset.for_create(:create, %{org_id: org, year: year, month: month}, scope: scope)
   end
 
-  defp period!(scope, org, year, month), do: period_changeset(scope, org, year, month) |> Ash.create!()
+  defp period!(scope, org, year, month),
+    do: period_changeset(scope, org, year, month) |> Ash.create!()
 
   defp soft_close!(period, scope) do
     period |> Ash.Changeset.for_update(:soft_close, %{}, scope: scope) |> Ash.update!()
@@ -447,6 +460,9 @@ defmodule Samen.FinancePeriodsTest do
       assert length(run.phases) == 10
       assert Enum.map(run.phases, & &1["key"]) == ClosePhases.keys()
       assert Enum.all?(run.phases, &(&1["done_at"] == nil))
+      assert Enum.all?(run.phases, &(&1["evidence_files"] == []))
+      assert Enum.all?(run.phases, &(&1["reviewed_by"] == nil))
+      assert Enum.all?(run.phases, &(&1["reviewed_at"] == nil))
 
       # The phase list IS the manual's table, in its calendar order.
       assert ClosePhases.keys() == [
@@ -464,8 +480,128 @@ defmodule Samen.FinancePeriodsTest do
 
       assert {:error, _} =
                CloseRun
-               |> Ash.Changeset.for_create(:start, %{org_id: org, period_id: period.id}, scope: admin)
+               |> Ash.Changeset.for_create(:start, %{org_id: org, period_id: period.id},
+                 scope: admin
+               )
                |> Ash.create()
+    end
+
+    test "completion requires evidence and an independent reviewer", %{
+      org: org,
+      admin: admin
+    } do
+      period = period!(admin, org, 2026, 9)
+      run = start_run!(admin, org, period.id)
+      reviewer = reviewer_scope(org)
+      file_id = Ash.UUID.generate()
+
+      no_evidence = complete(run, admin, "pre_close")
+      assert {:error, _} = no_evidence
+      assert inspect(no_evidence) =~ "no evidence files"
+
+      empty_review = review(run, reviewer, "pre_close", [])
+      assert {:error, _} = empty_review
+      assert inspect(empty_review) =~ "at least one evidence file id"
+
+      reviewed = review!(run, reviewer, "pre_close", [file_id])
+      phase = Enum.find(reviewed.phases, &(&1["key"] == "pre_close"))
+      assert phase["evidence_files"] == [file_id]
+      assert phase["reviewed_by"] == reviewer.actor.id
+      assert phase["reviewed_at"] != nil
+
+      self_sign = complete(reviewed, reviewer, "pre_close")
+      assert {:error, _} = self_sign
+      assert inspect(self_sign) =~ "cannot also sign"
+
+      assert {:ok, signed} = complete(reviewed, admin, "pre_close")
+      signed_phase = Enum.find(signed.phases, &(&1["key"] == "pre_close"))
+      assert signed_phase["done_at"] != nil
+      assert signed_phase["done_by"] == admin.actor.id
+
+      late_review = review(signed, reviewer, "pre_close")
+      assert {:error, _} = late_review
+      assert inspect(late_review) =~ "already signed"
+    end
+
+    test "the board requires all four facts and grandfathers legacy signed phases", %{
+      org: org,
+      admin: admin
+    } do
+      period = period!(admin, org, 2026, 9)
+      run = start_run!(admin, org, period.id)
+      key = "pre_close"
+      file_id = Ash.UUID.generate()
+      reviewed_at = DateTime.to_iso8601(DateTime.utc_now())
+
+      report = CloseBoard.report(%{run | phases: signed_phase_maps(run, admin, key)})
+      phase = Enum.find(report.phases, &(&1.key == key))
+      assert phase.status == :open
+      assert Enum.any?(report.discrepancies, &(&1.phase == key and &1.reason =~ "no evidence"))
+
+      report =
+        CloseBoard.report(%{
+          run
+          | phases: signed_phase_maps(run, admin, key, %{"evidence_files" => [file_id]})
+        })
+
+      phase = Enum.find(report.phases, &(&1.key == key))
+      assert phase.status == :open
+
+      assert Enum.any?(
+               report.discrepancies,
+               &(&1.phase == key and &1.reason =~ "without an independent reviewer")
+             )
+
+      report =
+        CloseBoard.report(%{
+          run
+          | phases:
+              signed_phase_maps(run, admin, key, %{
+                "evidence_files" => [file_id],
+                "reviewed_by" => admin.actor.id,
+                "reviewed_at" => reviewed_at
+              })
+        })
+
+      phase = Enum.find(report.phases, &(&1.key == key))
+      assert phase.status == :open
+
+      assert Enum.any?(
+               report.discrepancies,
+               &(&1.phase == key and &1.reason =~ "also its signer")
+             )
+
+      report =
+        CloseBoard.report(%{
+          run
+          | phases:
+              signed_phase_maps(run, admin, key, %{
+                "evidence_files" => [file_id],
+                "reviewed_by" => "reviewer:#{org}",
+                "reviewed_at" => reviewed_at
+              })
+        })
+
+      phase = Enum.find(report.phases, &(&1.key == key))
+      assert phase.status == :done
+      assert report.discrepancies == []
+
+      legacy =
+        run
+        |> signed_phase_maps(admin, key)
+        |> Enum.map(fn phase ->
+          if phase["key"] == key do
+            Map.drop(phase, ["evidence_files", "reviewed_by", "reviewed_at"])
+          else
+            phase
+          end
+        end)
+
+      report = CloseBoard.report(%{run | phases: legacy})
+      phase = Enum.find(report.phases, &(&1.key == key))
+      assert phase.status == :done
+      assert phase.legacy?
+      assert report.discrepancies == []
     end
 
     test "a phase completes by key; an unknown key is refused (RED); finish needs every phase",
@@ -486,14 +622,18 @@ defmodule Samen.FinancePeriodsTest do
 
       finished =
         Enum.reduce(ClosePhases.keys(), run, fn key, acc -> complete!(acc, admin, key) end)
-        |> then(fn r -> r |> Ash.Changeset.for_update(:finish, %{}, scope: admin) |> Ash.update!() end)
+        |> then(fn r ->
+          r |> Ash.Changeset.for_update(:finish, %{}, scope: admin) |> Ash.update!()
+        end)
 
       assert finished.status == :completed
       assert finished.completed_at != nil
       assert finished.completed_by == admin.actor.id
 
       # A completed run is final.
-      assert {:error, _} = finished |> Ash.Changeset.for_update(:finish, %{}, scope: admin) |> Ash.update()
+      assert {:error, _} =
+               finished |> Ash.Changeset.for_update(:finish, %{}, scope: admin) |> Ash.update()
+
       later = complete(finished, admin, "reconciliations")
       assert {:error, _} = later
       assert inspect(later) =~ "COMPLETED"
@@ -505,7 +645,10 @@ defmodule Samen.FinancePeriodsTest do
   # The read mirror takes the per-mount resources (the scope is materialized per
   # host namespace), so the p6 legs hand it this fixture's pair.
   defp r10(org) do
-    PeriodReconcile.clean?(org, @repo, entry_resource: JournalEntry, period_resource: FiscalPeriod)
+    PeriodReconcile.clean?(org, @repo,
+      entry_resource: JournalEntry,
+      period_resource: FiscalPeriod
+    )
   end
 
   defp r10_violations(org) do
@@ -521,6 +664,36 @@ defmodule Samen.FinancePeriodsTest do
     |> Ash.create!()
   end
 
+  defp review(run, scope, key, files \\ nil) do
+    evidence_files = files || [Ash.UUID.generate()]
+
+    run
+    |> Ash.Changeset.for_update(
+      :review_phase,
+      %{phase: key, evidence_files: evidence_files},
+      scope: scope
+    )
+    |> Ash.update()
+  end
+
+  defp review!(run, scope, key, files \\ nil) do
+    assert {:ok, updated} = review(run, scope, key, files)
+    updated
+  end
+
+  defp signed_phase_maps(run, admin, key, extra \\ %{}) do
+    Enum.map(run.phases, fn phase ->
+      if phase["key"] == key do
+        phase
+        |> Map.put("done_at", DateTime.to_iso8601(DateTime.utc_now()))
+        |> Map.put("done_by", admin.actor.id)
+        |> Map.merge(extra)
+      else
+        phase
+      end
+    end)
+  end
+
   defp complete(run, scope, key) do
     run
     |> Ash.Changeset.for_update(:complete_phase, %{phase: key}, scope: scope)
@@ -528,6 +701,7 @@ defmodule Samen.FinancePeriodsTest do
   end
 
   defp complete!(run, scope, key) do
+    run = review!(run, reviewer_scope(scope.actor.org_id), key)
     assert {:ok, updated} = complete(run, scope, key)
     updated
   end

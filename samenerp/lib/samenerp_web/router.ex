@@ -316,7 +316,8 @@ defmodule SamenerpWeb.Router do
     samen_close_routes(:close, Samenerp.Erp,
       repo: Samenerp.Repo,
       labels: @current_org_labels,
-      work_namespace: Samenerp.Work
+      work_namespace: Samenerp.Work,
+      docs_namespace: Samenerp.Docs
     )
 
     # 1c-4. WS-ACCT Phase 13 — the board reporting package over the same

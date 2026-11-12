@@ -7,20 +7,30 @@ defmodule Samen.Scopes.Finance.CloseBoard do
   ## Honesty is the feature
 
   The manual's dashboard has a Status column and a Blockers column. A status
-  that is typed by a human is a claim; this read DERIVES it from two
+  that is typed by a human is a claim; this read DERIVES it from four
   independent facts:
 
-    * the run's phase has `done_at` — the governed sign-off
-      (`CloseRun.:complete_phase`), and
     * the phase's anchored Work task is `:completed` — the operational fact
-      (`Samen.Scopes.Finance.CloseChecklist`).
+      (`Samen.Scopes.Finance.CloseChecklist`),
+    * at least one evidence file id is recorded on the phase,
+    * the phase carries a reviewer sign-off by a principal other than its
+      signer (`CloseRun.:review_phase`), and
+    * the phase has `done_at` — the governed sign-off
+      (`CloseRun.:complete_phase`).
 
-  A phase is `:done` **only when both agree**. An open (or reopened) task keeps
-  the phase `:open` even if the phase was signed; a task completed before the
-  sign-off does not make the phase done either. The disagreement is surfaced in
-  `:discrepancies`, never rounded away — a dashboard that reported a phase done
-  because one of its two facts was missing would be the exact "certificate that
-  certifies nothing" ADR-054 D7 refuses.
+  A phase is `:done` **only when all four agree**. An open (or reopened) task
+  keeps the phase `:open` even if the phase was signed; a signed phase with no
+  evidence or reviewer is surfaced as a discrepancy rather than rounded away —
+  a dashboard that reported a phase done because one of its facts was missing
+  would be the exact "certificate that certifies nothing" ADR-054 D7 refuses.
+
+  ## Legacy signed phases
+
+  A phase signed before this gate existed has no `evidence_files` /
+  `reviewed_by` keys. It remains `:done` when its task agrees: a historical
+  close is a signed fact, and inventing evidence or a reviewer for it would be
+  dishonest. New phase maps always carry the keys, so the legacy path cannot be
+  used to sign a new phase without evidence and independent review.
 
   ## What the report carries
 
@@ -31,20 +41,23 @@ defmodule Samen.Scopes.Finance.CloseBoard do
     * `:completed_by` — the principal that finished the run, `nil` while it is in
       progress and for a run completed before its host recorded attribution;
     * `:phases` — the checklist in calendar order, each with its role
-      assignment, sign-off stamp and signer, task projection and derived status;
+      assignment, evidence file ids, reviewer stamp, sign-off stamp and signer,
+      task projection and derived status;
     * `:completeness` — total/done/open, the percentage and the boolean
       `complete?` (the run is `:completed` AND every phase is done);
     * `:next_phase` — the first open phase, the manual's "what is blocking";
     * `:tasks` — total/completed/open plus `missing` (phases with no anchored
       task — the honest measure of an unanchored checklist);
-    * `:discrepancies` — signed phases whose Work task is still open.
+    * `:discrepancies` — signed phases that disagree with their task, evidence,
+      reviewer or signer.
 
   ## No task module, no invented task state
 
-  A caller that reads a run without the Work scope (`task:` absent) gets the
-  Phase-3 view: `task: nil` on every phase and the status driven by
-  `done_at` alone. That is deliberate — the read must not claim a task exists,
-  and a mount that never wired Work still has a valid dashboard.
+  A caller that reads a run without the Work scope (`task:` absent) gets
+  `task: nil` on every phase. That is deliberate — the read must not claim a
+  task exists — but the evidence, reviewer and sign-off facts still decide the
+  status, and a mount that never wired Work still has a valid dashboard.
+  Historical signed phases without the new keys remain the legacy exception.
   """
 
   alias Samen.Scopes.Finance.{CloseChecklist, ClosePhases}
@@ -112,6 +125,21 @@ defmodule Samen.Scopes.Finance.CloseBoard do
     task = Map.get(tasks, key)
     signed? = get(phase, "done_at") != nil
     task_done? = is_nil(task) or task.status == :completed
+    evidence_files = get(phase, "evidence_files")
+    evidence_files = if is_list(evidence_files), do: evidence_files, else: []
+    reviewed_by = get(phase, "reviewed_by")
+    reviewed_at = get(phase, "reviewed_at")
+    evidence_present? = evidence_files != []
+    reviewed? = is_binary(reviewed_by) and reviewed_at != nil
+    independent_review? = reviewed? and reviewed_by != get(phase, "done_by")
+
+    legacy? =
+      signed? and not Map.has_key?(phase, "evidence_files") and
+        not Map.has_key?(phase, "reviewed_by")
+
+    gate_satisfied? =
+      signed? and task_done? and
+        (legacy? or (evidence_present? and reviewed? and independent_review?))
 
     %{
       key: key,
@@ -124,9 +152,16 @@ defmodule Samen.Scopes.Finance.CloseBoard do
       signed?: signed?,
       done_at: get(phase, "done_at"),
       done_by: get(phase, "done_by"),
+      evidence_files: evidence_files,
+      evidence_present?: evidence_present?,
+      reviewed_by: reviewed_by,
+      reviewed_at: reviewed_at,
+      reviewed?: reviewed?,
+      independent_review?: independent_review?,
+      legacy?: legacy?,
       task: task_view(task),
       task_done?: task_done?,
-      status: if(signed? and task_done?, do: :done, else: :open)
+      status: if(gate_satisfied?, do: :done, else: :open)
     }
   end
 
@@ -160,15 +195,41 @@ defmodule Samen.Scopes.Finance.CloseBoard do
 
   defp discrepancies(phases) do
     Enum.flat_map(phases, fn phase ->
-      if phase.signed? and not phase.task_done? do
-        [
-          %{
-            phase: phase.key,
-            reason: "the phase is signed off but its Work task is still open"
-          }
-        ]
-      else
-        []
+      cond do
+        phase.signed? and not phase.task_done? ->
+          [
+            %{
+              phase: phase.key,
+              reason: "the phase is signed off but its Work task is still open"
+            }
+          ]
+
+        phase.signed? and not phase.legacy? and not phase.evidence_present? ->
+          [
+            %{
+              phase: phase.key,
+              reason: "the phase is signed off but has no evidence files"
+            }
+          ]
+
+        phase.signed? and not phase.legacy? and not phase.reviewed? ->
+          [
+            %{
+              phase: phase.key,
+              reason: "the phase is signed off without an independent reviewer"
+            }
+          ]
+
+        phase.signed? and phase.reviewed? and not phase.independent_review? ->
+          [
+            %{
+              phase: phase.key,
+              reason: "the phase reviewer is also its signer"
+            }
+          ]
+
+        true ->
+          []
       end
     end)
   end
@@ -203,5 +264,8 @@ defmodule Samen.Scopes.Finance.CloseBoard do
   defp safe_atom("roles"), do: :roles
   defp safe_atom("done_at"), do: :done_at
   defp safe_atom("done_by"), do: :done_by
+  defp safe_atom("evidence_files"), do: :evidence_files
+  defp safe_atom("reviewed_by"), do: :reviewed_by
+  defp safe_atom("reviewed_at"), do: :reviewed_at
   defp safe_atom(_), do: :__never__
 end

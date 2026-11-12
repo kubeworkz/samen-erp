@@ -261,6 +261,7 @@ defmodule Samen.Web.NotesTrashTest do
       html = render_live(TrashLive, notes_mount(), [org_id])
 
       assert html =~ ~s(class="app"), "the trash must render inside the shared shell"
+      assert html =~ ~s(phx-hook="TrashTarget"), "the target-row focus hook must be attached"
       assert html =~ "note-trash-item-#{gone.id}"
       assert html =~ "Retired page"
       assert html =~ "deleted "

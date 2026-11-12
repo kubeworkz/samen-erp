@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "outcome": "failure",
+  "threshold": 96,
+  "threshold_source": "repository variable",
+  "duration_seconds": 15,
+  "metrics_artifact": {
+    "name": "browser-metrics-123-1",
+    "size_bytes": 1287,
+    "size": "1.3 KB",
+    "retention_days": 30,
+    "url": "https://github.com/example/samen/actions/runs/123/artifacts/1"
+  },
+  "failure_artifact": {
+    "name": "browser-failure-123-1",
+    "produced": true,
+    "size_bytes": 25464,
+    "size": "24.9 KB",
+    "url": "https://github.com/example/samen/actions/runs/123/artifacts/10",
+    "retention_days": 7,
+    "files": [
+      {
+        "section": "Logs",
+        "name": "browser-console.log",
+        "size_bytes": 2048,
+        "size": "2.0 KB",
+        "retention_days": 7,
+        "url": "not-a-url"
+      },
+      {
+        "section": "Logs",
+        "name": "server.log",
+        "size_bytes": 1536,
+        "size": "1.5 KB",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/12"
+      },
+      {
+        "section": "Logs",
+        "name": "chrome-stderr.log",
+        "size_bytes": 500,
+        "size": "500 B",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/13"
+      },
+      {
+        "section": "Screenshots",
+        "name": "failure.png",
+        "size_bytes": 4096,
+        "size": "4.0 KB",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/14"
+      },
+      {
+        "section": "Screenshots",
+        "name": "trash-restore-blurred.png",
+        "size_bytes": 4096,
+        "size": "4.0 KB",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/15"
+      },
+      {
+        "section": "Screenshots",
+        "name": "trash-restore-focused.png",
+        "size_bytes": 4096,
+        "size": "4.0 KB",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/16"
+      },
+      {
+        "section": "Screenshots",
+        "name": "trash-restore-diff.png",
+        "size_bytes": 8192,
+        "size": "8.0 KB",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/17"
+      },
+      {
+        "section": "Reports",
+        "name": "failure.txt",
+        "size_bytes": 300,
+        "size": "300 B",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/18"
+      },
+      {
+        "section": "Reports",
+        "name": "page.html",
+        "size_bytes": 600,
+        "size": "600 B",
+        "retention_days": 7,
+        "url": "https://github.com/example/samen/actions/runs/123/artifacts/19"
+      }
+    ]
+  }
+}

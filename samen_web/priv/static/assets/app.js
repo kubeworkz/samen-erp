@@ -135,3 +135,42 @@
       );
     }
   };
+
+  // (h) The `TrashTarget` hook — when a link names a trashed row, put keyboard focus on that row's
+  //     Restore control. The URL fragment is the only signal; the hook reads no page data and never
+  //     writes text. It focuses only a target row whose Restore button actually exists, and leaves
+  //     ordinary trash visits (no fragment) untouched.
+  window.SamenHooks.TrashTarget = {
+    mounted: function () {
+      var hook = this;
+      this.onHashChange = function () { hook.focusTarget(); };
+      window.addEventListener("hashchange", this.onHashChange);
+
+      // A reconnect can re-mount a hook while the user is typing elsewhere; do not steal that
+      // focus. A fresh navigation leaves the body as the active element, so the target still wins.
+      if (!this.userHasFocus()) this.focusTarget();
+    },
+    destroyed: function () {
+      if (this.onHashChange) window.removeEventListener("hashchange", this.onHashChange);
+    },
+    userHasFocus: function () {
+      var active = document.activeElement;
+      return active && active !== document.body && active !== document.documentElement;
+    },
+    focusTarget: function () {
+      var id = window.location.hash.slice(1);
+      if (!id || id.indexOf("note-trash-item-") !== 0) return;
+
+      var row = document.getElementById(id);
+      if (!row) return;
+
+      var button = row.querySelector('button[phx-click="restore_page"]');
+      if (!button) return;
+
+      try {
+        button.focus({ preventScroll: true });
+      } catch (e) {
+        button.focus();
+      }
+    }
+  };

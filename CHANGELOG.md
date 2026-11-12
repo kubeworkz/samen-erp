@@ -8,6 +8,45 @@ All notable changes to Samen are recorded here. The format follows
 
 ### Added
 
+- **Evidence-backed, independently reviewed close phases** (WS-ACCT close gate): `CloseRun`
+  now records per-phase `evidence_files` (Docs file UUIDs), `reviewed_by` and `reviewed_at`
+  through a new governed `:review_phase` action. `:complete_phase` refuses unless the phase's
+  Work task is complete, at least one evidence UUID is present, and the authenticated reviewer
+  is not the signer. The close dashboard offers a review form, hides sign-off from the reviewer,
+  and derives `:done` only when the task, evidence, independent review and phase sign-off all
+  agree. A host that names its Docs namespace gets a document picker and sees evidence by
+  document title, linked to the mounted Pages route when that route exists. Archived evidence is
+  flagged with a direct link to its Docs trash row for restore, and the linked row is highlighted
+  on arrival; missing evidence is flagged and left unlinked. Without Docs the form keeps manual
+  Doc IDs and the count. Phases signed before the gate are grandfathered; no migration is needed
+  because the checklist is JSONB.
+- **Docs trash links land on the row they name**: `Samen.Web.Notes.Live.trash_item_href/3` is the
+  shared target-aware href. The Pages index's durable Trash link follows a delete notice, and the
+  page-not-found fallback where a stale Docs search hit lands points at the archived row. The row
+  highlights and scrolls into view via `.note-trash-item:target`, and a small client hook focuses
+  that row's Restore control without stealing focus on ordinary trash visits; close-dashboard
+  archived evidence uses the same helper. A browser-level test
+  (`samenerp/test/browser/trash_target_test.js`) follows the evidence link in Chrome and asserts
+  Restore receives focus, and a row-cropped visual snapshot check proves the focused state renders
+  differently from the blurred one. CI runs it in a browser job that reuses a detected Chrome or installs
+  Chrome for Testing when the runner has none, caching Mix dependencies and the Chrome download,
+  and uploading a screenshot plus both visual snapshots, a side-by-side diff with a
+  pixel-difference heatmap with configurable sensitive/tolerant counts and bounding boxes, a CI
+  threshold variable and manual-run override, logs the resolved threshold and its source, and
+  reports the threshold, source, test outcome, duration, and artifact link in the job summary;
+  every run also uploads a machine-readable `browser-metrics.json` with outcome, duration,
+  threshold/source, commit SHA, run URL, run attempt and job URL), validates it against a
+  versioned JSON Schema before upload, reads the schema version from that single source in both
+  the validator and CI writer, meta-validates the schema with a pinned CI-only `jsonschema`
+  install, lints the schema against the local validator subset, documents the schema-bump
+  checklist, writes a stable artifact index with per-file log, screenshot, and report links plus
+  GitHub API compressed sizes (paginated run-level lookups) and retention details to the job
+  summary, adds a local sample-summary preview with Markdown/JSON output, a versioned schema and
+  validator for that JSON with corrupt-fixture, malformed-JSON, and deterministic mutation CI
+  checks (including a configurable seed with empty, non-numeric, negative, fractional, and
+  valueless-flag usage checking plus a different-payloads assertion and alternate-seed
+  validation), and a CI alignment check covering CI and both README examples, and uploads
+  browser/server logs when the test fails.
 - **AP approval-chain admin settings surface** (`/erp/ap-approval`, mounted by
   `samen_erp_routes/3`): a tenant admin can set the AP bill threshold, choose whether
   bills below it auto-approve, and edit the ordered named-user/role chain on the

@@ -8,17 +8,18 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   newest run, else the newest declared period. The period header always names
   which one is showing, so an empty month is honest about being empty.
 
-  A phase row shows BOTH facts the status is derived from — the sign-off stamp
-  and the anchored Work task — so a disagreement is visible where it happens:
-  the row reads `open`, the discrepancy list names the phase, and the board's
-  progress never counts it. The page never prints `done` for a phase whose task
-  is open, even if a sign-off exists.
+  A phase row shows the facts the status is derived from — the sign-off stamp,
+  the evidence/reviewer, and the anchored Work task — so a disagreement is
+  visible where it happens: the row reads `open`, the discrepancy list names
+  the phase, and the board's progress never counts it. The page never prints
+  `done` for a phase whose task is open or whose evidence/review is missing.
 
   ## Governed commands
 
-  The page can START a period's close, SIGN OFF an open phase, and COMPLETE the
-  run once every phase is done. None of these commands is implemented here: the
-  page calls the host's OWN `CloseRun` `:start` / `:complete_phase` / `:finish`
+  The page can START a period's close, RECORD a phase's evidence and independent
+  reviewer sign-off, SIGN OFF the phase, and COMPLETE the run once every phase is
+  done. None of these commands is implemented here: the page calls the host's
+  OWN `CloseRun` `:start` / `:review_phase` / `:complete_phase` / `:finish`
   actions with `Samen.Web.TenantRole.attributed_admin_scope/2` (the disarmed dev
   posture's `:admin`, or the authenticated principal's REAL membership role on
   an armed host, with the actor id naming the principal when one resolves). The
@@ -30,7 +31,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   The same scope means the kernel's `started_by`, `done_by` and `completed_by`
   stamps name the authenticated principal when the host can resolve one. The
   period card names the starter and, for a completed run, the finisher; each
-  phase row names its signer. Each identity renders as `you` (the current
+  phase row names its signer and reviewer. Each identity renders as `you` (the current
   principal), `the workspace` (the dev posture's pseudo-principal), or a short
   admin id — never an invented name, because the close read carries no user
   directory.
@@ -61,6 +62,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
        error: nil,
        can_admin?: false,
        actor_id: nil,
+       write_actor_id: nil,
        action_error: nil,
        action_notice: nil,
        return_to: nil
@@ -79,19 +81,39 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   end
 
   defp load(%{assigns: %{org_id: nil}} = socket),
-    do: assign(socket, state: nil, error: :no_org, can_admin?: false, actor_id: nil)
+    do:
+      assign(socket,
+        state: nil,
+        error: :no_org,
+        can_admin?: false,
+        actor_id: nil,
+        write_actor_id: nil
+      )
 
   defp load(socket) do
     %{samen_mount: mount, org_id: org_id} = socket.assigns
     can_admin? = writable?(mount) and TenantRole.admin_scope(mount, org_id).actor.role == :admin
     actor_id = TenantRole.principal_actor_id(mount, org_id)
+    write_actor_id = TenantRole.attributed_admin_scope(mount, org_id).actor.id
 
     case CloseDashboard.load(mount, org_id) do
       {:ok, state} ->
-        assign(socket, state: state, error: nil, can_admin?: can_admin?, actor_id: actor_id)
+        assign(socket,
+          state: state,
+          error: nil,
+          can_admin?: can_admin?,
+          actor_id: actor_id,
+          write_actor_id: write_actor_id
+        )
 
       {:error, reason} ->
-        assign(socket, state: nil, error: reason, can_admin?: false, actor_id: nil)
+        assign(socket,
+          state: nil,
+          error: reason,
+          can_admin?: false,
+          actor_id: nil,
+          write_actor_id: nil
+        )
     end
   end
 
@@ -101,7 +123,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   def handle_event("start_run", _params, socket) do
     %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
 
-    if can_admin? and state && state.period && is_nil(state.run) do
+    if (can_admin? and state) && state.period && is_nil(state.run) do
       case CloseDashboard.start_run(mount, org_id, state.period.id) do
         {:ok, _run} ->
           {:noreply,
@@ -124,10 +146,38 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     end
   end
 
+  def handle_event("review_phase", %{"phase" => key} = params, socket) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+    evidence_files = parse_evidence_files(Map.get(params, "evidence_files"))
+
+    if (can_admin? and state) && state.run do
+      case CloseDashboard.review_phase(mount, org_id, state.run.id, key, evidence_files) do
+        {:ok, _run} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice:
+               "Recorded evidence and reviewer sign-off for #{phase_label(state, key)}."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("complete_phase", %{"phase" => key}, socket) do
     %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
 
-    if can_admin? and state && state.run do
+    if (can_admin? and state) && state.run do
       case CloseDashboard.complete_phase(mount, org_id, state.run.id, key) do
         {:ok, _run} ->
           {:noreply,
@@ -153,7 +203,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   def handle_event("finish_run", _params, socket) do
     %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
 
-    if can_admin? and state && state.run do
+    if (can_admin? and state) && state.run do
       case CloseDashboard.finish_run(mount, org_id, state.run.id) do
         {:ok, _run} ->
           {:noreply,
@@ -225,6 +275,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
               org_id={@org_id}
               can_admin?={@can_admin?}
               actor_id={@actor_id}
+              write_actor_id={@write_actor_id}
               action_error={@action_error}
               action_notice={@action_notice}
             />
@@ -235,13 +286,14 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     """
   end
 
-  attr :state, :map, required: true
-  attr :mount, Mount, required: true
-  attr :org_id, :string, required: true
-  attr :can_admin?, :boolean, required: true
-  attr :actor_id, :string, default: nil
-  attr :action_error, :string, default: nil
-  attr :action_notice, :string, default: nil
+  attr(:state, :map, required: true)
+  attr(:mount, Mount, required: true)
+  attr(:org_id, :string, required: true)
+  attr(:can_admin?, :boolean, required: true)
+  attr(:actor_id, :string, default: nil)
+  attr(:write_actor_id, :string, default: nil)
+  attr(:action_error, :string, default: nil)
+  attr(:action_notice, :string, default: nil)
 
   defp close_board(assigns) do
     ~H"""
@@ -275,7 +327,9 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     <div class="gtitle">
       <h3>Monthly close</h3>
       <span class="n">{summary(@state.report)}</span>
-      <span class="lane">· org-scoped · sign-off and Work task must agree</span>
+      <span class="lane">
+        · org-scoped · task, evidence, independent review and sign-off must agree
+      </span>
     </div>
 
     <.period_card state={@state} actor_id={@actor_id} />
@@ -439,6 +493,41 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
               <div :if={phase.done_by} style="font-size:11px">
                 {actor_label(phase.done_by, @actor_id)}
               </div>
+              <div :if={phase.evidence_files != []} style="font-size:11px">
+                <%= if @state.docs_wired? do %>
+                  <div>Evidence:</div>
+                  <div :for={file_id <- phase.evidence_files}>
+                    <%= if evidence_href(@mount, @org_id, @state.evidence_titles, @state.evidence_status, file_id) do %>
+                      <a
+                        href={evidence_href(@mount, @org_id, @state.evidence_titles, @state.evidence_status, file_id)}
+                        style="color:inherit;text-decoration:underline"
+                      >
+                        {evidence_label(@state.evidence_titles, file_id)}
+                      </a>
+                    <% else %>
+                      {evidence_label(@state.evidence_titles, file_id)}
+                      <span
+                        :if={evidence_flag(@state.evidence_status, file_id)}
+                        style="color:#B45309;font-size:10px"
+                      >
+                        · {evidence_flag(@state.evidence_status, file_id)}
+                      </span>
+                      <a
+                        :if={evidence_trash_href(@mount, @org_id, @state.evidence_status, file_id)}
+                        href={evidence_trash_href(@mount, @org_id, @state.evidence_status, file_id)}
+                        style="color:#B45309;font-size:10px"
+                      >
+                        · open trash
+                      </a>
+                    <% end %>
+                  </div>
+                <% else %>
+                  {length(phase.evidence_files)} evidence file(s)
+                <% end %>
+              </div>
+              <div :if={phase.reviewed_by} style="font-size:11px">
+                reviewed by {actor_label(phase.reviewed_by, @actor_id)}
+              </div>
             </td>
             <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
               <%= cond do %>
@@ -464,6 +553,60 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
                     <span style="font-size:11px;color:var(--muted)">
                       Complete the Work task first
                     </span>
+                  <% !phase.reviewed? -> %>
+                    <form
+                      phx-submit="review_phase"
+                      id={"close-review-form-#{phase.key}"}
+                      style="display:flex;flex-direction:column;gap:4px"
+                    >
+                      <input type="hidden" name="phase" value={phase.key} />
+                      <%= if @state.docs_wired? do %>
+                        <div
+                          id={"close-evidence-picker-#{phase.key}"}
+                          style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow:auto;border:1px solid var(--border, #e5e7eb);padding:4px;border-radius:4px"
+                        >
+                          <span style="font-size:10px;color:var(--muted)">Docs evidence</span>
+                          <span
+                            :if={@state.docs == []}
+                            style="font-size:11px;color:var(--muted)"
+                          >
+                            No live Docs pages in this workspace.
+                          </span>
+                          <label
+                            :for={doc <- @state.docs}
+                            style="display:flex;gap:4px;align-items:flex-start;font-size:11px"
+                          >
+                            <input
+                              type="checkbox"
+                              name="evidence_files[]"
+                              value={doc.id}
+                              id={"close-evidence-#{phase.key}-#{doc.id}"}
+                            />
+                            <span>{doc.title}</span>
+                          </label>
+                        </div>
+                      <% else %>
+                        <input
+                          type="text"
+                          name="evidence_files"
+                          placeholder="Doc IDs (comma-separated)"
+                          aria-label={"Evidence file IDs for #{phase.label}"}
+                          style="font-size:11px;padding:3px 5px"
+                        />
+                      <% end %>
+                      <button
+                        type="submit"
+                        class="button"
+                        id={"close-review-#{phase.key}"}
+                        style="font-size:11px"
+                      >
+                        Record review
+                      </button>
+                    </form>
+                  <% phase.reviewed_by == @write_actor_id -> %>
+                    <span style="font-size:11px;color:var(--muted)">
+                      reviewed by you — a different admin must sign
+                    </span>
                   <% true -> %>
                     <button
                       type="button"
@@ -487,8 +630,8 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     """
   end
 
-  attr :state, :map, required: true
-  attr :actor_id, :string, default: nil
+  attr(:state, :map, required: true)
+  attr(:actor_id, :string, default: nil)
 
   defp period_card(assigns) do
     ~H"""
@@ -532,6 +675,13 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     do: done == total
 
   defp all_phases_done?(_report), do: false
+
+  defp parse_evidence_files(value) do
+    value
+    |> List.wrap()
+    |> Enum.flat_map(fn item -> String.split(to_string(item), ~r/[\s,]+/, trim: true) end)
+    |> Enum.reject(&(&1 == ""))
+  end
 
   defp phase_label(%{report: %{phases: phases}}, key) do
     case Enum.find(phases, &(&1.key == key)) do
@@ -578,6 +728,40 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   end
 
   defp stamp(value), do: to_string(value)
+
+  defp evidence_label(titles, id) do
+    case Map.get(titles, id) do
+      title when is_binary(title) -> title
+      _ -> "Unavailable document"
+    end
+  end
+
+  defp evidence_href(mount, org_id, titles, statuses, id) do
+    with :live <- Map.get(statuses, id),
+         title when is_binary(title) <- Map.get(titles, id),
+         path when is_binary(path) and path != "" <- Mount.label(mount, :pages_path, nil) do
+      Samen.Web.Notes.Live.page_href(mount, org_id, id)
+    else
+      _ -> nil
+    end
+  end
+
+  defp evidence_flag(statuses, id) do
+    case Map.get(statuses, id) do
+      :archived -> "archived"
+      :missing -> "not accessible"
+      _ -> nil
+    end
+  end
+
+  defp evidence_trash_href(mount, org_id, statuses, id) do
+    with :archived <- Map.get(statuses, id),
+         path when is_binary(path) and path != "" <- Mount.label(mount, :pages_path, nil) do
+      Samen.Web.Notes.Live.trash_item_href(mount, org_id, id)
+    else
+      _ -> nil
+    end
+  end
 
   defp actor_label("broker:" <> _, _current), do: "the workspace"
   defp actor_label(id, id) when is_binary(id), do: "you"

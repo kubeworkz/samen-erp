@@ -45,8 +45,9 @@ defmodule Samen.Scopes.Finance.ClosePhases do
 
   ## Keys are stable
 
-  `key` is what `CloseRun.:complete_phase` accepts and what a caller stores.
-  Adding a phase is a deliberate change here (a new key), never a caller
+  `key` is what `CloseRun.:review_phase` / `:complete_phase` accept and what a
+  caller stores. Seeded phases also carry the empty evidence/review fields the
+  gate fills in later. Adding a phase is a deliberate change here (a new key), never a caller
   convenience — the same posture as the dimension vocabulary
   (`Samen.Scopes.Finance.DimensionGuard`).
   """
@@ -227,7 +228,10 @@ defmodule Samen.Scopes.Finance.ClosePhases do
         "role" => phase.role,
         "roles" => phase.roles,
         "done_at" => nil,
-        "done_by" => nil
+        "done_by" => nil,
+        "evidence_files" => [],
+        "reviewed_by" => nil,
+        "reviewed_at" => nil
       }
     end)
   end

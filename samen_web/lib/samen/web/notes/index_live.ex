@@ -60,6 +60,7 @@ defmodule Samen.Web.Notes.IndexLive do
       notes_sidebar: 1,
       page_href: 3,
       trash_href: 2,
+      trash_item_href: 3,
       writable?: 1
     ]
 
@@ -294,7 +295,11 @@ defmodule Samen.Web.Notes.IndexLive do
                any reload, while a deleted page stays in the trash until it is restored or the
                workspace drops it. --%>
           <div class="note-trash-link-row">
-            <a id="notes-trash-link" class="note-trash-back" href={trash_href(@samen_mount, @org_id)}>
+            <a
+              id="notes-trash-link"
+              class="note-trash-back"
+              href={trash_href_for(@samen_mount, @org_id, @deleted)}
+            >
               Trash
             </a>
           </div>
@@ -409,6 +414,13 @@ defmodule Samen.Web.Notes.IndexLive do
   defp crumbs(mount, org_id) do
     [Crumbs.org(mount, org_id), Crumbs.section(mount, org_id, :pages)]
   end
+
+  # The durable Trash link follows the delete notice: when this page was just removed, name its row
+  # so the target highlight lands on the Restore control instead of the top of the trash.
+  defp trash_href_for(mount, org_id, deleted) when is_binary(deleted),
+    do: trash_item_href(mount, org_id, deleted)
+
+  defp trash_href_for(mount, org_id, _deleted), do: trash_href(mount, org_id)
 
   # A block hit deep-links to the block's row; a title hit opens the page itself.
   defp hit_href(mount, org_id, %{kind: :block} = hit) do

@@ -162,22 +162,26 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         phases, started_at, started_by, completed_at, completed_by}`.
 
         `phases` starts as the source manual's ten close phases
-        (`Samen.Scopes.Finance.ClosePhases`) with `done_at` unset and their
-        role assignments attached; the `:complete_phase` action marks one off by
-        key. `:finish` is one-way and refuses while any phase is open, so
-        "completed" means the whole checklist was done rather than most of it.
+        (`Samen.Scopes.Finance.ClosePhases`) with `done_at`, evidence and review
+        fields unset and their role assignments attached. `:review_phase`
+        records the evidence file ids and the independent reviewer; the
+        `:complete_phase` action marks the phase off by key only after its task,
+        evidence, reviewer and signer all satisfy the gate. `:finish` is one-way
+        and refuses while any phase is open, so "completed" means the whole
+        checklist was done rather than most of it.
 
         When the host wires Work (`work_task`), `:start` also creates the ten
-        anchored Work tasks and `:complete_phase` refuses while the phase's task
-        is still open (WS-ACCT Phase 12) — see `CloseRunGuard`.
+        anchored Work tasks and both review/sign-off refuse while the phase's
+        task is still open (WS-ACCT Phase 12) — see `CloseRunGuard`.
 
         One run per period per org (the unique index), because a period has one
         close. A `:completed` run is a signed fact: its checklist can no longer
         be edited.
 
         No PII (INV-1) — a period id, an enum, the checklist maps (each a key, a
-        label, the doc's calendar window and output), timestamps, and the
-        principal ids that started, signed and completed the close.
+        label, the doc's calendar window and output, opaque Docs evidence file
+        ids, and reviewer ids), timestamps, and the principal ids that started,
+        signed and completed the close.
         """
 
         use Samen.Resource,
@@ -200,7 +204,9 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
             constraints: [one_of: [:in_progress, :completed]]
           )
 
-          # [%{"key" =>, "label" =>, "days" =>, "focus" =>, "output" =>, "done_at" =>, "done_by" =>}]
+          # [%{"key" =>, "label" =>, "days" =>, "focus" =>, "output" =>,
+          #   "evidence_files" => [%UUID{}], "reviewed_by" =>, "reviewed_at" =>,
+          #   "done_at" =>, "done_by" =>}]
           attribute(:phases, {:array, :map}, public?: true, default: [])
           attribute(:started_at, :utc_datetime, public?: true)
           attribute(:started_by, :string, public?: true)
@@ -236,6 +242,19 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
             change({Samen.Scopes.Finance.CloseRunGuard, op: :seed, work_task: unquote(work_task)})
           end
 
+          update :review_phase do
+            accept([])
+            require_atomic?(false)
+
+            argument(:phase, :string, allow_nil?: false)
+            argument(:evidence_files, {:array, :uuid}, allow_nil?: false)
+
+            change(
+              {Samen.Scopes.Finance.CloseRunGuard,
+               op: :review_phase, work_task: unquote(work_task)}
+            )
+          end
+
           update :complete_phase do
             accept([])
             require_atomic?(false)
@@ -251,7 +270,10 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
           update :finish do
             accept([])
             require_atomic?(false)
-            change({Samen.Scopes.Finance.CloseRunGuard, op: :finish, work_task: unquote(work_task)})
+
+            change(
+              {Samen.Scopes.Finance.CloseRunGuard, op: :finish, work_task: unquote(work_task)}
+            )
           end
 
           # NO destroy: a close run is a record of a close, not a scratch pad.

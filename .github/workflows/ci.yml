@@ -6,6 +6,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      browser_diff_threshold:
+        description: "Pixel-difference tolerant threshold (1-255); blank uses the repository variable or 24"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -64,6 +69,475 @@ jobs:
 
       - name: Run fast CI tier
         run: bash ./ci-fast.sh
+
+  browser:
+    name: Browser focus handoff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    env:
+      # Manual runs can override; otherwise tune in Settings -> Secrets and variables ->
+      # Actions -> Variables.
+      BROWSER_DIFF_THRESHOLD: ${{ github.event.inputs.browser_diff_threshold || vars.BROWSER_DIFF_THRESHOLD || '24' }}
+      BROWSER_DIFF_THRESHOLD_SOURCE: ${{ (github.event.inputs.browser_diff_threshold && 'workflow_dispatch input') || (vars.BROWSER_DIFF_THRESHOLD && 'repository variable') || 'default' }}
+      BROWSER_ARTIFACT_NAME: browser-failure-${{ github.run_id }}-${{ github.run_attempt }}
+      BROWSER_METRICS_ARTIFACT_NAME: browser-metrics-${{ github.run_id }}-${{ github.run_attempt }}
+      BROWSER_FAILURE_RETENTION_DAYS: 7
+      BROWSER_METRICS_RETENTION_DAYS: 30
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir and Erlang
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20.2"
+          otp-version: "29.0"
+          install-hex: true
+          rebar3-version: latest
+
+      # The browser test uses Node 24's built-in fetch + WebSocket; it does not need npm packages.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Prepare PostgreSQL role
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres \
+            -c 'CREATE ROLE runner LOGIN SUPERUSER CREATEDB; CREATE ROLE clank LOGIN SUPERUSER CREATEDB;'
+
+      - name: Cache Mix dependencies
+        uses: actions/cache@v4
+        with:
+          path: samenerp/deps
+          key: ${{ runner.os }}-${{ runner.arch }}-mix-browser-${{ hashFiles('samenerp/mix.lock', 'samen_core/mix.lock', 'samen_web/mix.lock', 'samen_resend/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-mix-browser-
+
+      - name: Fetch samenerp dependencies
+        working-directory: samenerp
+        run: mix deps.get --quiet
+
+      - name: Detect Chrome
+        id: chrome
+        run: |
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -n "$chrome" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "path=$chrome" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Chrome not found; installing Chrome for Testing."
+          fi
+
+      - name: Compute weekly Chrome cache key
+        id: chrome-cache-key
+        if: steps.chrome.outputs.available != 'true'
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chrome for Testing
+        if: steps.chrome.outputs.available != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/setup-chrome
+          key: setup-chrome-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.chrome-cache-key.outputs.week }}
+
+      - name: Install Chrome when the runner has none
+        id: setup-chrome
+        if: steps.chrome.outputs.available != 'true'
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: stable
+          install-dependencies: true
+
+      - name: Resolve Chrome path
+        id: chrome-path
+        run: |
+          if [ "${{ steps.chrome.outputs.available }}" = "true" ]; then
+            echo "path=${{ steps.chrome.outputs.path }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=${{ steps.setup-chrome.outputs.chrome-path }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint browser schemas
+        run: |
+          node samenerp/test/browser/lint_browser_metrics_schema.js
+          node samenerp/test/browser/lint_browser_metrics_schema.js \
+            samenerp/test/browser/preview_browser_summary.schema.json
+
+      - name: Check browser summary preview
+        run: node samenerp/test/browser/check_browser_summary_preview.js
+
+      - name: Validate browser summary preview JSON
+        run: |
+          node samenerp/test/browser/preview_browser_summary.js --json \
+            > "$RUNNER_TEMP/browser-summary-preview-failure.json"
+          node samenerp/test/browser/validate_preview_browser_summary.js \
+            "$RUNNER_TEMP/browser-summary-preview-failure.json"
+          node samenerp/test/browser/preview_browser_summary.js --json --success \
+            > "$RUNNER_TEMP/browser-summary-preview-success.json"
+          node samenerp/test/browser/validate_preview_browser_summary.js \
+            "$RUNNER_TEMP/browser-summary-preview-success.json"
+
+      - name: Test browser summary preview validator
+        run: |
+          node samenerp/test/browser/test_preview_browser_summary.js
+          node samenerp/test/browser/test_preview_seed_usage.js
+
+      - name: Validate browser schemas
+        run: |
+          python3 -m venv "$RUNNER_TEMP/browser-schema-venv"
+          "$RUNNER_TEMP/browser-schema-venv/bin/python" -m pip install \
+            --disable-pip-version-check --quiet 'jsonschema==4.26.0'
+          "$RUNNER_TEMP/browser-schema-venv/bin/python" - <<'PY'
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          schema_paths = [
+              Path("samenerp/test/browser/browser-metrics.schema.json"),
+              Path("samenerp/test/browser/preview_browser_summary.schema.json"),
+          ]
+          for schema_path in schema_paths:
+              schema = json.loads(schema_path.read_text())
+              Draft202012Validator.check_schema(schema)
+              print(f"{schema_path.name} meta-validation: ok ({schema['$id']})")
+          PY
+
+      - name: Run browser focus handoff test
+        id: browser_test
+        env:
+          CHROME_PATH: ${{ steps.chrome-path.outputs.path }}
+          BROWSER_ARTIFACT_DIR: ${{ runner.temp }}/browser-artifacts
+        run: |
+          set +e
+          started=$SECONDS
+          node samenerp/test/browser/trash_target_test.js
+          status=$?
+          echo "duration_seconds=$((SECONDS - started))" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Upload browser failure artifacts
+        id: browser_artifact
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/browser-artifacts
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload browser console log
+        id: browser_file_console_log
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-browser-console.log
+          path: ${{ runner.temp }}/browser-artifacts/browser-console.log
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload browser server log
+        id: browser_file_server_log
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-server.log
+          path: ${{ runner.temp }}/browser-artifacts/server.log
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload Chrome stderr log
+        id: browser_file_chrome_stderr
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-chrome-stderr.log
+          path: ${{ runner.temp }}/browser-artifacts/chrome-stderr.log
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload failure screenshot
+        id: browser_file_failure_png
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-failure.png
+          path: ${{ runner.temp }}/browser-artifacts/failure.png
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload blurred trash screenshot
+        id: browser_file_trash_blurred
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-trash-restore-blurred.png
+          path: ${{ runner.temp }}/browser-artifacts/trash-restore-blurred.png
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload focused trash screenshot
+        id: browser_file_trash_focused
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-trash-restore-focused.png
+          path: ${{ runner.temp }}/browser-artifacts/trash-restore-focused.png
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload trash diff screenshot
+        id: browser_file_trash_diff
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-trash-restore-diff.png
+          path: ${{ runner.temp }}/browser-artifacts/trash-restore-diff.png
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload failure report
+        id: browser_file_failure_txt
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-failure.txt
+          path: ${{ runner.temp }}/browser-artifacts/failure.txt
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Upload failure page HTML
+        id: browser_file_page_html
+        if: steps.browser_test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_ARTIFACT_NAME }}-page.html
+          path: ${{ runner.temp }}/browser-artifacts/page.html
+          if-no-files-found: warn
+          retention-days: ${{ env.BROWSER_FAILURE_RETENTION_DAYS }}
+
+      - name: Write browser metrics
+        if: always()
+        env:
+          BROWSER_TEST_OUTCOME: ${{ steps.browser_test.outcome || 'not run' }}
+          BROWSER_TEST_DURATION: ${{ steps.browser_test.outputs.duration_seconds }}
+          BROWSER_COMMIT_SHA: ${{ github.sha }}
+          BROWSER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BROWSER_RUN_ATTEMPT: ${{ github.run_attempt }}
+          BROWSER_JOB_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/${{ job.check_run_id }}
+        run: |
+          outcome="${BROWSER_TEST_OUTCOME:-not run}"
+          duration="${BROWSER_TEST_DURATION:-null}"
+          commit_sha="${BROWSER_COMMIT_SHA:-unknown}"
+          run_url="${BROWSER_RUN_URL:-unknown}"
+          run_attempt="${BROWSER_RUN_ATTEMPT:-null}"
+          if ! [[ "$run_attempt" =~ ^[0-9]+$ ]]; then
+            run_attempt=null
+          fi
+          job_url="${BROWSER_JOB_URL:-unknown}"
+          if ! [[ "$duration" =~ ^[0-9]+$ ]]; then
+            duration=null
+          fi
+          threshold="${BROWSER_DIFF_THRESHOLD:-24}"
+          if ! [[ "$threshold" =~ ^[0-9]+$ ]]; then
+            threshold=24
+          elif [ "$threshold" -lt 1 ]; then
+            threshold=1
+          elif [ "$threshold" -gt 255 ]; then
+            threshold=255
+          fi
+          source="${BROWSER_DIFF_THRESHOLD_SOURCE:-unknown}"
+          schema_file=samenerp/test/browser/browser-metrics.schema.json
+          schema_version=$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))['x-schema-version']" "$schema_file")
+          if ! [[ "$schema_version" =~ ^[1-9][0-9]*$ ]]; then
+            echo "browser metrics schema has invalid x-schema-version: $schema_version" >&2
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/browser-metrics.json" <<EOF
+          {
+            "schema_version": ${schema_version},
+            "browser_test": {
+              "outcome": "${outcome}",
+              "duration_seconds": ${duration},
+              "threshold": ${threshold},
+              "threshold_source": "${source}",
+              "commit_sha": "${commit_sha}",
+              "run_url": "${run_url}",
+              "run_attempt": ${run_attempt},
+              "job_url": "${job_url}"
+            }
+          }
+          EOF
+
+      - name: Validate browser metrics
+        if: always()
+        run: node samenerp/test/browser/validate_browser_metrics.js "$RUNNER_TEMP/browser-metrics.json"
+
+      - name: Upload browser metrics
+        id: browser_metrics_artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BROWSER_METRICS_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/browser-metrics.json
+          if-no-files-found: error
+          retention-days: ${{ env.BROWSER_METRICS_RETENTION_DAYS }}
+
+      - name: Fetch browser artifact sizes
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node samenerp/test/browser/fetch_browser_artifact_sizes.js "$RUNNER_TEMP/browser-artifact-sizes.json"
+
+      - name: Write browser diff summary
+        if: always()
+        env:
+          BROWSER_TEST_OUTCOME: ${{ steps.browser_test.outcome || 'not run' }}
+          BROWSER_TEST_DURATION: ${{ steps.browser_test.outputs.duration_seconds }}
+          BROWSER_ARTIFACT_ID: ${{ steps.browser_artifact.outputs.artifact-id }}
+          BROWSER_METRICS_ARTIFACT_ID: ${{ steps.browser_metrics_artifact.outputs.artifact-id }}
+          BROWSER_ARTIFACT_URL: ${{ steps.browser_artifact.outputs.artifact-url }}
+          BROWSER_METRICS_ARTIFACT_URL: ${{ steps.browser_metrics_artifact.outputs.artifact-url }}
+          BROWSER_CONSOLE_LOG_URL: ${{ steps.browser_file_console_log.outputs.artifact-url }}
+          BROWSER_SERVER_LOG_URL: ${{ steps.browser_file_server_log.outputs.artifact-url }}
+          BROWSER_CHROME_STDERR_URL: ${{ steps.browser_file_chrome_stderr.outputs.artifact-url }}
+          BROWSER_FAILURE_SCREENSHOT_URL: ${{ steps.browser_file_failure_png.outputs.artifact-url }}
+          BROWSER_TRASH_BLURRED_URL: ${{ steps.browser_file_trash_blurred.outputs.artifact-url }}
+          BROWSER_TRASH_FOCUSED_URL: ${{ steps.browser_file_trash_focused.outputs.artifact-url }}
+          BROWSER_TRASH_DIFF_URL: ${{ steps.browser_file_trash_diff.outputs.artifact-url }}
+          BROWSER_FAILURE_REPORT_URL: ${{ steps.browser_file_failure_txt.outputs.artifact-url }}
+          BROWSER_PAGE_HTML_URL: ${{ steps.browser_file_page_html.outputs.artifact-url }}
+          BROWSER_CONSOLE_LOG_ARTIFACT_ID: ${{ steps.browser_file_console_log.outputs.artifact-id }}
+          BROWSER_SERVER_LOG_ARTIFACT_ID: ${{ steps.browser_file_server_log.outputs.artifact-id }}
+          BROWSER_CHROME_STDERR_ARTIFACT_ID: ${{ steps.browser_file_chrome_stderr.outputs.artifact-id }}
+          BROWSER_FAILURE_SCREENSHOT_ARTIFACT_ID: ${{ steps.browser_file_failure_png.outputs.artifact-id }}
+          BROWSER_TRASH_BLURRED_ARTIFACT_ID: ${{ steps.browser_file_trash_blurred.outputs.artifact-id }}
+          BROWSER_TRASH_FOCUSED_ARTIFACT_ID: ${{ steps.browser_file_trash_focused.outputs.artifact-id }}
+          BROWSER_TRASH_DIFF_ARTIFACT_ID: ${{ steps.browser_file_trash_diff.outputs.artifact-id }}
+          BROWSER_FAILURE_REPORT_ARTIFACT_ID: ${{ steps.browser_file_failure_txt.outputs.artifact-id }}
+          BROWSER_PAGE_HTML_ARTIFACT_ID: ${{ steps.browser_file_page_html.outputs.artifact-id }}
+        run: |
+          {
+            echo "### Browser visual diff"
+            echo ""
+            printf -- '- Threshold: **%s**\n' "$BROWSER_DIFF_THRESHOLD"
+            printf -- '- Source: %s\n' "$BROWSER_DIFF_THRESHOLD_SOURCE"
+            printf -- '- Outcome: **%s**\n' "$BROWSER_TEST_OUTCOME"
+            if [ -n "$BROWSER_TEST_DURATION" ]; then
+              printf -- '- Duration: **%s s**\n' "$BROWSER_TEST_DURATION"
+            else
+              echo "- Duration: not available"
+            fi
+            echo ""
+            echo "### Browser artifacts"
+            echo ""
+            format_size() {
+              local bytes="$1"
+              if ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
+                echo "n/a"
+              elif [ "$bytes" -lt 1024 ]; then
+                printf '%s B' "$bytes"
+              elif [ "$bytes" -lt 1048576 ]; then
+                awk -v bytes="$bytes" 'BEGIN { printf "%.1f KB", bytes / 1024 }'
+              else
+                awk -v bytes="$bytes" 'BEGIN { printf "%.1f MB", bytes / 1048576 }'
+              fi
+            }
+            declare -A artifact_sizes=()
+            if [ -f "$RUNNER_TEMP/browser-artifact-sizes.json" ]; then
+              while IFS=$'\t' read -r artifact_id artifact_bytes; do
+                artifact_sizes["$artifact_id"]="$artifact_bytes"
+              done < <(node -e '
+                const fs = require("fs");
+                const sizes = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                for (const [id, bytes] of Object.entries(sizes)) console.log(`${id}\t${bytes}`);
+              ' "$RUNNER_TEMP/browser-artifact-sizes.json" 2>/dev/null || true)
+            fi
+            artifact_size() {
+              local id="$1"
+              local bytes="${artifact_sizes[$id]:-}"
+              if [[ "$bytes" =~ ^[0-9]+$ ]]; then
+                format_size "$bytes"
+              else
+                echo "n/a"
+              fi
+            }
+            artifact_link() {
+              local name="$1"
+              local url="$2"
+              local size="$3"
+              if [ -n "$url" ]; then
+                printf -- '| `%s` | %s | %s days | [Download](%s) |\n' "$name" "$size" "$BROWSER_FAILURE_RETENTION_DAYS" "$url"
+              else
+                printf -- '| `%s` | %s | %s days | URL unavailable |\n' "$name" "$size" "$BROWSER_FAILURE_RETENTION_DAYS"
+              fi
+            }
+            echo "| Artifact | Contents | Size | Retention | Link |"
+            echo "| --- | --- | --- | --- | --- |"
+            if [ -n "$BROWSER_METRICS_ARTIFACT_URL" ]; then
+              printf -- '| `%s` | Metrics JSON | %s | %s days | [Download](%s) |\n' "$BROWSER_METRICS_ARTIFACT_NAME" "$(artifact_size "$BROWSER_METRICS_ARTIFACT_ID")" "$BROWSER_METRICS_RETENTION_DAYS" "$BROWSER_METRICS_ARTIFACT_URL"
+            else
+              printf -- '| `%s` | Metrics JSON | %s | %s days | URL unavailable |\n' "$BROWSER_METRICS_ARTIFACT_NAME" "$(artifact_size "$BROWSER_METRICS_ARTIFACT_ID")" "$BROWSER_METRICS_RETENTION_DAYS"
+            fi
+            if [ "$BROWSER_TEST_OUTCOME" = "failure" ]; then
+              if [ -n "$BROWSER_ARTIFACT_URL" ]; then
+                printf -- '| `%s` | All failure files | %s | %s days | [Download](%s) |\n' "$BROWSER_ARTIFACT_NAME" "$(artifact_size "$BROWSER_ARTIFACT_ID")" "$BROWSER_FAILURE_RETENTION_DAYS" "$BROWSER_ARTIFACT_URL"
+              else
+                printf -- '| `%s` | All failure files | %s | %s days | URL unavailable |\n' "$BROWSER_ARTIFACT_NAME" "$(artifact_size "$BROWSER_ARTIFACT_ID")" "$BROWSER_FAILURE_RETENTION_DAYS"
+              fi
+              echo ""
+              echo "#### Logs"
+              echo ""
+              echo "| File | Size | Retention | Download |"
+              echo "| --- | --- | --- | --- |"
+              artifact_link "browser-console.log" "$BROWSER_CONSOLE_LOG_URL" "$(artifact_size "$BROWSER_CONSOLE_LOG_ARTIFACT_ID")"
+              artifact_link "server.log" "$BROWSER_SERVER_LOG_URL" "$(artifact_size "$BROWSER_SERVER_LOG_ARTIFACT_ID")"
+              artifact_link "chrome-stderr.log" "$BROWSER_CHROME_STDERR_URL" "$(artifact_size "$BROWSER_CHROME_STDERR_ARTIFACT_ID")"
+              echo ""
+              echo "#### Screenshots"
+              echo ""
+              echo "| File | Size | Retention | Download |"
+              echo "| --- | --- | --- | --- |"
+              artifact_link "failure.png" "$BROWSER_FAILURE_SCREENSHOT_URL" "$(artifact_size "$BROWSER_FAILURE_SCREENSHOT_ARTIFACT_ID")"
+              artifact_link "trash-restore-blurred.png" "$BROWSER_TRASH_BLURRED_URL" "$(artifact_size "$BROWSER_TRASH_BLURRED_ARTIFACT_ID")"
+              artifact_link "trash-restore-focused.png" "$BROWSER_TRASH_FOCUSED_URL" "$(artifact_size "$BROWSER_TRASH_FOCUSED_ARTIFACT_ID")"
+              artifact_link "trash-restore-diff.png" "$BROWSER_TRASH_DIFF_URL" "$(artifact_size "$BROWSER_TRASH_DIFF_ARTIFACT_ID")"
+              echo ""
+              echo "#### Reports"
+              echo ""
+              echo "| File | Size | Retention | Download |"
+              echo "| --- | --- | --- | --- |"
+              artifact_link "failure.txt" "$BROWSER_FAILURE_REPORT_URL" "$(artifact_size "$BROWSER_FAILURE_REPORT_ARTIFACT_ID")"
+              artifact_link "page.html" "$BROWSER_PAGE_HTML_URL" "$(artifact_size "$BROWSER_PAGE_HTML_ARTIFACT_ID")"
+            else
+              printf -- '| `%s` | Logs, screenshots, and reports | n/a | %s days | Not produced (test did not fail) |\n' "$BROWSER_ARTIFACT_NAME" "$BROWSER_FAILURE_RETENTION_DAYS"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # The deploy build, on EVERY pull request AND every push to main. `fast`/`full`
   # compile in MIX_ENV=test only, so neither can see a :prod-only compile break —

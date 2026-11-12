@@ -92,6 +92,7 @@ defmodule Samen.Web.Notes.PageLive do
       export_href: 4,
       notes_sidebar: 1,
       page_href: 3,
+      trash_item_href: 3,
       writable?: 1
     ]
 
@@ -621,6 +622,15 @@ defmodule Samen.Web.Notes.PageLive do
                 body="This page is not in your workspace. It may have been archived, or it belongs to another organization."
                 icon="▤"
               />
+              <p :if={is_binary(@doc_id)} class="note-trash-link-row">
+                <a
+                  id="notes-not-found-trash"
+                  class="note-trash-back"
+                  href={trash_item_href(@samen_mount, @org_id, @doc_id)}
+                >
+                  Look in trash
+                </a>
+              </p>
             </div>
           </div>
         <% @page -> %>

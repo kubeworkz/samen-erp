@@ -1338,7 +1338,8 @@ defmodule Samen.Web.Router do
 
         samen_close_routes(:close, MyHost.Erp,
           repo: MyHost.Repo,
-          work_namespace: MyHost.Work
+          work_namespace: MyHost.Work,
+          docs_namespace: MyHost.Docs
         )
       end
 
@@ -1354,6 +1355,13 @@ defmodule Samen.Web.Router do
   invents task state. Options as `samen_erp_routes/3` (`:repo` required;
   `:domain`, `:plane`, `:operator_id`/`:target_org_id`, `:path`, `:labels`,
   `:session_name`).
+
+  `:docs_namespace` names the host's mounted Docs namespace (the Doc resource
+  is derived as `<namespace>.Doc`), so the review form offers the org's live
+  documents as a picker and stored evidence UUIDs resolve to their titles.
+  Without it the form keeps the manual Doc-ID input and the page shows the
+  evidence count — a host that has not mounted Docs still works, and the page
+  never invents a document name.
   """
   defmacro samen_close_routes(kind, namespace, opts \\ []) do
     kind = Macro.expand(kind, __CALLER__)
@@ -1376,6 +1384,12 @@ defmodule Samen.Web.Router do
           case Keyword.get(opts, :work_namespace) do
             nil -> labels
             ns -> Map.put(labels, :work_namespace, ns)
+          end
+        end)
+        |> then(fn labels ->
+          case Keyword.get(opts, :docs_namespace) do
+            nil -> labels
+            ns -> Map.put(labels, :docs_namespace, ns)
           end
         end)
 

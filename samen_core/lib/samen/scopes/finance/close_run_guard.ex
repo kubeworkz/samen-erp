@@ -7,9 +7,15 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
       principal's id when the caller supplies one. The phases are never caller input:
       the doc's ten are the checklist, and a caller inventing an eleventh would
       be editing the close policy through a create argument.
+    * `op: :review_phase` — the `:review_phase` action's `phase` argument
+      records the reviewer (the acting principal) and the Docs file ids the
+      reviewer accepted as evidence. An unknown, already-signed or task-open
+      phase is refused; an empty evidence list is refused, because a review
+      with nothing to review is not evidence.
     * `op: :complete_phase` — the `:complete_phase` action's `phase` argument
       (a key from `ClosePhases.keys/0`) gets `done_at` and `done_by`, the
-      acting principal's id when the caller supplies one. An UNKNOWN key is
+      acting principal's id when the caller supplies one. It refuses unless the
+      phase has evidence and a reviewer OTHER than the signer. An UNKNOWN key is
       refused fail-honest rather than appended (a typo must not silently create
       a phase nobody checks); re-completing an already-done phase is a no-op, so
       a retried click is not an error.
@@ -27,12 +33,16 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     * `:seed` creates the ten anchored Work tasks in the SAME transaction as
       the run (`Samen.Scopes.Finance.CloseChecklist`) — a run whose checklist
       could not be created is not a started close;
-    * `:complete_phase` refuses while that phase's task is still open, so the
-      governed sign-off and the operational fact cannot disagree. The dashboard
-      (`CloseBoard`) still re-derives the status from both, which is what makes
-      an out-of-band task reopen visible rather than silently "done".
+    * `:review_phase` and `:complete_phase` refuse while that phase's task is
+      still open, so the governed sign-off and the operational fact cannot
+      disagree. `:complete_phase` also requires the evidence list recorded by
+      `:review_phase` and a reviewer whose id differs from the signer's. The
+      dashboard (`CloseBoard`) still re-derives the status from every fact,
+      which is what makes an out-of-band task reopen visible rather than
+      silently "done".
 
-  Without `work_task`, both operations behave exactly as Phase 3 shipped them.
+  Without `work_task`, the task precondition is skipped; the evidence, reviewer
+  and signer checks still apply.
 
   A completed run is final: `:complete_phase` and `:finish` both refuse on it, so
   the checklist cannot be rewritten after the close it describes was signed.
@@ -49,7 +59,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     # `Samen.Pii.WriteGuard`: a nested action can rebuild the changeset's private
     # context by the time `before_action` runs, but the registration-time
     # changeset still carries the caller's actor. A caller with no actor records
-    # no starter or signer (an honest absence, never a fabricated name).
+    # no starter; review and sign-off refuse because no identity can be named.
     actor =
       actor_id(Map.get(context, :actor)) ||
         actor_id(get_in(changeset.context, [:private, :actor]))
@@ -90,19 +100,93 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     |> Ash.Changeset.force_change_attribute(:started_by, actor)
   end
 
-  defp apply_op(changeset, :complete_phase, work_task, actor) do
+  defp apply_op(changeset, :review_phase, work_task, actor) do
     key = Ash.Changeset.get_argument(changeset, :phase)
+    evidence_files = Ash.Changeset.get_argument(changeset, :evidence_files) || []
     phases = phases(changeset)
+    phase = phase_for(phases, key)
     open_task = open_task(work_task, changeset.data, key)
 
     cond do
       current_status(changeset) == :completed ->
-        error(changeset, "this close run is COMPLETED — its checklist is a signed fact and " <>
-          "cannot be edited. Start the next period's run instead.")
+        error(
+          changeset,
+          "this close run is COMPLETED — its checklist is a signed fact and " <>
+            "cannot be edited. Start the next period's run instead."
+        )
 
       Samen.Scopes.Finance.ClosePhases.fetch(key) == nil ->
-        error(changeset, "unknown close phase #{inspect(key)} — the checklist is the source " <>
-          "manual's ten phases (see Samen.Scopes.Finance.ClosePhases.keys/0)")
+        error(
+          changeset,
+          "unknown close phase #{inspect(key)} — the checklist is the source " <>
+            "manual's ten phases (see Samen.Scopes.Finance.ClosePhases.keys/0)"
+        )
+
+      phase == nil ->
+        error(changeset, "close phase #{inspect(key)} is not present in this run's checklist")
+
+      get(phase, "done_at") != nil ->
+        error(changeset, "close phase #{inspect(key)} is already signed; its review is final")
+
+      is_nil(actor) ->
+        error(changeset, "a reviewer identity is required to sign a close phase review")
+
+      open_task != nil ->
+        error(
+          changeset,
+          "the Work task for close phase #{inspect(key)} is still #{open_task.status} — " <>
+            "complete the task before reviewing the phase. The close dashboard reads the " <>
+            "task and would keep reporting the phase open."
+        )
+
+      not evidence_present?(evidence_files) ->
+        error(
+          changeset,
+          "close phase #{inspect(key)} needs at least one evidence file id before a reviewer " <>
+            "can sign it off"
+        )
+
+      true ->
+        Ash.Changeset.force_change_attribute(
+          changeset,
+          :phases,
+          mark_reviewed(phases, key, evidence_files, actor)
+        )
+    end
+  end
+
+  defp apply_op(changeset, :complete_phase, work_task, actor) do
+    key = Ash.Changeset.get_argument(changeset, :phase)
+    phases = phases(changeset)
+    phase = phase_for(phases, key)
+    open_task = open_task(work_task, changeset.data, key)
+    evidence_files = if phase, do: get(phase, "evidence_files") || [], else: []
+    reviewed_by = if phase, do: get(phase, "reviewed_by")
+    reviewed_at = if phase, do: get(phase, "reviewed_at")
+
+    cond do
+      current_status(changeset) == :completed ->
+        error(
+          changeset,
+          "this close run is COMPLETED — its checklist is a signed fact and " <>
+            "cannot be edited. Start the next period's run instead."
+        )
+
+      Samen.Scopes.Finance.ClosePhases.fetch(key) == nil ->
+        error(
+          changeset,
+          "unknown close phase #{inspect(key)} — the checklist is the source " <>
+            "manual's ten phases (see Samen.Scopes.Finance.ClosePhases.keys/0)"
+        )
+
+      phase == nil ->
+        error(changeset, "close phase #{inspect(key)} is not present in this run's checklist")
+
+      get(phase, "done_at") != nil ->
+        changeset
+
+      is_nil(actor) ->
+        error(changeset, "a signer identity is required to sign a close phase off")
 
       open_task != nil ->
         error(
@@ -111,6 +195,27 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
             "complete the task before signing the phase off. The close dashboard reads the " <>
             "task and would keep reporting the phase open, so a sign-off now would be a " <>
             "checklist that disagrees with itself."
+        )
+
+      not evidence_present?(evidence_files) ->
+        error(
+          changeset,
+          "close phase #{inspect(key)} has no evidence files — record the evidence and its " <>
+            "reviewer before signing the phase off"
+        )
+
+      is_nil(reviewed_by) or is_nil(reviewed_at) ->
+        error(
+          changeset,
+          "close phase #{inspect(key)} has no independent reviewer sign-off — review the " <>
+            "evidence before signing the phase off"
+        )
+
+      reviewed_by == actor ->
+        error(
+          changeset,
+          "the reviewer of close phase #{inspect(key)} cannot also sign it off — an " <>
+            "independent reviewer is required"
         )
 
       true ->
@@ -123,14 +228,20 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
 
     cond do
       current_status(changeset) == :completed ->
-        error(changeset, "illegal close-run transition: the run is already COMPLETED " <>
-          "(the run is one-way — in_progress → completed)")
+        error(
+          changeset,
+          "illegal close-run transition: the run is already COMPLETED " <>
+            "(the run is one-way — in_progress → completed)"
+        )
 
       pending(phases) != [] ->
-        error(changeset, "the close run cannot be completed while #{length(pending(phases))} " <>
-          "phase(s) are still open: #{Enum.join(pending(phases), ", ")}. Complete every phase " <>
-          "or leave the run in progress — a close certificate with phases outstanding would " <>
-          "certify nothing.")
+        error(
+          changeset,
+          "the close run cannot be completed while #{length(pending(phases))} " <>
+            "phase(s) are still open: #{Enum.join(pending(phases), ", ")}. Complete every phase " <>
+            "or leave the run in progress — a close certificate with phases outstanding would " <>
+            "certify nothing."
+        )
 
       true ->
         changeset
@@ -167,6 +278,24 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
       end
     end)
   end
+
+  defp mark_reviewed(phases, key, evidence_files, reviewer) do
+    Enum.map(phases, fn phase ->
+      if get(phase, "key") == key and get(phase, "done_at") == nil do
+        phase
+        |> put("evidence_files", evidence_files)
+        |> put("reviewed_by", reviewer)
+        |> put("reviewed_at", DateTime.to_iso8601(now()))
+      else
+        phase
+      end
+    end)
+  end
+
+  defp phase_for(phases, key), do: Enum.find(phases, &(get(&1, "key") == key))
+
+  defp evidence_present?(files) when is_list(files), do: Enum.any?(files, &is_binary/1)
+  defp evidence_present?(_files), do: false
 
   defp actor_id(%{id: id}) when is_binary(id), do: id
   defp actor_id(_), do: nil
@@ -208,6 +337,9 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
 
   defp safe_atom("key"), do: :key
   defp safe_atom("done_at"), do: :done_at
+  defp safe_atom("evidence_files"), do: :evidence_files
+  defp safe_atom("reviewed_by"), do: :reviewed_by
+  defp safe_atom("reviewed_at"), do: :reviewed_at
   defp safe_atom(_), do: :__never__
 
   defp error(changeset, message) do
