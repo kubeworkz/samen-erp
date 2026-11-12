@@ -59,8 +59,13 @@ defmodule Samen.E8Rollups do
            (COALESCE(SUM(sjl.sjl_debit_cents), 0) - COALESCE(SUM(sjl.sjl_credit_cents), 0))::bigint,
            now()
          FROM sac_account sac
-         LEFT JOIN sjl_journal_line sjl ON sjl.sjl_account_id = sac.sac_id
-         LEFT JOIN sje_journal_entry sje ON sje.sje_id = sjl.sjl_entry_id AND sje.sje_status = 'posted'
+         LEFT JOIN sjl_journal_line sjl
+           ON sjl.sjl_account_id = sac.sac_id
+          AND sjl.sjl_org_id = sac.sac_org_id
+         LEFT JOIN sje_journal_entry sje
+           ON sje.sje_id = sjl.sjl_entry_id
+          AND sje.sje_org_id = sjl.sjl_org_id
+          AND sje.sje_status = 'posted'
          GROUP BY sac.sac_org_id, sac.sac_id, sac.sac_code
          ORDER BY sac.sac_code
          """}

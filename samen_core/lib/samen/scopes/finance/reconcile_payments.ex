@@ -72,6 +72,7 @@ defmodule Samen.Scopes.Finance.ReconcilePayments do
     entry_skey = attr_source(entry_resource, :source_key)
     entry_date = attr_source(entry_resource, :entry_date)
     line_entry_fk = entry_fk_source(line_resource, entry_resource)
+    line_org = attr_source(line_resource, :org_id)
     line_debit = attr_source(line_resource, :debit_cents)
 
     period = period_filter(entry_date, opts, 2)
@@ -80,7 +81,9 @@ defmodule Samen.Scopes.Finance.ReconcilePayments do
            """
            SELECT COALESCE(SUM(l.#{line_debit}), 0)
            FROM #{line_table} l
-           JOIN #{entry_table} e ON e.#{entry_id} = l.#{line_entry_fk}
+           JOIN #{entry_table} e
+             ON e.#{entry_id} = l.#{line_entry_fk}
+            AND e.#{entry_org} = l.#{line_org}
            WHERE e.#{entry_org} = $1
              AND e.#{entry_status} = 'posted'
              AND e.#{entry_skey} = '#{@cash_source_key}'#{period.sql}

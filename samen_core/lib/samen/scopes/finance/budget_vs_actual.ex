@@ -58,6 +58,7 @@ defmodule Samen.Scopes.Finance.BudgetVsActual do
 
     entry_table = AshPostgres.DataLayer.Info.table(entry_resource(journal_line))
     entry_pk = attr_source(entry_resource(journal_line), :id)
+    entry_org = attr_source(entry_resource(journal_line), :org_id)
     entry_status = attr_source(entry_resource(journal_line), :status)
     entry_date = attr_source(entry_resource(journal_line), :entry_date)
 
@@ -80,9 +81,11 @@ defmodule Samen.Scopes.Finance.BudgetVsActual do
                END
              ) AS actual_cents
       FROM #{jl_table} jl
-      JOIN #{acct_table} a2 ON a2.#{acct_pk} = jl.#{jl_account}
+      JOIN #{acct_table} a2
+        ON a2.#{acct_pk} = jl.#{jl_account} AND a2.#{acct_org} = jl.#{jl_org}
       JOIN #{entry_table} e
         ON e.#{entry_pk} = jl.#{jl_entry_fk}
+       AND e.#{entry_org} = jl.#{jl_org}
        AND e.#{entry_status} = 'posted'
        AND e.#{entry_date} >= make_date($2, 1, 1)
        AND e.#{entry_date} <= make_date($2, 12, 31)

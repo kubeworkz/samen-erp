@@ -99,6 +99,7 @@ defmodule Samen.Scopes.Finance.ReconcileRecognition do
     s_key = attr(ctx.schedule_resource, :deferred_key)
 
     r_id = attr(ctx.recognition_resource, :id)
+    r_org = attr(ctx.recognition_resource, :org_id)
     r_amount = attr(ctx.recognition_resource, :amount_cents)
     r_schedule = attr(ctx.recognition_resource, :schedule_id)
 
@@ -109,6 +110,7 @@ defmodule Samen.Scopes.Finance.ReconcileRecognition do
     e_source = attr(ctx.entry_resource, :source_id)
 
     l_entry = attr(ctx.line_resource, :entry_id)
+    l_org = attr(ctx.line_resource, :org_id)
     l_account = attr(ctx.line_resource, :account_id)
     l_debit = attr(ctx.line_resource, :debit_cents)
     l_credit = attr(ctx.line_resource, :credit_cents)
@@ -128,8 +130,12 @@ defmodule Samen.Scopes.Finance.ReconcileRecognition do
            COALESCE((
              SELECT SUM(l.#{l_debit} - l.#{l_credit})
              FROM #{line_table} l
-             JOIN #{entry_table} e ON e.#{e_id} = l.#{l_entry}
-             JOIN #{recognition_table} r ON r.#{r_id} = e.#{e_source}
+             JOIN #{entry_table} e
+               ON e.#{e_id} = l.#{l_entry}
+              AND e.#{e_org} = l.#{l_org}
+             JOIN #{recognition_table} r
+               ON r.#{r_id} = e.#{e_source}
+              AND r.#{r_org} = s.#{s_org}
              JOIN #{pa_table} pa
                ON pa.#{pa_org} = s.#{s_org}
               AND pa.#{pa_key} = s.#{s_key}
@@ -138,6 +144,7 @@ defmodule Samen.Scopes.Finance.ReconcileRecognition do
                AND e.#{e_org} = s.#{s_org}
                AND e.#{e_status} = 'posted'
                AND e.#{e_skey} = '#{@source_key}'
+               AND l.#{l_org} = s.#{s_org}
            ), 0) AS released
     FROM #{schedule_table} s
     WHERE s.#{s_org} = $1

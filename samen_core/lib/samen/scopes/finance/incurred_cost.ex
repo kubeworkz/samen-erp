@@ -45,11 +45,13 @@ defmodule Samen.Scopes.Finance.IncurredCost do
 
     line_entry_fk = entry_fk_source(line_resource, entry_resource)
     line_account_fk = account_fk_source(line_resource, account_resource)
+    line_org = attr_source(line_resource, :org_id)
     line_debit = attr_source(line_resource, :debit_cents)
     line_credit = attr_source(line_resource, :credit_cents)
     line_dims = attr_source(line_resource, :dimension_refs)
 
     account_id = attr_source(account_resource, :id)
+    account_org = attr_source(account_resource, :org_id)
     account_kind = attr_source(account_resource, :kind)
 
     from_date = Date.new!(year, month, 1)
@@ -59,8 +61,12 @@ defmodule Samen.Scopes.Finance.IncurredCost do
            """
            SELECT COALESCE(SUM(l.#{line_debit} - l.#{line_credit}), 0)
            FROM #{line_table} l
-           JOIN #{entry_table} e ON e.#{entry_id} = l.#{line_entry_fk}
-           JOIN #{account_table} a ON a.#{account_id} = l.#{line_account_fk}
+           JOIN #{entry_table} e
+             ON e.#{entry_id} = l.#{line_entry_fk}
+            AND e.#{entry_org} = l.#{line_org}
+           JOIN #{account_table} a
+             ON a.#{account_id} = l.#{line_account_fk}
+            AND a.#{account_org} = l.#{line_org}
            WHERE e.#{entry_org} = $1
              AND e.#{entry_status} = 'posted'
              AND e.#{entry_date} >= $2

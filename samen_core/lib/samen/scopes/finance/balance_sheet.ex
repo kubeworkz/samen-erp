@@ -81,9 +81,11 @@ defmodule Samen.Scopes.Finance.BalanceSheet do
     LEFT JOIN #{line_table} l
       ON l.#{ReportColumns.column(line_resource, :account_id)} =
          a.#{ReportColumns.column(account_resource, :id)}
+      AND l.#{ReportColumns.column(line_resource, :org_id)} = $1
       AND l.#{ReportColumns.column(line_resource, :entry_id)} IN (
         SELECT e.#{ReportColumns.column(entry_resource, :id)} FROM #{entry_table} e
-        WHERE e.#{ReportColumns.column(entry_resource, :status)} = 'posted'
+        WHERE e.#{ReportColumns.column(entry_resource, :org_id)} = $1
+          AND e.#{ReportColumns.column(entry_resource, :status)} = 'posted'
           AND e.#{ReportColumns.column(entry_resource, :posted_at)} <= $2
       )
     WHERE a.#{ReportColumns.column(account_resource, :org_id)} = $1
@@ -107,9 +109,11 @@ defmodule Samen.Scopes.Finance.BalanceSheet do
     LEFT JOIN #{line_table} l
       ON l.#{ReportColumns.column(line_resource, :account_id)} =
          a.#{ReportColumns.column(account_resource, :id)}
+      AND l.#{ReportColumns.column(line_resource, :org_id)} = $1
       AND l.#{ReportColumns.column(line_resource, :entry_id)} IN (
         SELECT e.#{ReportColumns.column(entry_resource, :id)} FROM #{entry_table} e
-        WHERE e.#{ReportColumns.column(entry_resource, :status)} = 'posted'
+        WHERE e.#{ReportColumns.column(entry_resource, :org_id)} = $1
+          AND e.#{ReportColumns.column(entry_resource, :status)} = 'posted'
           AND e.#{ReportColumns.column(entry_resource, :posted_at)} <= $2
       )
     WHERE a.#{ReportColumns.column(account_resource, :org_id)} = $1

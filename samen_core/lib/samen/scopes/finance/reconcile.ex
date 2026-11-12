@@ -81,15 +81,20 @@ defmodule Samen.Scopes.Finance.Reconcile do
   # intentions, not facts; a voided entry keeps its lines — the reversing entry
   # nets them). Joins the entry table on the line's belongs_to :entry FK, whose
   # destination is resolved from the line resource itself (no hard-coded module).
+  # The join ALSO requires both rows to carry the same org_id: a raw/compromised
+  # FK must not let one org's line borrow another org's posting status.
   defp posted_join_sql(line_resource) do
     entry_resource = entry_resource(line_resource)
 
     entry_table = AshPostgres.DataLayer.Info.table(entry_resource)
     entry_pk = attr_source(entry_resource, :id)
+    entry_org = attr_source(entry_resource, :org_id)
     entry_status = attr_source(entry_resource, :status)
     line_entry_fk = line_entry_fk_source(line_resource, entry_resource)
+    line_org = attr_source(line_resource, :org_id)
 
     "JOIN #{entry_table} e ON e.#{entry_pk} = l.#{line_entry_fk} " <>
+      "AND e.#{entry_org} = l.#{line_org} " <>
       "AND e.#{entry_status} = 'posted'"
   end
 

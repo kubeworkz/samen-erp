@@ -135,15 +135,19 @@ defmodule Samen.Scopes.Finance.DimensionReconcile do
 
   # Restrict the sum to lines whose ENTRY is posted (Reconcile's join, same
   # rationale: a draft's lines are staged intentions; a voided entry keeps its
-  # lines and its reversal nets them).
+  # lines and its reversal nets them). The same-org predicate makes the FK a
+  # tenant boundary, not merely a row pointer.
   defp posted_join_sql(line_resource) do
     entry_resource = entry_resource(line_resource)
 
     entry_table = AshPostgres.DataLayer.Info.table(entry_resource)
     entry_pk = attr_source(entry_resource, :id)
+    entry_org = attr_source(entry_resource, :org_id)
     entry_status = attr_source(entry_resource, :status)
+    line_org = attr_source(line_resource, :org_id)
 
     "JOIN #{entry_table} e ON e.#{entry_pk} = l.#{line_entry_fk_source(line_resource)} " <>
+      "AND e.#{entry_org} = l.#{line_org} " <>
       "AND e.#{entry_status} = 'posted'"
   end
 

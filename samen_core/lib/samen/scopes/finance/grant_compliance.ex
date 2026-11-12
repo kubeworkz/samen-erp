@@ -191,10 +191,12 @@ defmodule Samen.Scopes.Finance.GrantCompliance do
     entry_status = attr(mods.entry, :status)
     line_entry = belongs_to_attr(mods.line, mods.entry, :entry)
     line_account = belongs_to_attr(mods.line, mods.account, :account)
+    line_org = attr(mods.line, :org_id)
     debit = attr(mods.line, :debit_cents)
     credit = attr(mods.line, :credit_cents)
     dims = attr(mods.line, :dimension_refs)
     account_id = attr(mods.account, :id)
+    account_org = attr(mods.account, :org_id)
     account_kind = attr(mods.account, :kind)
 
     scalar(
@@ -202,8 +204,12 @@ defmodule Samen.Scopes.Finance.GrantCompliance do
       """
       SELECT COALESCE(SUM(l.#{credit} - l.#{debit}), 0)
       FROM #{line_table} l
-      JOIN #{entry_table} e ON e.#{entry_id} = l.#{line_entry}
-      JOIN #{account_table} a ON a.#{account_id} = l.#{line_account}
+      JOIN #{entry_table} e
+        ON e.#{entry_id} = l.#{line_entry}
+       AND e.#{entry_org} = l.#{line_org}
+      JOIN #{account_table} a
+        ON a.#{account_id} = l.#{line_account}
+       AND a.#{account_org} = l.#{line_org}
       WHERE e.#{entry_org} = $1
         AND e.#{entry_status} = 'posted'
         AND a.#{account_kind} = 'income'
@@ -223,6 +229,7 @@ defmodule Samen.Scopes.Finance.GrantCompliance do
     entry_status = attr(mods.entry, :status)
     line_entry = belongs_to_attr(mods.line, mods.entry, :entry)
     account_fk = belongs_to_attr(mods.line, mods.account, :account)
+    line_org = attr(mods.line, :org_id)
     debit = attr(mods.line, :debit_cents)
     credit = attr(mods.line, :credit_cents)
     dims = attr(mods.line, :dimension_refs)
@@ -232,7 +239,9 @@ defmodule Samen.Scopes.Finance.GrantCompliance do
       """
       SELECT COALESCE(SUM(l.#{credit} - l.#{debit}), 0)
       FROM #{line_table} l
-      JOIN #{entry_table} e ON e.#{entry_id} = l.#{line_entry}
+      JOIN #{entry_table} e
+        ON e.#{entry_id} = l.#{line_entry}
+       AND e.#{entry_org} = l.#{line_org}
       WHERE e.#{entry_org} = $1
         AND e.#{entry_status} = 'posted'
         AND l.#{account_fk} = $2
