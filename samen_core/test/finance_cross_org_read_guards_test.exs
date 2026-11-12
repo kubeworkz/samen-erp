@@ -202,6 +202,109 @@ defmodule Samen.FinanceCrossOrgReadGuardsTest do
     end
   end
 
+  describe "E8 trial balance" do
+    test "only same-org lines can inflate a local account's rollup", %{
+      org: org,
+      foreign: foreign,
+      scope: scope,
+      foreign_scope: foreign_scope
+    } do
+      cash = account!(scope, org, "1000", :asset, :debit)
+      income = account!(scope, org, "4000", :income, :credit)
+
+      local_entry =
+        post_entry!(scope, org, ~D[2026-08-15], [
+          %{account_id: cash.id, debit_cents: 10_000, credit_cents: 0},
+          %{account_id: income.id, debit_cents: 0, credit_cents: 10_000}
+        ])
+
+      foreign_cash = account!(foreign_scope, foreign, "1000", :asset, :debit)
+      foreign_income = account!(foreign_scope, foreign, "4000", :income, :credit)
+
+      foreign_entry =
+        post_entry!(foreign_scope, foreign, ~D[2026-08-16], [
+          %{account_id: foreign_cash.id, debit_cents: 555_000, credit_cents: 0},
+          %{account_id: foreign_income.id, debit_cents: 0, credit_cents: 555_000}
+        ])
+
+      # 1. Foreign-owned line on a local entry: requires BOTH same-org
+      #    predicates to stay out.
+      raw_line!(foreign, local_entry.id, cash.id, 777_000, 0)
+
+      # 2. Local line pointing at a foreign posted entry: the line/account
+      #    predicate passes, so only the line/entry predicate excludes it.
+      raw_line!(org, foreign_entry.id, cash.id, 222_000, 0)
+
+      # 3. Foreign-owned line on a foreign entry but a local account: the
+      #    line/entry predicate passes, so only the line/account predicate
+      #    excludes it.
+      raw_line!(foreign, foreign_entry.id, cash.id, 333_000, 0)
+
+      assert {:ok, _} =
+               Samen.Rollup.refresh(@repo, Samen.E8Rollups.trial_balance_spec())
+
+      assert {:ok, %{rows: [[debit, credit, balance]]}} =
+               @repo.query(
+                 "SELECT ser_debit_cents, ser_credit_cents, ser_balance_cents " <>
+                   "FROM ser_trial_balance WHERE ser_org_id = $1 AND ser_account_id = $2",
+                 [dump_uuid(org), dump_uuid(cash.id)]
+               )
+
+      assert debit == 10_000
+      assert credit == 0
+      assert balance == 10_000
+    end
+
+    test "draft and foreign-only accounts still materialize zero rows", %{
+      org: org,
+      foreign: foreign,
+      scope: scope,
+      foreign_scope: foreign_scope
+    } do
+      draft_account = account!(scope, org, "6100", :expense, :debit)
+      foreign_line_account = account!(scope, org, "6200", :expense, :debit)
+      foreign_owned_account = account!(scope, org, "6400", :expense, :debit)
+      empty_account = account!(scope, org, "6300", :expense, :debit)
+      draft_cash = account!(scope, org, "1000", :asset, :debit)
+
+      _draft =
+        draft_entry!(scope, org, ~D[2026-08-15], [
+          %{account_id: draft_account.id, debit_cents: 1_234, credit_cents: 0},
+          %{account_id: draft_cash.id, debit_cents: 0, credit_cents: 1_234}
+        ])
+
+      foreign_cash = account!(foreign_scope, foreign, "1000", :asset, :debit)
+      foreign_income = account!(foreign_scope, foreign, "4000", :income, :credit)
+
+      foreign_entry =
+        post_entry!(foreign_scope, foreign, ~D[2026-08-16], [
+          %{account_id: foreign_cash.id, debit_cents: 555_000, credit_cents: 0},
+          %{account_id: foreign_income.id, debit_cents: 0, credit_cents: 555_000}
+        ])
+
+      # The line joins the local account, but its entry is foreign. The account
+      # must still materialize, with zero activity, rather than disappear.
+      raw_line!(org, foreign_entry.id, foreign_line_account.id, 2_222, 0)
+
+      # This local account's only line is owned by the foreign org. The line
+      # must not join the local account, but the account still needs a zero row.
+      raw_line!(foreign, foreign_entry.id, foreign_owned_account.id, 3_333, 0)
+
+      assert {:ok, _} =
+               Samen.Rollup.refresh(@repo, Samen.E8Rollups.trial_balance_spec())
+
+      for account <- [draft_account, foreign_line_account, foreign_owned_account, empty_account] do
+        assert {:ok, %{rows: [[0, 0, 0]]}} =
+                 @repo.query(
+                   "SELECT ser_debit_cents, ser_credit_cents, ser_balance_cents " <>
+                     "FROM ser_trial_balance WHERE ser_org_id = $1 AND ser_account_id = $2",
+                   [dump_uuid(org), dump_uuid(account.id)]
+                 ),
+               "expected a zero trial-balance row for #{account.code}"
+      end
+    end
+  end
+
   describe "ReconcilePayments" do
     test "a foreign-owned line on a local payment entry does not inflate posted cash", %{
       org: org,
@@ -450,6 +553,16 @@ defmodule Samen.FinanceCrossOrgReadGuardsTest do
         fund_cost_object_id: fund.id
       },
       scope: admin
+    )
+    |> Ash.create!()
+  end
+
+  defp draft_entry!(scope, org, date, lines) do
+    JournalEntry
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org, entry_date: date, memo: "cross-org draft", lines: lines},
+      scope: scope
     )
     |> Ash.create!()
   end

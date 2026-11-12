@@ -62,10 +62,13 @@ defmodule Samen.E8Rollups do
          LEFT JOIN sjl_journal_line sjl
            ON sjl.sjl_account_id = sac.sac_id
           AND sjl.sjl_org_id = sac.sac_org_id
-         LEFT JOIN sje_journal_entry sje
-           ON sje.sje_id = sjl.sjl_entry_id
-          AND sje.sje_org_id = sjl.sjl_org_id
-          AND sje.sje_status = 'posted'
+          AND EXISTS (
+            SELECT 1
+            FROM sje_journal_entry sje
+            WHERE sje.sje_id = sjl.sjl_entry_id
+              AND sje.sje_org_id = sjl.sjl_org_id
+              AND sje.sje_status = 'posted'
+          )
          GROUP BY sac.sac_org_id, sac.sac_id, sac.sac_code
          ORDER BY sac.sac_code
          """}
