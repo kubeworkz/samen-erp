@@ -2792,6 +2792,10 @@ defmodule Samen.Web.Router do
       {"#{path}/huggingface", Samen.Web.Settings.HuggingFaceLive},
       {"#{path}/security", Samen.Web.Settings.SecurityLive},
       {"#{path}/invitations", Samen.Web.Settings.InvitationsLive},
+      # The ORG approvals queue — every pending tenant-plane decision for this org, with the
+      # admin decision controls. Settings pages that open a gated write (the AP approval
+      # policy) link their pending card here instead of growing a per-domain queue.
+      {"#{path}/approvals", Samen.Web.Settings.ApprovalsLive},
       # PP-13 — the tenant reveal-APPROVER surface (its OWN LiveView, NOT SecurityLive —
       # SecurityLive is pinned read-only by RP-ST-4). An org admin approves/denies the
       # PENDING operator reveal-requests for their org, completing the

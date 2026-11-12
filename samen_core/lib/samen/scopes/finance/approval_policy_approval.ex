@@ -38,6 +38,25 @@ defmodule Samen.Scopes.Finance.ApprovalPolicyApproval do
     end
   end
 
+  @doc """
+  Decode the proposed policy snapshot from an approval's `subject_ref` for reviewer display.
+
+  The approval row deliberately stores no action inputs except this encoded, bounded
+  snapshot. Returning the proposed attributes lets an approvals surface show WHAT the
+  admin is deciding without reading the live policy (which still has the old values).
+  """
+  @spec proposed_change(String.t()) ::
+          {:ok, %{record_id: String.t(), attrs: map()}} | {:error, term()}
+  def proposed_change(subject_ref) when is_binary(subject_ref) do
+    with {:ok, {record_id, attrs}} <- parse_subject_ref(subject_ref) do
+      {:ok, %{record_id: record_id, attrs: attrs}}
+    end
+  rescue
+    _ -> {:error, :invalid_subject_ref}
+  end
+
+  def proposed_change(_subject_ref), do: {:error, :invalid_subject_ref}
+
   @doc false
   def subject_ref(changeset) do
     attrs =

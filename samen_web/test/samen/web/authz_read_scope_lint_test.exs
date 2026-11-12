@@ -168,16 +168,18 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     assert files >= 800
     assert governed >= 140
 
-    # The sanctioned reads are a KNOWN, per-site-justified set (now 63 — pre-auth
+    # The sanctioned reads are a KNOWN, per-site-justified set (now 64 — pre-auth
     # boot-path/unique-key lookups, webhook-ingest provider-ref lookups, FK cascades,
     # the system-plane sweeps, the operator activity rollup, the R3/R4 addendum's
     # three authorization-boundary reads: the two session-cap credential enumerations
     # and the mcp generic read helper, WS-ACCT Phase 6's revenue-recognition sweep
     # (every org's due schedule, each release still governed by `:recognize`),
     # WS-ACCT Phase 8's depreciation sweep (every org's due asset slice, each posting
-    # still governed by `:depreciate`), and the AR collections cross-tenant dunning
-    # sweep (every org's due cases, each update still pinned to the case's org) — each
-    # carrying a `# authz-scope:` reason at the read SITE, bound to exactly that read).
+    # still governed by `:depreciate`), the AR collections cross-tenant dunning
+    # sweep (every org's due cases, each update still pinned to the case's org), and
+    # the AP approval-policy queue's org-wide pending read (`list_pending_for_org/2`,
+    # pinned by its own `org_filter/2` conjunct) — each carrying a `# authz-scope:`
+    # reason at the read SITE, bound to exactly that read).
     # A regression that started silently swallowing violations as sanctions would blow
     # this ceiling; a lost marker (or a lost pin downgraded to a sanction) would move
     # it. Lower bound 47 leaves headroom for a couple marker→genuine-pin conversions
@@ -185,7 +187,7 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     # deliberate posture change and SHOULD re-open this test. (At S15 this set was 49;
     # the R3/R4 addendum added 3; Phase 6 added 1; Phase 8 added 1; the AR collections
     # dunning sweep added 1.)
-    assert sanctioned in 47..63
+    assert sanctioned in 47..64
   end
 
   test "COMPLETENESS ROLL-CALL: the sweep covers both kernels AND the vertical trees, and skips the seed/fixture harnesses" do

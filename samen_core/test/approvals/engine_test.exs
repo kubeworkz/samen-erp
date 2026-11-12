@@ -432,6 +432,105 @@ defmodule Samen.Approvals.EngineTest do
     refute null_org.id in seen_b
   end
 
+  test "list_pending_for_org/2 returns only the requested org's pending approvals" do
+    org_a = org()
+    org_b = org()
+
+    request = fn org_id ->
+      Approvals.request(%{
+        org_id: org_id,
+        kind: "test:note",
+        subject_ref: "samen:apd:#{Ecto.UUID.generate()}",
+        requested_by: Ecto.UUID.generate()
+      })
+    end
+
+    {:ok, pending_a1} = request.(org_a)
+    {:ok, pending_a2} = request.(org_a)
+    {:ok, pending_b} = request.(org_b)
+
+    assert {:ok, rows} = Approvals.list_pending_for_org(org_a)
+
+    ids = Enum.map(rows, & &1.id)
+    assert MapSet.new(ids) == MapSet.new([pending_a1.id, pending_a2.id])
+    refute pending_b.id in ids
+    assert Enum.all?(rows, &(&1.org_id == org_a and &1.state == :pending))
+  end
+
+  test "list_pending_for_org/2 excludes approved and rejected approvals for the requested org" do
+    org_a = org()
+
+    {:ok, pending} =
+      Approvals.request(%{
+        org_id: org_a,
+        kind: "test:note",
+        subject_ref: "samen:apd:#{document(org_a).id}",
+        requested_by: Ecto.UUID.generate()
+      })
+
+    {:ok, to_approve} =
+      Approvals.request(%{
+        org_id: org_a,
+        kind: "test:note",
+        subject_ref: "samen:apd:#{document(org_a).id}",
+        requested_by: Ecto.UUID.generate()
+      })
+
+    assert {:ok, %{state: :approved}, _meta} =
+             Approvals.approve(to_approve.id, Ecto.UUID.generate())
+
+    {:ok, to_reject} =
+      Approvals.request(%{
+        org_id: org_a,
+        kind: "test:note",
+        subject_ref: "samen:apd:#{document(org_a).id}",
+        requested_by: Ecto.UUID.generate()
+      })
+
+    assert {:ok, %{state: :rejected}} = Approvals.reject(to_reject.id, Ecto.UUID.generate())
+
+    assert {:ok, rows} = Approvals.list_pending_for_org(org_a)
+    ids = Enum.map(rows, & &1.id)
+
+    assert ids == [pending.id]
+    refute to_approve.id in ids
+    refute to_reject.id in ids
+    assert Enum.all?(rows, &(&1.org_id == org_a and &1.state == :pending))
+  end
+
+  test "list_pending_for_org/2 excludes NULL-org governance rows for a binary org but preserves the nil global lane" do
+    org_a = org()
+
+    {:ok, org_pending} =
+      Approvals.request(%{
+        org_id: org_a,
+        kind: "test:note",
+        subject_ref: "samen:apd:#{Ecto.UUID.generate()}",
+        requested_by: Ecto.UUID.generate()
+      })
+
+    {:ok, global_pending} =
+      Approvals.request(%{
+        org_id: nil,
+        kind: "test:op",
+        subject_ref: "samen:apd:#{Ecto.UUID.generate()}",
+        requested_by: Ecto.UUID.generate()
+      })
+
+    assert {:ok, org_rows} = Approvals.list_pending_for_org(org_a)
+    org_ids = Enum.map(org_rows, & &1.id)
+    assert org_ids == [org_pending.id]
+    refute global_pending.id in org_ids
+    assert Enum.all?(org_rows, &(&1.org_id == org_a))
+
+    # The nil argument is the deliberate GLOBAL lane, not a wildcard tenant query.
+    assert {:ok, global_rows} = Approvals.list_pending_for_org(nil)
+    global_ids = Enum.map(global_rows, & &1.id)
+    assert global_pending.id in global_ids
+    refute org_pending.id in global_ids
+    assert Enum.all?(global_rows, &is_nil(&1.org_id))
+  end
+
   defp read_ids(actor) do
     {:ok, rows} =
       Approval

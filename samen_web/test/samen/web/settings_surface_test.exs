@@ -57,6 +57,7 @@ defmodule Samen.Web.SettingsSurfaceTest do
       assert {"/settings/profile", Samen.Web.Settings.ProfileLive} in routes
       assert {"/settings/api-keys", Samen.Web.Settings.ApiKeysLive} in routes
       assert {"/settings/security", Samen.Web.Settings.SecurityLive} in routes
+      assert {"/settings/approvals", Samen.Web.Settings.ApprovalsLive} in routes
     end
 
     test "the settings mount scope_kind survives session round-trip" do
@@ -213,7 +214,7 @@ defmodule Samen.Web.SettingsSurfaceTest do
       refute html =~ "module-nav"
 
       # Every sub-surface is reachable from the sidebar...
-      for id <- ~w(profile api-keys huggingface security invitations reveal-approvals) do
+      for id <- ~w(profile api-keys huggingface security invitations approvals reveal-approvals) do
         assert html =~ ~s(id="settings-nav-#{id}")
       end
 

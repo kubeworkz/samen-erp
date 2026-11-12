@@ -2,7 +2,7 @@ defmodule Samen.Web.Settings.Live do
   @moduledoc """
   Shared chrome for the framework SETTINGS LiveViews (WS-E E5; ADR-029) — the sidebar
   nav across the settings sub-surfaces (Profile · API keys · HuggingFace · Security ·
-  Invitations · Reveal approvals) and the small plane helpers each surface reads.
+  Invitations · AP policy approvals · Reveal approvals) and the small plane helpers each surface reads.
   Mirrors `Samen.Web.Files.Live`.
   """
   use Phoenix.Component
@@ -62,6 +62,13 @@ defmodule Samen.Web.Settings.Live do
           id="settings-nav-invitations"
         >
           Invitations
+        </a>
+        <a
+          href={href("/settings/approvals", @org_id, @user_id)}
+          class={nav_class(@active, :approvals)}
+          id="settings-nav-approvals"
+        >
+          AP policy approvals
         </a>
         <a
           href={href("/settings/reveal-approvals", @org_id, @user_id)}

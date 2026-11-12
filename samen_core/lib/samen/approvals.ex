@@ -194,6 +194,34 @@ defmodule Samen.Approvals do
     end
   end
 
+  @doc """
+  List every PENDING approval in `org_id`, across all kinds — the ORG-SCOPED read a
+  tenant approvals queue consults. The same org pin as `list_pending/3`: a binary org
+  returns ONLY that org's pending rows and `nil` is the deliberate GLOBAL lane.
+
+  Callers that render a tenant decision surface should keep only the kinds whose
+  `Samen.Approvals.Registry` plane is `:tenant`; operator-plane kinds keep their own
+  surfaces and must not be decided through a tenant queue.
+
+  Returns `{:ok, [approval]}` or `{:error, :no_approvals_module}` (unwired host).
+  """
+  @spec list_pending_for_org(term(), keyword()) :: {:ok, [struct()]} | {:error, term()}
+  def list_pending_for_org(org_id, opts \\ []) do
+    with {:ok, {res, _repo}} <- wiring(opts) do
+      query =
+        res
+        |> Ash.Query.filter(state == :pending)
+        |> org_filter(org_id)
+        |> Ash.Query.sort(requested_at: :asc)
+
+      # authz-scope: org-pinned one clause down via org_filter/2, exactly like list_pending/3.
+      case Ash.read(query, authorize?: false) do
+        {:ok, approvals} -> {:ok, approvals}
+        {:error, _} = err -> err
+      end
+    end
+  end
+
   # ==========================================================================
   # Decision core (approve/reject) — one transaction, handler in-tx, then audit.
   # ==========================================================================

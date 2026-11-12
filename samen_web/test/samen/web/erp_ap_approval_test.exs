@@ -42,6 +42,38 @@ defmodule Samen.Web.ErpApApprovalTest do
     socket
   end
 
+  defp queue_socket(org_id, user_id, approval_id, opts \\ []) do
+    mount =
+      if Keyword.get(opts, :operator, false) do
+        build_mount(:settings, plane: :operator, target_org_id: org_id)
+      else
+        build_mount(:settings)
+      end
+
+    session =
+      mount
+      |> mount_session()
+      |> Map.put("samen_current_user", user_id)
+
+    params = %{"org" => org_id, "approval" => approval_id}
+
+    {:ok, socket} =
+      Samen.Web.Settings.ApprovalsLive.mount(
+        params,
+        session,
+        %Phoenix.LiveView.Socket{}
+      )
+
+    {:noreply, socket} =
+      Samen.Web.Settings.ApprovalsLive.handle_params(
+        params,
+        "http://localhost/settings/approvals?org=#{org_id}&approval=#{approval_id}",
+        socket
+      )
+
+    socket
+  end
+
   defp event(socket, name, params) do
     {:noreply, socket} = ApApprovalLive.handle_event(name, params, socket)
     socket
@@ -53,6 +85,16 @@ defmodule Samen.Web.ErpApApprovalTest do
     steps
     |> Enum.with_index()
     |> Map.new(fn {step, index} -> {Integer.to_string(index), step} end)
+  end
+
+  defp submit_policy_change!(socket, threshold \\ "5000") do
+    event(socket, "save", %{
+      "form" => %{
+        "threshold_cents" => threshold,
+        "auto_approve_below" => "false",
+        "steps" => %{}
+      }
+    })
   end
 
   # A create form with one named-user step, ready for the member picker.
@@ -318,11 +360,16 @@ defmodule Samen.Web.ErpApApprovalTest do
 
     assert socket.assigns.approval_pending
     assert socket.assigns.save_error == nil
+    assert is_binary(socket.assigns.approval_id)
 
     html = render(socket)
     assert html =~ ~s(id="ap-approval-pending")
     assert html =~ "Pending a distinct admin's approval."
     assert html =~ "current policy remains in effect"
+    assert html =~ ~s(id="ap-approval-review-link")
+    assert html =~ "/settings/approvals"
+    assert html =~ "approval=#{socket.assigns.approval_id}"
+    assert html =~ "#approval-#{socket.assigns.approval_id}"
     assert only_policy().threshold_cents == 1_000
 
     socket = approve_policy_change!(socket)
@@ -330,6 +377,167 @@ defmodule Samen.Web.ErpApApprovalTest do
     refute socket.assigns.approval_pending
     refute render(socket) =~ ~s(id="ap-approval-pending")
     assert only_policy().threshold_cents == 5_000
+  end
+
+  test "the pending policy request is discoverable and decidable in the AP policy approvals queue" do
+    seed_policy(%{threshold_cents: 1_000})
+    socket = open()
+
+    socket =
+      event(socket, "save", %{
+        "form" => %{
+          "threshold_cents" => "5000",
+          "auto_approve_below" => "false",
+          "steps" => %{}
+        }
+      })
+
+    approval_id = socket.assigns.approval_id
+    assert is_binary(approval_id)
+
+    # A different tenant approval in the same org must NOT become decidable through the
+    # AP policy queue just because it is pending.
+    {:ok, unrelated_approval} =
+      Samen.Approvals.request(
+        %{
+          org_id: @org,
+          kind: Atom.to_string(Samen.WebTest.Erp.JournalApprovalPolicy) <> ":update",
+          subject_ref: "samen:jap:#{Ash.UUID.generate()}",
+          requested_by: "journal-admin"
+        },
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    approver = seed_member("approval-admin", :admin)
+    queue_socket = queue_socket(@org, approver.id, approval_id)
+
+    html = render_html(Samen.Web.Settings.ApprovalsLive, queue_socket.assigns)
+
+    assert html =~ ~s(id="approval-#{approval_id}")
+    assert html =~ "Samen.WebTest.Erp.ApprovalPolicy:update"
+    assert html =~ "Threshold: $50.00"
+    assert html =~ "Auto-approve below: no"
+    assert html =~ "Chain: none"
+    assert html =~ ~s(id="approve-approval-#{approval_id}")
+
+    refute html =~ "JournalApprovalPolicy:update"
+    refute html =~ ~s(id="approval-#{unrelated_approval.id}")
+
+    {:noreply, queue_socket} =
+      Samen.Web.Settings.ApprovalsLive.handle_event(
+        "approve",
+        %{"approval" => approval_id},
+        queue_socket
+      )
+
+    assert queue_socket.assigns.decision_notice =~ "applied"
+    assert only_policy().threshold_cents == 5_000
+  end
+
+  test "a non-admin member sees the AP policy queue read-only and cannot decide" do
+    seed_policy(%{threshold_cents: 1_000})
+    socket = open() |> submit_policy_change!()
+    approval_id = socket.assigns.approval_id
+    member = seed_member("queue-member", :member)
+    queue_socket = queue_socket(@org, member.id, approval_id)
+
+    html = render_html(Samen.Web.Settings.ApprovalsLive, queue_socket.assigns)
+
+    assert html =~ ~s(id="approvals-role-note")
+    refute html =~ ~s(id="approve-approval-#{approval_id}")
+    refute html =~ ~s(id="reject-approval-#{approval_id}")
+
+    {:noreply, queue_socket} =
+      Samen.Web.Settings.ApprovalsLive.handle_event(
+        "approve",
+        %{"approval" => approval_id},
+        queue_socket
+      )
+
+    assert queue_socket.assigns.decision_notice =~ "admin role is required"
+    assert only_policy().threshold_cents == 1_000
+  end
+
+  test "an operator-plane viewer cannot decide from the AP policy queue" do
+    seed_policy(%{threshold_cents: 1_000})
+    socket = open() |> submit_policy_change!()
+    approval_id = socket.assigns.approval_id
+    operator = seed_member("queue-operator", :admin)
+
+    queue_socket = queue_socket(@org, operator.id, approval_id, operator: true)
+    html = render_html(Samen.Web.Settings.ApprovalsLive, queue_socket.assigns)
+
+    assert html =~ ~s(id="approvals-operator-note")
+    refute html =~ ~s(id="approvals-role-note")
+    refute html =~ ~s(id="approve-approval-#{approval_id}")
+    refute html =~ ~s(id="reject-approval-#{approval_id}")
+
+    {:noreply, queue_socket} =
+      Samen.Web.Settings.ApprovalsLive.handle_event(
+        "approve",
+        %{"approval" => approval_id},
+        queue_socket
+      )
+
+    assert queue_socket.assigns.decision_notice =~ "tenant-plane actions"
+    assert only_policy().threshold_cents == 1_000
+  end
+
+  test "a requester sees the self-approval guard instead of an approve button" do
+    seed_policy(%{threshold_cents: 1_000})
+    requester = seed_member("queue-requester", :admin)
+    socket = open() |> submit_policy_change!()
+    approval_id = socket.assigns.approval_id
+    assert is_binary(approval_id)
+
+    kind = Atom.to_string(ApprovalPolicy) <> ":update"
+
+    {:ok, [pending]} =
+      Samen.Approvals.list_pending(@org, kind,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    # Re-open the same policy subject as the requester so the queue sees a real request by
+    # this admin (the AP settings page's disarmed test mount uses its workspace principal).
+    {:ok, _cancelled} =
+      Samen.Approvals.cancel(pending.id, pending.requested_by,
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    {:ok, approval} =
+      Samen.Approvals.request(
+        %{
+          org_id: @org,
+          kind: kind,
+          subject_ref: pending.subject_ref,
+          requested_by: requester.id
+        },
+        approval_resource: @approval_resource,
+        repo: @repo
+      )
+
+    approval_id = approval.id
+    assert approval.requested_by == requester.id
+
+    queue_socket = queue_socket(@org, requester.id, approval_id)
+    html = render_html(Samen.Web.Settings.ApprovalsLive, queue_socket.assigns)
+
+    assert html =~ "Awaiting another admin"
+    refute html =~ ~s(id="approve-approval-#{approval_id}")
+    refute html =~ ~s(id="reject-approval-#{approval_id}")
+
+    {:noreply, queue_socket} =
+      Samen.Web.Settings.ApprovalsLive.handle_event(
+        "approve",
+        %{"approval" => approval_id},
+        queue_socket
+      )
+
+    assert queue_socket.assigns.decision_notice =~ "Self-approval is refused"
+    assert only_policy().threshold_cents == 1_000
   end
 
   test "removing every step returns the policy to the single-decision Gate" do

@@ -82,6 +82,7 @@ defmodule Samen.Web.Erp.ApApprovalLive do
        missing: nil,
        save_error: nil,
        approval_pending: false,
+       approval_id: nil,
        saved: false
      )
      |> load()}
@@ -101,6 +102,7 @@ defmodule Samen.Web.Erp.ApApprovalLive do
   def load(socket) do
     socket
     |> assign(:approval_pending, false)
+    |> assign(:approval_id, nil)
     |> assign_new(:saved, fn -> false end)
     |> assign_new(:save_error, fn -> nil end)
     |> assign_new(:return_to, fn -> nil end)
@@ -402,6 +404,7 @@ defmodule Samen.Web.Erp.ApApprovalLive do
 
         {:error, form} ->
           approval_pending? = approval_required?(form)
+          approval_id = approval_required_id(form)
 
           {:noreply,
            assign(socket,
@@ -411,6 +414,7 @@ defmodule Samen.Web.Erp.ApApprovalLive do
              period_scope_text: scope_text(params["period_keys"]),
              save_error: if(approval_pending?, do: nil, else: form_error(form)),
              approval_pending: approval_pending?,
+             approval_id: approval_id,
              saved: false
            )}
       end
@@ -923,6 +927,45 @@ defmodule Samen.Web.Erp.ApApprovalLive do
     _ -> false
   end
 
+  # The Gate's `ApprovalRequired` error carries the pending approval id, but the form
+  # adapter may hand it to us as an exception, a nested error, or its rendered message.
+  # Pull the id out so the pending card can deep-link to THIS request in the queue.
+  defp approval_required_id(form) do
+    form
+    |> form_errors()
+    |> Enum.find_value(&approval_id_from/1)
+  rescue
+    _ -> nil
+  end
+
+  defp approval_id_from(%Samen.Approvals.ApprovalRequired{approval_id: id}) when is_binary(id),
+    do: id
+
+  defp approval_id_from(%{errors: errors}) when is_list(errors),
+    do: Enum.find_value(errors, &approval_id_from/1)
+
+  defp approval_id_from(message) when is_binary(message), do: approval_id_text(message)
+
+  defp approval_id_from({message, opts}) when is_binary(message),
+    do: approval_id_text(message) || approval_id_from(opts)
+
+  defp approval_id_from({_key, value}), do: approval_id_from(value)
+
+  defp approval_id_from(list) when is_list(list),
+    do: Enum.find_value(list, &approval_id_from/1)
+
+  defp approval_id_from(_error), do: nil
+
+  defp approval_id_text(message) do
+    case Regex.run(
+           ~r/pending as ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/,
+           message
+         ) do
+      [_match, id] -> id
+      _ -> nil
+    end
+  end
+
   defp approval_required_error?(%Samen.Approvals.ApprovalRequired{}), do: true
 
   defp approval_required_error?(message) when is_binary(message),
@@ -973,6 +1016,26 @@ defmodule Samen.Web.Erp.ApApprovalLive do
 
   defp crumbs(mount, org_id) do
     [Crumbs.org(mount, org_id), "ERP", Erp.ap_approval_label()]
+  end
+
+  # The org queue is a settings route. The ERP mount does not carry `:settings_path` on
+  # every host, so the framework default is the fallback; a host that mounts settings
+  # elsewhere can name the label.
+  defp approvals_href(mount, org_id, approval_id) do
+    base = Mount.label(mount, :settings_path, "/settings") <> "/approvals"
+
+    query =
+      [org: org_id, approval: approval_id]
+      |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
+      |> URI.encode_query()
+
+    href = if query == "", do: base, else: "#{base}?#{query}"
+
+    if is_binary(approval_id) and approval_id != "" do
+      "#{href}#approval-#{approval_id}"
+    else
+      href
+    end
   end
 
   @impl Samen.Web.Tenant.Live
@@ -1031,6 +1094,13 @@ defmodule Samen.Web.Erp.ApApprovalLive do
               <b>Pending a distinct admin's approval.</b>
               This change is not live yet. The current policy remains in effect until another
               admin approves the request.
+              <a
+                id="ap-approval-review-link"
+                href={approvals_href(@samen_mount, @org_id, @approval_id)}
+                style="margin-left:4px"
+              >
+                Review AP policy approvals
+              </a>
             </div>
 
             <div
