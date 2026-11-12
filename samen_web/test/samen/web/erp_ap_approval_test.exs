@@ -303,6 +303,35 @@ defmodule Samen.Web.ErpApApprovalTest do
     assert html =~ "Step 2: Role · admin"
   end
 
+  test "a submitted update is explicitly pending a distinct admin's approval" do
+    seed_policy(%{threshold_cents: 1_000})
+    socket = open()
+
+    socket =
+      event(socket, "save", %{
+        "form" => %{
+          "threshold_cents" => "5000",
+          "auto_approve_below" => "false",
+          "steps" => %{}
+        }
+      })
+
+    assert socket.assigns.approval_pending
+    assert socket.assigns.save_error == nil
+
+    html = render(socket)
+    assert html =~ ~s(id="ap-approval-pending")
+    assert html =~ "Pending a distinct admin's approval."
+    assert html =~ "current policy remains in effect"
+    assert only_policy().threshold_cents == 1_000
+
+    socket = approve_policy_change!(socket)
+
+    refute socket.assigns.approval_pending
+    refute render(socket) =~ ~s(id="ap-approval-pending")
+    assert only_policy().threshold_cents == 5_000
+  end
+
   test "removing every step returns the policy to the single-decision Gate" do
     seed_policy(%{
       steps: [%{"approver_type" => "role", "approver" => "admin"}]

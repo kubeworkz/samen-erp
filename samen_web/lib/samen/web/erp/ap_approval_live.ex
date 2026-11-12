@@ -81,6 +81,7 @@ defmodule Samen.Web.Erp.ApApprovalLive do
        admin?: false,
        missing: nil,
        save_error: nil,
+       approval_pending: false,
        saved: false
      )
      |> load()}
@@ -99,6 +100,7 @@ defmodule Samen.Web.Erp.ApApprovalLive do
   @doc false
   def load(socket) do
     socket
+    |> assign(:approval_pending, false)
     |> assign_new(:saved, fn -> false end)
     |> assign_new(:save_error, fn -> nil end)
     |> assign_new(:return_to, fn -> nil end)
@@ -399,13 +401,16 @@ defmodule Samen.Web.Erp.ApApprovalLive do
           {:noreply, socket |> assign(form: nil, policy: nil, saved: true) |> load()}
 
         {:error, form} ->
+          approval_pending? = approval_required?(form)
+
           {:noreply,
            assign(socket,
              form: form,
              step_values: params["steps"],
              account_scope_text: scope_text(params["account_ids"]),
              period_scope_text: scope_text(params["period_keys"]),
-             save_error: form_error(form),
+             save_error: if(approval_pending?, do: nil, else: form_error(form)),
+             approval_pending: approval_pending?,
              saved: false
            )}
       end
@@ -910,6 +915,44 @@ defmodule Samen.Web.Erp.ApApprovalLive do
 
   defp step_errors(form), do: field_errors(form, :steps)
 
+  defp approval_required?(form) do
+    form
+    |> form_errors()
+    |> Enum.any?(&approval_required_error?/1)
+  rescue
+    _ -> false
+  end
+
+  defp approval_required_error?(%Samen.Approvals.ApprovalRequired{}), do: true
+
+  defp approval_required_error?(message) when is_binary(message),
+    do: approval_required_text?(message)
+
+  defp approval_required_error?({message, opts}) when is_binary(message) do
+    approval_required_text?(message) or approval_required_error?(opts)
+  end
+
+  defp approval_required_error?({_key, value}), do: approval_required_error?(value)
+
+  defp approval_required_error?(list) when is_list(list),
+    do: Enum.any?(list, &approval_required_error?/1)
+
+  defp approval_required_error?(_error), do: false
+
+  defp approval_required_text?(message), do: String.contains?(message, "approval_required:")
+
+  defp form_errors(form) do
+    source_errors =
+      case form.source do
+        %{errors: errors} when is_list(errors) -> errors
+        _ -> []
+      end
+
+    Enum.to_list(form.errors) ++ source_errors
+  rescue
+    _ -> []
+  end
+
   defp form_error(form) do
     case Enum.reject(form.errors, &(&1 in [nil, ""])) do
       [] -> "Could not save the AP approval policy."
@@ -977,6 +1020,17 @@ defmodule Samen.Web.Erp.ApApprovalLive do
               style="padding:10px 14px;color:var(--bad, #b91c1c);font-size:12px;margin-bottom:10px"
             >
               {@save_error}
+            </div>
+
+            <div
+              :if={@approval_pending}
+              id="ap-approval-pending"
+              class="card"
+              style="padding:12px 14px;color:var(--warn, #b45309);font-size:12px;margin-bottom:10px;border-left:3px solid var(--warn, #b45309)"
+            >
+              <b>Pending a distinct admin's approval.</b>
+              This change is not live yet. The current policy remains in effect until another
+              admin approves the request.
             </div>
 
             <div
