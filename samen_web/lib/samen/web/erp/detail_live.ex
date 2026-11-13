@@ -66,6 +66,9 @@ defmodule Samen.Web.Erp.DetailLive do
        missing: :unknown_surface,
        show_edit: false,
        edit_form: nil,
+       edit_line_rows: [],
+       edit_line_values: [],
+       generation_notice: nil,
        action_error: nil,
        ap_match: nil,
        pending_approval: nil,
@@ -130,11 +133,11 @@ defmodule Samen.Web.Erp.DetailLive do
               Enum.map(Erp.edit_fields(surface), fn {field, _, _} -> field end)
           )
 
-        # The AP match panel and the agent-expense line table read the embedded
-        # lines even though they are not a fact-grid field. Select them
-        # explicitly for these surfaces.
+        # The AP match panel, the agent-expense line table and the template
+        # line editor read the embedded lines even though they are not a
+        # fact-grid field. Select them explicitly for these surfaces.
         selected =
-          if surface in [:ap_invoices, :expense_reports],
+          if surface in [:ap_invoices, :expense_reports, :journal_templates],
             do: Enum.uniq([:lines | selected]),
             else: selected
 
@@ -215,31 +218,94 @@ defmodule Samen.Web.Erp.DetailLive do
         |> AshPhoenix.Form.for_update(:update, scope: scope)
         |> to_form()
 
-      {:noreply, assign(socket, show_edit: true, edit_form: form)}
+      {rows, values} = edit_line_state(socket.assigns.surface, record)
+
+      {:noreply,
+       assign(socket,
+         show_edit: true,
+         edit_form: form,
+         edit_line_rows: rows,
+         edit_line_values: values
+       )}
     else
       {:noreply, socket}
     end
   end
 
   def handle_event("cancel_edit", _params, socket) do
-    {:noreply, assign(socket, show_edit: false)}
+    {:noreply, assign(socket, show_edit: false, edit_line_rows: [], edit_line_values: [])}
+  end
+
+  def handle_event("add_edit_line", _params, socket) do
+    if socket.assigns.surface == :journal_templates do
+      rows = socket.assigns.edit_line_rows ++ [nil]
+      {:noreply, assign(socket, edit_line_rows: rows)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("validate_edit", %{"form" => params}, socket) do
+    params = prepare_edit_params(socket.assigns.surface, params)
+
     {:noreply,
-     assign(socket, edit_form: AshPhoenix.Form.validate(socket.assigns.edit_form, params))}
+     assign(socket,
+       edit_form: AshPhoenix.Form.validate(socket.assigns.edit_form, params),
+       edit_line_rows: edit_rows(params["lines"] || socket.assigns.edit_line_values),
+       edit_line_values: params["lines"] || socket.assigns.edit_line_values
+     )}
   end
 
   def handle_event("save_edit", %{"form" => params}, socket) do
+    params = prepare_edit_params(socket.assigns.surface, params)
+
     case AshPhoenix.Form.submit(socket.assigns.edit_form, params: params) do
       {:ok, _record} ->
-        socket = assign(socket, show_edit: false)
+        socket =
+          assign(socket, show_edit: false, edit_line_rows: [], edit_line_values: [])
+
         {:noreply, load(socket)}
 
       {:error, form} ->
-        {:noreply, assign(socket, edit_form: form)}
+        {:noreply,
+         assign(socket,
+           edit_form: form,
+           edit_line_rows: edit_rows(params["lines"] || []),
+           edit_line_values: params["lines"] || []
+         )}
     end
   end
+
+  # Generating a template is a normal resource action, submitted under the
+  # org-pinned scope. The resulting journal is an ordinary draft; this page
+  # only asks the resource to create it and then links to it.
+  def handle_event("generate", _params, %{assigns: %{surface: :journal_templates}} = socket) do
+    %{samen_mount: mount, org_id: org_id, record: record} = socket.assigns
+
+    if writable?(mount) and record != nil and is_binary(org_id) do
+      scope = Mount.scope(mount, org_id)
+
+      case record
+           |> Ash.Changeset.for_update(:generate, %{entry_date: Date.utc_today()}, scope: scope)
+           |> Ash.update() do
+        {:ok, updated} ->
+          socket = load(socket)
+
+          {:noreply,
+           assign(socket,
+             generation_notice: "Generated draft #{updated.last_entry_id}.",
+             action_error: nil
+           )}
+
+        {:error, error} ->
+          {:noreply, assign(socket, action_error: error_message(error))}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("generate", _params, socket), do: {:noreply, socket}
 
   # A governed state transition — `accept([])`, no caller inputs. The action
   # and its pre-state are re-checked against the REGISTRY server-side (the
@@ -318,6 +384,7 @@ defmodule Samen.Web.Erp.DetailLive do
     case {surface, record} do
       {:coa, r} -> r.name
       {:stock, r} -> r.name
+      {:journal_templates, r} -> r.name
       {:entries, r} -> "#{r.entry_date}"
       {:ap_invoices, r} -> r.number
       {:purchase_orders, r} -> r.number
@@ -359,6 +426,74 @@ defmodule Samen.Web.Erp.DetailLive do
     case Map.get(record, :lines) do
       lines when is_list(lines) -> lines
       _ -> []
+    end
+  end
+
+  defp edit_line_state(:journal_templates, record) do
+    values = record |> lines_of() |> Enum.map(&stringify_line/1)
+    {edit_rows(values), values}
+  end
+
+  defp edit_line_state(_surface, _record), do: {[], []}
+
+  defp edit_rows([]), do: [nil]
+  defp edit_rows(values) when is_list(values), do: Enum.map(values, fn _ -> nil end)
+
+  defp stringify_line(line) when is_map(line) do
+    Map.new(line, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp prepare_edit_params(:journal_templates, params) do
+    params
+    |> Map.reject(fn {key, _value} -> match?("_unused_" <> _, key) end)
+    |> Map.put("lines", normalize_edit_lines(params["lines"]))
+  end
+
+  defp prepare_edit_params(_surface, params), do: params
+
+  defp normalize_edit_lines(lines) when is_list(lines) do
+    lines
+    |> Enum.map(fn
+      {_index, row} when is_map(row) -> row
+      row when is_map(row) -> row
+      _other -> %{}
+    end)
+    |> prune_edit_lines()
+  end
+
+  defp normalize_edit_lines(lines) when is_map(lines) do
+    lines
+    |> Enum.sort_by(fn
+      {index, _row} ->
+        case Integer.parse(to_string(index)) do
+          {number, _rest} -> number
+          :error -> 0
+        end
+    end)
+    |> Enum.map(fn {_index, row} -> row end)
+    |> Enum.filter(&is_map/1)
+    |> prune_edit_lines()
+  end
+
+  defp normalize_edit_lines(_lines), do: []
+
+  defp prune_edit_lines(lines) do
+    lines
+    |> Enum.map(fn row ->
+      Map.reject(row, fn {key, value} ->
+        match?("_unused_" <> _, key) or is_nil(value) or value == ""
+      end)
+    end)
+    |> Enum.reject(&(&1 == %{}))
+  end
+
+  defp line_input_value(values, index, field) do
+    case Enum.at(values, index, %{}) do
+      row when is_map(row) ->
+        Map.get(row, to_string(field)) || Map.get(row, field) || ""
+
+      _other ->
+        ""
     end
   end
 
@@ -522,6 +657,47 @@ defmodule Samen.Web.Erp.DetailLive do
               </dl>
             </div>
 
+            <div
+              :if={@surface == :journal_templates}
+              id="template-generation"
+              class="card"
+              style="padding:14px 18px;margin-top:10px"
+            >
+              <div class="gtitle" style="margin-bottom:6px">
+                <h3 style="font-size:13px">Generate a draft</h3>
+              </div>
+              <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">
+                Generation creates an ordinary draft journal from these lines. It never posts:
+                the draft follows the normal journal approval and posting path.
+              </p>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <.button
+                  :if={writable?(@samen_mount) and @record != nil and @missing == nil}
+                  id="generate-draft"
+                  type="button"
+                  phx-click="generate"
+                >
+                  Generate draft
+                </.button>
+                <a
+                  :if={@record != nil and @record.last_entry_id}
+                  id="generated-draft-link"
+                  class="btn"
+                  style="text-decoration:none"
+                  href={"#{erp_path(@samen_mount)}/entries/#{@record.last_entry_id}?org=#{@org_id}"}
+                >
+                  Open generated draft
+                </a>
+              </div>
+              <p
+                :if={@generation_notice}
+                id="generation-notice"
+                style="margin:8px 0 0;font-size:12px;color:var(--ok, #047857)"
+              >
+                {@generation_notice}
+              </p>
+            </div>
+
             <div :if={Erp.line_fields(@surface) != []} class="card" id="erp-lines" style="padding:16px 18px;margin-top:10px">
               <div class="gtitle" style="margin-bottom:6px">
                 <h3 style="font-size:13px">Lines</h3>
@@ -615,6 +791,27 @@ defmodule Samen.Web.Erp.DetailLive do
           options={opts[:options] || []}
           placeholder={opts[:placeholder]}
         />
+
+        <div :if={@surface == :journal_templates} id="edit-line-rows" style="margin-bottom:4px">
+          <div class="field-label" style="font-size:12px;font-weight:600;margin-bottom:6px">Lines</div>
+          <div
+            :for={{_row, index} <- Enum.with_index(@edit_line_rows)}
+            style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"
+          >
+            <input
+              :for={{field, type, opts} <- Erp.line_fields(@surface)}
+              type={input_type(type)}
+              name={"#{f.name}[lines][#{index}][#{field}]"}
+              value={line_input_value(@edit_line_values, index, field)}
+              placeholder={opts[:placeholder] || humanize(field)}
+              style="font-size:12px;padding:6px 8px;flex:1;min-width:110px"
+            />
+          </div>
+          <.button type="button" phx-click="add_edit_line" id="add-edit-line" style="margin-bottom:4px">
+            Add line
+          </.button>
+        </div>
+
         <:actions>
           <.button variant="primary" type="submit">Save changes</.button>
           <.button type="button" phx-click="cancel_edit">Cancel</.button>

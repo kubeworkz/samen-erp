@@ -859,6 +859,12 @@ defmodule Samen.UI.Nav do
         ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></svg>)
       )
 
+  defp erp_icon(:journal_templates),
+    do:
+      Phoenix.HTML.raw(
+        ~s(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 3h10v18H7z" /><path d="M10 8h4M10 12h4M10 16h2" /><path d="M4 7l2-2 2 2" /></svg>)
+      )
+
   defp erp_icon(:ap_invoices),
     do:
       Phoenix.HTML.raw(

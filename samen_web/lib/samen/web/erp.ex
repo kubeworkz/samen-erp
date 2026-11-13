@@ -63,6 +63,7 @@ defmodule Samen.Web.Erp do
   @type surface ::
           :coa
           | :entries
+          | :journal_templates
           | :ap_invoices
           | :credit_notes
           | :vendor_credits
@@ -82,6 +83,9 @@ defmodule Samen.Web.Erp do
       normal side, archived flag. The plan of record, read-only.
     * `:entries`         — the journal (`JournalEntry`): entry date, status,
       memo, posted-at. The audit surface over the event-sourced GL.
+    * `:journal_templates` — reusable balanced line sets (`JournalTemplate`):
+      name, cadence, next run, active flag and last generation date. Generating
+      one creates an ordinary draft journal, never a posting.
     * `:ap_invoices`     — the AP inbox (`ApInvoice`): number, vendor, dates,
       amount, status — the bills awaiting action.
     * `:credit_notes`    — the AR adjustments (`CreditNote`): number, customer,
@@ -104,6 +108,7 @@ defmodule Samen.Web.Erp do
   @surfaces [
     :coa,
     :entries,
+    :journal_templates,
     :ap_invoices,
     :credit_notes,
     :vendor_credits,
@@ -349,6 +354,7 @@ defmodule Samen.Web.Erp do
   @spec resource(Mount.t(), surface()) :: module() | nil
   def resource(%Mount{} = mount, :coa), do: derived(mount, :Account)
   def resource(%Mount{} = mount, :entries), do: derived(mount, :JournalEntry)
+  def resource(%Mount{} = mount, :journal_templates), do: derived(mount, :JournalTemplate)
   def resource(%Mount{} = mount, :ap_invoices), do: derived(mount, :ApInvoice)
   def resource(%Mount{} = mount, :credit_notes), do: derived(mount, :CreditNote)
   def resource(%Mount{} = mount, :vendor_credits), do: derived(mount, :VendorCredit)
@@ -374,6 +380,10 @@ defmodule Samen.Web.Erp do
   @spec columns(surface()) :: [atom()]
   def columns(:coa), do: [:code, :name, :kind, :normal_side]
   def columns(:entries), do: [:entry_date, :status, :memo, :posted_at]
+
+  def columns(:journal_templates),
+    do: [:name, :frequency, :next_run_on, :active, :last_generated_on]
+
   # AP/PO totals are Σ lines (the subledger shape) — the header surface shows
   # the document facts, the journal/GL carries the money.
   def columns(:ap_invoices), do: [:number, :vendor_id, :bill_date, :due_date, :currency, :status]
@@ -402,6 +412,7 @@ defmodule Samen.Web.Erp do
   @spec sortable(surface()) :: [atom()]
   def sortable(:coa), do: [:code, :name]
   def sortable(:entries), do: [:entry_date, :status]
+  def sortable(:journal_templates), do: [:name, :next_run_on, :last_generated_on]
   def sortable(:ap_invoices), do: [:bill_date, :due_date]
   def sortable(:credit_notes), do: [:date, :status, :number]
   def sortable(:vendor_credits), do: [:date, :status, :number]
@@ -415,6 +426,7 @@ defmodule Samen.Web.Erp do
 
   @doc "The surface's bounded free-text filter fields (empty disables the filter box)."
   @spec filter_fields(surface()) :: [atom()]
+  def filter_fields(:journal_templates), do: [:name]
   def filter_fields(:goods_receipts), do: [:number]
   def filter_fields(:expense_reports), do: [:title]
   def filter_fields(_surface), do: []
@@ -426,6 +438,7 @@ defmodule Samen.Web.Erp do
   @spec record_label(surface()) :: String.t()
   def record_label(:coa), do: "Account"
   def record_label(:entries), do: "Journal entry"
+  def record_label(:journal_templates), do: "Journal template"
   def record_label(:ap_invoices), do: "AP invoice"
   def record_label(:credit_notes), do: "Credit note"
   def record_label(:vendor_credits), do: "Vendor credit"
@@ -448,6 +461,18 @@ defmodule Samen.Web.Erp do
 
   def detail_fields(:entries),
     do: [:entry_date, :status, :memo, :source_key, :source_id, :posted_at, :inserted_at]
+
+  def detail_fields(:journal_templates),
+    do: [
+      :name,
+      :memo,
+      :frequency,
+      :next_run_on,
+      :active,
+      :last_generated_on,
+      :last_entry_id,
+      :inserted_at
+    ]
 
   def detail_fields(:ap_invoices),
     do: [
@@ -581,6 +606,16 @@ defmodule Samen.Web.Erp do
 
   def create_fields(:entries), do: [{:entry_date, :date, []}, {:memo, :text, []}]
 
+  def create_fields(:journal_templates) do
+    [
+      {:name, :text, []},
+      {:memo, :text, []},
+      {:frequency, :select, [options: ~w(none weekly monthly quarterly yearly)]},
+      {:next_run_on, :date, []},
+      {:active, :select, [options: ~w(true false)]}
+    ]
+  end
+
   def create_fields(:ap_invoices) do
     [
       {:vendor_id, :text, [placeholder: "Vendor id (uuid)"]},
@@ -701,6 +736,16 @@ defmodule Samen.Web.Erp do
 
   def edit_fields(:entries), do: [{:entry_date, :date, []}, {:memo, :text, []}]
 
+  def edit_fields(:journal_templates) do
+    [
+      {:name, :text, []},
+      {:memo, :text, []},
+      {:frequency, :select, [options: ~w(none weekly monthly quarterly yearly)]},
+      {:next_run_on, :date, []},
+      {:active, :select, [options: ~w(true false)]}
+    ]
+  end
+
   def edit_fields(:ap_invoices),
     do: [
       {:due_date, :date, []},
@@ -782,6 +827,15 @@ defmodule Samen.Web.Erp do
   """
   @spec line_fields(surface()) :: [{atom(), atom(), keyword()}, ...]
   def line_fields(:entries) do
+    [
+      {:account_id, :text, [placeholder: "Account id (uuid)"]},
+      {:debit_cents, :number, []},
+      {:credit_cents, :number, []},
+      {:memo, :text, []}
+    ]
+  end
+
+  def line_fields(:journal_templates) do
     [
       {:account_id, :text, [placeholder: "Account id (uuid)"]},
       {:debit_cents, :number, []},
@@ -895,6 +949,7 @@ defmodule Samen.Web.Erp do
   @spec label(surface()) :: String.t()
   def label(:coa), do: "Chart of Accounts"
   def label(:entries), do: "Journal"
+  def label(:journal_templates), do: "Journal templates"
   def label(:ap_invoices), do: "AP Invoices"
   def label(:credit_notes), do: "Credit Notes"
   def label(:vendor_credits), do: "Vendor Credits"
