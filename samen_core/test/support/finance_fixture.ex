@@ -56,6 +56,7 @@ defmodule SamenCore.Support.FinanceFixture do
       account: "sac",
       journal_entry: "sje",
       journal_line: "sjl",
+      journal_template: "sjt",
       ap_invoice: "sap",
       payment_receipt: "prc",
       receipt_allocation: "sra",

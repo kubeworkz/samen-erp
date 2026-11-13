@@ -31,6 +31,7 @@ defmodule Samenerp.Erp do
     abbrevs: %{
       account: "eca",
       journal_entry: "ecj",
+      journal_template: "ejr",
       journal_approval_policy: "ejp",
       approval_policy: "eap",
       journal_line: "ecl",

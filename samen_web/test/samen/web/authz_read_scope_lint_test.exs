@@ -176,7 +176,9 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     # (every org's due schedule, each release still governed by `:recognize`),
     # WS-ACCT Phase 8's depreciation sweep (every org's due asset slice, each posting
     # still governed by `:depreciate`), the AR collections cross-tenant dunning
-    # sweep (every org's due cases, each update still pinned to the case's org), and
+    # sweep (every org's due cases, each update still pinned to the case's org), the
+    # recurring journal template sweep (every org's due template, each generated
+    # entry still guarded by its own OrgScope and the normal :post approval path), and
     # the AP approval-policy queue's org-wide pending read (`list_pending_for_org/2`,
     # pinned by its own `org_filter/2` conjunct) — each carrying a `# authz-scope:`
     # reason at the read SITE, bound to exactly that read).
@@ -186,8 +188,8 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     # before a conscious band update — shrinking the sanctioned set further is a
     # deliberate posture change and SHOULD re-open this test. (At S15 this set was 49;
     # the R3/R4 addendum added 3; Phase 6 added 1; Phase 8 added 1; the AR collections
-    # dunning sweep added 1.)
-    assert sanctioned in 47..64
+    # dunning sweep added 1; the recurring journal template sweep added 1.)
+    assert sanctioned in 47..65
   end
 
   test "COMPLETENESS ROLL-CALL: the sweep covers both kernels AND the vertical trees, and skips the seed/fixture harnesses" do

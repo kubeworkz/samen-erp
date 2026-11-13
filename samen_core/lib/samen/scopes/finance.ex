@@ -6,9 +6,10 @@ defmodule Samen.Scopes.Finance do
   host-owned resources in the host's namespace, each a normal `use Samen.Resource`
   with the host's `otp_app`, `repo`, and `domain`.
 
-  ## Resources — `account · journal_entry · journal_line · ap_invoice ·
-  ## payment_receipt · receipt_allocation · statement_delivery · collection_case ·
-  ## collection_cadence · credit_note · vendor_credit · posting_account`
+  ## Resources — `account · journal_entry · journal_line · journal_template ·
+  ## ap_invoice · payment_receipt · receipt_allocation · statement_delivery ·
+  ## collection_case · collection_cadence · credit_note · vendor_credit ·
+  ## posting_account`
 
   - **`Account`** — the chart of accounts (Tier-0 config row): `code` (unique
     per org), `name`, `kind ∈ {asset, liability, equity, income, expense}`,
@@ -25,6 +26,12 @@ defmodule Samen.Scopes.Finance do
   - **`JournalLine`** — `entry_id`, `account_id`, `debit_cents`/`credit_cents`
     (unsigned integer cents; **exactly one non-zero per line** —
     `Samen.Scopes.Finance.LineAmounts`).
+  - **`JournalTemplate`** — a reusable balanced line set with an optional
+    `:weekly`/`:monthly`/`:quarterly`/`:yearly` cadence. `:generate` creates an
+    ORDINARY DRAFT `JournalEntry` (never a posted one); the daily
+    `RecurringJournalWorker` runs due templates and advances their schedule.
+    The generated draft then rides the journal's normal `:post` and
+    `JournalApprovalPolicy` path.
   - **`ApInvoice`** — a vendor bill (AP document; E2): `vendor_id` (the
     SalesOps.Vendor reference), `number`, dates, embedded jsonb `lines`
     (`account_id` + `amount_cents` + `memo` — the design's P2-promote-if-hot
@@ -351,6 +358,9 @@ defmodule Samen.Scopes.Finance do
     account: "fca",
     journal_entry: "fje",
     journal_line: "fjl",
+    # Reusable/recurring journal templates. Reserved under the `samen_web`
+    # test host (the fixture and samenerp pass their own reservations).
+    journal_template: "fjr",
     # WS-ACCT journal controls: the org's approval policy. Reserved under the
     # `samen_web` host (the fixture and samenerp pass their own overrides).
     journal_approval_policy: "jap",
@@ -452,6 +462,7 @@ defmodule Samen.Scopes.Finance do
     account_mod = Module.concat(namespace, Account)
     entry_mod = Module.concat(namespace, JournalEntry)
     line_mod = Module.concat(namespace, JournalLine)
+    journal_template_mod = Module.concat(namespace, JournalTemplate)
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     approval_policy_mod = Module.concat(namespace, ApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
@@ -535,6 +546,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(account_mod))
         resource(unquote(entry_mod))
         resource(unquote(line_mod))
+        resource(unquote(journal_template_mod))
         resource(unquote(journal_approval_policy_mod))
         resource(unquote(approval_policy_mod))
         resource(unquote(ap_invoice_mod))
@@ -935,6 +947,20 @@ defmodule Samen.Scopes.Finance do
         unquote(account_mod),
         unquote(entry_mod),
         unquote(cost_object_mod)
+      )
+
+      # Reusable/recurring journal templates. Generation creates an ordinary
+      # DRAFT entry through the entry resource's own :create action, so the
+      # generated instance later rides the same :post/approval path as any
+      # hand-entered draft.
+      Samen.Scopes.Finance.Blueprint.define_journal_template(
+        unquote(journal_template_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.journal_template),
+        unquote(account_mod),
+        unquote(entry_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_ap_invoice(

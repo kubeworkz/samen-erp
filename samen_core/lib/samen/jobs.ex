@@ -202,6 +202,11 @@ defmodule Samen.Jobs do
       `next_action_on` is due to its next dunning step, with an idempotent
       timeline key so a retry cannot duplicate the action. A host with no
       collection case wired is a no-op.)
+    - `"0 0 * * *"` → `Samen.Scopes.Finance.RecurringJournalWorker` (the daily
+      recurring-journal sweep: every active template whose `next_run_on` has
+      arrived generates ONE ordinary DRAFT journal. It never posts and never
+      opens an approval; the draft later rides the normal `:post` and
+      `JournalApprovalPolicy` path. A host with no template wired is a no-op.)
   """
   @spec default_crontab() :: [{String.t(), module()}]
   def default_crontab do
@@ -231,7 +236,10 @@ defmodule Samen.Jobs do
       # AR collections dunning — daily at 01:10 UTC. The run advances only
       # open cases whose next_action_on has arrived; its per-case/due-date
       # idempotency key makes a retry a clean no-op.
-      {"10 1 * * *", Samen.Scopes.Finance.CollectionDunningWorker}
+      {"10 1 * * *", Samen.Scopes.Finance.CollectionDunningWorker},
+      # Recurring journal templates — daily at 00:00 UTC. The sweep creates
+      # ordinary DRAFTS only; approval/posting remains a human decision.
+      {"0 0 * * *", Samen.Scopes.Finance.RecurringJournalWorker}
     ] ++ web_crontab()
   end
 

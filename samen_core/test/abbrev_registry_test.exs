@@ -184,9 +184,9 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
       # +3 each in WS-ERP E31 (#12): expense category/card/report tables.
-      assert map_size(hosts["samenerp"]) == 138
-      assert map_size(hosts["samen_core"]) == 129
-      assert map_size(hosts["samen_web"]) == 111
+      assert map_size(hosts["samenerp"]) == 139
+      assert map_size(hosts["samen_core"]) == 130
+      assert map_size(hosts["samen_web"]) == 112
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -540,6 +540,7 @@ defmodule Samen.AbbrevRegistryTest do
                  # the demo host — allocator-reserved under the samen_core
                  # host namespace.
                  "sac" => "SamenCore.Support.FinanceFixture.Account",
+                 "sjt" => "SamenCore.Support.FinanceFixture.JournalTemplate",
                  "sdc" => "SamenCore.Support.FinanceFixture.CreditNote",
                  "sdv" => "SamenCore.Support.FinanceFixture.VendorCredit",
                  "sje" => "SamenCore.Support.FinanceFixture.JournalEntry",
@@ -749,6 +750,7 @@ defmodule Samen.AbbrevRegistryTest do
                  # cross-host reuse, so the ADR-025 flatten tripwire stays clean).
                  # 27 entries, allocator-reserved.
                  "fca" => "Samen.WebTest.Erp.Account",
+                 "fjr" => "Samen.WebTest.Erp.JournalTemplate",
                  "fcn" => "Samen.WebTest.Erp.CreditNote",
                  "fvc" => "Samen.WebTest.Erp.VendorCredit",
                  "fje" => "Samen.WebTest.Erp.JournalEntry",
@@ -834,6 +836,7 @@ defmodule Samen.AbbrevRegistryTest do
                  "ecd" => "Samenerp.Erp.BudgetLine",
                  "ecf" => "Samenerp.Erp.PostingAccount",
                  "ecj" => "Samenerp.Erp.JournalEntry",
+                 "ejr" => "Samenerp.Erp.JournalTemplate",
                  "ecl" => "Samenerp.Erp.JournalLine",
                  "ecp" => "Samenerp.Erp.ApInvoice",
                  "ecr" => "Samenerp.Erp.PaymentReceipt",
@@ -1138,7 +1141,7 @@ defmodule Samen.AbbrevRegistryTest do
       # (+3 per-org collection cadence: `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
       # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
       # ADR-055 retired 100 global rows: 873 flat -> 773 flat.
-      assert map_size(Reg.load()) == 773
+      assert map_size(Reg.load()) == 776
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

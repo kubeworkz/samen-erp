@@ -24,6 +24,7 @@ defmodule Samen.WebTest.Erp do
     abbrevs: %{
       exchange_rate: "fex",
       org_fx_settings: "ofx",
+      journal_template: "fjr",
       journal_approval_policy: "wja",
       approval_policy: "wap",
       statement_delivery: "fcl",

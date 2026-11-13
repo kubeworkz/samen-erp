@@ -983,6 +983,152 @@ defmodule Samen.Scopes.Finance.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
+  # JournalTemplate — a reusable, balanced line set plus an optional recurring
+  # cadence. :generate creates an ORDINARY DRAFT journal entry; it never posts
+  # and never opens an approval itself. The draft later rides the journal's
+  # normal :post action, including its JournalApprovalPolicy gate.
+  # ---------------------------------------------------------------------------
+  defmacro define_journal_template(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             account_mod,
+             entry_mod
+           ) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.JournalTemplate — a reusable journal line set with an optional
+        recurring cadence.
+
+        A template is a template, never a posting: `:generate` copies its lines
+        into a normal `JournalEntry` draft (`source_key: "journal_template"`,
+        `source_id: template`). The generated row has no special status and no
+        privileged route — a person posts it through the journal's ordinary
+        `:post` action, so `JournalApprovalPolicy`, `PeriodGuard`,
+        `PostBalance` and `DimensionBalance` all run exactly as they do for a
+        hand-entered draft.
+
+        `frequency` is `:none`, `:weekly`, `:monthly`, `:quarterly` or
+        `:yearly`. A recurring template requires `next_run_on`; the daily
+        `RecurringJournalWorker` asks every due row to generate one draft and
+        advances the schedule. Generation is idempotent per
+        `{template, entry_date}` — a retry advances the schedule without
+        creating a duplicate journal.
+
+        `name` is unique per org. No PII (INV-1): a bounded name/memo, enum,
+        dates and account/amount/id line facts.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_journal_template")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:name, :string, public?: true, allow_nil?: false)
+          attribute(:memo, :string, public?: true)
+
+          attribute(:frequency, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :none,
+            constraints: [one_of: [:none, :weekly, :monthly, :quarterly, :yearly]]
+          )
+
+          attribute(:next_run_on, :date, public?: true)
+          attribute(:active, :boolean, public?: true, allow_nil?: false, default: true)
+
+          attribute(:lines, {:array, :map},
+            public?: true,
+            allow_nil?: false,
+            default: [],
+            constraints: [
+              items: [
+                fields: [
+                  account_id: [type: :uuid, allow_nil?: false],
+                  debit_cents: [type: :integer],
+                  credit_cents: [type: :integer],
+                  memo: [type: :string],
+                  dimension_refs: [type: :map]
+                ]
+              ]
+            ]
+          )
+
+          # System-stamped, never caller input.
+          attribute(:last_generated_on, :date, public?: true)
+          attribute(:last_entry_id, :uuid, public?: true)
+        end
+
+        identities do
+          identity(:unique_org_name, [:org_id, :name])
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([
+              :org_id,
+              :name,
+              :memo,
+              :frequency,
+              :next_run_on,
+              :active,
+              :lines
+            ])
+
+            change({Samen.Scopes.Finance.JournalTemplateLines, account: unquote(account_mod)})
+            change(Samen.Scopes.Finance.JournalTemplateSchedule)
+          end
+
+          update :update do
+            accept([:name, :memo, :frequency, :next_run_on, :active, :lines])
+            require_atomic?(false)
+            change({Samen.Scopes.Finance.JournalTemplateLines, account: unquote(account_mod)})
+            change(Samen.Scopes.Finance.JournalTemplateSchedule)
+          end
+
+          # One ordinary DRAFT JournalEntry from this template. `entry_date` is
+          # optional for a person (defaults to today); the cron passes the due
+          # date so a late run still dates the draft in the period it belongs
+          # to.
+          update :generate do
+            accept([])
+            require_atomic?(false)
+            argument(:entry_date, :date, allow_nil?: true)
+            change({Samen.Scopes.Finance.JournalTemplateGeneration, entry: unquote(entry_mod)})
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # ApInvoice — the AP vendor bill (E2). :approve rides the ADR-040 engine as
   # an ApprovalRequired GATE; the approval re-invokes :approve as the requester
   # INSIDE the decision transaction, where ApPosting lands the expense+

@@ -352,9 +352,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # -> 40_571 bytes, 864 flat.
       # +9 WS-ERP E31 (#12) host rows (three hosts × category/card/report).
       # -> 41_039 bytes, 873 flat before ADR-055 retirement.
-      # ADR-055 retired 100 rows: 36_474 bytes, 773 flat.
-      assert byte_size(committed) == 36_474
-      assert map_size(R.load()) == 773
+      # +3 recurring journal template rows (`sjt`/`fjr`/`ejr`).
+      # ADR-055 retired 100 rows: 36_634 bytes, 776 flat.
+      assert byte_size(committed) == 36_634
+      assert map_size(R.load()) == 776
     end
   end
 

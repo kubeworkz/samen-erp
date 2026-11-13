@@ -103,6 +103,12 @@ config :samen_core, :support_sla_breach_ticket_resource, Samenerp.Support.Ticket
 # wire it has no books to reverse and is an honest no-op.
 config :samen_core, Samen.Scopes.Finance.AccrualReversal, entry_module: Samenerp.Erp.JournalEntry
 
+# Recurring journal templates generate ordinary DRAFTS on this host. The run
+# never posts; a person still submits each generated draft through the journal's
+# normal :post/JournalApprovalPolicy path. A host without templates is a no-op.
+config :samen_core, Samen.Scopes.Finance.RecurringJournalRun,
+  template_module: Samenerp.Erp.JournalTemplate
+
 # #8 — scheduled AR collections dunning advances THIS host's collection cases
 # through the same governed timeline as the desk. A host that does not wire it
 # has no collection cases to advance and is an honest no-op.
