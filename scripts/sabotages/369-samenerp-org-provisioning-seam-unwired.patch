@@ -1,7 +1,7 @@
 # SABOTAGE: the HOST WIRING of per-org provisioning. `Samen.Web.OrgProvisioning` runs a host's
 # per-org setup when a tenant org is CREATED (self-serve signup + the operator plane's New-account
-# write); this host's hook is `Samenerp.Seeds.ensure_notes_search_index!/1`, wired at exactly one
-# line in `config/config.exs`. This patch deletes that ONE config line and nothing else.
+# write); this host's hook is `Samenerp.Seeds.ensure_notes_search_index!/1`, one entry in the
+# `:org_provisioning` list in `config/config.exs`. This patch deletes that ONE entry and nothing else.
 #
 # What it refutes is the claim that a NEW org is provisioned at creation. Every creation path
 # still works (an account is created, the redirect is the same), and the registry rows are still
@@ -15,18 +15,18 @@
 # `Samenerp.Seeds.backfill_notes_search_index!/0` (the deploy-time repair). Removing the seam
 # would fail four tests and tell us less about which link broke.
 #
-# No warning is introduced: the hooks list simply becomes empty, and `OrgProvisioning.configured?/1`
-# is a legitimate `false` for a host that wires nothing (the framework default).
+# No warning is introduced: the list keeps the journal-approval and AP-policy hooks, so
+# `OrgProvisioning.configured?/1` remains true and only the notes index is missing.
 # APP: samenerp
 # TEST_FILES: test/notes_org_provisioning_test.exs
 # MUST_FAIL: SIGNUP provisions the new org: exactly Doc.title + DocBlock.text, with no seed call
 --- a/samenerp/config/config.exs
 +++ b/samenerp/config/config.exs
-@@ -276,7 +276,6 @@
- # `Samenerp.Seeds.seed!/0,1` backfills orgs that predate this wiring on every boot. The hook is
- # idempotent and guard-first: `SearchIndexGuard` refuses the vaulted `text_secure` column, so a
- # searchable Pages surface can never mean an indexed vault.
--config :samenerp, :org_provisioning, [{Samenerp.Seeds, :ensure_notes_search_index!, []}]
- 
- # ADR-031/ADR-045 §2 — the launch AUTH gate, ARMED BY DEFAULT IN PROD (V-F1, Option A). The
- # router's tenant/shared mounts carry `authn: {:app_env, :samenerp, :auth_required?}`;
+@@ -332,7 +332,6 @@
+ # for existing orgs, so a deploy never retroactively gates their history. Both are admin changes
+ # (journal changes are additionally two-admin), and neither path overwrites a configured row.
+ config :samenerp, :org_provisioning, [
+-  {Samenerp.Seeds, :ensure_notes_search_index!, []},
+   {Samenerp.Seeds, :ensure_journal_approval_policy!, []},
+   {Samenerp.Seeds, :ensure_approval_policy!, []}
+ ]
