@@ -1335,6 +1335,72 @@
     {
       "fields": [
         {
+          "column_name": "eaa_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eaa_applied_at",
+          "logical_name": "applied_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eaa_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eaa_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaa_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eaa_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaa_invoice_key",
+          "logical_name": "invoice_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eaa_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaa_receipt_id",
+          "logical_name": "receipt_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eaa_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ReceiptAllocation",
+      "table_name": "eaa_receipt_allocation"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ead_amount_cents",
           "logical_name": "amount_cents",
           "pii": false,
@@ -1397,6 +1463,72 @@
       ],
       "resource": "Samenerp.Erp.AssetPosting",
       "table_name": "ead_asset_posting"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "eap_account_ids",
+          "logical_name": "account_ids",
+          "pii": false,
+          "type": "{:array, Ash.Type.UUID}"
+        },
+        {
+          "column_name": "eap_auto_approve_below",
+          "logical_name": "auto_approve_below",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "eap_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eap_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "eap_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "eap_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eap_period_keys",
+          "logical_name": "period_keys",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "eap_steps",
+          "logical_name": "steps",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "eap_threshold_cents",
+          "logical_name": "threshold_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eap_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ApprovalPolicy",
+      "table_name": "eap_approval_policy"
     },
     {
       "fields": [
@@ -1929,6 +2061,114 @@
     {
       "fields": [
         {
+          "column_name": "ecc_actions",
+          "logical_name": "actions",
+          "pii": false,
+          "type": "Map"
+        },
+        {
+          "column_name": "ecc_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecc_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecc_invoice_count",
+          "logical_name": "invoice_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecc_last_contacted_at",
+          "logical_name": "last_contacted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecc_next_action_on",
+          "logical_name": "next_action_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecc_notes",
+          "logical_name": "notes",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecc_opened_on",
+          "logical_name": "opened_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecc_outstanding_cents",
+          "logical_name": "outstanding_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecc_promise_to_pay_on",
+          "logical_name": "promise_to_pay_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecc_promised_cents",
+          "logical_name": "promised_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecc_stage",
+          "logical_name": "stage",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CollectionCase",
+      "table_name": "ecc_collection_case"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ecd_account_id",
           "logical_name": "account_id",
           "pii": false,
@@ -2025,6 +2265,84 @@
     {
       "fields": [
         {
+          "column_name": "ecg_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecg_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecg_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecg_is_active",
+          "logical_name": "is_active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ecg_max_amount_cents",
+          "logical_name": "max_amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecg_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecg_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecg_requires_receipt",
+          "logical_name": "requires_receipt",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ecg_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ExpenseCategory",
+      "table_name": "ecg_expense_category"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecj_approval_id",
+          "logical_name": "approval_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecj_approved_at",
+          "logical_name": "approved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecj_approved_by",
+          "logical_name": "approved_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
           "column_name": "ecj_archived_at",
           "logical_name": "archived_at",
           "pii": false,
@@ -2065,6 +2383,12 @@
           "logical_name": "posted_at",
           "pii": false,
           "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecj_prepared_by",
+          "logical_name": "prepared_by",
+          "pii": false,
+          "type": "String"
         },
         {
           "column_name": "ecj_source_id",
@@ -2169,6 +2493,114 @@
     {
       "fields": [
         {
+          "column_name": "ecn_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecn_applied_at",
+          "logical_name": "applied_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecn_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecn_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecn_date",
+          "logical_name": "date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecn_due_date",
+          "logical_name": "due_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ecn_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecn_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecn_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecn_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecn_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecn_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecn_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecn_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecn_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecn_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecn_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CreditNote",
+      "table_name": "ecn_credit_note"
+    },
+    {
+      "fields": [
+        {
           "column_name": "eco_archived_at",
           "logical_name": "archived_at",
           "pii": false,
@@ -2223,16 +2655,40 @@
     {
       "fields": [
         {
+          "column_name": "ecp_base_currency",
+          "logical_name": "base_currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecp_base_total_cents",
+          "logical_name": "base_total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
           "column_name": "ecp_bill_date",
           "logical_name": "bill_date",
           "pii": false,
           "type": "Date"
         },
         {
+          "column_name": "ecp_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
           "column_name": "ecp_due_date",
           "logical_name": "due_date",
           "pii": false,
           "type": "Date"
+        },
+        {
+          "column_name": "ecp_exchange_rate",
+          "logical_name": "exchange_rate",
+          "pii": false,
+          "type": "String"
         },
         {
           "column_name": "ecp_id",
@@ -2251,6 +2707,18 @@
           "logical_name": "lines",
           "pii": false,
           "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "ecp_match_tolerance_cents",
+          "logical_name": "match_tolerance_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecp_match_tolerance_pct",
+          "logical_name": "match_tolerance_pct",
+          "pii": false,
+          "type": "Integer"
         },
         {
           "column_name": "ecp_memo",
@@ -2307,6 +2775,72 @@
     {
       "fields": [
         {
+          "column_name": "ecq_collections_days",
+          "logical_name": "collections_days",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecq_collections_enabled",
+          "logical_name": "collections_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ecq_final_notice_days",
+          "logical_name": "final_notice_days",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecq_final_notice_enabled",
+          "logical_name": "final_notice_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ecq_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecq_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecq_notice_days",
+          "logical_name": "notice_days",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecq_notice_enabled",
+          "logical_name": "notice_enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ecq_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecq_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CollectionCadence",
+      "table_name": "ecq_collection_cadence"
+    },
+    {
+      "fields": [
+        {
           "column_name": "ecr_amount_cents",
           "logical_name": "amount_cents",
           "pii": false,
@@ -2317,6 +2851,12 @@
           "logical_name": "currency",
           "pii": false,
           "type": "String"
+        },
+        {
+          "column_name": "ecr_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
         },
         {
           "column_name": "ecr_id",
@@ -2387,6 +2927,180 @@
       ],
       "resource": "Samenerp.Erp.PaymentReceipt",
       "table_name": "ecr_payment_receipt"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecy_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecy_cardholder_id",
+          "logical_name": "cardholder_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecy_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecy_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecy_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecy_is_active",
+          "logical_name": "is_active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ecy_last4",
+          "logical_name": "last4",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecy_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecy_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecy_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.CorporateCard",
+      "table_name": "ecy_corporate_card"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ecz_approved_at",
+          "logical_name": "approved_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecz_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecz_employee_id",
+          "logical_name": "employee_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecz_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecz_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecz_lines",
+          "logical_name": "lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "ecz_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecz_posted_entry_id",
+          "logical_name": "posted_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecz_reimbursed_at",
+          "logical_name": "reimbursed_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecz_rejected_at",
+          "logical_name": "rejected_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecz_rejected_reason",
+          "logical_name": "rejected_reason",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecz_settlement_entry_id",
+          "logical_name": "settlement_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ecz_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ecz_submitted_at",
+          "logical_name": "submitted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ecz_title",
+          "logical_name": "title",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ecz_total_cents",
+          "logical_name": "total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ecz_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ExpenseReport",
+      "table_name": "ecz_expense_report"
     },
     {
       "fields": [
@@ -2627,6 +3341,132 @@
       ],
       "resource": "Samenerp.Docs.DocLink",
       "table_name": "edl_doc_link"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "edm_as_of",
+          "logical_name": "as_of",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "edm_credited_cents",
+          "logical_name": "credited_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edm_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edm_customer_id",
+          "logical_name": "customer_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edm_delivered_at",
+          "logical_name": "delivered_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "edm_error",
+          "logical_name": "error",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "edm_invoice_count",
+          "logical_name": "invoice_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edm_invoice_ids",
+          "logical_name": "invoice_ids",
+          "pii": false,
+          "type": "{:array, Ash.Type.UUID}"
+        },
+        {
+          "column_name": "edm_invoiced_cents",
+          "logical_name": "invoiced_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edm_outstanding_cents",
+          "logical_name": "outstanding_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edm_paid_cents",
+          "logical_name": "paid_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edm_provider_message_id",
+          "logical_name": "provider_message_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edm_send_id",
+          "logical_name": "send_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "edm_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "edm_template_id",
+          "logical_name": "template_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "edm_unapplied_cents",
+          "logical_name": "unapplied_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "edm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.StatementDelivery",
+      "table_name": "edm_statement_delivery"
     },
     {
       "fields": [
@@ -3695,6 +4535,144 @@
       ],
       "resource": "Samenerp.Erp.Grant",
       "table_name": "egt_grant"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ejp_account_ids",
+          "logical_name": "account_ids",
+          "pii": false,
+          "type": "{:array, Ash.Type.UUID}"
+        },
+        {
+          "column_name": "ejp_enabled",
+          "logical_name": "enabled",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ejp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ejp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ejp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ejp_period_keys",
+          "logical_name": "period_keys",
+          "pii": false,
+          "type": "{:array, Ash.Type.String}"
+        },
+        {
+          "column_name": "ejp_steps",
+          "logical_name": "steps",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "ejp_threshold_cents",
+          "logical_name": "threshold_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "ejp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.JournalApprovalPolicy",
+      "table_name": "ejp_journal_approval_policy"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "ejr_active",
+          "logical_name": "active",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
+          "column_name": "ejr_frequency",
+          "logical_name": "frequency",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "ejr_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ejr_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "ejr_last_entry_id",
+          "logical_name": "last_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ejr_last_generated_on",
+          "logical_name": "last_generated_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ejr_lines",
+          "logical_name": "lines",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
+        },
+        {
+          "column_name": "ejr_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ejr_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "ejr_next_run_on",
+          "logical_name": "next_run_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "ejr_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "ejr_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.JournalTemplate",
+      "table_name": "ejr_journal_template"
     },
     {
       "fields": [
@@ -8333,6 +9311,102 @@
       ],
       "resource": "Samenerp.Erp.TransferOrder",
       "table_name": "etn_transfer_order"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "evc_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "evc_applied_at",
+          "logical_name": "applied_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "evc_bill_id",
+          "logical_name": "bill_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "evc_currency",
+          "logical_name": "currency",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "evc_date",
+          "logical_name": "date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "evc_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "evc_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "evc_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "evc_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "evc_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "evc_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "evc_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "evc_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "evc_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "evc_vendor_id",
+          "logical_name": "vendor_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.VendorCredit",
+      "table_name": "evc_vendor_credit"
     },
     {
       "fields": [
