@@ -171,6 +171,87 @@ defmodule Samenerp.KubeworkzBooksTest do
     assert Enum.all?(equipment_slices, &(&1.amount_cents == 100_000))
   end
 
+  test "opens a prepaid schedule and releases it against the seeded prepaid accounts" do
+    org = create_org!("Kubeworkz Books Prepaid")
+    Books.seed!(org.id)
+
+    admin = %Samen.Scope{
+      actor: %{id: "a:#{org.id}", org_id: org.id, role: :admin, kind: :tenant, plane: :tenant}
+    }
+
+    prepaid = account!(org.id, "1200")
+    expense = account!(org.id, "7000")
+
+    prev = Application.get_env(:samen_core, Samen.Scopes.Finance.PrepaidReleaseRun)
+
+    Application.put_env(:samen_core, Samen.Scopes.Finance.PrepaidReleaseRun,
+      modules: [
+        schedule: Erp.PrepaidSchedule,
+        release: Erp.PrepaidRelease,
+        entry: Erp.JournalEntry,
+        account: Erp.Account
+      ]
+    )
+
+    on_exit(fn ->
+      if prev do
+        Application.put_env(:samen_core, Samen.Scopes.Finance.PrepaidReleaseRun, prev)
+      else
+        Application.delete_env(:samen_core, Samen.Scopes.Finance.PrepaidReleaseRun)
+      end
+    end)
+
+    schedule =
+      Erp.PrepaidSchedule
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org.id,
+          code: "PREPAID-1200",
+          name: "Prepaid foundry costs",
+          total_cents: 12_000,
+          start_on: ~D[2026-01-01],
+          months: 3,
+          prepaid_account_id: prepaid.id,
+          expense_account_id: expense.id
+        },
+        scope: admin
+      )
+      |> Ash.create!()
+
+    assert {:ok, %{posted: [release_id]}} =
+             Samen.Scopes.Finance.PrepaidReleaseRun.run(period: {2026, 1})
+
+    release =
+      Erp.PrepaidRelease
+      |> Ash.Query.filter(org_id == ^org.id)
+      |> Ash.read_one!(authorize?: false)
+
+    assert release.id == release_id
+    assert release.schedule_id == schedule.id
+    assert release.period_key == "2026-01"
+    assert release.amount_cents == 4_000
+    assert release.prepaid_account_id == prepaid.id
+    assert release.expense_account_id == expense.id
+
+    entry =
+      Erp.JournalEntry
+      |> Ash.Query.filter(
+        org_id == ^org.id and source_key == "prepaid_release" and source_id == ^release.id
+      )
+      |> Ash.read_one!(authorize?: false)
+
+    assert entry.status == :posted
+
+    lines =
+      Erp.JournalLine
+      |> Ash.Query.filter(org_id == ^org.id and entry_id == ^entry.id)
+      |> Ash.read!(authorize?: false)
+
+    assert Enum.sort(Enum.map(lines, &{&1.account_id, &1.debit_cents, &1.credit_cents})) ==
+             Enum.sort([{expense.id, 4_000, 0}, {prepaid.id, 0, 4_000}])
+  end
+
   test "opens the four programmes, the four cost pools and the grant fund" do
     org = create_org!("Kubeworkz Books Cost Objects")
     Books.seed!(org.id)

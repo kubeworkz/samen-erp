@@ -354,8 +354,11 @@ defmodule Samen.Abbrev.AllocatorTest do
       # -> 41_039 bytes, 873 flat before ADR-055 retirement.
       # +3 recurring journal template rows (`sjt`/`fjr`/`ejr`).
       # ADR-055 retired 100 rows: 36_634 bytes, 776 flat.
-      assert byte_size(committed) == 36_634
-      assert map_size(R.load()) == 776
+      # +6 WS-ACCT prepaid expense slice: `PrepaidSchedule` + `PrepaidRelease`
+      # in the three Finance hosts (samen_core `spf`/`psf`, samen_web `wep`/`ewp`,
+      # samenerp `sep`/`spe`), allocator-reserved -> 36_951 bytes, 782 flat.
+      assert byte_size(committed) == 36_951
+      assert map_size(R.load()) == 782
     end
   end
 

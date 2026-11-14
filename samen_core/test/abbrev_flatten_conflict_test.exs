@@ -130,7 +130,9 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # (+9 WS-ERP E31 (#12) rows = 405 + 468 = 873 flat.)
       # +3 recurring journal template rows (`sjt`/`fjr`/`ejr`).
       # ADR-055 retired 100 global rows: 876 flat -> 776 flat.
-      assert map_size(flat) == 776
+      # +6 WS-ACCT prepaid expense slice: `PrepaidSchedule` + `PrepaidRelease`
+      # in the three Finance hosts, allocator-reserved -> 782 flat.
+      assert map_size(flat) == 782
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

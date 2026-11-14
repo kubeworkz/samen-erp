@@ -164,6 +164,21 @@ defmodule Samen.Scopes.Finance do
   independent audit — amount, term, disposal, backing entry, the two named legs,
   and Σ slices == the contra account's GL movement.
 
+  ## D9a — prepaid expenses: a derived contract and release facts
+
+  `PrepaidSchedule` is a prepaid contract (`total_cents`, `start_on`, `months`)
+  plus the two accounts every release uses: the same-org debit-normal prepaid
+  asset and a debit-normal expense or asset/WIP target. It is deliberately not
+  an `Asset.kind` — there is no accumulated contra or disposal, and the chart
+  is host data, so the accounts are named directly (the AP-line precedent).
+  `Samen.Scopes.Finance.PrepaidSchedule` derives each month's slice, the last
+  month absorbing the remainder; `PrepaidRelease` is the only persisted
+  per-period fact and is append-only. `PrepaidReleaseRun` posts the due month
+  Dr expense / Cr prepaid, exactly once per `{schedule, period}` (run read +
+  unique index), with the accounts forced from the contract. `PrepaidRegister`
+  derives released, remaining and completion; `PrepaidShape` refuses the wrong
+  side/kind at create time.
+
   ## D10 — obsolescence: a policy, an assessment, a gated write-down
 
   `InventoryReserve` is a POLICY (basis `:age` or `:item`, a threshold, a
@@ -296,6 +311,8 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.CostVariance`
     * `Demo.FinanceScope.Asset`
     * `Demo.FinanceScope.AssetPosting`
+    * `Demo.FinanceScope.PrepaidSchedule`
+    * `Demo.FinanceScope.PrepaidRelease`
     * `Demo.FinanceScope.InventoryReserve`
     * `Demo.FinanceScope.ReserveWriteDown`
     * `Demo.FinanceScope.ReserveWriteDownLine`
@@ -404,6 +421,10 @@ defmodule Samen.Scopes.Finance do
     # postings. Allocator-reserved under the `samen_web` host.
     asset: "fas",
     asset_posting: "fad",
+    # WS-ACCT prepaid expense slice: the prepaid contract and its per-period
+    # releases. Allocator-reserved under the `samen_web` host.
+    prepaid_schedule: "wep",
+    prepaid_release: "ewp",
     # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence policy, its gated
     # write-down and the assessed lines. Allocator-reserved under `samen_web`.
     inventory_reserve: "fro",
@@ -490,6 +511,8 @@ defmodule Samen.Scopes.Finance do
     cost_variance_mod = Module.concat(namespace, CostVariance)
     asset_mod = Module.concat(namespace, Asset)
     asset_posting_mod = Module.concat(namespace, AssetPosting)
+    prepaid_schedule_mod = Module.concat(namespace, PrepaidSchedule)
+    prepaid_release_mod = Module.concat(namespace, PrepaidRelease)
     inventory_reserve_mod = Module.concat(namespace, InventoryReserve)
     reserve_write_down_mod = Module.concat(namespace, ReserveWriteDown)
     reserve_write_down_line_mod = Module.concat(namespace, ReserveWriteDownLine)
@@ -529,6 +552,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.VarianceBlueprint
 
       require Samen.Scopes.Finance.AssetBlueprint
+
+      require Samen.Scopes.Finance.PrepaidBlueprint
 
       require Samen.Scopes.Finance.ReserveBlueprint
 
@@ -574,6 +599,8 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(cost_variance_mod))
         resource(unquote(asset_mod))
         resource(unquote(asset_posting_mod))
+        resource(unquote(prepaid_schedule_mod))
+        resource(unquote(prepaid_release_mod))
         resource(unquote(inventory_reserve_mod))
         resource(unquote(reserve_write_down_mod))
         resource(unquote(reserve_write_down_line_mod))
@@ -818,6 +845,31 @@ defmodule Samen.Scopes.Finance do
         unquote(asset_mod),
         unquote(entry_mod),
         unquote(posting_account_mod),
+        unquote(account_mod)
+      )
+
+      # WS-ACCT prepaid expense slice — the prepaid contract and its
+      # exactly-once release facts. The release cascade posts through this
+      # host's entry resource and the accounts the schedule names.
+      Samen.Scopes.Finance.PrepaidBlueprint.define_prepaid_schedule(
+        unquote(prepaid_schedule_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.prepaid_schedule),
+        unquote(prepaid_release_mod),
+        unquote(account_mod),
+        unquote(cost_object_mod)
+      )
+
+      Samen.Scopes.Finance.PrepaidBlueprint.define_prepaid_release(
+        unquote(prepaid_release_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.prepaid_release),
+        unquote(prepaid_schedule_mod),
+        unquote(entry_mod),
         unquote(account_mod)
       )
 

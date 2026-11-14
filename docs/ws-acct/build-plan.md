@@ -375,6 +375,40 @@ Three lifecycle gaps were closed without changing the derived-schedule disciplin
    reclassifies cost from `construction_in_progress` to the kind's asset-cost account, and starts
    the derived schedule at that month. `DepreciationRun` reports `:under_construction` until then.
 
+### Phase 8 extension — prepaid expense schedules and releases (2026-11-14)
+
+Prepaid accounts (`1200`/`1210` in the Kubeworkz books) existed but had no release mechanism
+comparable to the asset register. The slice adds `Samen.Scopes.Finance.{PrepaidSchedule,
+PrepaidRelease}` (blueprint `prepaid_blueprint.ex`), the derived arithmetic `PrepaidSchedule`,
+the account guard `PrepaidShape`, the posting cascade `PrepaidReleasePosting`, the monthly run
+`PrepaidReleaseRun`, the `PrepaidReleaseWorker` on the canonical crontab (`50 0 1 * *`), and
+the register read `PrepaidRegister` — plus three migrations (fixture `spf`/`psf`, web
+`wep`/`ewp`, erp `sep`/`spe`), six allocator-reserved abbrevs, and
+`samen_core/test/finance_prepaids_test.exs` (9 tests), and the Kubeworkz host
+release regression in `samenerp/test/kubeworkz_books_test.exs`.
+
+Decisions the slice had to take:
+
+1. **Prepaid is its own resource, not an `Asset.kind`.** A prepaid is a current asset released
+   to expense; the asset register's accumulated contra, disposal and CIP semantics do not fit.
+   `PrepaidSchedule` stores `prepaid_account_id`/`expense_account_id` directly (the AP-line
+   precedent — the chart is host data), so no new `PostingAccount` meanings or host seeds were
+   needed.
+2. **The schedule is a contract, never a table.** `{total_cents, months, start_on}` derives
+   every monthly slice; `PrepaidRelease` is the only per-period fact. The last month absorbs the
+   division remainder, so the term sums to the contract exactly. `PrepaidRegister` re-derives
+   released, remaining, the next open period and completion from the contract plus Σ releases.
+3. **Exactly-once is a read plus a unique index.** The run reads `{schedule, period}` first and
+   reports `:already_released` as a caller-facing no-op; the unique index is the belt for a
+   racing or regressed caller. The release cascade forces the accounts from the schedule and
+   refuses a date outside the term or before the first month.
+4. **Append-only facts, closed-period gate.** The release table's trigger refuses UPDATE and
+   DELETE; a correction is a reversing entry. The release posts through the same `PostGuard` as
+   every entry, so a closed period refuses the release and leaves no fact behind.
+5. **The shape guard names both sides.** `PrepaidShape` requires a same-org debit-normal asset
+   prepaid account, a same-org debit-normal expense or asset/WIP release target, and distinct
+   accounts. `SameOrgFk` keeps the schedule and release dimensions inside the org.
+
 ---
 
 ## Phase 9 — Obsolescence / NRV reserve · default · 1 session

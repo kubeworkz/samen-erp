@@ -37,7 +37,7 @@ defmodule Mix.Tasks.Samen.Verify.NoDormantModules do
   # conversion helpers are part of that surface. These are reachable only
   # through tests or macro expansion, which the static walk cannot see.
   #
-  # The execution reconciliation also preserved 11 Finance/Inventory
+  # The execution reconciliation also preserved Finance/Inventory read and
   # test-oracle modules. They are exercised by focused tests but are not
   # reachable from a mounted scope and their tables are not migrated by any
   # host, so the static walk would otherwise flag them.
@@ -50,6 +50,7 @@ defmodule Mix.Tasks.Samen.Verify.NoDormantModules do
     "Samen.Scopes.Finance.ApAchArtifactRecord",
     "Samen.Scopes.Finance.ApInvoiceCapture",
     "Samen.Scopes.Finance.AssetRegister",
+    "Samen.Scopes.Finance.PrepaidRegister",
     "Samen.Scopes.Finance.BudgetVsActual",
     "Samen.Scopes.Finance.GrantReconcile",
     "Samen.Scopes.Finance.ReconcileRecognition",

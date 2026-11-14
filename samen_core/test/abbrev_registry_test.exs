@@ -177,6 +177,9 @@ defmodule Samen.AbbrevRegistryTest do
       # `she`/`seh`/`shl` (Employee/EmploymentEvent/LeaveRequest), every row
       # allocator-reserved.
       # +3 per-org collection cadence rows (`scq`/`fcf`/`ecq`).
+      # +6 WS-ACCT prepaid expense slice: `PrepaidSchedule` + `PrepaidRelease`
+      # in the three Finance hosts — samen_core `spf`/`psf`, samen_web
+      # `wep`/`ewp`, samenerp `sep`/`spe`, every row allocator-reserved.
       # = 459 host entries across six hosts, including the three AP/AR
       # JournalApprovalPolicy rows (`jap`/`wja`/`ejp`) and the #7 receipt
       # allocation rows (`sra`/`fra`/`eaa`).
@@ -184,9 +187,9 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
       # +3 each in WS-ERP E31 (#12): expense category/card/report tables.
-      assert map_size(hosts["samenerp"]) == 139
-      assert map_size(hosts["samen_core"]) == 130
-      assert map_size(hosts["samen_web"]) == 112
+      assert map_size(hosts["samenerp"]) == 141
+      assert map_size(hosts["samen_core"]) == 132
+      assert map_size(hosts["samen_web"]) == 114
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -481,6 +484,8 @@ defmodule Samen.AbbrevRegistryTest do
                  # its per-period postings, allocator-reserved.
                  "fsf" => "SamenCore.Support.FinanceFixture.Asset",
                  "fsp" => "SamenCore.Support.FinanceFixture.AssetPosting",
+                 "spf" => "SamenCore.Support.FinanceFixture.PrepaidSchedule",
+                 "psf" => "SamenCore.Support.FinanceFixture.PrepaidRelease",
                  # WS-ACCT Phase 9 (ADR-054 D10): the fixture's obsolescence
                  # policy, its gated write-down and the assessed lines.
                  "fsr" => "SamenCore.Support.FinanceFixture.InventoryReserve",
@@ -659,6 +664,8 @@ defmodule Samen.AbbrevRegistryTest do
                  # and its per-period postings, allocator-reserved.
                  "fas" => "Samen.WebTest.Erp.Asset",
                  "fad" => "Samen.WebTest.Erp.AssetPosting",
+                 "wep" => "Samen.WebTest.Erp.PrepaidSchedule",
+                 "ewp" => "Samen.WebTest.Erp.PrepaidRelease",
                  # WS-ACCT Phase 9 (ADR-054 D10): the test host's reserve policy,
                  # write-down and assessed lines.
                  "fro" => "Samen.WebTest.Erp.InventoryReserve",
@@ -959,6 +966,8 @@ defmodule Samen.AbbrevRegistryTest do
                  # (PDK licence + lab equipment) and its postings.
                  "eas" => "Samenerp.Erp.Asset",
                  "ead" => "Samenerp.Erp.AssetPosting",
+                 "sep" => "Samenerp.Erp.PrepaidSchedule",
+                 "spe" => "Samenerp.Erp.PrepaidRelease",
                  # WS-ACCT Phase 9 (ADR-054 D10): the Kubeworkz reserve policy,
                  # its gated write-down and the assessed lines.
                  "ear" => "Samenerp.Erp.InventoryReserve",
@@ -1141,7 +1150,10 @@ defmodule Samen.AbbrevRegistryTest do
       # (+3 per-org collection cadence: `scq`/`fcf`/`ecq` = 405 + 456 = 861 flat.)
       # (+3 AP approval-policy rows `fps`/`wap`/`eap` = 405 + 459 = 864 flat.)
       # ADR-055 retired 100 global rows: 873 flat -> 773 flat.
-      assert map_size(Reg.load()) == 776
+      # (+6 WS-ACCT prepaid expense slice: `PrepaidSchedule` + `PrepaidRelease`
+      # in the three Finance hosts — samen_core `spf`/`psf`, samen_web
+      # `wep`/`ewp`, samenerp `sep`/`spe`, allocator-reserved = 782 flat.)
+      assert map_size(Reg.load()) == 782
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

@@ -270,6 +270,21 @@ account. `:dispose` posts the standard proceeds/accumulated/cost/gain-loss entry
 `:transfer` moves the future cost-object dimension with a dated history. Past entries never
 change dimensions.
 
+### D9a — Prepaid expense schedules are their own derived contract and release facts
+`PrepaidSchedule` `{code, name, total_cents, start_on, months, method ∈ {:straight_line},
+prepaid_account_id, expense_account_id, dimension_key, cost_object_id}` names its two accounts
+directly (the AP-line precedent; the chart is host data). It is not an `Asset.kind`: a prepaid is
+a current asset released to expense, not a depreciating fixed asset with accumulated contra and
+disposal semantics. **No schedule table** — each month's slice is derived from the contract, and
+the last month absorbs the division remainder so the term releases the total exactly. A
+`PrepaidRelease` is the only persisted per-period fact and is append-only; a monthly
+`PrepaidReleaseRun` posts Dr the named expense (or WIP asset) / Cr the named prepaid account,
+exactly once per `{schedule, period}` behind a unique index and a run read. The accounts are
+forced from the schedule, and `PrepaidShape` refuses a prepaid side that is not a same-org
+debit-normal asset or a release target that is not a same-org debit-normal expense/asset. A
+closed period refuses the release through the same posting gate as every other entry. The
+register is derived from the contract plus Σ releases; there is no stored balance to drift.
+
 ### D10 — Obsolescence is a policy row plus a gated write-down, never an automatic posting
 `InventoryReserve` `{name, basis ∈ {:age, :item}, age_months, pct, applies_to}`; the quarterly
 assessment is a **derived read** (excess/obsolete candidates at NRV) that **drafts** a write-down

@@ -58,6 +58,8 @@ defmodule Samenerp.Erp do
       cost_variance: "esv",
       asset: "eas",
       asset_posting: "ead",
+      prepaid_schedule: "sep",
+      prepaid_release: "spe",
       inventory_reserve: "ear",
       reserve_write_down: "eav",
       reserve_write_down_line: "eaw",
@@ -171,6 +173,8 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.CostVariance)
     resource(Samenerp.Erp.Asset)
     resource(Samenerp.Erp.AssetPosting)
+    resource(Samenerp.Erp.PrepaidSchedule)
+    resource(Samenerp.Erp.PrepaidRelease)
     resource(Samenerp.Erp.InventoryReserve)
     resource(Samenerp.Erp.ReserveWriteDown)
     resource(Samenerp.Erp.ReserveWriteDownLine)
