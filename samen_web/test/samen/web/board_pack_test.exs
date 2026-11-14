@@ -22,6 +22,7 @@ defmodule Samen.Web.BoardPackTest do
 
   alias Samen.WebTest.Erp.{
     Account,
+    CostObject,
     FiscalPeriod,
     ForecastDriver,
     ForecastVersion,
@@ -74,6 +75,22 @@ defmodule Samen.Web.BoardPackTest do
       authorize?: false
     )
     |> Ash.create!()
+  end
+
+  defp seed_cost_object!(org_id, code) do
+    CostObject
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org_id, code: code, name: "Project #{code}", kind: :project},
+      scope: admin_scope(org_id)
+    )
+    |> Ash.create!()
+  end
+
+  defp archive!(record, org_id) do
+    record
+    |> Ash.Changeset.for_destroy(:archive, %{}, scope: admin_scope(org_id))
+    |> Ash.destroy!()
   end
 
   defp seed_period!(org_id, year, month) do
@@ -262,6 +279,45 @@ defmodule Samen.Web.BoardPackTest do
     assert csv =~ "segment_report,Unallocated net,60000,cents,SegmentReport.report/4"
     assert csv =~ "variance_bridge,Labour basis,declared_pending_driver,text"
     assert csv =~ "runway,Status,no_published_forecast,text"
+  end
+
+  test "an allocated segment with a missing CostObject label is not Unallocated" do
+    %{org_id: org_id, today: today, cash: cash, income: income} = seed_month!()
+    project = seed_cost_object!(org_id, "PROJECT-A")
+
+    post_entry!(org_id, today, "Project award", [
+      %{
+        account_id: cash.id,
+        debit_cents: 50_000,
+        credit_cents: 0,
+        dimension_refs: %{"project" => project.id}
+      },
+      %{
+        account_id: income.id,
+        debit_cents: 0,
+        credit_cents: 50_000,
+        dimension_refs: %{"project" => project.id}
+      }
+    ])
+
+    archive!(project, org_id)
+
+    socket = open(org_id)
+    html = render_html(Live, socket.assigns)
+    {:ok, state} = BoardPack.load(board_mount(), org_id)
+
+    allocated = Enum.find(state.report.statements.segment_report.segments, & &1.allocated?)
+    assert allocated.segment_id == project.id
+    assert is_nil(allocated.code)
+    assert is_nil(allocated.name)
+
+    label = "Segment #{project.id}"
+    assert html =~ label
+    assert html =~ "Unallocated"
+
+    csv = BoardPack.csv(state.report)
+    assert csv =~ "segment_report,#{label} net,50000,cents,SegmentReport.report/4"
+    assert csv =~ "segment_report,Unallocated net,60000,cents,SegmentReport.report/4"
   end
 
   test "quotes the latest published forecast through ForecastRead.runway/2" do

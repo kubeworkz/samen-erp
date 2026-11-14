@@ -38,6 +38,24 @@ defmodule Samen.Web.Finance.BoardPack do
   def columns, do: @columns
 
   @doc """
+  Display label for a `SegmentReport` row.
+
+  `allocated?` is the report's signal for whether a row belongs to a real
+  CostObject. An allocated row whose label read returned nothing (for example,
+  an archived CostObject) stays identifiable by its id; only the true
+  unallocated bucket is called `"Unallocated"`.
+  """
+  @spec segment_label(map()) :: String.t()
+  def segment_label(%{allocated?: false}), do: "Unallocated"
+  def segment_label(%{allocated?: true, code: code}) when is_binary(code), do: code
+  def segment_label(%{allocated?: true, name: name}) when is_binary(name), do: name
+
+  def segment_label(%{allocated?: true, segment_id: id}) when is_binary(id),
+    do: "Segment #{id}"
+
+  def segment_label(_segment), do: "Unallocated"
+
+  @doc """
   Load the newest period's board package for `mount` + `org_id`.
 
   Returns `{:ok, %{period:, run:, report:, task_wired?:}}` or
@@ -305,7 +323,7 @@ defmodule Samen.Web.Finance.BoardPack do
       )
     ] ++
       Enum.flat_map(segments.segments, fn segment ->
-        label = segment.code || segment.name || "Unallocated"
+        label = segment_label(segment)
 
         [
           row(

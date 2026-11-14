@@ -285,7 +285,7 @@ defmodule Samen.Web.Finance.BoardPack.Live do
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <tbody>
                 <tr :for={segment <- @report.statements.segment_report.segments}>
-                  <td style="padding:3px 0;color:var(--muted)">{segment_label(segment)}</td>
+                  <td style="padding:3px 0;color:var(--muted)">{BoardPack.segment_label(segment)}</td>
                   <td style="padding:3px 0;text-align:right">{money(segment.net_cents)}</td>
                 </tr>
                 <tr style="border-top:1px solid var(--border,#e5e7eb)">
@@ -425,10 +425,6 @@ defmodule Samen.Web.Finance.BoardPack.Live do
   end
 
   defp period_label(_period), do: "Current period"
-
-  defp segment_label(%{code: code}) when is_binary(code), do: code
-  defp segment_label(%{name: name}) when is_binary(name), do: name
-  defp segment_label(_segment), do: "Unallocated"
 
   defp close_label(%{close_complete?: true}), do: "complete"
   defp close_label(%{close_percent: percent}) when is_integer(percent), do: "#{percent}%"
