@@ -763,6 +763,13 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 # the reference table names 1520 for lab equipment (D16's
                 # corrected form), so the asset run needs its own meaning.
                 :accumulated_depreciation,
+                # The lifecycle pair: where an asset's cost sits, where a CIP
+                # waits, and the one gain/loss account a disposal plugs into
+                # (positive = credit gain, negative = debit loss).
+                :asset_cost_intangible,
+                :asset_cost_equipment,
+                :construction_in_progress,
+                :disposal_gain_loss,
                 :write_down_expense,
                 # the standard-cost variance layer (Phase 7). The four family
                 # accounts hold the variances; the per-type disposition

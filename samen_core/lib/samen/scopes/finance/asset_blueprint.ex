@@ -51,6 +51,8 @@ defmodule Samen.Scopes.Finance.AssetBlueprint do
              repo,
              abbrev,
              posting_mod,
+             entry_mod,
+             posting_account_mod,
              cost_object_mod
            ) do
     quote do
@@ -70,18 +72,33 @@ defmodule Samen.Scopes.Finance.AssetBlueprint do
             schedule row and no stored balance.
           * `method` — `:straight_line` only, for now. A method the ledger cannot
             compute is refused rather than silently treated as straight line.
-          * `status` / `disposed_on` — one-way: `:active` until `:dispose`, which
-            records the date and stops the schedule from that month onward. The
-            months already posted stay posted (a disposal is prospective).
+          * `status` — `:active`, `:under_construction`, or `:disposed`. An active
+            asset depreciates from `in_service_on`. A CIP asset has no schedule
+            and no postings until `:place_in_service`. `:dispose` is one-way and
+            stops the schedule from its month onward; the months already posted
+            stay posted (a disposal is prospective).
+          * `in_service_on` — the month the derived schedule starts. Ordinary
+            assets default it to `acquired_on`; CIP assets acquire it on
+            `:place_in_service`.
+          * `disposal_proceeds_cents` / `disposal_gain_loss_cents` /
+            `disposal_entry_id` — the disposal fact and the entry that carries
+            it. `disposal_gain_loss_cents` is signed: positive is a gain,
+            negative a loss.
+          * `in_service_entry_id` — the CIP reclassification entry, when the
+            asset was placed in service through that action.
+          * `transfer_history` — bounded, dated from/to cost-object records for
+            `:transfer`. Future depreciation follows the current dimension;
+            past entries keep theirs.
           * `cost_object_id` / `dimension_key` — the optional programme dimension
             both entry legs carry (R6). Nil means the asset is undimensioned and
             the entry passes R6 vacuously, exactly like a base-system posting.
 
-        No update action besides `:dispose`: changing a cost, life or salvage
-        after postings exist would rewrite the schedule retroactively, which is
-        an accounting decision (a new asset, or a correcting entry), not a row
-        edit. A disposal posts NO write-off; see the moduledoc of
-        `Samen.Scopes.Finance.DepreciationRun`.
+        Updates are lifecycle actions only: `:dispose` posts the disposal
+        entry, `:place_in_service` transfers a CIP into service, and `:transfer`
+        moves the future cost-object dimension and keeps a history. Changing a
+        cost, life or salvage after postings exist would rewrite the schedule
+        retroactively, which is an accounting decision (a new asset, or a
+        correcting entry), not a row edit.
 
         No PII (INV-1): ids, integers, dates, two closed enums, a freeform memo
         (default-deny-CDC-excluded, not vaulted).
@@ -127,10 +144,21 @@ defmodule Samen.Scopes.Finance.AssetBlueprint do
             public?: true,
             allow_nil?: false,
             default: :active,
-            constraints: [one_of: [:active, :disposed]]
+            constraints: [one_of: [:active, :under_construction, :disposed]]
           )
 
+          attribute(:in_service_on, :date, public?: true)
           attribute(:disposed_on, :date, public?: true)
+          attribute(:disposal_proceeds_cents, :integer, public?: true)
+          attribute(:disposal_gain_loss_cents, :integer, public?: true)
+          attribute(:disposal_entry_id, :uuid, public?: true)
+          attribute(:in_service_entry_id, :uuid, public?: true)
+
+          attribute(:transfer_history, {:array, :map},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
 
           attribute(:dimension_key, :atom,
             public?: true,
@@ -194,27 +222,68 @@ defmodule Samen.Scopes.Finance.AssetBlueprint do
               :cost_object_id
             ])
 
+            # `status` and `disposed_on` are NOT accepted: the lifecycle action
+            # decides the status, and only `:dispose` can retire an asset.
+            argument(:under_construction, :boolean, default: false)
+            argument(:in_service_on, :date)
+
             validate(numericality(:cost_cents, greater_than: 0))
             validate(numericality(:life_months, greater_than: 0))
             validate(numericality(:salvage_cents, greater_than_or_equal_to: 0))
 
-            # `status` and `disposed_on` are NOT accepted: an asset is born
-            # active, and only `:dispose` can move it.
-            change(set_attribute(:status, :active))
+            change(Samen.Scopes.Finance.AssetCreate)
             change(Samen.Scopes.Finance.AssetShape)
           end
 
-          # The one-way disposal. It records the date and nothing else: the
-          # schedule stops from that month, and the months already posted are
-          # history that a disposal cannot rewrite.
+          # The one-way disposal. It records the date, posts the standard
+          # proceeds/accumulated/cost/gain-loss entry, and stops the schedule
+          # from that month. The months already posted are history that a
+          # disposal cannot rewrite.
           update :dispose do
             accept([])
             argument(:disposed_on, :date, allow_nil?: false)
+            argument(:proceeds_cents, :integer, allow_nil?: false, default: 0)
             require_atomic?(false)
-            change(Samen.Scopes.Finance.AssetDisposal)
+
+            change(
+              {Samen.Scopes.Finance.AssetDisposal,
+               asset: unquote(module),
+               posting: unquote(posting_mod),
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod)}
+            )
           end
 
-          # NO update / destroy: see the moduledoc.
+          # CIP -> in service. Posts the reclassification from
+          # construction-in-progress to the asset-kind cost account, then the
+          # derived schedule starts at this date.
+          update :place_in_service do
+            accept([])
+            argument(:in_service_on, :date, allow_nil?: false)
+            require_atomic?(false)
+
+            change(
+              {Samen.Scopes.Finance.AssetInService,
+               asset: unquote(module),
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod)}
+            )
+          end
+
+          # Move the FUTURE cost-object dimension. Past entries keep theirs;
+          # the action appends a dated from/to record to the register. No entry
+          # is posted (the balance is unchanged, and R6 requires a
+          # dimension-balanced entry rather than a one-sided reclass).
+          update :transfer do
+            accept([])
+            argument(:transferred_on, :date, allow_nil?: false)
+            argument(:cost_object_id, :uuid, allow_nil?: false)
+            argument(:dimension_key, :atom, allow_nil?: false)
+            require_atomic?(false)
+            change({Samen.Scopes.Finance.AssetTransfer, asset: unquote(module)})
+          end
+
+          # NO generic update / destroy: see the moduledoc.
         end
 
         policies do

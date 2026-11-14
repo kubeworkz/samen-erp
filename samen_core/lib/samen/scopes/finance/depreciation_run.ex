@@ -11,7 +11,11 @@ defmodule Samen.Scopes.Finance.DepreciationRun do
   been disposed in or before that month, and no posting exists for
   `{asset, period}`. Anything else is reported and skipped:
 
-    * `:not_yet_acquired` — the period precedes the acquisition month;
+    * `:under_construction` — a CIP asset has not been placed in service, so it
+      has no schedule at all;
+    * `:not_in_service` — the row has no schedule start (a malformed/legacy CIP);
+    * `:not_yet_acquired` / `:not_yet_in_service` — the period precedes the
+      acquisition or the in-service month;
     * `:fully_depreciated` — the life has run out (the schedule has no slice);
     * `:disposed` — the asset was retired in this month or an earlier one, so
       the schedule stopped (the months already posted remain);
@@ -47,13 +51,13 @@ defmodule Samen.Scopes.Finance.DepreciationRun do
     not prevent the others' independent facts from landing; the failures are
     named and the run is not reported as a success.
 
-  ## Why no disposal write-off
+  ## Disposal is an action, not a run side effect
 
-  A disposal stops the schedule; it does not post a gain/loss or a catch-up.
-  Proceeds, scrap and the remaining net book value are a human's disposal
-  entry, not an estimate the run invents. Keeping that out of the run is the
-  same posture as the accrual reversal and the recognition run: the scheduled
-  job posts only what the contract already determined.
+  `AssetDisposal` posts the proceeds/accumulated/cost/gain-loss entry when a
+  human disposes of the asset. The run only stops scheduling from the disposal
+  month; it never invents proceeds or a catch-up write-off. Keeping the
+  scheduled job to what the contract already determined is the same posture as
+  the accrual reversal and the recognition run.
 
   ## The host seam
 
@@ -146,11 +150,19 @@ defmodule Samen.Scopes.Finance.DepreciationRun do
 
   defp plan(asset, period, key) do
     cond do
+      asset.status == :under_construction ->
+        {:skip, :under_construction}
+
+      is_nil(AssetSchedule.start_on(asset)) ->
+        {:skip, :not_in_service}
+
       not AssetSchedule.in_term?(asset, period) ->
         reason =
-          if AssetSchedule.before_start?(asset, period),
-            do: :not_yet_acquired,
-            else: :fully_depreciated
+          cond do
+            not AssetSchedule.before_start?(asset, period) -> :fully_depreciated
+            not is_nil(asset.in_service_on) -> :not_yet_in_service
+            true -> :not_yet_acquired
+          end
 
         {:skip, reason}
 

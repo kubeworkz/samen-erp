@@ -17,11 +17,16 @@ defmodule Samen.Scopes.Finance.AssetRegister do
     * `schedule` — every month of the term, with `posted?` and `stopped?`
       (a disposal stops the future months without deleting the past ones);
     * `accumulated_cents` — Σ posted slices (the contra account's movement);
-    * `nbv_cents` — cost − accumulated;
-    * `remaining_cents` — amortizable − accumulated, never negative on a
-      healthy register;
+    * `nbv_cents` — cost − accumulated while the asset is on the books; ZERO
+      after disposal (the disposal entry removed the cost and the contra);
+    * `remaining_cents` — amortizable − accumulated while active; ZERO after
+      disposal;
     * `fully_amortized?` — accumulated has reached cost − salvage;
-    * `last_posted_period` / `next_open_period` — where the schedule stands.
+    * `last_posted_period` / `next_open_period` — where the schedule stands;
+      a CIP or disposed asset has no next open period;
+    * `in_service_on`, `disposal_proceeds_cents`, `disposal_gain_loss_cents`,
+      `transfer_history` — the lifecycle facts an operator needs to explain
+      the current row.
 
   `for_org/2` takes the host's `:asset` and `:posting` resources so the same
   read serves the kernel fixture, the web mount and the host.
@@ -84,12 +89,16 @@ defmodule Samen.Scopes.Finance.AssetRegister do
 
     accumulated = Enum.reduce(postings, 0, &(&1.amount_cents + &2))
     amortizable = AssetSchedule.amortizable(asset)
+    disposed? = asset.status == :disposed
 
     posted_keys = MapSet.new(postings, & &1.period_key)
 
     next_open =
-      months
-      |> Enum.find(fn month -> not MapSet.member?(posted_keys, month.period_key) end)
+      if disposed? or asset.status == :under_construction do
+        nil
+      else
+        Enum.find(months, fn month -> not MapSet.member?(posted_keys, month.period_key) end)
+      end
 
     %{
       asset: asset,
@@ -97,13 +106,20 @@ defmodule Samen.Scopes.Finance.AssetRegister do
       name: asset.name,
       kind: asset.kind,
       status: asset.status,
+      in_service_on: asset.in_service_on,
+      under_construction?: asset.status == :under_construction,
       disposed_on: asset.disposed_on,
       cost_cents: asset.cost_cents,
       salvage_cents: asset.salvage_cents,
       amortizable_cents: amortizable,
       accumulated_cents: accumulated,
-      remaining_cents: amortizable - accumulated,
-      nbv_cents: asset.cost_cents - accumulated,
+      remaining_cents: if(disposed?, do: 0, else: amortizable - accumulated),
+      nbv_cents: if(disposed?, do: 0, else: asset.cost_cents - accumulated),
+      disposal_proceeds_cents: asset.disposal_proceeds_cents,
+      disposal_gain_loss_cents: asset.disposal_gain_loss_cents,
+      disposal_entry_id: asset.disposal_entry_id,
+      in_service_entry_id: asset.in_service_entry_id,
+      transfer_history: asset.transfer_history || [],
       fully_amortized?: accumulated >= amortizable,
       monthly_cents: first_slice(schedule),
       posted_months: map_size(posted_by_key),

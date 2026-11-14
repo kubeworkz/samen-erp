@@ -83,6 +83,11 @@ defmodule Samenerp.KubeworkzBooksTest do
     # The documented correction: the manual reuses 1510 for lab equipment, which
     # one unique code cannot name twice.
     assert %{kind: :asset, normal_side: :credit} = account!(org.id, "1520")
+    # Lifecycle additions: the equipment cost, the CIP holding account, and the
+    # disposal gain/loss account.
+    assert %{kind: :asset, normal_side: :debit} = account!(org.id, "1530")
+    assert %{kind: :asset, normal_side: :debit} = account!(org.id, "1540")
+    assert %{kind: :income, normal_side: :credit} = account!(org.id, "7920")
     assert %{kind: :expense} = account!(org.id, "8000")
     # The variance family the playbook posts to.
     for code <- ~w(5100 5110 5120 5130 5140 5150 5160 5170 5180 5190) do
@@ -109,6 +114,10 @@ defmodule Samenerp.KubeworkzBooksTest do
     # and credits the separate `1520` contra the reference table names.
     assert bound[:depreciation_expense] == "6030"
     assert bound[:accumulated_depreciation] == "1520"
+    assert bound[:asset_cost_intangible] == "1500"
+    assert bound[:asset_cost_equipment] == "1530"
+    assert bound[:construction_in_progress] == "1540"
+    assert bound[:disposal_gain_loss] == "7920"
 
     # The fail-honest posture: no row exists for a meaning the manual gives no
     # single account, so a posting that needs one REFUSES rather than posting to

@@ -144,23 +144,24 @@ defmodule Samen.Scopes.Finance do
   ## D9 — the asset register: derived schedules, an exactly-once run
 
   `Asset` (intangible/equipment) stores a contract, never a schedule:
-  `{cost_cents, salvage_cents, life_months, acquired_on}` is the whole rule,
-  and `Samen.Scopes.Finance.AssetSchedule` derives every period's slice from
-  it, giving the LAST month the division remainder so the term releases
-  `cost − salvage` exactly. `AssetPosting` is the only persisted per-period
-  fact — one append-only row per `{asset, period}`, naming the expense and
-  contra accounts it paid and anchored to its entry (`source_key:
+  `{cost_cents, salvage_cents, life_months, acquired_on, in_service_on}` is the
+  whole rule, and `Samen.Scopes.Finance.AssetSchedule` derives every period's
+  slice from it, giving the LAST month the division remainder so the term
+  releases `cost − salvage` exactly. `AssetPosting` is the only persisted
+  per-period fact — one append-only row per `{asset, period}`, naming the
+  expense and contra accounts it paid and anchored to its entry (`source_key:
   "asset_posting"`).
 
   `Samen.Scopes.Finance.DepreciationRun` posts the due month through the
   governed `:depreciate` action, exactly-once in two layers (the run's
-  `already_posted?` read; the table's unique index). A disposal is one-way and
-  stops the schedule from that month — no catch-up, no write-off. The cascade
-  re-derives the slice and refuses any other amount, so the posting and the
-  contract cannot disagree. `AssetRegister` is the derived read (schedule,
-  accumulated, NBV); `ReconcileAssets` is the independent audit — amount, term,
-  disposal, backing entry, the two named legs, and Σ slices == the contra
-  account's GL movement.
+  `already_posted?` read; the table's unique index). A disposal is one-way,
+  stops the schedule from that month, and posts the standard proceeds /
+  accumulated / cost / gain-loss entry; the run itself never invents proceeds or
+  a catch-up. The cascade re-derives the slice and refuses any other amount, so
+  the posting and the contract cannot disagree. `AssetRegister` is the derived
+  read (schedule, accumulated, NBV, lifecycle); `ReconcileAssets` is the
+  independent audit — amount, term, disposal, backing entry, the two named legs,
+  and Σ slices == the contra account's GL movement.
 
   ## D10 — obsolescence: a policy, an assessment, a gated write-down
 
@@ -802,6 +803,8 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.asset),
         unquote(asset_posting_mod),
+        unquote(entry_mod),
+        unquote(posting_account_mod),
         unquote(cost_object_mod)
       )
 

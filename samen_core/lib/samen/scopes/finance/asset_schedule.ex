@@ -23,10 +23,12 @@ defmodule Samen.Scopes.Finance.AssetSchedule do
 
   ## Which month is which
 
-  `acquired_on`'s MONTH is period 1 (the acquisition month amortizes); the
-  schedule runs for `life_months` consecutive calendar months and the period
-  key is `"YYYY-MM"`. Only the month of `acquired_on` matters — the day is
-  retained for the register and disposal comparison, not for the schedule.
+  `in_service_on`'s MONTH is period 1 (the in-service month amortizes); for an
+  ordinary asset that date defaults to `acquired_on`. The schedule runs for
+  `life_months` consecutive calendar months and the period key is `"YYYY-MM"`.
+  Only the month matters — the day is retained for the register and disposal
+  comparison, not for the schedule. A construction-in-progress asset has no
+  `in_service_on` yet and therefore no schedule.
 
   ## Disposal
 
@@ -52,20 +54,26 @@ defmodule Samen.Scopes.Finance.AssetSchedule do
   `index` is 0-based. An asset with a non-positive life yields `[]` (the create
   action refuses that shape; the guard keeps the function total).
   """
-  def slices(%{life_months: life, acquired_on: %Date{} = acquired} = asset) when life > 0 do
-    start = {acquired.year, acquired.month}
+  def slices(%{life_months: life} = asset) when is_integer(life) and life > 0 do
+    case start_on(asset) do
+      %Date{} = start_date ->
+        start = {start_date.year, start_date.month}
 
-    Enum.map(0..(life - 1), fn index ->
-      period = add_months(start, index)
+        Enum.map(0..(life - 1), fn index ->
+          period = add_months(start, index)
 
-      %{
-        index: index,
-        period: period,
-        period_key: period_key(period),
-        amount_cents: amount_at(asset, index)
-      }
-    end)
-    |> put_cumulative()
+          %{
+            index: index,
+            period: period,
+            period_key: period_key(period),
+            amount_cents: amount_at(asset, index)
+          }
+        end)
+        |> put_cumulative()
+
+      nil ->
+        []
+    end
   end
 
   def slices(_asset), do: []
@@ -76,10 +84,12 @@ defmodule Samen.Scopes.Finance.AssetSchedule do
   `{:error, :bad_period}` for a key that is not `"YYYY-MM"`.
   """
   def slice(asset, period_key) do
-    with {:ok, period} <- parse_period(period_key),
+    with %Date{} <- start_on(asset),
+         {:ok, period} <- parse_period(period_key),
          true <- in_term?(asset, period) do
       {:ok, slice_amount(asset, period)}
     else
+      nil -> :outside_term
       false -> :outside_term
       :error -> {:error, :bad_period}
     end
@@ -87,24 +97,42 @@ defmodule Samen.Scopes.Finance.AssetSchedule do
 
   @doc "The cents this asset amortizes in `period` (callers check `in_term?/2` first)."
   def slice_amount(asset, period) do
-    asset
-    |> amount_at(month_index(asset.acquired_on, period))
+    case start_on(asset) do
+      %Date{} = start -> amount_at(asset, month_index(start, period))
+      nil -> 0
+    end
   end
 
-  @doc "Is the period inside the asset's term (acquisition month through month `life_months`)?"
-  def in_term?(%{acquired_on: %Date{} = acquired, life_months: life}, {_year, _month} = period) do
-    index = month_index(acquired, period)
-    index >= 0 and index < life
+  @doc "Is the period inside the asset's term (in-service month through month `life_months`)?"
+  def in_term?(%{life_months: life} = asset, {_year, _month} = period) do
+    case start_on(asset) do
+      %Date{} = start ->
+        index = month_index(start, period)
+        index >= 0 and index < life
+
+      nil ->
+        false
+    end
   end
 
   def in_term?(_asset, _period), do: false
 
-  @doc "Is the period before the asset's first month?"
-  def before_start?(%{acquired_on: %Date{} = acquired}, period) do
-    month_index(acquired, period) < 0
+  @doc "Is the period before the asset's first in-service month?"
+  def before_start?(asset, period) do
+    case start_on(asset) do
+      %Date{} = start -> month_index(start, period) < 0
+      nil -> false
+    end
   end
 
-  def before_start?(_asset, _period), do: false
+  @doc """
+  The date the schedule starts: `in_service_on` when present, otherwise
+  `acquired_on` for a legacy/active row. A CIP (and a disposed CIP) has no
+  schedule start yet, so this returns `nil`.
+  """
+  def start_on(%{in_service_on: %Date{} = on}), do: on
+  def start_on(%{status: :active, acquired_on: %Date{} = on}), do: on
+  def start_on(_asset), do: nil
 
   @doc """
   Has a disposal stopped this period? True for the disposal's month and every

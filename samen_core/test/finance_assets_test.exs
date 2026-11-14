@@ -29,7 +29,13 @@ defmodule Samen.FinanceAssetsTest do
     * a11 the monthly sweep rides the canonical crontab;
     * a12 a member cannot capitalize an asset; an admin can;
     * a13 a dimensioned asset carries its cost object on BOTH legs (R6), and an
-      undimensioned one stays undimensioned.
+      undimensioned one stays undimensioned;
+    * a14/a15 a disposal posts proceeds, accumulated, cost and the signed
+      gain/loss leg (the two directions);
+    * a16 a CIP does not depreciate until `:place_in_service` posts the
+      reclassification and starts the schedule;
+    * a17 a transfer moves FUTURE depreciation to the new cost object, keeps
+      history, and leaves past entries on their original dimension.
   """
   use ExUnit.Case, async: false
 
@@ -580,6 +586,291 @@ defmodule Samen.FinanceAssetsTest do
     assert report.ok?, inspect(report.violations)
   end
 
+  # ── a14/a15: disposal gain and loss ───────────────────────────────────────
+
+  test "a disposal posts proceeds, accumulated, cost, and a gain", %{org: org, admin: admin} do
+    ctx = books!(admin, org)
+    pdk = pdk!(admin, org, ctx)
+
+    for month <- 1..3 do
+      assert {:ok, %{posted: [_]}} = DepreciationRun.run(period: {2026, month})
+    end
+
+    disposed =
+      dispose!(admin, pdk, %{disposed_on: ~D[2026-04-15], proceeds_cents: 56_000_000})
+
+    assert disposed.status == :disposed
+    assert disposed.disposal_proceeds_cents == 56_000_000
+    # cost 60,000,000 - accumulated 4,999,998 = NBV 55,000,002; proceeds
+    # 56,000,000 therefore produce a 999,998 gain.
+    assert disposed.disposal_gain_loss_cents == 999_998
+
+    entry = entry_for!(org, "asset_disposal", pdk.id)
+    assert entry.id == disposed.disposal_entry_id
+    assert entry.status == :posted
+    assert entry.entry_date == ~D[2026-04-15]
+
+    assert Enum.sort(
+             Enum.map(
+               entry_lines(org, entry.id),
+               &{&1.account_id, &1.debit_cents, &1.credit_cents}
+             )
+           ) ==
+             Enum.sort([
+               {ctx.cash.id, 56_000_000, 0},
+               {ctx.accumulated_amortization.id, 4_999_998, 0},
+               {ctx.asset_cost_intangible.id, 0, 60_000_000},
+               {ctx.disposal_gain_loss.id, 0, 999_998}
+             ])
+
+    register = AssetRegister.for_org(org, asset: Asset, posting: AssetPosting)
+    [row] = register.assets
+    assert row.nbv_cents == 0
+    assert row.remaining_cents == 0
+    assert row.disposal_proceeds_cents == 56_000_000
+    assert row.disposal_gain_loss_cents == 999_998
+    assert row.next_open_period == nil
+
+    report = audit(org)
+    assert report.ok?, inspect(report.violations)
+  end
+
+  test "a disposal below NBV posts the loss leg", %{org: org, admin: admin} do
+    ctx = books!(admin, org)
+    pdk = pdk!(admin, org, ctx)
+
+    for month <- 1..3 do
+      assert {:ok, %{posted: [_]}} = DepreciationRun.run(period: {2026, month})
+    end
+
+    disposed =
+      dispose!(admin, pdk, %{disposed_on: ~D[2026-04-15], proceeds_cents: 50_000_000})
+
+    # NBV 55,000,002 - proceeds 50,000,000 = 5,000,002 loss.
+    assert disposed.disposal_gain_loss_cents == -5_000_002
+
+    entry = entry_for!(org, "asset_disposal", pdk.id)
+
+    assert Enum.sort(
+             Enum.map(
+               entry_lines(org, entry.id),
+               &{&1.account_id, &1.debit_cents, &1.credit_cents}
+             )
+           ) ==
+             Enum.sort([
+               {ctx.cash.id, 50_000_000, 0},
+               {ctx.accumulated_amortization.id, 4_999_998, 0},
+               {ctx.disposal_gain_loss.id, 5_000_002, 0},
+               {ctx.asset_cost_intangible.id, 0, 60_000_000}
+             ])
+  end
+
+  # ── a16: construction-in-progress ─────────────────────────────────────────
+
+  test "a CIP does not depreciate until it is placed in service", %{
+    org: org,
+    admin: admin
+  } do
+    ctx = books!(admin, org)
+
+    cip =
+      asset!(admin, org, %{
+        code: "CIP-LAB",
+        name: "Lab build-out in progress",
+        kind: :equipment,
+        cost_cents: 4_800_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 48,
+        under_construction: true
+      })
+
+    assert cip.status == :under_construction
+    assert cip.in_service_on == nil
+    assert AssetSchedule.slices(cip) == []
+
+    assert {:ok, %{posted: [], skipped: [{asset_id, :under_construction}]}} =
+             DepreciationRun.run(period: {2026, 1})
+
+    assert asset_id == cip.id
+    assert postings(org) == []
+
+    placed =
+      place_in_service!(admin, cip, %{in_service_on: ~D[2026-03-01]})
+
+    assert placed.status == :active
+    assert placed.in_service_on == ~D[2026-03-01]
+
+    entry = entry_for!(org, "asset_in_service", cip.id)
+    assert entry.id == placed.in_service_entry_id
+
+    assert Enum.sort(
+             Enum.map(
+               entry_lines(org, entry.id),
+               &{&1.account_id, &1.debit_cents, &1.credit_cents}
+             )
+           ) ==
+             Enum.sort([
+               {ctx.asset_cost_equipment.id, 4_800_000, 0},
+               {ctx.construction_in_progress.id, 0, 4_800_000}
+             ])
+
+    assert :outside_term = AssetSchedule.slice(placed, "2026-02")
+    assert {:ok, 100_000} = AssetSchedule.slice(placed, "2026-03")
+
+    assert {:ok, %{posted: [_]}} = DepreciationRun.run(period: {2026, 3})
+    assert [posting] = postings(org)
+    assert posting.period_key == "2026-03"
+    assert posting.amount_cents == 100_000
+
+    report = audit(org)
+    assert report.ok?, inspect(report.violations)
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             placed
+             |> Ash.Changeset.for_update(:place_in_service, %{in_service_on: ~D[2026-04-01]},
+               scope: admin
+             )
+             |> Ash.update()
+
+    assert Exception.message(err) =~ "already in service"
+  end
+
+  # ── a17: transfers ────────────────────────────────────────────────────────
+
+  test "a transfer moves FUTURE depreciation to the new cost object and keeps history", %{
+    org: org,
+    admin: admin
+  } do
+    ctx = books!(admin, org)
+    other = cost_object!(admin, org, "ptb", "PTB Photonics")
+
+    asset =
+      asset!(admin, org, %{
+        code: "TRANSFER-ME",
+        name: "Transferable asset",
+        kind: :intangible,
+        cost_cents: 1_200_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 12,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project
+      })
+
+    assert {:ok, %{posted: [january_id]}} = DepreciationRun.run(period: {2026, 1})
+    january = Enum.find(postings(org), &(&1.id == january_id))
+    january_entry = entry_for!(org, "asset_posting", january.id)
+
+    assert Enum.all?(
+             entry_lines(org, january_entry.id),
+             &(&1.dimension_refs["project"] == ctx.cost_object.id)
+           )
+
+    transferred =
+      transfer!(admin, asset, %{
+        transferred_on: ~D[2026-02-01],
+        cost_object_id: other.id,
+        dimension_key: :project
+      })
+
+    assert transferred.cost_object_id == other.id
+    assert [history] = transferred.transfer_history
+    assert history["from_cost_object_id"] == ctx.cost_object.id
+    assert history["to_cost_object_id"] == other.id
+    assert history["transferred_on"] == "2026-02-01"
+
+    assert {:ok, %{posted: [february_id]}} = DepreciationRun.run(period: {2026, 2})
+    february = Enum.find(postings(org), &(&1.id == february_id))
+    february_entry = entry_for!(org, "asset_posting", february.id)
+
+    assert Enum.all?(
+             entry_lines(org, february_entry.id),
+             &(&1.dimension_refs["project"] == other.id)
+           )
+
+    # The January entry keeps the dimension it posted with; history is not
+    # rewritten by the later transfer.
+    assert Enum.all?(
+             entry_lines(org, january_entry.id),
+             &(&1.dimension_refs["project"] == ctx.cost_object.id)
+           )
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             transferred
+             |> Ash.Changeset.for_update(
+               :transfer,
+               %{
+                 transferred_on: ~D[2026-03-01],
+                 cost_object_id: other.id,
+                 dimension_key: :project
+               },
+               scope: admin
+             )
+             |> Ash.update()
+
+    assert Exception.message(err) =~ "already assigned"
+  end
+
+  # ── a18: lifecycle failure leaves no half-state ───────────────────────────
+
+  test "an unmapped disposal account refuses and leaves the asset active", %{
+    org: org,
+    admin: admin
+  } do
+    _ctx = accounts!(admin, org)
+    pdk = pdk!(admin, org, nil)
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             pdk
+             |> Ash.Changeset.for_update(:dispose, %{disposed_on: ~D[2026-02-01]}, scope: admin)
+             |> Ash.update()
+
+    assert Exception.message(err) =~ "asset_cost_intangible"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^pdk.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.status == :active
+    assert reloaded.disposed_on == nil
+
+    assert JournalEntry
+           |> Ash.Query.filter(org_id == ^org and source_key == "asset_disposal")
+           |> Ash.read!(authorize?: false) == []
+  end
+
+  test "an unmapped CIP account refuses and leaves the asset under construction", %{
+    org: org,
+    admin: admin
+  } do
+    _ctx = accounts!(admin, org)
+
+    cip =
+      asset!(admin, org, %{
+        code: "CIP-UNMAPPED",
+        name: "CIP with no accounts",
+        kind: :equipment,
+        cost_cents: 4_800_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 48,
+        under_construction: true
+      })
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             cip
+             |> Ash.Changeset.for_update(:place_in_service, %{in_service_on: ~D[2026-03-01]},
+               scope: admin
+             )
+             |> Ash.update()
+
+    assert Exception.message(err) =~ "asset_cost_equipment" or
+             Exception.message(err) =~ "construction_in_progress"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^cip.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.status == :under_construction
+    assert reloaded.in_service_on == nil
+
+    assert JournalEntry
+           |> Ash.Query.filter(org_id == ^org and source_key == "asset_in_service")
+           |> Ash.read!(authorize?: false) == []
+  end
+
   # ── fixture ───────────────────────────────────────────────────────────────
 
   defp tenant_scope(org_id) do
@@ -612,25 +903,51 @@ defmodule Samen.FinanceAssetsTest do
     |> Ash.create!()
   end
 
-  defp cost_object!(admin, org) do
+  defp cost_object!(admin, org), do: cost_object!(admin, org, "pta", "PTA Photonics")
+
+  defp cost_object!(admin, org, code, name) do
     CostObject
     |> Ash.Changeset.for_create(
       :create,
-      %{org_id: org, code: "pta", name: "PTA Photonics", kind: :chip},
+      %{org_id: org, code: code, name: name, kind: :chip},
       scope: admin
     )
     |> Ash.create!()
   end
 
-  # The four GL accounts the register posts against: the PDK pair (7000/1510)
-  # and the equipment pair (6030/1520). The accounts exist unbound, so the
-  # fail-honest test can map them late.
+  defp dispose!(admin, asset, attrs) do
+    asset
+    |> Ash.Changeset.for_update(:dispose, attrs, scope: admin)
+    |> Ash.update!()
+  end
+
+  defp place_in_service!(admin, asset, attrs) do
+    asset
+    |> Ash.Changeset.for_update(:place_in_service, attrs, scope: admin)
+    |> Ash.update!()
+  end
+
+  defp transfer!(admin, asset, attrs) do
+    asset
+    |> Ash.Changeset.for_update(:transfer, attrs, scope: admin)
+    |> Ash.update!()
+  end
+
+  # The GL accounts the register posts against: the depreciation pairs plus
+  # the lifecycle pair (asset cost, CIP), cash for disposal proceeds, and the
+  # disposal gain/loss account. The accounts exist unbound, so the fail-honest
+  # test can map them late.
   defp accounts!(admin, org) do
     %{
       amortization_expense: new_account(admin, org, "7000", :expense, :debit),
       accumulated_amortization: new_account(admin, org, "1510", :asset, :credit),
       depreciation_expense: new_account(admin, org, "6030", :expense, :debit),
       accumulated_depreciation: new_account(admin, org, "1520", :asset, :credit),
+      asset_cost_intangible: new_account(admin, org, "1500", :asset, :debit),
+      asset_cost_equipment: new_account(admin, org, "1530", :asset, :debit),
+      construction_in_progress: new_account(admin, org, "1540", :asset, :debit),
+      cash: new_account(admin, org, "1000", :asset, :debit),
+      disposal_gain_loss: new_account(admin, org, "7920", :income, :credit),
       cost_object: nil
     }
   end
@@ -642,6 +959,11 @@ defmodule Samen.FinanceAssetsTest do
     map_posting!(admin, org, :accumulated_amortization, ctx.accumulated_amortization)
     map_posting!(admin, org, :depreciation_expense, ctx.depreciation_expense)
     map_posting!(admin, org, :accumulated_depreciation, ctx.accumulated_depreciation)
+    map_posting!(admin, org, :asset_cost_intangible, ctx.asset_cost_intangible)
+    map_posting!(admin, org, :asset_cost_equipment, ctx.asset_cost_equipment)
+    map_posting!(admin, org, :construction_in_progress, ctx.construction_in_progress)
+    map_posting!(admin, org, :cash, ctx.cash)
+    map_posting!(admin, org, :disposal_gain_loss, ctx.disposal_gain_loss)
 
     %{ctx | cost_object: cost_object!(admin, org)}
   end
@@ -735,6 +1057,12 @@ defmodule Samen.FinanceAssetsTest do
     JournalLine
     |> Ash.Query.filter(org_id == ^org and entry_id == ^entry_id)
     |> Ash.read!(authorize?: false)
+  end
+
+  defp entry_for!(org, source_key, source_id) do
+    JournalEntry
+    |> Ash.Query.filter(org_id == ^org and source_key == ^source_key and source_id == ^source_id)
+    |> Ash.read_one!(authorize?: false)
   end
 
   defp audit(org) do

@@ -1623,6 +1623,24 @@
           "type": "Atom"
         },
         {
+          "column_name": "eas_disposal_entry_id",
+          "logical_name": "disposal_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eas_disposal_gain_loss_cents",
+          "logical_name": "disposal_gain_loss_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "eas_disposal_proceeds_cents",
+          "logical_name": "disposal_proceeds_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
           "column_name": "eas_disposed_on",
           "logical_name": "disposed_on",
           "pii": false,
@@ -1633,6 +1651,18 @@
           "logical_name": "id",
           "pii": false,
           "type": "UUID"
+        },
+        {
+          "column_name": "eas_in_service_entry_id",
+          "logical_name": "in_service_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "eas_in_service_on",
+          "logical_name": "in_service_on",
+          "pii": false,
+          "type": "Date"
         },
         {
           "column_name": "eas_inserted_at",
@@ -1687,6 +1717,12 @@
           "logical_name": "status",
           "pii": false,
           "type": "Atom"
+        },
+        {
+          "column_name": "eas_transfer_history",
+          "logical_name": "transfer_history",
+          "pii": false,
+          "type": "{:array, Ash.Type.Map}"
         },
         {
           "column_name": "eas_updated_at",

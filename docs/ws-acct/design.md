@@ -244,9 +244,13 @@ bending one scope's SoT into another's).
 ### D9 — Asset schedules are derived; the run is exactly-once per period
 `Asset` `{name, kind ∈ {:intangible, :equipment}, cost_cents, acquired_on, method ∈
 {:straight_line}, life_months, salvage_cents, status, disposal}`. **No schedule table** — the
-schedule is derived from `{cost, life, method, start}` (the derived-state discipline), and a
-monthly `DepreciationRun` posts once per period behind a period-keyed anchor. Covers the PDK
-license (JE-003/004), lab equipment (JE-063), and the accumulated-amortization contra account.
+schedule is derived from `{cost, life, method, in_service_on}` (the derived-state discipline),
+and a monthly `DepreciationRun` posts once per period behind a period-keyed anchor. Covers the
+PDK license (JE-003/004), lab equipment (JE-063), and the accumulated-amortization contra
+account. `:dispose` posts the standard proceeds/accumulated/cost/gain-loss entry;
+`:place_in_service` reclassifies a construction-in-progress asset and starts its schedule;
+`:transfer` moves the future cost-object dimension with a dated history. Past entries never
+change dimensions.
 
 ### D10 — Obsolescence is a policy row plus a gated write-down, never an automatic posting
 `InventoryReserve` `{name, basis ∈ {:age, :item}, age_months, pct, applies_to}`; the quarterly

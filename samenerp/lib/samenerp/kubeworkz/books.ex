@@ -27,12 +27,16 @@ defmodule Samenerp.Kubeworkz.Books do
       |---|---|---|---|
       | `1520` | reuses `1510 · Accumulated Depreciation – Lab Equipment` (JE-063) | `1510` stays *Accumulated Amortization – PDK License*; equipment gets `1520` | one code cannot name two accounts; the reference table's heading names `1510` as the PDK contra |
 
-      Nothing else is invented: `1520` is the only row not present in the
-      manual, and it exists so JE-063's credit leg is expressible at all.
+      `1520` is the only correction to an existing code. The lifecycle
+      extension adds three additive host accounts the reference table does not
+      name separately: `1530 Lab Equipment` (the PDK licence keeps `1500`),
+      `1540 Construction in Progress`, and `7920 Gain/Loss on Asset Disposal`.
 
     * **The posting map** — one `PostingAccount` row per meaning the manual
       actually gives an account for (see `pending_meanings/0` for the ones it
-      does not, and why they stay unmapped).
+      does not, and why they stay unmapped). The lifecycle meanings bind
+      `asset_cost_intangible` → `1500`, `asset_cost_equipment` → `1530`,
+      `construction_in_progress` → `1540`, and `disposal_gain_loss` → `7920`.
 
     * **The cost objects** — the manual's four programmes (RISC-V64 SoC, GPU,
       PTA, PDB), its four cost pools, and the grant fund placeholder (ADR-054 D1).
@@ -43,8 +47,9 @@ defmodule Samenerp.Kubeworkz.Books do
     * **The asset register** — the PDK licence (an intangible over 36 months:
       the manual's JE-003/004) and the lab equipment (JE-063) as `Asset` rows.
       The schedule is DERIVED from each contract; the monthly
-      `DepreciationRun` posts the slice, and the posting map binds
-      `accumulated_depreciation` to `1520`.
+      `DepreciationRun` posts the slice, the posting map binds
+      `accumulated_depreciation` to `1520`, and the lifecycle postings can
+      dispose/reclassify from the accounts above.
 
     * **The journal approval policy** — enabled with a zero threshold, so the
       books' manual journal entries require a distinct approver. The seed
@@ -119,6 +124,8 @@ defmodule Samenerp.Kubeworkz.Books do
     {"1500", "Intangible Assets – Photonics PDK License", :asset, :debit},
     {"1510", "Accumulated Amortization – PDK License", :asset, :credit},
     {"1520", "Accumulated Depreciation – Lab Equipment", :asset, :credit},
+    {"1530", "Lab Equipment", :asset, :debit},
+    {"1540", "Construction in Progress", :asset, :debit},
     # -- liabilities ---------------------------------------------------------
     {"2000", "Accounts Payable", :liability, :credit},
     {"2100", "Accrued Liabilities", :liability, :credit},
@@ -153,6 +160,8 @@ defmodule Samenerp.Kubeworkz.Books do
     {"7000", "Amortization – PDK License", :expense, :debit},
     # -- realized FX on foreign-currency settlement -------------------------
     {"7900", "Foreign Exchange Gain/Loss", :income, :credit},
+    # -- asset disposal gain/loss --------------------------------------------
+    {"7920", "Gain/Loss on Asset Disposal", :income, :credit},
     # -- write-downs ---------------------------------------------------------
     {"8000", "Inventory Write-Down – Obsolete Chips", :expense, :debit}
   ]
@@ -200,6 +209,10 @@ defmodule Samenerp.Kubeworkz.Books do
     accumulated_amortization: "1510",
     depreciation_expense: "6030",
     accumulated_depreciation: "1520",
+    asset_cost_intangible: "1500",
+    asset_cost_equipment: "1530",
+    construction_in_progress: "1540",
+    disposal_gain_loss: "7920",
     write_down_expense: "8000",
     fx_gain_loss: "7900",
     mask_expense: "6000",

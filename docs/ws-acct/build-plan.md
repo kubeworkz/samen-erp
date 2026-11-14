@@ -305,8 +305,10 @@ Landed as `Samen.Scopes.Finance.{Asset,AssetPosting}` (blueprint
 monthly `DepreciationWorker`, the register read `AssetRegister`, the independent audit
 `ReconcileAssets`, and the two guards `AssetShape`/`AssetDisposal` — plus three migrations
 (fixture `fsf`/`fsp`, web `fas`/`fad`, erp `eas`/`ead`), six allocator-reserved abbrevs,
-`samen_core/test/finance_assets_test.exs` (13 tests), the Kubeworkz asset seed + host test, and
-sabotage **408**.
+`samen_core/test/finance_assets_test.exs` (19 tests), the Kubeworkz asset seed + host test, and
+sabotage **408**. The 2026-11-14 extension adds `AssetEntry`, the `AssetCreate`/
+`AssetTransfer`/`AssetInService` lifecycle changes, one ALTER migration per host, and the six
+lifecycle tests (disposal gain/loss, CIP, transfer, and two failure-rollback cases).
 
 Seven decisions the phase had to take:
 
@@ -329,11 +331,11 @@ Seven decisions the phase had to take:
    regressed caller. Removing the read turns a retry into a loud failure (the belt refuses), which
    is exactly what sabotage 408's first leg demonstrates — the belt alone is not the caller-facing
    guarantee.
-5. **A disposal is prospective and posts nothing.** It records the date, is one-way, and stops
-   the schedule from that month; the months already posted stay. There is no catch-up and no
-   write-off: proceeds/scrap/remaining NBV are a human's disposal entry, not an estimate the run
-   invents. Sabotage 408's second leg removes the stop and every number stays exact — only the
-   future months nobody wanted keep posting.
+5. **A disposal is prospective and posts its own entry.** `:dispose` records the date, posts
+   proceeds/accumulated/cost/gain-loss, is one-way, and stops the schedule from that month; the
+   months already posted stay. There is no catch-up: the run never invents a slice for a month
+   nobody reviewed. Sabotage 408's second leg removes the stop and every number stays exact —
+   only the future months nobody wanted keep posting.
 6. **Equipment needed its own contra meaning.** The manual reuses `1510`, but `Account.code` is
    unique per org and the reference table names `1520` for lab equipment (D16's corrected form),
    so the `PostingAccount` enum widened with `:accumulated_depreciation` and the books bind it to
@@ -354,6 +356,24 @@ period behind a period-keyed anchor. Covers JE-003/004 (PDK license over 36 mont
 **AC:** amortization accumulates to the contra account and rolls off at end-of-life (red-proven:
 idempotent re-run, and a disposal that stops the run); the PDK license schedule reproduces the
 doc's JE-004 arithmetic exactly.
+
+### Phase 8 extension — disposal gain/loss, transfers, CIP (2026-11-14)
+
+Three lifecycle gaps were closed without changing the derived-schedule discipline:
+
+1. **Disposal posts the standard entry.** `:dispose` resolves `asset_cost_intangible` /
+   `asset_cost_equipment` (or `construction_in_progress` for a CIP), accumulated contra, cash
+   proceeds and `disposal_gain_loss`, anchored `asset_disposal` to the asset id. `proceeds_cents`
+   is the only caller-supplied amount; the gain/loss is `proceeds - NBV`. The entry is in the
+   same transaction as the status/disposal fact.
+2. **Transfers move future dimensions and keep a history.** `:transfer` changes the asset's
+   current cost object/dimension, appends a dated from/to record, and posts nothing (the balance
+   is unchanged; a one-sided dimension reclass would violate R6). Past depreciation keeps the
+   dimension it posted with.
+3. **CIP is a lifecycle state, not a second asset class.** `under_construction: true` creates a
+   status-`:under_construction` asset with no schedule. `:place_in_service` requires a date,
+   reclassifies cost from `construction_in_progress` to the kind's asset-cost account, and starts
+   the derived schedule at that month. `DepreciationRun` reports `:under_construction` until then.
 
 ---
 

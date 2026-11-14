@@ -7,7 +7,7 @@ defmodule Samen.Scopes.Finance.ReconcileAssets do
   The read never trusts the run or the cascade. It re-reads the asset contract,
   re-derives the period's slice, follows the ADR-041 anchor to the entry, and
   compares the entry's persisted lines with the two accounts the posting row
-  says it paid. Six checks:
+  says it paid. Seven checks:
 
     * **amount** — `amount_cents` is `AssetSchedule`'s slice for that period.
       A hand-inserted row carrying a different number is `{:amount, …}`;
@@ -20,13 +20,20 @@ defmodule Samen.Scopes.Finance.ReconcileAssets do
     * **legs** — exactly two lines: debit the posting's `expense_account_id`,
       credit its `contra_account_id`, both for `amount_cents` (`{:legs, …}`);
     * **cap** — Σ posted per asset never exceeds cost − salvage
-      (`{:over_amortized, …}`).
+      (`{:over_amortized, …}`);
+    * **lifecycle** — a disposed asset has its posted, correctly dated
+      `asset_disposal` entry anchored to its id, and a placed CIP has its
+      `asset_in_service` entry (`{:missing_disposal, …}`,
+      `{:disposal_unposted, …}`, `{:disposal_misdated, …}`,
+      `{:disposal_unanchored, …}`, `{:unexpected_disposal, …}`, and the
+      in-service counterparts).
 
   Then org-wide: Σ the register's slices equals Σ (credit − debit) on the
   contra accounts over the anchored entries — the AC's "amortization
-  accumulates to the contra account" — and an anchored entry with no posting
-  row is `{:orphaned_gl, …}`. A clean register passes; each red path above is
-  reachable from hand-crafted rows, which is what keeps the green path from
+  accumulates to the contra account" — an anchored entry with no posting
+  row is `{:orphaned_gl, …}`, and a lifecycle entry with no asset is
+  `{:orphaned_lifecycle_gl, …}`. A clean register passes; each red path above
+  is reachable from hand-crafted rows, which is what keeps the green path from
   being a tautology.
   """
 
@@ -66,7 +73,19 @@ defmodule Samen.Scopes.Finance.ReconcileAssets do
       |> Ash.Query.filter(org_id == ^org_id and source_key == @source_key)
       |> Ash.read!(authorize?: false)
 
+    disposal_entries =
+      entry_mod
+      |> Ash.Query.filter(org_id == ^org_id and source_key == "asset_disposal")
+      |> Ash.read!(authorize?: false)
+
+    in_service_entries =
+      entry_mod
+      |> Ash.Query.filter(org_id == ^org_id and source_key == "asset_in_service")
+      |> Ash.read!(authorize?: false)
+
     entry_by_source = Map.new(entries, &{&1.source_id, &1})
+    disposal_by_asset = Map.new(disposal_entries, &{&1.source_id, &1})
+    in_service_by_asset = Map.new(in_service_entries, &{&1.source_id, &1})
     entry_ids = Enum.map(entries, & &1.id)
     lines_by_entry = lines_by_entry(line_mod, org_id, entry_ids)
 
@@ -98,11 +117,26 @@ defmodule Samen.Scopes.Finance.ReconcileAssets do
       |> Enum.reject(&MapSet.member?(claimed, &1.source_id))
       |> Enum.map(&{:orphaned_gl, &1.id})
 
+    lifecycle_checks =
+      Enum.flat_map(assets, fn asset ->
+        disposal_check(asset, Map.get(disposal_by_asset, asset.id)) ++
+          in_service_check(asset, Map.get(in_service_by_asset, asset.id))
+      end)
+
+    lifecycle_orphans =
+      (disposal_entries ++ in_service_entries)
+      |> Enum.reject(&Map.has_key?(assets_by_id, &1.source_id))
+      |> Enum.map(&{:orphaned_lifecycle_gl, &1.id})
+
     contra = contra_check(postings, entry_by_source, lines_by_entry)
 
     violations =
       checks ++
-        cap_checks ++ orphan_checks ++ if(contra.agrees?, do: [], else: [contra.violation])
+        cap_checks ++
+        orphan_checks ++
+        lifecycle_checks ++
+        lifecycle_orphans ++
+        if(contra.agrees?, do: [], else: [contra.violation])
 
     asset_rows =
       Enum.map(assets, fn asset ->
@@ -115,10 +149,12 @@ defmodule Samen.Scopes.Finance.ReconcileAssets do
           code: asset.code,
           kind: asset.kind,
           status: asset.status,
+          in_service_on: asset.in_service_on,
           accumulated_cents: accumulated,
           amortizable_cents: amortizable,
-          nbv_cents: asset.cost_cents - accumulated,
+          nbv_cents: if(asset.status == :disposed, do: 0, else: asset.cost_cents - accumulated),
           fully_amortized?: accumulated >= amortizable,
+          disposal_gain_loss_cents: asset.disposal_gain_loss_cents,
           ok?: not Enum.any?(violations, &names_asset?(&1, asset.id))
         }
       end)
@@ -264,10 +300,49 @@ defmodule Samen.Scopes.Finance.ReconcileAssets do
     |> Enum.group_by(& &1.entry_id)
   end
 
-  # Only the cap violation is tagged by asset id; posting-level violations are
-  # listed by posting id in `violations`, where an operator resolves them. The
-  # per-asset row is a summary, not a second opinion on them.
+  defp disposal_check(%{status: :disposed, disposed_on: on} = asset, nil),
+    do: [{:missing_disposal, asset.id, on}]
+
+  defp disposal_check(%{status: :disposed, disposed_on: on, disposal_entry_id: id} = asset, entry) do
+    []
+    |> check(entry.status != :posted, {:disposal_unposted, asset.id, entry.status})
+    |> check(entry.id != id, {:disposal_unanchored, asset.id, id, entry.id})
+    |> check(entry.entry_date != on, {:disposal_misdated, asset.id, on, entry.entry_date})
+  end
+
+  defp disposal_check(_asset, nil), do: []
+  defp disposal_check(asset, entry), do: [{:unexpected_disposal, asset.id, entry.id}]
+
+  defp in_service_check(%{in_service_entry_id: nil}, nil), do: []
+
+  defp in_service_check(%{in_service_entry_id: nil} = asset, entry),
+    do: [{:unexpected_in_service, asset.id, entry.id}]
+
+  defp in_service_check(%{in_service_entry_id: id} = asset, nil),
+    do: [{:missing_in_service, asset.id, id}]
+
+  defp in_service_check(asset, entry) do
+    []
+    |> check(entry.status != :posted, {:in_service_unposted, asset.id, entry.status})
+    |> check(
+      entry.entry_date != asset.in_service_on,
+      {:in_service_misdated, asset.id, asset.in_service_on, entry.entry_date}
+    )
+  end
+
+  # Posting-level violations are listed by posting id in `violations`, where an
+  # operator resolves them. The per-asset row is a summary: cap and lifecycle
+  # violations name the asset and therefore mark it not-ok.
   defp names_asset?({:over_amortized, asset_id, _, _}, asset_id), do: true
+  defp names_asset?({:missing_disposal, asset_id, _}, asset_id), do: true
+  defp names_asset?({:disposal_unposted, asset_id, _}, asset_id), do: true
+  defp names_asset?({:disposal_unanchored, asset_id, _, _}, asset_id), do: true
+  defp names_asset?({:disposal_misdated, asset_id, _, _}, asset_id), do: true
+  defp names_asset?({:unexpected_disposal, asset_id, _}, asset_id), do: true
+  defp names_asset?({:missing_in_service, asset_id, _}, asset_id), do: true
+  defp names_asset?({:in_service_unposted, asset_id, _}, asset_id), do: true
+  defp names_asset?({:in_service_misdated, asset_id, _, _}, asset_id), do: true
+  defp names_asset?({:unexpected_in_service, asset_id, _}, asset_id), do: true
   defp names_asset?(_violation, _asset_id), do: false
 
   defp check(violations, false, _violation), do: violations
