@@ -34,8 +34,19 @@ defmodule Samen.FinanceAssetsTest do
       gain/loss leg (the two directions);
     * a16 a CIP does not depreciate until `:place_in_service` posts the
       reclassification and starts the schedule;
-    * a17 a transfer moves FUTURE depreciation to the new cost object, keeps
-      history, and leaves past entries on their original dimension.
+    * a17 a transfer before any ledger history moves all future depreciation
+      and the disposal to the new cost object and keeps history;
+    * a20 a disposal before the latest posted depreciation period is refused
+      before any entry lands, and the same asset can still be disposed later;
+    * a21 a transfer after depreciation is refused, leaving the asset on its
+      original dimension and disposal complete on that one dimension;
+    * a22 a CIP may transfer before service, but a transfer after the in-service
+      entry is refused and subsequent depreciation stays on the pre-service
+      transfer's dimension;
+    * a23 a legacy transferred asset with a posted slice on the old dimension
+      refuses disposal, while a clean asset still disposes (CONTROL);
+    * a24 a legacy transferred CIP whose in-service entry is on the old
+      dimension refuses disposal, while a clean CIP still disposes (CONTROL).
   """
   use ExUnit.Case, async: false
 
@@ -737,10 +748,8 @@ defmodule Samen.FinanceAssetsTest do
 
   # ── a17: transfers ────────────────────────────────────────────────────────
 
-  test "a transfer moves FUTURE depreciation to the new cost object and keeps history", %{
-    org: org,
-    admin: admin
-  } do
+  test "a pre-posting transfer carries all later postings, including disposal, on the new object",
+       %{org: org, admin: admin} do
     ctx = books!(admin, org)
     other = cost_object!(admin, org, "ptb", "PTB Photonics")
 
@@ -756,18 +765,13 @@ defmodule Samen.FinanceAssetsTest do
         dimension_key: :project
       })
 
-    assert {:ok, %{posted: [january_id]}} = DepreciationRun.run(period: {2026, 1})
-    january = Enum.find(postings(org), &(&1.id == january_id))
-    january_entry = entry_for!(org, "asset_posting", january.id)
-
-    assert Enum.all?(
-             entry_lines(org, january_entry.id),
-             &(&1.dimension_refs["project"] == ctx.cost_object.id)
-           )
+    # A transfer is a pre-ledger assignment: no slice has posted, so there is
+    # no old-dimension balance for a later disposal to strand.
+    assert postings(org) == []
 
     transferred =
       transfer!(admin, asset, %{
-        transferred_on: ~D[2026-02-01],
+        transferred_on: ~D[2026-01-01],
         cost_object_id: other.id,
         dimension_key: :project
       })
@@ -776,30 +780,14 @@ defmodule Samen.FinanceAssetsTest do
     assert [history] = transferred.transfer_history
     assert history["from_cost_object_id"] == ctx.cost_object.id
     assert history["to_cost_object_id"] == other.id
-    assert history["transferred_on"] == "2026-02-01"
-
-    assert {:ok, %{posted: [february_id]}} = DepreciationRun.run(period: {2026, 2})
-    february = Enum.find(postings(org), &(&1.id == february_id))
-    february_entry = entry_for!(org, "asset_posting", february.id)
-
-    assert Enum.all?(
-             entry_lines(org, february_entry.id),
-             &(&1.dimension_refs["project"] == other.id)
-           )
-
-    # The January entry keeps the dimension it posted with; history is not
-    # rewritten by the later transfer.
-    assert Enum.all?(
-             entry_lines(org, january_entry.id),
-             &(&1.dimension_refs["project"] == ctx.cost_object.id)
-           )
+    assert history["transferred_on"] == "2026-01-01"
 
     assert {:error, %Ash.Error.Invalid{} = err} =
              transferred
              |> Ash.Changeset.for_update(
                :transfer,
                %{
-                 transferred_on: ~D[2026-03-01],
+                 transferred_on: ~D[2026-01-02],
                  cost_object_id: other.id,
                  dimension_key: :project
                },
@@ -808,6 +796,32 @@ defmodule Samen.FinanceAssetsTest do
              |> Ash.update()
 
     assert Exception.message(err) =~ "already assigned"
+
+    for month <- 1..2 do
+      assert {:ok, %{posted: [_]}} = DepreciationRun.run(period: {2026, month})
+    end
+
+    for posting <- postings(org) do
+      lines = entry_lines(org, entry_for!(org, "asset_posting", posting.id).id)
+      assert Enum.all?(lines, &(&1.dimension_refs["project"] == other.id))
+      refute Enum.any?(lines, &(&1.dimension_refs["project"] == ctx.cost_object.id))
+    end
+
+    disposed = dispose!(admin, asset, %{disposed_on: ~D[2026-03-01], proceeds_cents: 0})
+    assert disposed.status == :disposed
+
+    disposal_lines =
+      entry_lines(org, entry_for!(org, "asset_disposal", asset.id).id)
+
+    assert Enum.all?(disposal_lines, &(&1.dimension_refs["project"] == other.id))
+    refute Enum.any?(disposal_lines, &(&1.dimension_refs["project"] == ctx.cost_object.id))
+
+    register = AssetRegister.for_org(org, asset: Asset, posting: AssetPosting)
+    [row] = register.assets
+    assert row.nbv_cents == 0
+
+    report = audit(org)
+    assert report.ok?, inspect(report.violations)
   end
 
   # ── a18: lifecycle failure leaves no half-state ───────────────────────────
@@ -871,6 +885,342 @@ defmodule Samen.FinanceAssetsTest do
            |> Ash.read!(authorize?: false) == []
   end
 
+  # ── a20: disposal cannot outrun the posted ledger ────────────────────────
+
+  test "a disposal before the latest posted period refuses and leaves the asset active", %{
+    org: org,
+    admin: admin
+  } do
+    ctx = books!(admin, org)
+    pdk = pdk!(admin, org, ctx)
+
+    for month <- 1..2 do
+      assert {:ok, %{posted: [_]}} = DepreciationRun.run(period: {2026, month})
+    end
+
+    before_postings = postings(org)
+    assert Enum.map(before_postings, & &1.period_key) == ["2026-01", "2026-02"]
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             pdk
+             |> Ash.Changeset.for_update(:dispose, %{disposed_on: ~D[2026-01-15]}, scope: admin)
+             |> Ash.update()
+
+    message = Exception.message(err)
+    assert message =~ "depreciation posted for 2026-02"
+    assert message =~ "2026-01-15"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^pdk.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.status == :active
+    assert reloaded.disposed_on == nil
+    assert reloaded.disposal_entry_id == nil
+    assert postings(org) == before_postings
+
+    assert JournalEntry
+           |> Ash.Query.filter(org_id == ^org and source_key == "asset_disposal")
+           |> Ash.read!(authorize?: false) == []
+
+    # CONTROL: a disposal in the latest posted month is allowed; the guard is
+    # about future slices, not about the month that is already posted.
+    disposed =
+      dispose!(admin, pdk, %{
+        disposed_on: ~D[2026-02-15],
+        proceeds_cents: 56_000_000
+      })
+
+    assert disposed.status == :disposed
+    assert entry_for!(org, "asset_disposal", pdk.id).status == :posted
+    assert length(postings(org)) == 2
+  end
+
+  # ── a21: a transfer after depreciation is refused ────────────────────────
+
+  test "a transfer after depreciation refuses and leaves disposal on the original object", %{
+    org: org,
+    admin: admin
+  } do
+    ctx = books!(admin, org)
+    other = cost_object!(admin, org, "ptb", "PTB Photonics")
+
+    asset =
+      asset!(admin, org, %{
+        code: "TRANSFER-AFTER-POST",
+        name: "Asset with a posted slice",
+        kind: :intangible,
+        cost_cents: 1_200_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 12,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project
+      })
+
+    assert {:ok, %{posted: [january_id]}} = DepreciationRun.run(period: {2026, 1})
+    january = Enum.find(postings(org), &(&1.id == january_id))
+    january_entry = entry_for!(org, "asset_posting", january.id)
+
+    assert Enum.all?(
+             entry_lines(org, january_entry.id),
+             &(&1.dimension_refs["project"] == ctx.cost_object.id)
+           )
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             asset
+             |> Ash.Changeset.for_update(
+               :transfer,
+               %{
+                 transferred_on: ~D[2026-02-01],
+                 cost_object_id: other.id,
+                 dimension_key: :project
+               },
+               scope: admin
+             )
+             |> Ash.update()
+
+    message = Exception.message(err)
+    assert message =~ "already has depreciation postings"
+    assert message =~ "leave the old balances behind"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^asset.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.cost_object_id == ctx.cost_object.id
+    assert reloaded.transfer_history == []
+
+    # The refused transfer wrote nothing, so the disposal still clears the one
+    # dimension every asset-owned entry carries.
+    disposed = dispose!(admin, asset, %{disposed_on: ~D[2026-02-15], proceeds_cents: 0})
+    assert disposed.status == :disposed
+
+    disposal_lines = entry_lines(org, entry_for!(org, "asset_disposal", asset.id).id)
+    assert Enum.all?(disposal_lines, &(&1.dimension_refs["project"] == ctx.cost_object.id))
+    refute Enum.any?(disposal_lines, &(&1.dimension_refs["project"] == other.id))
+
+    register = AssetRegister.for_org(org, asset: Asset, posting: AssetPosting)
+    [row] = register.assets
+    assert row.nbv_cents == 0
+
+    report = audit(org)
+    assert report.ok?, inspect(report.violations)
+  end
+
+  # ── a22: a transfer after CIP in-service is refused ─────────────────────
+
+  test "a transfer after a CIP is placed in service refuses", %{org: org, admin: admin} do
+    ctx = books!(admin, org)
+    other = cost_object!(admin, org, "ptb", "PTB Photonics")
+
+    cip =
+      asset!(admin, org, %{
+        code: "CIP-TRANSFER-LATE",
+        name: "In-service CIP",
+        kind: :equipment,
+        cost_cents: 4_800_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 48,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project,
+        under_construction: true
+      })
+
+    # CONTROL: a CIP may transfer before it has any ledger history. The
+    # in-service entry and every later slice then carry the new dimension.
+    transferred =
+      transfer!(admin, cip, %{
+        transferred_on: ~D[2026-02-01],
+        cost_object_id: other.id,
+        dimension_key: :project
+      })
+
+    assert transferred.cost_object_id == other.id
+    assert [_history] = transferred.transfer_history
+
+    placed = place_in_service!(admin, transferred, %{in_service_on: ~D[2026-03-01]})
+    assert placed.status == :active
+    refute is_nil(placed.in_service_entry_id)
+
+    in_service_lines = entry_lines(org, placed.in_service_entry_id)
+    assert Enum.all?(in_service_lines, &(&1.dimension_refs["project"] == other.id))
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             placed
+             |> Ash.Changeset.for_update(
+               :transfer,
+               %{
+                 transferred_on: ~D[2026-03-02],
+                 cost_object_id: ctx.cost_object.id,
+                 dimension_key: :project
+               },
+               scope: admin
+             )
+             |> Ash.update()
+
+    message = Exception.message(err)
+    assert message =~ "already has an in-service reclassification entry"
+    assert message =~ "leave the old balances behind"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^cip.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.cost_object_id == other.id
+    assert [_history] = reloaded.transfer_history
+
+    # The next slice follows the unchanged dimension; the refused transfer did
+    # not leave a future switch behind.
+    assert {:ok, %{posted: [_]}} = DepreciationRun.run(period: {2026, 3})
+    [march] = postings(org)
+    march_entry = entry_for!(org, "asset_posting", march.id)
+
+    assert Enum.all?(
+             entry_lines(org, march_entry.id),
+             &(&1.dimension_refs["project"] == other.id)
+           )
+  end
+
+  # ── a23: legacy mixed-dimension depreciation ─────────────────────────────
+
+  test "a legacy post-transfer asset refuses disposal; a clean asset still disposes", %{
+    org: org,
+    admin: admin
+  } do
+    ctx = books!(admin, org)
+    other = cost_object!(admin, org, "ptb", "PTB Photonics")
+
+    legacy =
+      asset!(admin, org, %{
+        code: "LEGACY-DIM",
+        name: "Legacy transferred asset",
+        kind: :intangible,
+        cost_cents: 1_200_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 12,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project
+      })
+
+    clean =
+      asset!(admin, org, %{
+        code: "CLEAN-DIM",
+        name: "Clean asset",
+        kind: :intangible,
+        cost_cents: 1_200_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 12,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project
+      })
+
+    assert {:ok, %{posted: posted}} = DepreciationRun.run(period: {2026, 1})
+    assert length(posted) == 2
+
+    # The database is put into the state the old transfer action could create:
+    # the asset now points at B, while its January slice remains on A. The
+    # transfer action itself refuses this state, so this direct update stands in
+    # for a row written before the restriction.
+    force_legacy_transfer!(org, legacy, ctx.cost_object, other)
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             legacy
+             |> Ash.Changeset.for_update(:dispose, %{disposed_on: ~D[2026-02-01]}, scope: admin)
+             |> Ash.update()
+
+    message = Exception.message(err)
+    assert message =~ "legacy dimension group"
+    assert message =~ "disposal clears only the current dimension"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^legacy.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.status == :active
+    assert reloaded.cost_object_id == other.id
+    assert [_history] = reloaded.transfer_history
+
+    assert JournalEntry
+           |> Ash.Query.filter(
+             org_id == ^org and source_key == "asset_disposal" and source_id == ^legacy.id
+           )
+           |> Ash.read!(authorize?: false) == []
+
+    # CONTROL: the clean asset has one dimension across its posted slice and
+    # current assignment, so the same disposal action still posts.
+    clean_disposed = dispose!(admin, clean, %{disposed_on: ~D[2026-02-01], proceeds_cents: 0})
+    assert clean_disposed.status == :disposed
+
+    clean_lines = entry_lines(org, entry_for!(org, "asset_disposal", clean.id).id)
+    assert Enum.all?(clean_lines, &(&1.dimension_refs["project"] == ctx.cost_object.id))
+    refute Enum.any?(clean_lines, &(&1.dimension_refs["project"] == other.id))
+  end
+
+  # ── a24: legacy mixed-dimension in-service cost ──────────────────────────
+
+  test "a legacy post-transfer CIP refuses disposal; a clean CIP still disposes", %{
+    org: org,
+    admin: admin
+  } do
+    ctx = books!(admin, org)
+    other = cost_object!(admin, org, "ptb", "PTB Photonics")
+
+    legacy =
+      asset!(admin, org, %{
+        code: "LEGACY-CIP",
+        name: "Legacy in-service CIP",
+        kind: :equipment,
+        cost_cents: 4_800_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 48,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project,
+        under_construction: true
+      })
+
+    clean =
+      asset!(admin, org, %{
+        code: "CLEAN-CIP",
+        name: "Clean in-service CIP",
+        kind: :equipment,
+        cost_cents: 2_400_000,
+        acquired_on: ~D[2026-01-01],
+        life_months: 48,
+        cost_object_id: ctx.cost_object.id,
+        dimension_key: :project,
+        under_construction: true
+      })
+
+    legacy_placed = place_in_service!(admin, legacy, %{in_service_on: ~D[2026-03-01]})
+    clean_placed = place_in_service!(admin, clean, %{in_service_on: ~D[2026-03-01]})
+
+    assert Enum.all?(
+             entry_lines(org, legacy_placed.in_service_entry_id),
+             &(&1.dimension_refs["project"] == ctx.cost_object.id)
+           )
+
+    force_legacy_transfer!(org, legacy_placed, ctx.cost_object, other, "2026-03-02")
+
+    assert {:error, %Ash.Error.Invalid{} = err} =
+             legacy_placed
+             |> Ash.Changeset.for_update(:dispose, %{disposed_on: ~D[2026-04-01]}, scope: admin)
+             |> Ash.update()
+
+    message = Exception.message(err)
+    assert message =~ "legacy dimension group"
+    assert message =~ "disposal clears only the current dimension"
+
+    reloaded = Asset |> Ash.Query.filter(id == ^legacy.id) |> Ash.read_one!(authorize?: false)
+    assert reloaded.status == :active
+    assert reloaded.cost_object_id == other.id
+    assert [_history] = reloaded.transfer_history
+
+    assert JournalEntry
+           |> Ash.Query.filter(
+             org_id == ^org and source_key == "asset_disposal" and source_id == ^legacy.id
+           )
+           |> Ash.read!(authorize?: false) == []
+
+    # CONTROL: the clean CIP's in-service entry and current dimension agree, so
+    # disposal still clears its cost on that one dimension.
+    clean_disposed =
+      dispose!(admin, clean_placed, %{disposed_on: ~D[2026-04-01], proceeds_cents: 0})
+
+    assert clean_disposed.status == :disposed
+
+    clean_lines = entry_lines(org, entry_for!(org, "asset_disposal", clean.id).id)
+    assert Enum.all?(clean_lines, &(&1.dimension_refs["project"] == ctx.cost_object.id))
+    refute Enum.any?(clean_lines, &(&1.dimension_refs["project"] == other.id))
+  end
+
   # ── fixture ───────────────────────────────────────────────────────────────
 
   defp tenant_scope(org_id) do
@@ -931,6 +1281,36 @@ defmodule Samen.FinanceAssetsTest do
     asset
     |> Ash.Changeset.for_update(:transfer, attrs, scope: admin)
     |> Ash.update!()
+  end
+
+  # Stand in for the pre-restriction transfer action: the current assignment
+  # moves, but the entries already posted keep their old dimension. Only a raw
+  # write can reconstruct that legacy state now that :transfer refuses it.
+  defp force_legacy_transfer!(org, asset, from, to, transferred_on \\ "2026-02-01") do
+    history = %{
+      "transferred_on" => transferred_on,
+      "from_cost_object_id" => from.id,
+      "from_dimension_key" => "project",
+      "to_cost_object_id" => to.id,
+      "to_dimension_key" => "project"
+    }
+
+    @repo.query!(
+      """
+      UPDATE fsf_asset
+      SET fsf_cost_object_id = $1,
+          fsf_transfer_history = ARRAY[$2::jsonb]
+      WHERE fsf_org_id = $3 AND fsf_id = $4
+      """,
+      [
+        Ecto.UUID.dump!(to.id),
+        history,
+        Ecto.UUID.dump!(org),
+        Ecto.UUID.dump!(asset.id)
+      ]
+    )
+
+    :ok
   end
 
   # The GL accounts the register posts against: the depreciation pairs plus

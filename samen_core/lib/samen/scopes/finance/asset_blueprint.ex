@@ -87,18 +87,19 @@ defmodule Samen.Scopes.Finance.AssetBlueprint do
           * `in_service_entry_id` — the CIP reclassification entry, when the
             asset was placed in service through that action.
           * `transfer_history` — bounded, dated from/to cost-object records for
-            `:transfer`. Future depreciation follows the current dimension;
-            past entries keep theirs.
+            `:transfer`. A transfer is allowed only before the asset has any
+            ledger history, so all of its depreciation and its disposal carry
+            one dimension.
           * `cost_object_id` / `dimension_key` — the optional programme dimension
             both entry legs carry (R6). Nil means the asset is undimensioned and
             the entry passes R6 vacuously, exactly like a base-system posting.
 
         Updates are lifecycle actions only: `:dispose` posts the disposal
         entry, `:place_in_service` transfers a CIP into service, and `:transfer`
-        moves the future cost-object dimension and keeps a history. Changing a
-        cost, life or salvage after postings exist would rewrite the schedule
-        retroactively, which is an accounting decision (a new asset, or a
-        correcting entry), not a row edit.
+        moves the cost-object dimension before any ledger history and keeps a
+        record. Changing a cost, life or salvage after postings exist would
+        rewrite the schedule retroactively, which is an accounting decision (a
+        new asset, or a correcting entry), not a row edit.
 
         No PII (INV-1): ids, integers, dates, two closed enums, a freeform memo
         (default-deny-CDC-excluded, not vaulted).
@@ -270,17 +271,21 @@ defmodule Samen.Scopes.Finance.AssetBlueprint do
             )
           end
 
-          # Move the FUTURE cost-object dimension. Past entries keep theirs;
-          # the action appends a dated from/to record to the register. No entry
-          # is posted (the balance is unchanged, and R6 requires a
-          # dimension-balanced entry rather than a one-sided reclass).
+          # Move the cost-object dimension before the asset has any ledger
+          # history: no entry has posted, so no cost/accumulated balance can be
+          # stranded on the old dimension. Posts no entry; R6 cannot reclassify
+          # a balance between cost objects with a one-sided entry.
           update :transfer do
             accept([])
             argument(:transferred_on, :date, allow_nil?: false)
             argument(:cost_object_id, :uuid, allow_nil?: false)
             argument(:dimension_key, :atom, allow_nil?: false)
             require_atomic?(false)
-            change({Samen.Scopes.Finance.AssetTransfer, asset: unquote(module)})
+
+            change(
+              {Samen.Scopes.Finance.AssetTransfer,
+               asset: unquote(module), posting: unquote(posting_mod)}
+            )
           end
 
           # NO generic update / destroy: see the moduledoc.

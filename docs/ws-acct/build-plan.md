@@ -305,10 +305,12 @@ Landed as `Samen.Scopes.Finance.{Asset,AssetPosting}` (blueprint
 monthly `DepreciationWorker`, the register read `AssetRegister`, the independent audit
 `ReconcileAssets`, and the two guards `AssetShape`/`AssetDisposal` — plus three migrations
 (fixture `fsf`/`fsp`, web `fas`/`fad`, erp `eas`/`ead`), six allocator-reserved abbrevs,
-`samen_core/test/finance_assets_test.exs` (19 tests), the Kubeworkz asset seed + host test, and
+`samen_core/test/finance_assets_test.exs` (24 tests), the Kubeworkz asset seed + host test, and
 sabotage **408**. The 2026-11-14 extension adds `AssetEntry`, the `AssetCreate`/
-`AssetTransfer`/`AssetInService` lifecycle changes, one ALTER migration per host, and the six
-lifecycle tests (disposal gain/loss, CIP, transfer, and two failure-rollback cases).
+`AssetTransfer`/`AssetInService` lifecycle changes, one ALTER migration per host, and the eleven
+lifecycle tests (disposal gain/loss, CIP, pre-ledger transfer, two failure-rollback cases, the
+posted-period disposal refusal, two transfer-restriction red paths, and two legacy mixed-dimension
+disposal refusals).
 
 Seven decisions the phase had to take:
 
@@ -365,11 +367,17 @@ Three lifecycle gaps were closed without changing the derived-schedule disciplin
    `asset_cost_equipment` (or `construction_in_progress` for a CIP), accumulated contra, cash
    proceeds and `disposal_gain_loss`, anchored `asset_disposal` to the asset id. `proceeds_cents`
    is the only caller-supplied amount; the gain/loss is `proceeds - NBV`. The entry is in the
-   same transaction as the status/disposal fact.
-2. **Transfers move future dimensions and keep a history.** `:transfer` changes the asset's
-   current cost object/dimension, appends a dated from/to record, and posts nothing (the balance
-   is unchanged; a one-sided dimension reclass would violate R6). Past depreciation keeps the
-   dimension it posted with.
+   same transaction as the status/disposal fact. Before posting, `:dispose` reads the
+   asset-owned entry lines and refuses a legacy asset whose posted slice or in-service entry
+   carries a dimension different from the current one; those prior balances cannot be cleared
+   on the current dimension.
+2. **Transfers are pre-ledger assignments.** `:transfer` changes the asset's current cost
+   object/dimension, appends a dated from/to record, and posts nothing. It is allowed only before
+   the asset has any ledger history — no depreciation posting and no CIP in-service entry. R6
+   cannot move a balance between cost objects, so a transfer after posting would leave the cost
+   and accumulated on the old dimension; disposal clears only the current dimension. Once an
+   asset is in service or depreciated, changing its cost object is a new-asset or
+   correcting-entry decision, not a subledger edit.
 3. **CIP is a lifecycle state, not a second asset class.** `under_construction: true` creates a
    status-`:under_construction` asset with no schedule. `:place_in_service` requires a date,
    reclassifies cost from `construction_in_progress` to the kind's asset-cost account, and starts

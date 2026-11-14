@@ -267,8 +267,12 @@ and a monthly `DepreciationRun` posts once per period behind a period-keyed anch
 PDK license (JE-003/004), lab equipment (JE-063), and the accumulated-amortization contra
 account. `:dispose` posts the standard proceeds/accumulated/cost/gain-loss entry;
 `:place_in_service` reclassifies a construction-in-progress asset and starts its schedule;
-`:transfer` moves the future cost-object dimension with a dated history. Past entries never
-change dimensions.
+`:transfer` moves the cost-object dimension with a dated history, but only **before the asset has
+any ledger history** (no posted depreciation and no in-service reclassification). A later transfer
+would leave posted cost/accumulated on the old dimension, and R6 cannot move a balance between
+cost objects; disposal clears only the current dimension. `:dispose` also reads the asset-owned
+entry lines and refuses a legacy asset already in that mixed state, rather than silently clearing
+one dimension. Past entries never change dimensions.
 
 ### D9a — Prepaid expense schedules are their own derived contract and release facts
 `PrepaidSchedule` `{code, name, total_cents, start_on, months, method ∈ {:straight_line},

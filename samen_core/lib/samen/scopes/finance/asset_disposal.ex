@@ -22,11 +22,28 @@ defmodule Samen.Scopes.Finance.AssetDisposal do
   supply. A nil proceeds value means zero (a scrap write-off), not an
   invention: the resulting loss is the remaining NBV.
 
+  Disposal clears cost and accumulated on the asset's CURRENT dimension. That is
+  complete because `AssetTransfer` refuses a transfer once the asset has any
+  ledger history (a posted slice or an in-service reclassification): every
+  asset-owned cost/contra entry therefore carries the same dimension. Moving an
+  in-service asset between cost objects cannot be represented as a subledger
+  transfer under R6; it needs its own accounting decision.
+
+  Legacy assets transferred under the earlier permissive behavior are not
+  assumed safe: `:dispose` reads the asset-owned entry lines and refuses when any
+  carries a dimension different from the asset's current dimension. The refusal
+  happens before accounts are resolved or an entry is posted, so the mixed state
+  is not silently cleared on one side.
+
   Refusals, all inside the update's transaction:
 
     * disposing an already-disposed asset (the transition is one-way);
     * a disposal dated before acquisition, or before an active asset was placed
       in service;
+    * a disposal dated before the latest posted depreciation period — those
+      slices are facts and cannot be pulled into the disposal or unposted;
+    * a legacy asset whose posted depreciation or in-service entry carries a
+      different cost object from its current dimension;
     * a negative proceeds value;
     * a disposal whose entry cannot land (closed period, unmapped account).
   """
@@ -34,6 +51,7 @@ defmodule Samen.Scopes.Finance.AssetDisposal do
   require Ash.Query
 
   alias Samen.Scopes.Finance.AssetEntry
+  alias Samen.Scopes.Finance.AssetSchedule
 
   use Ash.Resource.Change
 
@@ -120,8 +138,11 @@ defmodule Samen.Scopes.Finance.AssetDisposal do
   defp active_before_service?(_asset, _on), do: false
 
   defp post_disposal(changeset, asset, on, proceeds, posting_mod, entry_mod, pa_mod) do
-    with {:ok, accumulated} <- accumulated(asset, posting_mod),
+    with {:ok, postings} <- asset_postings(asset, posting_mod),
+         accumulated = Enum.reduce(postings, 0, &(&1.amount_cents + &2)),
          :ok <- ensure_cip_has_no_slices(asset, accumulated),
+         :ok <- ensure_disposal_not_before_latest_posting(asset, on, postings),
+         :ok <- ensure_one_dimension(asset, postings, entry_mod),
          {:ok, accounts} <- accounts(asset, pa_mod, proceeds, accumulated),
          gain_loss = proceeds + accumulated - asset.cost_cents,
          {:ok, entry} <-
@@ -142,12 +163,37 @@ defmodule Samen.Scopes.Finance.AssetDisposal do
     end
   end
 
-  defp accumulated(asset, posting_mod) do
+  defp asset_postings(asset, posting_mod) do
     case posting_mod
          |> Ash.Query.filter(org_id == ^asset.org_id and asset_id == ^asset.id)
          |> Ash.read(authorize?: false) do
-      {:ok, postings} -> {:ok, Enum.reduce(postings, 0, &(&1.amount_cents + &2))}
+      {:ok, postings} -> {:ok, postings}
       {:error, reason} -> {:error, {:postings_unreadable, reason}}
+    end
+  end
+
+  # A disposal is a prospective event: the posted slices are facts it cannot
+  # rewrite. If the latest posted month is after the disposal month, summing
+  # every posting into the disposal would carry a future slice into
+  # accumulated/gain-loss while leaving that slice posted. Refuse instead; a
+  # correction is a reversal, not an un-disposal.
+  defp ensure_disposal_not_before_latest_posting(_asset, _on, []), do: :ok
+
+  defp ensure_disposal_not_before_latest_posting(asset, on, postings) do
+    latest = Enum.max_by(postings, & &1.period_key)
+
+    case AssetSchedule.parse_period(latest.period_key) do
+      {:ok, {year, month}} ->
+        period_start = Date.new!(year, month, 1)
+
+        if Date.compare(on, period_start) == :lt do
+          {:error, {:disposal_before_latest_posting, asset.code, latest.period_key, on}}
+        else
+          :ok
+        end
+
+      :error ->
+        {:error, {:invalid_posting_period, asset.code, latest.period_key}}
     end
   end
 
@@ -156,6 +202,77 @@ defmodule Samen.Scopes.Finance.AssetDisposal do
        do: {:error, {:cip_has_depreciation, accumulated}}
 
   defp ensure_cip_has_no_slices(_asset, _accumulated), do: :ok
+
+  # A transfer made under the pre-restriction behavior could leave posted cost
+  # or accumulated on the old cost object. Disposal clears only the current
+  # dimension, so read the asset-owned entries themselves and refuse a mixed
+  # state. `transfer_history` alone is not enough: a transfer before any
+  # posting is safe and leaves one dimension on every entry.
+  defp ensure_one_dimension(asset, postings, entry_mod) do
+    current = AssetEntry.dimension_refs(asset)
+
+    with {:ok, entries} <- asset_entries(asset, postings, entry_mod) do
+      mismatched =
+        entries
+        |> Enum.flat_map(fn entry ->
+          entry.lines
+          |> List.wrap()
+          |> Enum.map(&normalize_dimensions(&1.dimension_refs))
+          |> Enum.reject(&(&1 == current))
+          |> Enum.map(&{entry.id, &1})
+        end)
+        |> Enum.uniq()
+
+      case mismatched do
+        [] ->
+          :ok
+
+        [{entry_id, dims} | _] ->
+          {:error, {:mixed_dimensions, asset.code, current, entry_id, dims, length(mismatched)}}
+      end
+    end
+  end
+
+  defp asset_entries(asset, postings, entry_mod) do
+    posting_ids = Enum.map(postings, & &1.id)
+
+    with {:ok, posting_entries} <- posting_entries(asset, posting_ids, entry_mod),
+         {:ok, in_service_entries} <- in_service_entries(asset, entry_mod) do
+      {:ok, posting_entries ++ in_service_entries}
+    end
+  end
+
+  defp posting_entries(_asset, [], _entry_mod), do: {:ok, []}
+
+  defp posting_entries(asset, posting_ids, entry_mod) do
+    entry_mod
+    |> Ash.Query.filter(
+      org_id == ^asset.org_id and source_key == "asset_posting" and source_id in ^posting_ids
+    )
+    |> Ash.Query.load(:lines)
+    |> Ash.read(authorize?: false)
+    |> entries_result()
+  end
+
+  defp in_service_entries(%{in_service_entry_id: nil}, _entry_mod), do: {:ok, []}
+
+  defp in_service_entries(asset, entry_mod) do
+    entry_mod
+    |> Ash.Query.filter(org_id == ^asset.org_id and id == ^asset.in_service_entry_id)
+    |> Ash.Query.load(:lines)
+    |> Ash.read(authorize?: false)
+    |> entries_result()
+  end
+
+  defp entries_result({:ok, entries}), do: {:ok, entries}
+  defp entries_result({:error, reason}), do: {:error, {:asset_entries_unreadable, reason}}
+
+  defp normalize_dimensions(nil), do: %{}
+
+  defp normalize_dimensions(refs) when is_map(refs),
+    do: Map.new(refs, fn {key, value} -> {to_string(key), value} end)
+
+  defp normalize_dimensions(_refs), do: %{}
 
   defp accounts(asset, pa_mod, proceeds, accumulated) do
     gain_or_loss? = proceeds + accumulated - asset.cost_cents != 0
@@ -231,10 +348,39 @@ defmodule Samen.Scopes.Finance.AssetDisposal do
       "a construction-in-progress asset has #{accumulated} cents of depreciation postings; " <>
         "correct those facts before disposing of the asset"
 
+  defp format({:disposal_before_latest_posting, code, period_key, on}),
+    do:
+      "asset #{code} has depreciation posted for #{period_key}, after the disposal date " <>
+        "#{Date.to_iso8601(on)} — posted slices are facts; reverse them before disposing"
+
+  defp format({:invalid_posting_period, code, period_key}),
+    do:
+      "asset #{code} has a depreciation posting with an invalid period key " <>
+        "#{inspect(period_key)}"
+
+  defp format({:mixed_dimensions, code, current, entry_id, dims, count}) do
+    "asset #{code} has #{count} legacy dimension group(s) different from its current " <>
+      "dimension (current #{format_dimensions(current)}; entry #{entry_id} uses " <>
+      "#{format_dimensions(dims)}) — a pre-restriction transfer left cost/accumulated on " <>
+      "the old cost object, and disposal clears only the current dimension. Correct those " <>
+      "ledger facts before disposing."
+  end
+
+  defp format({:asset_entries_unreadable, reason}),
+    do: "asset entries are unreadable for the dimension check: #{inspect(reason)}"
+
   defp format({:postings_unreadable, reason}),
     do: "asset postings are unreadable: #{inspect(reason)}"
 
   defp format({:asset_not_found, id}), do: "asset #{id} was not found"
   defp format(%{__exception__: true} = error), do: Exception.message(error)
   defp format(reason), do: inspect(reason)
+
+  defp format_dimensions(dims) when dims == %{}, do: "undimensioned"
+
+  defp format_dimensions(dims) do
+    dims
+    |> Enum.sort()
+    |> Enum.map_join(", ", fn {key, value} -> "#{key}=#{value}" end)
+  end
 end

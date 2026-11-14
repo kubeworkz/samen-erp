@@ -54,13 +54,21 @@ defmodule Samen.Scopes.Finance.AssetTransfer do
   A dated cost-object transfer (WS-ACCT Phase 8; ADR-054 D9).
 
   The asset's current `cost_object_id` / `dimension_key` govern FUTURE
-  depreciation entries. Past entries keep the dimension they posted with. The
-  action appends a bounded transfer record — from/to ids and the date — so the
-  register can explain why a later slice carries a different cost object.
+  depreciation entries. The action appends a bounded transfer record — from/to
+  ids and the date — so the register can explain why a later slice carries a
+  different cost object.
 
-  This is a subledger movement, not a GL reclassification: the entry balance is
-  unchanged, so no journal entry is posted. A dimension-balanced reclassification
-  would violate R6 unless the old and new cost objects both netted to zero.
+  **A transfer is available only before the asset has any ledger history.**
+  Once a depreciation slice has posted or a CIP has been placed in service,
+  moving the asset would leave the already-posted cost/accumulated balance on
+  the old dimension, and a later disposal clears only the current dimension.
+  That balance cannot be moved between cost objects: R6 requires every entry to
+  balance per cost object, so a one-sided reclassification is refused. Refusing
+  the transfer is the honest boundary; changing the cost object of an in-service
+  asset is a new-asset or correcting-entry decision, not a subledger edit.
+
+  A transfer before any ledger history posts no journal entry: it changes which
+  dimension future entries will carry, and no balance exists to reclassify.
   """
 
   require Ash.Query
@@ -70,22 +78,23 @@ defmodule Samen.Scopes.Finance.AssetTransfer do
   @impl true
   def change(changeset, opts, _context) do
     asset_mod = Keyword.fetch!(opts, :asset)
+    posting_mod = Keyword.fetch!(opts, :posting)
 
     Ash.Changeset.before_action(changeset, fn changeset ->
-      transfer(changeset, asset_mod)
+      transfer(changeset, asset_mod, posting_mod)
     end)
   end
 
-  defp transfer(changeset, asset_mod) do
+  defp transfer(changeset, asset_mod, posting_mod) do
     with {:ok, asset} <- load_asset(asset_mod, changeset.data.id) do
-      do_transfer(changeset, asset)
+      do_transfer(changeset, asset, posting_mod)
     else
       {:error, reason} ->
         add_error(changeset, :base, "the asset cannot be loaded for transfer: #{inspect(reason)}")
     end
   end
 
-  defp do_transfer(changeset, asset) do
+  defp do_transfer(changeset, asset, posting_mod) do
     on = Ash.Changeset.get_argument(changeset, :transferred_on)
     cost_object_id = Ash.Changeset.get_argument(changeset, :cost_object_id)
     dimension_key = Ash.Changeset.get_argument(changeset, :dimension_key)
@@ -112,21 +121,57 @@ defmodule Samen.Scopes.Finance.AssetTransfer do
         add_error(changeset, :cost_object_id, "the asset is already assigned to that cost object")
 
       true ->
-        record = %{
-          "transferred_on" => Date.to_iso8601(on),
-          "from_cost_object_id" => asset.cost_object_id,
-          "from_dimension_key" => to_string(asset.dimension_key),
-          "to_cost_object_id" => cost_object_id,
-          "to_dimension_key" => to_string(dimension_key)
-        }
+        case ensure_no_ledger_history(asset, posting_mod) do
+          :ok ->
+            record = %{
+              "transferred_on" => Date.to_iso8601(on),
+              "from_cost_object_id" => asset.cost_object_id,
+              "from_dimension_key" => to_string(asset.dimension_key),
+              "to_cost_object_id" => cost_object_id,
+              "to_dimension_key" => to_string(dimension_key)
+            }
 
-        changeset
-        |> Ash.Changeset.force_change_attribute(
-          :transfer_history,
-          (asset.transfer_history || []) ++ [record]
-        )
-        |> Ash.Changeset.force_change_attribute(:cost_object_id, cost_object_id)
-        |> Ash.Changeset.force_change_attribute(:dimension_key, dimension_key)
+            changeset
+            |> Ash.Changeset.force_change_attribute(
+              :transfer_history,
+              (asset.transfer_history || []) ++ [record]
+            )
+            |> Ash.Changeset.force_change_attribute(:cost_object_id, cost_object_id)
+            |> Ash.Changeset.force_change_attribute(:dimension_key, dimension_key)
+
+          {:error, {:postings_unreadable, reason}} ->
+            add_error(
+              changeset,
+              :base,
+              "the asset's postings cannot be checked before transfer: #{inspect(reason)}"
+            )
+
+          {:error, history} ->
+            add_error(
+              changeset,
+              :base,
+              "asset #{asset.code} already has #{history}; a transfer only moves future " <>
+                "depreciation, but the cost and accumulated already posted cannot be " <>
+                "reclassified between cost objects (R6). A later disposal would clear only " <>
+                "the current dimension and leave the old balances behind. Transfer the " <>
+                "asset before it is placed in service or depreciated."
+            )
+        end
+    end
+  end
+
+  defp ensure_no_ledger_history(%{in_service_entry_id: entry_id}, _posting_mod)
+       when not is_nil(entry_id),
+       do: {:error, "an in-service reclassification entry"}
+
+  defp ensure_no_ledger_history(asset, posting_mod) do
+    case posting_mod
+         |> Ash.Query.filter(org_id == ^asset.org_id and asset_id == ^asset.id)
+         |> Ash.Query.limit(1)
+         |> Ash.read(authorize?: false) do
+      {:ok, []} -> :ok
+      {:ok, [_posting]} -> {:error, "depreciation postings"}
+      {:error, reason} -> {:error, {:postings_unreadable, reason}}
     end
   end
 
