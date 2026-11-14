@@ -310,6 +310,16 @@ with the `Samen.Web.Erp` registry extended by the new surfaces. Risks/opportunit
 and board resolutions stay **authored documents** — generating narrative from numbers is not a
 feature this workstream claims.
 
+### D12a — The statement set is equity, segments and an indirect cash flow
+Three period reads complete the statements: `EquityStatement` rolls each equity account plus the
+unclosed earnings the balance sheet already adds; `SegmentReport` groups P&L lines by one frozen
+dimension axis and names the unallocated remainder instead of dropping it; and `CashFlow` keeps its
+opening/closing movement totals while deriving operating (net income, non-cash addbacks and
+working-capital changes), investing and financing sections. Cash classifications follow the host
+posting map by default and are overridable per account; a mixed entry is classified by its
+capital/financing counterpart, never split by invention. AP/AR aging remains the existing
+`ApAging`/`ArAging` subledger reads.
+
 ### D13 — Consolidation stays dormant; single-entity is the honest default
 Kubeworkz is one legal entity today. `scopes/consolidation/*` (E24) is dormant (§0.2) and is the
 documented path when a second entity exists — **not** a phase here. The doc's "Multi-Entity

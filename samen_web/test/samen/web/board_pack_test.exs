@@ -189,6 +189,11 @@ defmodule Samen.Web.BoardPackTest do
     assert html =~ "Cash flow"
     assert html =~ "Opening cash"
     assert html =~ "Closing cash"
+    assert html =~ "Operating (indirect)"
+    assert html =~ "Investing"
+    assert html =~ "Financing"
+    assert html =~ "Equity statement"
+    assert html =~ "Segment P&amp;L" or html =~ "Segment P&L"
     assert html =~ ~s(id="board-light-statements")
     assert html =~ ~s(id="board-light-cash")
     assert html =~ "Trace"
@@ -237,6 +242,8 @@ defmodule Samen.Web.BoardPackTest do
     assert state.report.statements.profit_loss == profit_loss
     assert state.report.statements.balance_sheet == balance_sheet
     assert state.report.statements.cash_flow == cash_flow
+    assert state.report.statements.equity_statement.closing_total_cents == 60_000
+    assert state.report.statements.segment_report.totals.net_cents == 60_000
 
     assert state.report.exec.revenue_cents == 100_000
     assert state.report.exec.expenses_cents == 40_000
@@ -250,6 +257,9 @@ defmodule Samen.Web.BoardPackTest do
     assert csv =~ "section,label,value,unit,source"
     assert csv =~ "exec,Revenue,100000,cents,ProfitLoss.generate/4"
     assert csv =~ "cash_flow,Closing cash,60000,cents,CashFlow.statement/4"
+    assert csv =~ "cash_flow,Operating cash (indirect),60000,cents,CashFlow.statement/4"
+    assert csv =~ "equity_statement,Closing equity,60000,cents,EquityStatement.generate/4"
+    assert csv =~ "segment_report,Unallocated net,60000,cents,SegmentReport.report/4"
     assert csv =~ "variance_bridge,Labour basis,declared_pending_driver,text"
     assert csv =~ "runway,Status,no_published_forecast,text"
   end

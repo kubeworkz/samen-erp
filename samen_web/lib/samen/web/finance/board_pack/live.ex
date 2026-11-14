@@ -225,9 +225,25 @@ defmodule Samen.Web.Finance.BoardPack.Live do
                   <td style="padding:3px 0;color:var(--muted)">Outflows</td>
                   <td style="padding:3px 0;text-align:right">{money(@report.statements.cash_flow.outflows_cents)}</td>
                 </tr>
+                <tr>
+                  <td style="padding:3px 0;color:var(--muted)">Operating (indirect)</td>
+                  <td style="padding:3px 0;text-align:right">{money(@report.statements.cash_flow.operating.net_cents)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:3px 0;color:var(--muted)">Investing</td>
+                  <td style="padding:3px 0;text-align:right">{money(@report.statements.cash_flow.investing.net_cents)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:3px 0;color:var(--muted)">Financing</td>
+                  <td style="padding:3px 0;text-align:right">{money(@report.statements.cash_flow.financing.net_cents)}</td>
+                </tr>
                 <tr style="border-top:1px solid var(--border,#e5e7eb)">
                   <td style="padding:5px 0"><b>Closing cash</b></td>
                   <td style="padding:5px 0;text-align:right"><b>{money(@report.statements.cash_flow.closing_cents)}</b></td>
+                </tr>
+                <tr>
+                  <td style="padding:3px 0;color:var(--muted)">Sections reconciled</td>
+                  <td style="padding:3px 0;text-align:right">{if @report.statements.cash_flow.sections_reconciled?, do: "yes", else: "NO"}</td>
                 </tr>
               </tbody>
             </table>
@@ -235,6 +251,49 @@ defmodule Samen.Web.Finance.BoardPack.Live do
             <p style="color:var(--muted);font-size:12px">
               No <code>:cash</code> posting account is mapped on this workspace, so cash movement is unavailable. The statement is not estimated.
             </p>
+          <% end %>
+        </div>
+
+        <div>
+          <h4>Equity statement</h4>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <tbody>
+              <tr :for={row <- @report.statements.equity_statement.rows}>
+                <td style="padding:3px 0;color:var(--muted)">{row.code} · {row.name}</td>
+                <td style="padding:3px 0;text-align:right">{money(row.closing_cents)}</td>
+              </tr>
+              <tr>
+                <td style="padding:3px 0;color:var(--muted)">Unclosed earnings</td>
+                <td style="padding:3px 0;text-align:right">{money(@report.statements.equity_statement.unclosed_earnings.closing_cents)}</td>
+              </tr>
+              <tr style="border-top:1px solid var(--border,#e5e7eb)">
+                <td style="padding:5px 0"><b>Closing equity</b></td>
+                <td style="padding:5px 0;text-align:right"><b>{money(@report.statements.equity_statement.closing_total_cents)}</b></td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="color:var(--muted);font-size:11px;margin-top:4px">
+            Opening {money(@report.statements.equity_statement.opening_total_cents)} · net income {money(@report.statements.equity_statement.net_income_cents)} · other changes {money(@report.statements.equity_statement.other_changes_cents)}
+          </div>
+        </div>
+
+        <div>
+          <h4>Segment P&amp;L</h4>
+          <%= if @report.statements.segment_report.segments == [] do %>
+            <p style="color:var(--muted);font-size:12px">No segment activity is recorded for this period.</p>
+          <% else %>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <tbody>
+                <tr :for={segment <- @report.statements.segment_report.segments}>
+                  <td style="padding:3px 0;color:var(--muted)">{segment_label(segment)}</td>
+                  <td style="padding:3px 0;text-align:right">{money(segment.net_cents)}</td>
+                </tr>
+                <tr style="border-top:1px solid var(--border,#e5e7eb)">
+                  <td style="padding:5px 0"><b>Total</b></td>
+                  <td style="padding:5px 0;text-align:right"><b>{money(@report.statements.segment_report.totals.net_cents)}</b></td>
+                </tr>
+              </tbody>
+            </table>
           <% end %>
         </div>
       </div>
@@ -366,6 +425,10 @@ defmodule Samen.Web.Finance.BoardPack.Live do
   end
 
   defp period_label(_period), do: "Current period"
+
+  defp segment_label(%{code: code}) when is_binary(code), do: code
+  defp segment_label(%{name: name}) when is_binary(name), do: name
+  defp segment_label(_segment), do: "Unallocated"
 
   defp close_label(%{close_complete?: true}), do: "complete"
   defp close_label(%{close_percent: percent}) when is_integer(percent), do: "#{percent}%"

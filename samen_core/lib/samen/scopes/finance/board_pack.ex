@@ -8,7 +8,11 @@ defmodule Samen.Scopes.Finance.BoardPack do
     * condensed profit & loss — `Samen.Scopes.Finance.ProfitLoss`;
     * balance sheet — `Samen.Scopes.Finance.BalanceSheet`;
     * cash flow — `Samen.Scopes.Finance.CashFlow` (the host's `:cash`
-      posting accounts);
+      posting accounts, with operating/investing/financing classification);
+    * equity statement — `Samen.Scopes.Finance.EquityStatement` (the period
+      roll-forward plus unclosed earnings);
+    * segment report — `Samen.Scopes.Finance.SegmentReport` (P&L by the
+      `project` dimension, with an explicit unallocated bucket);
     * runway — `Samen.Scopes.Finance.ForecastRead` (the latest published
       forecast version, when the host supplies one);
     * variance bridge and appendix — `Samen.Scopes.Finance.VarianceReport`;
@@ -37,8 +41,10 @@ defmodule Samen.Scopes.Finance.BoardPack do
     BalanceSheet,
     CashFlow,
     CloseBoard,
+    EquityStatement,
     ForecastRead,
     ProfitLoss,
+    SegmentReport,
     VarianceReport
   }
 
@@ -65,9 +71,10 @@ defmodule Samen.Scopes.Finance.BoardPack do
   Required opts: `:repo`, `:account`, `:line`, `:entry`, `:posting_account`.
   Optional: `:period`, `:run`, `:task` (the Work Task module), `:variance`
   (the `CostVariance` module; absent means the variance section is
-  unavailable), and `:forecast`/`:forecast_driver` (a published
-  `ForecastVersion` and its driver module; absent means runway is
-  unavailable).
+  unavailable), `:cost_object` (the CostObject module, used only to label
+  segment rows), `:segment_dimension` (default `"project"`), and
+  `:forecast`/`:forecast_driver` (a published `ForecastVersion` and its
+  driver module; absent means runway is unavailable).
   """
   @spec report(String.t(), integer(), integer(), keyword()) ::
           {:ok, report()} | {:error, term()}
@@ -100,6 +107,19 @@ defmodule Samen.Scopes.Finance.BoardPack do
              posting_account: posting_account,
              line: line,
              entry: entry
+           ),
+         {:ok, equity_statement} <-
+           EquityStatement.generate(org_id, from_date, to_date, statement_opts),
+         {:ok, segment_report} <-
+           SegmentReport.report(
+             org_id,
+             from_date,
+             to_date,
+             statement_opts ++
+               [
+                 dimension_key: Keyword.get(opts, :segment_dimension, "project"),
+                 cost_object: Keyword.get(opts, :cost_object)
+               ]
            ) do
       variance = variance_report(org_id, year, month, variance_mod)
       close = close_report(run, task, period)
@@ -125,7 +145,9 @@ defmodule Samen.Scopes.Finance.BoardPack do
          statements: %{
            profit_loss: profit_loss,
            balance_sheet: balance_sheet,
-           cash_flow: cash_flow
+           cash_flow: cash_flow,
+           equity_statement: equity_statement,
+           segment_report: segment_report
          },
          variance_bridge: variance_bridge(variance, year, month),
          variance_appendix: variance.rows,
@@ -137,6 +159,8 @@ defmodule Samen.Scopes.Finance.BoardPack do
              %{section: "Profit & loss", read: "ProfitLoss.generate/4"},
              %{section: "Balance sheet", read: "BalanceSheet.generate/3"},
              %{section: "Cash flow", read: "CashFlow.statement/4"},
+             %{section: "Equity statement", read: "EquityStatement.generate/4"},
+             %{section: "Segment report", read: "SegmentReport.report/4"},
              %{section: "Variance", read: "VarianceReport.for_period/3"},
              %{section: "Close", read: "CloseBoard.report/2"}
            ] ++ runway_sources(runway)

@@ -57,6 +57,7 @@ defmodule Samen.Web.Finance.BoardPack do
       run = latest_run(run_mod, period, scope)
       task = task_module(mount)
       variance = optional_resource(mount, :CostVariance)
+      cost_object = optional_resource(mount, :CostObject)
       forecast_version = optional_resource(mount, :ForecastVersion)
       forecast_driver = optional_resource(mount, :ForecastDriver)
       forecast = latest_published_forecast(forecast_version, forecast_driver, period, scope)
@@ -68,6 +69,8 @@ defmodule Samen.Web.Finance.BoardPack do
              entry: entry,
              posting_account: posting_account,
              variance: variance,
+             cost_object: cost_object,
+             segment_dimension: "project",
              forecast: forecast,
              forecast_driver: forecast_driver,
              period: period,
@@ -178,6 +181,8 @@ defmodule Samen.Web.Finance.BoardPack do
     profit_loss = report.statements.profit_loss
     balance_sheet = report.statements.balance_sheet
     cash_flow = report.statements.cash_flow
+    equity = report.statements.equity_statement
+    segments = report.statements.segment_report
 
     [
       row("exec", "Revenue", exec.revenue_cents, "cents", "ProfitLoss.generate/4"),
@@ -231,6 +236,34 @@ defmodule Samen.Web.Finance.BoardPack do
         "cents",
         "BalanceSheet.generate/3"
       ),
+      row(
+        "equity_statement",
+        "Opening equity",
+        equity.opening_total_cents,
+        "cents",
+        "EquityStatement.generate/4"
+      ),
+      row(
+        "equity_statement",
+        "Net income",
+        equity.net_income_cents,
+        "cents",
+        "EquityStatement.generate/4"
+      ),
+      row(
+        "equity_statement",
+        "Other changes",
+        equity.other_changes_cents,
+        "cents",
+        "EquityStatement.generate/4"
+      ),
+      row(
+        "equity_statement",
+        "Closing equity",
+        equity.closing_total_cents,
+        "cents",
+        "EquityStatement.generate/4"
+      ),
       row("cash_flow", "Opening cash", cash_flow.opening_cents, "cents", "CashFlow.statement/4"),
       row("cash_flow", "Cash inflows", cash_flow.inflows_cents, "cents", "CashFlow.statement/4"),
       row(
@@ -241,8 +274,63 @@ defmodule Samen.Web.Finance.BoardPack do
         "CashFlow.statement/4"
       ),
       row("cash_flow", "Net cash movement", cash_flow.net_cents, "cents", "CashFlow.statement/4"),
-      row("cash_flow", "Closing cash", cash_flow.closing_cents, "cents", "CashFlow.statement/4")
+      row("cash_flow", "Closing cash", cash_flow.closing_cents, "cents", "CashFlow.statement/4"),
+      row(
+        "cash_flow",
+        "Operating cash (indirect)",
+        cash_flow.operating.net_cents,
+        "cents",
+        "CashFlow.statement/4"
+      ),
+      row(
+        "cash_flow",
+        "Investing cash",
+        cash_flow.investing.net_cents,
+        "cents",
+        "CashFlow.statement/4"
+      ),
+      row(
+        "cash_flow",
+        "Financing cash",
+        cash_flow.financing.net_cents,
+        "cents",
+        "CashFlow.statement/4"
+      ),
+      row(
+        "cash_flow",
+        "Sections reconciled",
+        cash_flow.sections_reconciled?,
+        "boolean",
+        "CashFlow.statement/4"
+      )
     ] ++
+      Enum.flat_map(segments.segments, fn segment ->
+        label = segment.code || segment.name || "Unallocated"
+
+        [
+          row(
+            "segment_report",
+            "#{label} revenue",
+            segment.revenue_cents,
+            "cents",
+            "SegmentReport.report/4"
+          ),
+          row(
+            "segment_report",
+            "#{label} expense",
+            segment.expense_cents,
+            "cents",
+            "SegmentReport.report/4"
+          ),
+          row(
+            "segment_report",
+            "#{label} net",
+            segment.net_cents,
+            "cents",
+            "SegmentReport.report/4"
+          )
+        ]
+      end) ++
       Enum.map(report.variance_bridge.rows, fn bridge ->
         row(
           "variance_bridge",

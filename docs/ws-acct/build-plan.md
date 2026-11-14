@@ -623,6 +623,29 @@ posture. Narrative pages and resolutions stay authored (design D12). Extend the
 **AC:** every number on the pack traces to a ledger/rollup read (no hand-figured sheet); the new
 surfaces render no PII column; a k-anon floor holds on any cohort view (the `%Suppressed{}` path).
 
+### Phase 13 extension — equity, segments and indirect cash flow (2026-11-14)
+
+The statement set now includes:
+
+- **Equity statement** — `Samen.Scopes.Finance.EquityStatement` rolls each equity account from
+  opening to closing with period increases/decreases, plus the unclosed-earnings row the balance
+  sheet adds because the ledger has no automatic closing entry. Closing equity is asserted against
+  the balance sheet.
+- **Segment report** — `Samen.Scopes.Finance.SegmentReport` groups posted income and expense lines
+  by one frozen dimension axis (`project` by default), returns revenue/expense/net per segment,
+  and puts lines without that axis in an explicit `Unallocated` bucket so totals tie to the P&L.
+- **Indirect cash flow** — `Samen.Scopes.Finance.CashFlow` keeps its opening/closing movement totals
+  and adds operating/investing/financing sections. Operating starts from net income, adds back
+  non-cash contra movements and reclassifies gains/losses out of operating; working-capital
+  movements and the direct classification reconcile inside the read. Account classes come from the
+  host posting map and can be overridden per account; an entry mixing classes is classified by its
+  capital/financing counterpart rather than split by invention.
+
+AP/AR aging already ships as `Samen.Scopes.Finance.ApAging` / `ArAging` with their vendor/customer
+statement reads and aging surfaces; this extension does not duplicate them. The board pack now
+carries the equity and segment statements and the classified cash-flow view alongside the existing
+P&L and balance sheet.
+
 ---
 
 ## Phase 14 — Rolling forecast, scenarios and cash runway · opus · 2–3 sessions
