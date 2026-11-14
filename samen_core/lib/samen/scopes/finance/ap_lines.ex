@@ -13,9 +13,10 @@ defmodule Samen.Scopes.Finance.ApLines do
     DRAFT — `:approve`'s posted entry makes the bill a governed fact and
     immutability is the migration's trigger (the belt). A re-approval is
     refused here exactly like E1's one-way state machine — the exactly-once
-    mechanism behind the Gate's re-invocation. `:pay` is the one legal
-    transition after approval, so it requires the persisted bill to still be
-    `:approved`; a second payment is refused.
+    mechanism behind the Gate's re-invocation. `:pay` and `:void` are the legal
+    transitions after approval; `:pay` requires the persisted bill to still be
+    `:approved` (a second payment is refused), and `:void` is governed by
+    `VoidApInvoice`.
   """
   use Ash.Resource.Change
 

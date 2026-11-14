@@ -79,7 +79,8 @@ defmodule Samen.Scopes.Finance do
     Phase 1 widened the enum in place to the meanings the Kubeworkz books' flows
     need (`wip_foundry`, `finished_goods_chip`, `deferred_revenue`, `grant_deferred`,
     `variance_*`, `mask_expense`, `credit_note_clearing`,
-    `vendor_credit_clearing`, `bad_debt_expense`, …) — ADR-054 D2. The enum stays
+    `vendor_credit_clearing`, `bad_debt_expense`, `fx_gain_loss`,
+    `unrealized_fx_gain_loss`, …) — ADR-054 D2. The enum stays
     closed and fail-honest: an unmapped meaning refuses the posting.
   - **`CostObject`** — the cost/analysis registry (WS-ACCT Phase 1; ADR-054 D1):
     `{code, name, kind ∈ {project, chip, cost_pool, fund}}`, org-scoped, unique
@@ -895,7 +896,14 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.close_run),
         unquote(fiscal_period_mod),
-        unquote(work[:task])
+        unquote(work[:task]),
+        period: unquote(fiscal_period_mod),
+        ap_invoice: unquote(ap_invoice_mod),
+        entry: unquote(entry_mod),
+        posting_account: unquote(posting_account_mod),
+        org_fx_settings: unquote(org_fx_settings_mod),
+        exchange_rate: unquote(exchange_rate_mod),
+        repo: unquote(repo)
       )
 
       Samen.Scopes.Finance.Blueprint.define_cost_object(
@@ -976,7 +984,8 @@ defmodule Samen.Scopes.Finance do
         unquote(posting_account_mod),
         unquote(approval_policy_mod),
         unquote(org_fx_settings_mod),
-        unquote(exchange_rate_mod)
+        unquote(exchange_rate_mod),
+        unquote(vendor_credit_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_payment_receipt(

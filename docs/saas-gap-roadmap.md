@@ -63,7 +63,7 @@ op-todo (human operator task).
 | G10 | **Getting-started tutorial + cookbook + README** | builder | 3 reference guides, no zero-to-feature walkthrough, no gate-failure index | M-H | S | gen | ✅ shipped (WS-D) |
 | G11 | **Status/health/SLA + alerting + lifecycle email** | operator | Metrics defined but unwired; bare `/healthz`; no status page/alerts/health dashboard | H | M | web+gen | 🟡 `/readyz` (F1) + metrics egress/alerts runbook (F5) + fail-honest lifecycle-email delivery (WS-F7); public status page still open |
 | G12 | **Product analytics over CDC** | operator | No event capture/funnels/retention; vault-excluded CDC projection is an ideal unused feed — privacy-correct-by-construction moat | H | L | new (web) | ✅ seed shipped (WS-B) |
-| G13 | **Billing depth: Stripe sync + usage rating** | operator, harden | Stripe-mirror schema inert; SyncAdapter stub; no rating/proration/tax | M-H | L | kernel+op-todo | 🟡 plan/entitlement editor shipped (WS-F7); Stripe sync + usage rating/proration/tax = op-todo (live keys) |
+| G13 | **Billing depth: Stripe sync + usage rating** | operator, harden | Stripe-mirror schema inert; SyncAdapter stub; no usage rating/proration. ERP tax is separate: dormant TaxCalculator/blueprint, no live TaxRate. | M-H | L | kernel+op-todo | 🟡 plan/entitlement editor shipped (WS-F7); Stripe sync + usage rating/proration = op-todo (live keys); ERP tax remains out of scope (no live TaxRate or filing path) |
 | G14 | **Files engine** | end-user, harden | Metadata resource only; no storage adapter/upload/preview | M/H | M | kernel+web | ✅ shipped (WS-E) |
 | G15 | **Import/export (CSV mapper)** | end-user | None at any granularity; catalog-as-data makes a generic mapper feasible; export = highest-risk mask-by-omission vector | M/H | M | web | ✅ shipped (WS-E) |
 | G16 | **Deploy story (Fly/Neon templates)** | builder | Zero deploy artifacts; all carried as operator TODOs | H | M | gen+op-todo | ✅ shipped (WS-D) |
@@ -688,9 +688,9 @@ scopes + the `samenerp` host proof (design: `docs/ws-erp/design.md`; ADR-049; fu
 - **Adversarial posture:** sabotage patches **302–308** committed (one per phase, re-flipped at the E8
   re-gate); masking trios re-run green; every R-test pairs denial with a positive control.
 
-**Honest scope (design §7 — binding):** payroll/tax engines, multi-currency, lot costing, scheduling,
+**Honest scope (design §7 — binding):** payroll/tax engines (the ERP TaxCalculator is a dormant test-oracle; no live TaxRate or filing path), advanced multi-currency (AR/cash/intercompany revaluation and CTA), lot costing, scheduling,
 accruals, forecasting, depreciation are adapter-or-P2/P3 and were REFUSED into that list — the shipped
-thing is the ledger + document spine, fail-honest about the rest.
+thing is the ledger + document spine plus realized AP FX and AP period-end remeasurement, fail-honest about the rest.
 
 **Next-workstream candidates (from this workstream):** a reference payroll adapter (the behaviour has no
 engine), lot/serial costing on the stock ledger, the P2 AR-side customer statement/aging reads, and the

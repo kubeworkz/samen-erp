@@ -401,6 +401,12 @@ defmodule Samen.Scopes.Finance.Blueprint do
             # approval policy governs it.
             change({Samen.Scopes.Finance.JournalApproval, policy: unquote(policy_mod)})
 
+            # AP bill entries are not independent facts. Their approval is the
+            # ledger half of the bill; their clearing entry is the mirror of
+            # the bill's governed void. Refuse the generic entry door so an
+            # admin cannot strand the bill/revaluation by voiding one directly.
+            change(Samen.Scopes.Finance.ApBillEntryVoidGuard)
+
             # R10: the reversal is dated the ORIGINAL's date, so a closed period
             # would refuse it mid-action — refuse up front, naming the period.
             change({Samen.Scopes.Finance.PeriodGuard, period: unquote(period_mod)})
@@ -789,6 +795,10 @@ defmodule Samen.Scopes.Finance.Blueprint do
                 # account can carry both sides; the posting direction carries
                 # the gain (credit) or loss (debit).
                 :fx_gain_loss,
+                # period-end remeasurement of open foreign-currency AP. Kept
+                # separate from realized settlement so the close can disclose
+                # the two.
+                :unrealized_fx_gain_loss,
                 # WS-ERP E31 (#12): cash/personal expense lines accrue to the
                 # employee until reimbursement.
                 :employee_reimbursement_payable
@@ -1151,7 +1161,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
              posting_account_mod,
              policy_mod,
              org_fx_settings_mod,
-             exchange_rate_mod
+             exchange_rate_mod,
+             vendor_credit_mod
            ) do
     quote do
       defmodule unquote(module) do
@@ -1159,8 +1170,22 @@ defmodule Samen.Scopes.Finance.Blueprint do
         Finance.ApInvoice — a vendor bill (WS-ERP E2; design §2.2).
         `status ∈ {draft, approved, paid, void}`. `:approve` posts the bill to
         the ledger; `:pay` settles an approved bill by posting the AP-clearing
-        debit and the cash credit, anchored `source_key: "ap_payment"`. The
-        `void` transition remains the documented credit-note carry.
+        debit and the cash credit, anchored `source_key: "ap_payment"`.
+
+        ## Voiding a bill
+
+        `:void` is ADMIN-only. A draft is simply voided; an approved bill is
+        voided by posting one current-period `source_key: "ap_void"` clearing
+        entry (`Samen.Scopes.Finance.VoidApInvoice`) that mirrors the approval
+        entry and reverses the bill's cumulative unrealized FX, then flipping
+        the bill to `:void`. The close's revaluation entry is ONE entry shared
+        across every revalued bill, so a single bill cannot void it without
+        reversing the others; the bill-specific clearing entry is what makes
+        AP and unrealized P&L net to zero. An open or applied `VendorCredit`
+        bound to the bill refuses the void: its AP and vendor-credit-clearing
+        postings are already facts, and an applied credit is final at that
+        layer. A `:paid` bill must
+        have its payment reversed first — voiding it would strand the cash side.
 
         ## Cash release is dual control (no direct `:pay`)
 
@@ -1392,6 +1417,25 @@ defmodule Samen.Scopes.Finance.Blueprint do
             )
           end
 
+          # Period-end carrying-amount update (WS-ACCT close): the FX
+          # revaluation posts the unrealized difference and moves this bill to
+          # the closing-rate carrying amount, so a later payment books only the
+          # subsequent realized difference. SYSTEM-ONLY: `FxRevaluation` calls
+          # it from the governed close action; a direct caller is refused.
+          update :revalue_fx do
+            accept([])
+            require_atomic?(false)
+
+            argument(:base_total_cents, :integer, allow_nil?: false)
+            argument(:exchange_rate, :string, allow_nil?: false)
+            argument(:base_currency, :string, allow_nil?: false)
+
+            change(Samen.Scopes.Finance.PostingMarker)
+            change(set_attribute(:base_total_cents, arg(:base_total_cents)))
+            change(set_attribute(:exchange_rate, arg(:exchange_rate)))
+            change(set_attribute(:base_currency, arg(:base_currency)))
+          end
+
           # The compensating transition for a returned/reversed payment.
           # SYSTEM-ONLY: `ApPaymentReversal` calls it after a DISTINCT admin
           # approves the reversal. It voids the posted `ap_payment` entry
@@ -1404,6 +1448,26 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
             change(Samen.Scopes.Finance.PostingMarker)
             change({Samen.Scopes.Finance.ReverseApPayment, entry: unquote(entry_mod)})
+          end
+
+          # The terminal bill transition. A draft simply flips to `:void`; an
+          # approved bill gets one current-period clearing entry that mirrors
+          # its approval entry and reverses its cumulative unrealized FX. The
+          # close's revaluation entry is shared across bills, so it cannot be
+          # voided for just this bill — the clearing entry clears the net.
+          # `PostingMarker` arms the DB belt for the status write.
+          update :void do
+            accept([])
+            require_atomic?(false)
+
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change(
+              {Samen.Scopes.Finance.VoidApInvoice,
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               vendor_credit: unquote(vendor_credit_mod)}
+            )
           end
         end
 
@@ -1425,6 +1489,21 @@ defmodule Samen.Scopes.Finance.Blueprint do
           # distinct-admin decision and inside its one transaction.
           policy action(:reverse_payment) do
             forbid_if(always())
+          end
+
+          # The period-end carrying-amount write is system-only: the governed
+          # CloseRun action reaches it after its own admin check.
+          policy action(:revalue_fx) do
+            forbid_if(always())
+          end
+
+          # Voiding an approved bill is a control event, not a draft edit.
+          # Admin-only; the clearing entry is derived entirely from the
+          # persisted approval entry and the bill's stored carrying amount.
+          policy action(:void) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
           end
 
           policy action_type([:create, :update]) do

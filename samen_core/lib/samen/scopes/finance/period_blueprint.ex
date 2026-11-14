@@ -152,8 +152,18 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
              repo,
              abbrev,
              period_mod,
-             work_task \\ nil
+             work_task \\ nil,
+             fx \\ []
            ) do
+    unless fx[:period] && fx[:ap_invoice] && fx[:entry] && fx[:posting_account] &&
+             fx[:org_fx_settings] && fx[:exchange_rate] && fx[:repo] do
+      raise ArgumentError,
+            "define_close_run/8 requires the fx: wiring " <>
+              "(period, ap_invoice, entry, posting_account, org_fx_settings, exchange_rate, repo)"
+    end
+
+    post_opts = Keyword.put(fx, :op, :post)
+
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -177,6 +187,11 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         One run per period per org (the unique index), because a period has one
         close. A `:completed` run is a signed fact: its checklist can no longer
         be edited.
+
+        `:preview_fx_revaluation` prices the period's open foreign-currency AP
+        at the closing rate without writing anything; `:post_fx_revaluation`
+        books the unrealized difference and updates each bill's carrying amount
+        so later settlement does not double-count the movement.
 
         No PII (INV-1) — a period id, an enum, the checklist maps (each a key, a
         label, the doc's calendar window and output, opaque Docs evidence file
@@ -276,12 +291,56 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
             )
           end
 
+          # Period-end FX revaluation against this close run. `preview` is a
+          # read-only calc over the run's fiscal period; `post` writes the
+          # unrealized adjustment and moves each open foreign AP bill to its
+          # closing-rate carrying amount. Both are admin-governed; `post` is a
+          # normal update so the close run's existing admin policy applies.
+          action :preview_fx_revaluation, :map do
+            argument(:close_run_id, :uuid, allow_nil?: false)
+
+            run(fn input, context ->
+              with {:ok, run} <-
+                     Ash.get(__MODULE__, input.arguments.close_run_id, actor: context.actor),
+                   {:ok, period} <-
+                     Ash.get(unquote(fx[:period]), run.period_id, authorize?: false),
+                   {:ok, preview} <-
+                     Samen.Scopes.Finance.FxRevaluation.preview(
+                       run,
+                       period,
+                       unquote(fx)
+                     ) do
+                {:ok, preview}
+              end
+            end)
+          end
+
+          update :post_fx_revaluation do
+            accept([])
+            require_atomic?(false)
+
+            # The revaluation entry is posted-born through the same
+            # `create_reversal` factory as AP approval, so the transaction must
+            # carry the posting marker while its lines land and each bill's
+            # carrying amount moves. The marker restores after the action.
+            change(Samen.Scopes.Finance.PostingMarker)
+            change({Samen.Scopes.Finance.FxRevaluation, unquote(post_opts)})
+          end
+
           # NO destroy: a close run is a record of a close, not a scratch pad.
         end
 
         policies do
           policy action_type(:read) do
             authorize_if(Samen.Policy.OrgScope)
+          end
+
+          # Generic actions cannot use OrgScope's filter check. The action
+          # policy gates the role; the `Ash.get` inside the action carries the
+          # actor, so the CloseRun's own read policy still proves the org.
+          policy action(:preview_fx_revaluation) do
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
           end
 
           policy action_type([:create, :update, :destroy]) do

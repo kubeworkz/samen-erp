@@ -131,7 +131,7 @@ defmodule SamenCore.TestRepo.Migrations.FinanceE2ScopeFixture do
               IF TG_OP = 'DELETE' THEN
                 IF OLD.sap_status IS DISTINCT FROM 'draft' THEN
                   RAISE EXCEPTION 'sap_ap_invoice: DELETE of a non-draft bill is refused — '
-                    'an AP bill is a business record; voiding is the P2 credit-note carry. '
+                    'an AP bill is a business record; use the governed bill :void action. '
                     'Bill id: %', OLD.sap_id;
                 END IF;
               ELSE

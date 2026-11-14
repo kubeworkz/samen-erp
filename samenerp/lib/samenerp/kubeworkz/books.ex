@@ -160,6 +160,8 @@ defmodule Samenerp.Kubeworkz.Books do
     {"7000", "Amortization – PDK License", :expense, :debit},
     # -- realized FX on foreign-currency settlement -------------------------
     {"7900", "Foreign Exchange Gain/Loss", :income, :credit},
+    # -- unrealized FX on period-end remeasurement --------------------------
+    {"7910", "Unrealized Foreign Exchange Gain/Loss", :income, :credit},
     # -- asset disposal gain/loss --------------------------------------------
     {"7920", "Gain/Loss on Asset Disposal", :income, :credit},
     # -- write-downs ---------------------------------------------------------
@@ -215,6 +217,7 @@ defmodule Samenerp.Kubeworkz.Books do
     disposal_gain_loss: "7920",
     write_down_expense: "8000",
     fx_gain_loss: "7900",
+    unrealized_fx_gain_loss: "7910",
     mask_expense: "6000",
     eda_expense: "6010",
     # WS-ACCT Phase 7 — the four variance families and the two disposition

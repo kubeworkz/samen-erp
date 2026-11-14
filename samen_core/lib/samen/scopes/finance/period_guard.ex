@@ -66,9 +66,17 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
   # held, not documents landing in the book (see the moduledoc). `journal_entry`
   # is a void's reversal; `accrual_reversal` is the scheduled half of a
   # month-end accrual; `revenue_recognition` is the period's deferred-revenue
-  # release — the mechanisms that PREVENT double-counting must not themselves
-  # be locked out when the document window shuts.
-  @ledger_internal_sources ["journal_entry", "accrual_reversal", "revenue_recognition"]
+  # release; `fx_revaluation` is the close's AP remeasurement; `ap_void` is the
+  # bill-specific clearance of that shared remeasurement when a bill is voided —
+  # the mechanisms that PREVENT double-counting must not themselves be locked
+  # out when the document window shuts.
+  @ledger_internal_sources [
+    "journal_entry",
+    "accrual_reversal",
+    "revenue_recognition",
+    "fx_revaluation",
+    "ap_void"
+  ]
 
   @doc "Source anchors that are ledger adjustments rather than upstream documents."
   def ledger_internal_sources, do: @ledger_internal_sources
@@ -153,8 +161,12 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
     """
 
     case repo.query(sql, [dump_uuid(org_id), year, month]) do
-      {:ok, %{rows: [[status]]}} when is_binary(status) -> {:ok, status_atom(status)}
-      {:ok, %{rows: []}} -> {:ok, nil}
+      {:ok, %{rows: [[status]]}} when is_binary(status) ->
+        {:ok, status_atom(status)}
+
+      {:ok, %{rows: []}} ->
+        {:ok, nil}
+
       # FAIL CLOSED: a period table the guard cannot read is not "open". A
       # broken lookup must refuse the posting rather than wave it through —
       # otherwise a schema drift (or a restore mid-close) silently disables R10.
@@ -209,7 +221,6 @@ defmodule Samen.Scopes.Finance.PeriodGuard do
       value -> {:ok, value}
     end
   end
-
 
   defp attr_source(resource, name) do
     case Ash.Resource.Info.attribute(resource, name) do

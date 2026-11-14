@@ -57,3 +57,10 @@ ledger) — and the reconciliation spine that binds them to Billing and CRM
 - Every new scope is archivable + vault-aware from birth and passes the standing verifier
   tiers; Finance/Inventory report modules never read current-state tables directly
   (derived-only), keeping the CDC/aggregate posture intact.
+
+## Amendment — AP-only FX revaluation (2026-11-13)
+
+ADR-054's amendment lifts §8's "multi-currency revaluation" deferral for approved
+foreign-currency AP bills only: period-end remeasurement posts the unrealized P&L difference and
+updates each bill's carrying amount, and realized settlement FX is already booked. AR/cash/
+intercompany revaluation and consolidation/translation remain deferred.

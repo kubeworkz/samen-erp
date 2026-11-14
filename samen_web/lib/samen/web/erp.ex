@@ -900,7 +900,12 @@ defmodule Samen.Web.Erp do
     ]
   end
 
-  def transitions(:ap_invoices), do: [{:approve, "Approve bill", [:draft]}]
+  def transitions(:ap_invoices) do
+    [
+      {:approve, "Approve bill", [:draft]},
+      {:void, "Void bill", [:draft, :approved]}
+    ]
+  end
 
   def transitions(:credit_notes) do
     [

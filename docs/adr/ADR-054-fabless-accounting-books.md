@@ -29,7 +29,8 @@
   was filed — with the five operator-facing calls and their rationales recorded in "Ratification"
   below.
 - **Consumes:** ADR-049 (the ERP base scopes this extends — its §2 event-sourcing discipline,
-  §6.3 reconciliation spine and §7 honesty list all carry forward unamended), ADR-004 (scope
+  §6.3 reconciliation spine and §7 honesty list carry forward, with the AP-only FX amendment
+  named at the end of this ADR), ADR-004 (scope
   packaging), ADR-014/024/026 (fail-honest adapters — the tax/payroll boundaries), ADR-018
   (rollups), ADR-023 (the sanctioned abbrev allocator), ADR-040 (the approvals Gate + lifecycle
   substrate), ADR-041 (canonical work objects + the object-ref anchor), ADR-002 (the hash-chained
@@ -152,8 +153,9 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
 15. **Single functional currency (CAD), set by host config.** The doc's header reads "Currency:
     **CA**" while `Account.currency` defaults to `"USD"`. The default comes from host config and
     Kubeworkz's org is seeded CAD — **ratified** ("Ratification" 4). `ExchangeRate`/`FxConvert`
-    serve converted *reporting*; revaluation and FX gain/loss stay deferred (ADR-049 §7.3
-    unchanged).
+    serve converted *reporting*. This decision originally deferred revaluation and FX gain/loss;
+    the AP half is lifted by the amendment below (realized AP FX and period-end AP
+    remeasurement); AR/cash/intercompany revaluation and CTA remain deferred.
 16. **Consolidation stays dormant; single-entity is the default.** Kubeworkz is one legal entity.
     `samen_core/lib/samen/scopes/consolidation/*` (E24) is dormant and unwired, and is the
     documented path **when** a second entity exists — not a phase here. The doc's "multi-entity
@@ -204,7 +206,8 @@ ADR **15 = D15**; ADR **16 = D13**; ADR **17 = D14**; ADR **18 = D16**.
   abbrev rows retired under proof), which closes the hygiene item this paragraph carried. Read this
   paragraph as the finding whose remediation is ADR-055, not as an open question.
 - **The honesty list carries forward and grows.** ADR-049 §7 remains binding (payroll computation,
-  tax filing, FX revaluation, serials/fractional UOM, scheduling, leave accrual), and this ADR adds
+  tax filing, AR/cash/intercompany FX revaluation and CTA, serials/fractional UOM, scheduling,
+  leave accrual), and this ADR adds
   its own refusals: no ASC 606 multi-element contracts, no formula engine, no generated narrative,
   no intercompany elimination (decision 16), no payroll computation in the GL. Where this ADR lifts
   a deferral it is named and bounded — depreciation (decision 9) and driver-based forecasting
@@ -268,8 +271,8 @@ rather than a hardcoded rule.
 
 The manual's grant landscape is entirely Canadian (NRC IRAP, NSERC, FABrIC, CFI, Ontario CTI) and
 its header's "Currency: CA" reads as CAD. `Account.currency` takes its default from host config;
-`ExchangeRate`/`FxConvert` remain for converted reporting only; revaluation and FX gain/loss stay
-deferred (ADR-049 §7.3 unamended).
+`ExchangeRate`/`FxConvert` remain for converted reporting. Realized AP FX and AP period-end
+remeasurement are live (amendment below); AR/cash/intercompany revaluation and CTA stay deferred.
 
 ### 5 · The labour driver — AUTHORIZED, and it is load-bearing
 
@@ -305,3 +308,22 @@ Consequence for Phase 2's seed, stated because it is the easy thing to get wrong
 design-engineering cost enters inventory.** Only foundry, photonics, assembly-and-test and board-BOM
 costs flow into stock via the cost pools; engineering effort is a period expense dimensioned to a
 programme so it can still be reported per chip.
+
+## Amendment — AP-only period-end FX revaluation (2026-11-13)
+
+Decision 15's deferral is lifted for the AP liability only. `ApFx` resolves the strict
+approval-date and period-end rate; `ApPaymentPosting` books the realized settlement difference to
+`fx_gain_loss`; and `CloseRun.:preview_fx_revaluation` / `:post_fx_revaluation` run
+`Samen.Scopes.Finance.FxRevaluation`, which remeasures approved foreign-currency AP bills at the
+period-end rate, posts the unrealized difference to `unrealized_fx_gain_loss`, and moves each
+bill's `base_total_cents` / `exchange_rate` carrying amount so a later payment books only the
+subsequent realized difference. Missing rates refuse the preview/post; a rerun at the same rate
+is a no-op. A void of a revalued bill posts a bill-specific current-period `ap_void` clearing
+entry (the approval entry mirrored plus the cumulative unrealized FX), because the close's one
+revaluation entry covers every revalued bill and must not be voided for one of them; AP and P&L
+net to zero. Direct entry voids of the bill's `ap_invoice` approval entry or `ap_void` clearing
+entry are refused, so the bill action is the only clearing path; an open or applied vendor credit
+bound to the bill also refuses that void until resolved. This does not lift
+AR/cash/intercompany revaluation or any consolidation/translation
+reserve (decision 16; a CAD entity remeasures USD payables through P&L, not CTA). ADR-049 §8's
+"multi-currency revaluation" boundary is amended only to that AP scope.

@@ -43,7 +43,7 @@ tree carries phases through **E38**. Grounding therefore reads the code, not the
 
 | Scope | Resources (`use Samen.Scopes.X` → host namespace) | Mounted in samenerp? |
 |---|---|---|
-| **Finance** (`finance.ex`, `finance/blueprint.ex`, `finance/budget_blueprint.ex`, `finance/credit_note_blueprint.ex`) | `Account`, `JournalEntry`, `JournalLine`, `ApInvoice`, `PaymentReceipt`, `PostingAccount`, `Budget`, `BudgetLine`, `ExchangeRate`, `OrgFxSettings`, `JournalApprovalPolicy`, `CreditNote`, `VendorCredit`, `TaxRate` | ✅ |
+| **Finance** (`finance.ex`, `finance/blueprint.ex`, `finance/budget_blueprint.ex`, `finance/credit_note_blueprint.ex`) | `Account`, `JournalEntry`, `JournalLine`, `ApInvoice`, `PaymentReceipt`, `PostingAccount`, `Budget`, `BudgetLine`, `ExchangeRate`, `OrgFxSettings`, `JournalApprovalPolicy`, `CreditNote`, `VendorCredit` | ✅ |
 | **Inventory** (`inventory.ex`, `inventory/blueprint.ex`, `inventory/blueprint_e6.ex`) | `Item`, `Warehouse`, `StockLedger`, `StockLevel`, `PurchaseOrder`, `PoLine`, `GoodsReceipt`, `ReceiptLine`, `SalesOrder`, `SoLine`, `Bom`, `BomLine`, `WorkOrder`, `ProductionLog`, `TransferOrder`, `LandedCost` | ✅ |
 | **Banking** (`banking.ex`) | `BankAccount`, `StatementLine`, `StatementImport`, `Match`, `Rule` | ✅ |
 | **Hr** (`hr.ex`) | `Employee`🔒, `EmploymentEvent`, `LeaveRequest`, `LeaveType`, `LeaveBalance`, `PayRun`, `Payslip`, `SalaryStructure` | ❌ **not mounted** |
@@ -51,8 +51,14 @@ tree carries phases through **E38**. Grounding therefore reads the code, not the
 | **Work** | tasks/projects/owners + timesheets (authored in Unit 10.2; E15 stayed dormant/deleted) | ✅ |
 | Substrate | `Samen.Approvals` (ADR-040 Gate: `gate.ex`/`registry.ex`/`handler.ex`) — real, and Finance's `:approve` already rides it | ✅ |
 
+**Tax is not a mounted finance capability.** `credit_note_blueprint.ex` defines a
+`define_tax_rate/5` blueprint, but it has no call site, so there is no `tax_rate` table or host
+resource. `TaxCalculator` is an ADR-055 preserved test-oracle module with no production caller,
+no invoice/line integration, and no rate resource to query. No line-level tax is computed today.
+
 Finance reports already shipped: `TrialBalance`, `BalanceSheet`, `ProfitLoss`, `BudgetVsActual`,
-`Reconcile`, `ReconcilePayments`; FX: `FxConvert` + guard. The finance guards are real code
+`Reconcile`, `ReconcilePayments`; FX: `FxConvert` + guard, realized AP FX (`ApFx` /
+`ApPaymentPosting`), and AP period-end remeasurement (`FxRevaluation`). The finance guards are real code
 (`UnbalancedEntry`, `PostGuard`, `PostBalance`, `VoidGuard`, `CycleGuard`, `LineAmounts`,
 `EntryLines`, `PostingMarker`). The E8 surfaces are a **closed six-surface registry**
 (`Samen.Web.Erp` → `:coa | :entries | :ap_invoices | :stock | :purchase_orders | :work_orders`)
@@ -230,6 +236,18 @@ Docs titles and offers a picker; titles link to the host's mounted Pages route w
 Archived evidence titles are flagged with a direct link to their Docs trash row for restore,
 where the target row is highlighted; missing evidence is flagged and unlinked. A host without
 Docs keeps the manual ID path.
+The same close run carries the AP FX remeasurement pair (`:preview_fx_revaluation` /
+`:post_fx_revaluation`): preview prices open foreign-currency AP at the period-end rate; post
+books the unrealized difference to `unrealized_fx_gain_loss` and moves each bill's carrying
+amount so settlement cannot recognize the same movement twice. Both are admin-only; the preview
+is read-only, and a missing closing rate refuses the whole run. A later admin-only
+`ApInvoice.:void` does not try to void that shared close entry (it covers every revalued bill);
+it posts a bill-specific current-period `ap_void` clearing entry — the approval entry mirrored
+plus the cumulative unrealized FX — so AP and P&L net to zero even though the close entry remains
+posted history. A direct `JournalEntry.:void` of the bill's `ap_invoice` approval entry or its
+`ap_void` clearing entry is refused; the bill action is the only path that clears both sides.
+An open or applied vendor credit bound to the bill also refuses the void, because its AP and
+vendor-credit-clearing posting is already a fact; resolve that adjustment first.
 
 ### D8 — Grants are a document plus a fund dimension, not a fund-accounting subsystem
 `Grant` `{funder, program, award_ref, award_cents, period_start/end, restricted?: true, status,
@@ -293,8 +311,19 @@ labour-derived figure stays **labelled ratio-based** until the driver lands (bui
 ### D15 — One functional currency (CAD), set by host config
 The doc's header reads "Currency: **CA**" (an evident truncation of CAD) while
 `Account.currency` defaults to `"USD"`. Decision: the default comes from **host config**, and
-Kubeworkz's org is seeded CAD. FX revaluation / gain-loss stays P2 (design §7.3) — `ExchangeRate`
-and `FxConvert` exist for converted *reporting*, not for revaluation.
+Kubeworkz's org is seeded CAD. Realized AP FX is shipped: approval stamps the functional
+carrying amount and payment books the settlement difference to `fx_gain_loss`. AP period-end
+remeasurement is now implemented against the close: `CloseRun.:preview_fx_revaluation` /
+`:post_fx_revaluation` reprice approved foreign-currency AP bills at the closing rate, post the
+unrealized difference to `unrealized_fx_gain_loss` (Dr loss / Cr gain), and move each bill's
+carrying amount so later payment books only the subsequent realized difference. Missing closing
+rates fail closed; a rerun at the same rate is a no-op. A void of a revalued bill posts a
+current-period `ap_void` clearing entry (the approval entry mirrored plus the cumulative
+unrealized FX), so the shared close entry is cleared rather than stranded; AP and P&L net to
+zero. Direct entry voids of the bill's `ap_invoice` and `ap_void` entries are refused, so an
+admin cannot bypass the bill-level action; open or applied vendor credits bound to the bill also
+block the void until they are resolved. AR, cash, intercompany, and a consolidation/translation reserve remain out of scope — one functional currency means a USD
+payable is remeasured through P&L, not translated through CTA.
 
 ### D16 — The books are seeded under `Kubeworkz`, not the doc's placeholder
 The doc's JE playbook header names "**Gridworkz** Fabless AI Chip Company" while the company is
@@ -398,9 +427,16 @@ reports an operator's disable/threshold edit as drift instead of overwriting it.
 
 1. **ASC 606 multi-element contract machinery** — the schedules in D5 are single-obligation
    (straight-line or cost-incurred). Multi-element allocation is P3.
-2. **Tax computation and filing** — `TaxRate`/`TaxCalculator` exist; jurisdictions do not. Rates
-   are host data, filing is an adapter (ADR-014 shape), both P3.
-3. **FX revaluation and gain/loss** — reporting conversion only ([design §7.3] parity).
+2. **Tax computation, determination, and filing** — there is no live tax path. `TaxRate` is only
+   an uninstantiated `define_tax_rate/5` blueprint; `TaxCalculator` is an ADR-055 preserved
+   test-oracle module with no production caller and no line/invoice integration. Jurisdictions,
+   nexus/registrations, exemption certificates, VAT/GST/withholding semantics, 1099/T4A reporting,
+   filing exports, and e-invoicing are all absent and remain out of scope (P3 only while the host
+   has no nexus/registration in a jurisdiction). A multi-jurisdiction seller needs a separate tax
+   determination/filing workstream, not a rate row.
+3. **FX revaluation and gain/loss** — realized AP FX and period-end AP remeasurement are
+   implemented (D15); AR/cash/intercompany revaluation and CTA/consolidation translation remain
+   out of scope ([design §7.3] parity for the rest).
 4. **Serials, fractional UOM, recall genealogy** — lots land (D3); unit-level serials do not.
 5. **MRP / shop-floor scheduling / capacity planning** — unchanged from the base system (P3).
 6. **A formula/spreadsheet engine** — the rolling forecast is a bounded driver model (D11).
