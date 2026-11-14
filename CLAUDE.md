@@ -25,9 +25,11 @@ not — that is what codemunch replaces. See `driftwood/CLAUDE.md` for the full 
   (`samen_core/test/test_helper.exs`), not an opaque `CREATE EXTENSION` error.
 - Root gate: `./ci.sh` — spikes → samen_core → the AI eval/red-team tier → 5 adapter-package
   gates (samen_stripe/postmark/ses/resend/anthropic) → 3 gen_app probes → an opt-in
-  (`SAMEN_SABOTAGE=1`) sabotage-harness step → samen_web + demo + driftwood + pawchart run
-  CONCURRENTLY last (own DBs, race-free once everything registry-mutating above has finished
-  sequentially). Takes minutes; must end `ROOT CI: ALL PASSED`.
+  (`SAMEN_SABOTAGE=1`) sabotage-harness step → the app tier starts with samen_web ALONE,
+  then demo + driftwood + pawchart + samenerp run CONCURRENTLY (own DBs, race-free once
+  everything registry-mutating above has finished sequentially). Running the largest DB
+  suite alone keeps sibling gates from stalling its sandbox `BEGIN`; it is not a test
+  relaxation. Takes minutes; must end `ROOT CI: ALL PASSED`.
 - Iteration tier: `./ci-fast.sh` — spikes → samen_core → samen_web ONLY (framework core,
   skips the gen_app probes + demo/vertical gates). Fast inner-loop feedback; NOT a
   substitute for `./ci.sh` before a milestone. Ends `CI-FAST: ALL PASSED`.

@@ -551,14 +551,24 @@ else
   echo "==> Skipping sabotage harness (opt-in: SAMEN_SABOTAGE=1 ./ci.sh replays all gate sabotages)"
 fi
 
-# --- Independent app/framework gates — RUN CONCURRENTLY (10-core box) -----------------
-# The four vertical/framework gates below are independent (own apps, own test DBs —
-# samen_web_test / demo_test / driftwood_test / pawchart_test — own _build) so they run
-# in PARALLEL to cut wall-clock. HAZARD GUARD: everything above this point (spikes,
-# samen_core, the 3 registry-mutating gen probes, and the opt-in sabotage harness — which
-# patches samen_core/samen_web/demo/pawchart source) is SEQUENTIAL and has already fully
-# completed; nothing below touches the shared abbrev_registry.json or patches source, so
-# concurrency here is race-free.
+# --- Independent app/framework gates — samen_web ALONE, then four CONCURRENTLY ---------
+# The five app gates are independent (own apps, own test DBs — samen_web_test / demo_test /
+# driftwood_test / pawchart_test / samenerp_test — own _build), so the four smaller vertical
+# gates run in PARALLEL to cut wall-clock. HAZARD GUARD: everything above this point
+# (spikes, samen_core, the 3 registry-mutating gen probes, and the opt-in sabotage harness —
+# which patches samen_core/samen_web/demo/pawchart source) is SEQUENTIAL and has already
+# fully completed; nothing below touches the shared abbrev_registry.json or patches source,
+# so concurrency here is race-free.
+#
+# samen_web is the exception: it is the largest DB-backed suite (2.5k tests, ~45 min) and it
+# runs ALONE before the concurrent tier. On 2026-11-14 the full gate showed its shared
+# sandbox connection checked out for >15s while driftwood was still running its PITR
+# game-day dataset build (2,212 s) against the same local Postgres; BEGIN missed
+# DBConnection's 15s deadline and the sync TotpTest then hit ExUnit's 60s timeout. The suite
+# passes in isolation, and its own tests cannot race each other (DataCase is sync; the async
+# phase never touches the sandbox), so the contention is between app gates, not inside
+# samen_web's pool. Serializing just this one gate removes the load without changing a test,
+# a timeout, or an assertion.
 #
 # CORRECTNESS CONTRACT (do NOT weaken): a backgrounded command that fails does NOT trip
 # `set -e`. Each gate's stdout+stderr is captured to its own log; each background PID's exit
@@ -612,15 +622,35 @@ gate_samenerp() {
   MIX_ENV=test bash ci.sh
 }
 
+# Run the DB-heavy framework gate ALONE before the concurrent vertical tier. The function's
+# `cd` and `HEX_HOME` export stay in this subshell, so they cannot leak into the other gates.
+gate_failed=0
+if tier_on web; then
+  echo ""
+  echo "==> Running samen_web gate ALONE (largest DB-backed suite; see the concurrency note above)"
+  web_log="$GATE_LOG_DIR/samen_web.log"
+  if ( gate_samen_web ) >"$web_log" 2>&1; then
+    echo "==> samen_web gate: PASSED"
+  else
+    code=$?
+    gate_failed=1
+    echo ""
+    echo "==> samen_web gate: FAILED (exit $code)"
+    echo "==> ----- begin samen_web log ($web_log) -----"
+    cat "$web_log"
+    echo "==> ----- end samen_web log -----"
+  fi
+fi
+
 # Gate registry: name | function | PASSED marker line(s) to emit on success — built from the
 # SELECTED app tiers. `all` selects every app (identical to the pre-tier gate); a subset selects
 # only those, so a change confined to one app does not also pay for the other four. An empty
-# registry short-circuits to a reported skip rather than an empty launch loop.
+# registry short-circuits to a reported skip rather than an empty launch loop. samen_web is not
+# registered here: it already ran alone above.
 gate_names=()
 gate_fns=()
 gate_markers=()
 add_gate() { gate_names+=("$1"); gate_fns+=("$2"); gate_markers+=("$3"); }
-if tier_on web; then add_gate samen_web gate_samen_web "==> samen_web gate: PASSED"; fi
 if tier_on demo; then add_gate demo gate_demo $'==> demo tests: PASSED\n==> demo CI gate: PASSED'; fi
 if tier_on driftwood; then add_gate driftwood gate_driftwood "==> Driftwood CI gate: PASSED"; fi
 if tier_on pawchart; then add_gate pawchart gate_pawchart "==> PawChart CI gate: PASSED"; fi
@@ -628,10 +658,14 @@ if tier_on samenerp; then add_gate samenerp gate_samenerp "==> samenerp CI gate:
 
 if (( ${#gate_names[@]} == 0 )); then
   echo ""
-  echo "==> SKIPPING every app gate (no app tier selected — SAMEN_CI_TIERS=$CI_TIERS)"
+  if tier_on web; then
+    echo "==> No additional app gates selected (samen_web ran alone above)"
+  else
+    echo "==> SKIPPING every app gate (no app tier selected — SAMEN_CI_TIERS=$CI_TIERS)"
+  fi
 else
 echo ""
-echo "==> Running app gates CONCURRENTLY: ${gate_names[*]}"
+echo "==> Running remaining app gates CONCURRENTLY: ${gate_names[*]}"
 
 # Launch them in the background, each redirected to its own per-app log.
 gate_pids=()
@@ -644,7 +678,6 @@ for i in "${!gate_names[@]}"; do
 done
 
 # Collect each background job's exit code EXPLICITLY (set -e will not catch a bg failure).
-gate_failed=0
 for i in "${!gate_names[@]}"; do
   if wait "${gate_pids[$i]}"; then
     printf '%s\n' "${gate_markers[$i]}"
@@ -658,6 +691,7 @@ for i in "${!gate_names[@]}"; do
     echo "==> ----- end ${gate_names[$i]} log -----"
   fi
 done
+fi
 
 if [[ "$gate_failed" != 0 ]]; then
   echo ""
@@ -667,7 +701,6 @@ fi
 
 # Every launched gate confirmed exit 0 — logs no longer needed.
 rm -rf "$GATE_LOG_DIR"
-fi
 
 echo ""
 if [[ "$CI_TIERS" == "all" ]]; then
