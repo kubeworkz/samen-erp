@@ -289,6 +289,22 @@ debit-normal asset or a release target that is not a same-org debit-normal expen
 closed period refuses the release through the same posting gate as every other entry. The
 register is derived from the contract plus Σ releases; there is no stored balance to drift.
 
+### D9b — Leases are a contract, a derived IFRS 16 schedule and append-only payment facts
+`Lease` `{code, name, kind ∈ {:office, :lab}, start_on, months, payment_cents,
+annual_rate_bps, six account ids, dimension}` is the office/lab lease contract. Payments
+are fixed and modeled at month end. There is no schedule table: `LeaseSchedule` derives
+the initial liability as the present value of the fixed payment stream at the monthly
+incremental-borrowing rate, then derives each month's interest, principal, closing
+liability, straight-line ROU amortization and the final rounding residue. Creation
+posts the commencement entry (`Dr ROU asset / Cr lease liability`) in the same
+transaction, anchored `lease_initial` to the lease id. A monthly `LeasePayment` is
+the only persisted per-period fact, anchored `lease_payment` to its entry; it is
+append-only and unique per `{lease, period}`. The monthly `LeasePaymentRun` posts
+`Dr interest / Dr amortization / Dr liability / Cr accumulated amortization / Cr
+cash` exactly once behind that anchor. The register is derived from the contract
+plus Σ payments. Variable payments, escalations, options and remeasurement are
+not invented; a contract that needs them is a new accounting decision.
+
 ### D10 — Obsolescence is a policy row plus a gated write-down, never an automatic posting
 `InventoryReserve` `{name, basis ∈ {:age, :item}, age_months, pct, applies_to}`; the quarterly
 assessment is a **derived read** (excess/obsolete candidates at NRV) that **drafts** a write-down

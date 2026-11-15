@@ -60,6 +60,8 @@ defmodule Samenerp.Erp do
       asset_posting: "ead",
       prepaid_schedule: "sep",
       prepaid_release: "spe",
+      lease: "els",
+      lease_payment: "lse",
       inventory_reserve: "ear",
       reserve_write_down: "eav",
       reserve_write_down_line: "eaw",

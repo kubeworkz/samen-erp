@@ -51,6 +51,7 @@ defmodule Mix.Tasks.Samen.Verify.NoDormantModules do
     "Samen.Scopes.Finance.ApInvoiceCapture",
     "Samen.Scopes.Finance.AssetRegister",
     "Samen.Scopes.Finance.PrepaidRegister",
+    "Samen.Scopes.Finance.LeaseRegister",
     "Samen.Scopes.Finance.BudgetVsActual",
     "Samen.Scopes.Finance.GrantReconcile",
     "Samen.Scopes.Finance.ReconcileRecognition",

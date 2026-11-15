@@ -80,6 +80,8 @@ defmodule SamenCore.Support.FinanceFixture do
       asset_posting: "fsp",
       prepaid_schedule: "spf",
       prepaid_release: "psf",
+      lease: "fls",
+      lease_payment: "lsf",
       # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence policy, its gated
       # write-down and the assessed lines.
       inventory_reserve: "fsr",

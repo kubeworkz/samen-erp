@@ -419,6 +419,41 @@ Decisions the slice had to take:
 
 ---
 
+### Phase 8 extension — lease accounting (2026-11-14)
+
+Office and lab leases had no subledger, so a material lease could not be recorded
+as an IFRS 16 right-of-use asset and liability without hand journals. The slice
+adds `Samen.Scopes.Finance.{LeaseSchedule, LeaseRegister, LeasePaymentRun}` plus
+the `Lease`/`LeasePayment` resources (blueprint `lease_blueprint.ex`), the
+account guard `LeaseShape`, the commencement/payment cascades, and the monthly
+`LeasePaymentWorker` on the canonical crontab (`55 0 1 * *`). The
+`samen_core/test/finance_leases_test.exs` suite proves the arithmetic, both
+posting paths, exactly-once/append-only behavior, the register and the closed
+period refusal.
+
+Decisions the slice had to take:
+
+1. **A lease is not an `Asset.kind`.** The asset register has no liability or
+   interest leg, and a lease's ROU asset amortizes against a liability that
+   accretes interest. The contract names its six accounts directly (the
+   prepaid/AP-line precedent); `LeaseShape` pins their sides and kinds.
+2. **The schedule is derived, never stored.** `{payment, months, start_on,
+   annual_rate_bps}` derives the present value and every monthly row. Payments
+   are fixed and modeled at month end; the final payment and ROU slice absorb
+   cent rounding so both close at zero.
+3. **Commencement and monthly postings are cascades.** Creating a lease posts
+   `Dr ROU / Cr liability`; the monthly payment posts interest, principal and
+   ROU amortization. Both draft then call the ordinary governed `:post`, so R1,
+   R6 and R10 apply, and both anchor their entries to the row that persists.
+4. **Exactly-once is a read plus a unique index.** `LeasePaymentRun` skips an
+   already-paid period; the unique `{org, lease, period}` index is the belt.
+   The payment table is append-only; a correction is a reversing entry.
+5. **No invented leases.** The Kubeworkz books have no office/lab lease rows or
+   lease accounts, so the host schema is open but no lease is seeded. A lease
+   is created through the governed resource when an actual contract exists.
+
+---
+
 ## Phase 9 — Obsolescence / NRV reserve · default · 1 session
 
 `InventoryReserve` policy + the quarterly assessment read + a **gated** drafted write-down

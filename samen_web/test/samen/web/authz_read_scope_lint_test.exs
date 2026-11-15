@@ -168,7 +168,7 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     assert files >= 800
     assert governed >= 140
 
-    # The sanctioned reads are a KNOWN, per-site-justified set (now 66 — pre-auth
+    # The sanctioned reads are a KNOWN, per-site-justified set (now 67 — pre-auth
     # boot-path/unique-key lookups, webhook-ingest provider-ref lookups, FK cascades,
     # the system-plane sweeps, the operator activity rollup, the R3/R4 addendum's
     # three authorization-boundary reads: the two session-cap credential enumerations
@@ -180,8 +180,10 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     # recurring journal template sweep (every org's due template, each generated
     # entry still guarded by its own OrgScope and the normal :post approval path), the
     # AP approval-policy queue's org-wide pending read (`list_pending_for_org/2`,
-    # pinned by its own `org_filter/2` conjunct), plus WS-ACCT's prepaid-release sweep (every org's schedule, each release
-    # governed by its own `:release` action) — each carrying a `# authz-scope:`
+    # pinned by its own `org_filter/2` conjunct), WS-ACCT's prepaid-release sweep
+    # (every org's schedule, each release governed by its own `:release` action),
+    # and the lease-payment sweep (every org's lease, each payment governed by its
+    # own `:pay` cascade) — each carrying a `# authz-scope:`
     # reason at the read SITE, bound to exactly that read).
     # A regression that started silently swallowing violations as sanctions would blow
     # this ceiling; a lost marker (or a lost pin downgraded to a sanction) would move
@@ -190,8 +192,8 @@ defmodule Samen.Web.Authz.ReadScopeLintTest do
     # deliberate posture change and SHOULD re-open this test. (At S15 this set was 49;
     # the R3/R4 addendum added 3; Phase 6 added 1; Phase 8 added 1; the AR collections
     # dunning sweep added 1; the recurring journal template sweep added 1; the
-    # prepaid-release sweep added 1.)
-    assert sanctioned in 47..66
+    # prepaid-release sweep added 1; the lease-payment sweep added 1.)
+    assert sanctioned in 47..67
   end
 
   test "COMPLETENESS ROLL-CALL: the sweep covers both kernels AND the vertical trees, and skips the seed/fixture harnesses" do

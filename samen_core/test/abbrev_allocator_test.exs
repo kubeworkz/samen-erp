@@ -357,8 +357,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +6 WS-ACCT prepaid expense slice: `PrepaidSchedule` + `PrepaidRelease`
       # in the three Finance hosts (samen_core `spf`/`psf`, samen_web `wep`/`ewp`,
       # samenerp `sep`/`spe`), allocator-reserved -> 36_951 bytes, 782 flat.
-      assert byte_size(committed) == 36_951
-      assert map_size(R.load()) == 782
+      # +6 lease accounting: `Lease` + `LeasePayment` in the same three hosts,
+      # allocator-reserved -> 37_232 bytes, 788 flat.
+      assert byte_size(committed) == 37_232
+      assert map_size(R.load()) == 788
     end
   end
 

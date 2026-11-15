@@ -4785,6 +4785,150 @@
     {
       "fields": [
         {
+          "column_name": "els_accumulated_amortization_account_id",
+          "logical_name": "accumulated_amortization_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_amortization_expense_account_id",
+          "logical_name": "amortization_expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_annual_rate_bps",
+          "logical_name": "annual_rate_bps",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "els_cash_account_id",
+          "logical_name": "cash_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "els_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_dimension_key",
+          "logical_name": "dimension_key",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "els_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_initial_entry_id",
+          "logical_name": "initial_entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "els_interest_expense_account_id",
+          "logical_name": "interest_expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_kind",
+          "logical_name": "kind",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "els_lease_liability_account_id",
+          "logical_name": "lease_liability_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "els_months",
+          "logical_name": "months",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "els_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "els_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_payment_cents",
+          "logical_name": "payment_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "els_rou_asset_account_id",
+          "logical_name": "rou_asset_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_source_id",
+          "logical_name": "source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "els_source_key",
+          "logical_name": "source_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "els_start_on",
+          "logical_name": "start_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "els_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.Lease",
+      "table_name": "els_lease"
+    },
+    {
+      "fields": [
+        {
           "column_name": "elt_code",
           "logical_name": "code",
           "pii": false,
@@ -9759,6 +9903,108 @@
     {
       "fields": [
         {
+          "column_name": "lse_accumulated_amortization_account_id",
+          "logical_name": "accumulated_amortization_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_amortization_cents",
+          "logical_name": "amortization_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "lse_amortization_expense_account_id",
+          "logical_name": "amortization_expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_cash_account_id",
+          "logical_name": "cash_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "lse_interest_cents",
+          "logical_name": "interest_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "lse_interest_expense_account_id",
+          "logical_name": "interest_expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_lease_id",
+          "logical_name": "lease_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_lease_liability_account_id",
+          "logical_name": "lease_liability_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "lse_paid_on",
+          "logical_name": "paid_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "lse_payment_cents",
+          "logical_name": "payment_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "lse_period_key",
+          "logical_name": "period_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "lse_principal_cents",
+          "logical_name": "principal_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "lse_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.LeasePayment",
+      "table_name": "lse_lease_payment"
+    },
+    {
+      "fields": [
+        {
           "column_name": "pii_rne_secret",
           "logical_name": "secret",
           "pii": true,
@@ -10755,6 +11001,114 @@
     {
       "fields": [
         {
+          "column_name": "sep_code",
+          "logical_name": "code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sep_cost_object_id",
+          "logical_name": "cost_object_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sep_dimension_key",
+          "logical_name": "dimension_key",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sep_expense_account_id",
+          "logical_name": "expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sep_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sep_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "sep_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sep_method",
+          "logical_name": "method",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "sep_months",
+          "logical_name": "months",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "sep_name",
+          "logical_name": "name",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sep_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sep_prepaid_account_id",
+          "logical_name": "prepaid_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sep_source_id",
+          "logical_name": "source_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "sep_source_key",
+          "logical_name": "source_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "sep_start_on",
+          "logical_name": "start_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "sep_total_cents",
+          "logical_name": "total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "sep_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PrepaidSchedule",
+      "table_name": "sep_prepaid_schedule"
+    },
+    {
+      "fields": [
+        {
           "column_name": "pii_she_dob",
           "logical_name": "dob",
           "pii": true,
@@ -10967,6 +11321,72 @@
       ],
       "resource": "Samenerp.Erp.LabourAllocationShare",
       "table_name": "sle_labour_allocation_share"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "spe_amount_cents",
+          "logical_name": "amount_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "spe_expense_account_id",
+          "logical_name": "expense_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spe_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spe_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "spe_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spe_period_key",
+          "logical_name": "period_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "spe_prepaid_account_id",
+          "logical_name": "prepaid_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spe_released_on",
+          "logical_name": "released_on",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "spe_schedule_id",
+          "logical_name": "schedule_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "spe_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PrepaidRelease",
+      "table_name": "spe_prepaid_release"
     },
     {
       "fields": [

@@ -199,6 +199,9 @@ defmodule Samen.Jobs do
     - `"50 0 1 * *"` → `Samen.Scopes.Finance.PrepaidReleaseWorker` (the monthly prepaid
       expense release sweep on the 1st at 00:50 UTC. Its per-{schedule, period} anchor
       makes a retry a clean no-op.)
+    - `"55 0 1 * *"` → `Samen.Scopes.Finance.LeasePaymentWorker` (the monthly lease
+      interest/principal/ROU sweep on the 1st at 00:55 UTC. Its per-{lease, period}
+      anchor makes a retry a clean no-op.)
 
     - `"10 1 * * *"` → `Samen.Scopes.Finance.CollectionDunningWorker` (the
       daily AR collections sweep: advances every open `CollectionCase` whose
@@ -240,6 +243,9 @@ defmodule Samen.Jobs do
       # the 1st at 00:50 UTC. Its per-{schedule, period} anchor makes a retry a
       # clean no-op.
       {"50 0 1 * *", Samen.Scopes.Finance.PrepaidReleaseWorker},
+      # Lease accounting — the monthly interest/principal/ROU sweep, on the 1st
+      # at 00:55 UTC. Its per-{lease, period} anchor makes a retry a clean no-op.
+      {"55 0 1 * *", Samen.Scopes.Finance.LeasePaymentWorker},
       # AR collections dunning — daily at 01:10 UTC. The run advances only
       # open cases whose next_action_on has arrived; its per-case/due-date
       # idempotency key makes a retry a clean no-op.

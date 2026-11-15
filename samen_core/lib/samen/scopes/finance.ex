@@ -179,6 +179,21 @@ defmodule Samen.Scopes.Finance do
   derives released, remaining and completion; `PrepaidShape` refuses the wrong
   side/kind at create time.
 
+  ## D9b — leases: a derived IFRS 16 schedule and payment facts
+
+  `Lease` is one office or lab contract: a fixed monthly payment, term, start
+  month, incremental-borrowing rate in basis points and the six same-org
+  accounts every posting uses. Payment dates are month ends. `LeaseSchedule`
+  derives the initial liability as the present value of the payment stream and
+  each month's interest, principal, closing liability and straight-line ROU
+  amortization; creation posts `Dr ROU / Cr lease liability` in the same
+  transaction. `LeasePayment` is the only persisted per-period fact — append-only,
+  unique per `{lease, period}`, anchored to its entry. `LeasePaymentRun` posts
+  the due month's interest, principal, ROU amortization and cash exactly once;
+  `LeaseRegister` derives the liability/ROU balances from the contract plus Σ
+  payments. Advance rent, escalations, options and remeasurement are out of
+  scope; a contract that needs them is a new accounting decision.
+
   ## D10 — obsolescence: a policy, an assessment, a gated write-down
 
   `InventoryReserve` is a POLICY (basis `:age` or `:item`, a threshold, a
@@ -313,6 +328,8 @@ defmodule Samen.Scopes.Finance do
     * `Demo.FinanceScope.AssetPosting`
     * `Demo.FinanceScope.PrepaidSchedule`
     * `Demo.FinanceScope.PrepaidRelease`
+    * `Demo.FinanceScope.Lease`
+    * `Demo.FinanceScope.LeasePayment`
     * `Demo.FinanceScope.InventoryReserve`
     * `Demo.FinanceScope.ReserveWriteDown`
     * `Demo.FinanceScope.ReserveWriteDownLine`
@@ -425,6 +442,10 @@ defmodule Samen.Scopes.Finance do
     # releases. Allocator-reserved under the `samen_web` host.
     prepaid_schedule: "wep",
     prepaid_release: "ewp",
+    # Lease accounting: the contract and its monthly payment facts.
+    # Allocator-reserved under the `samen_web` host.
+    lease: "ewl",
+    lease_payment: "elw",
     # WS-ACCT Phase 9 (ADR-054 D10): the obsolescence policy, its gated
     # write-down and the assessed lines. Allocator-reserved under `samen_web`.
     inventory_reserve: "fro",
@@ -513,6 +534,8 @@ defmodule Samen.Scopes.Finance do
     asset_posting_mod = Module.concat(namespace, AssetPosting)
     prepaid_schedule_mod = Module.concat(namespace, PrepaidSchedule)
     prepaid_release_mod = Module.concat(namespace, PrepaidRelease)
+    lease_mod = Module.concat(namespace, Lease)
+    lease_payment_mod = Module.concat(namespace, LeasePayment)
     inventory_reserve_mod = Module.concat(namespace, InventoryReserve)
     reserve_write_down_mod = Module.concat(namespace, ReserveWriteDown)
     reserve_write_down_line_mod = Module.concat(namespace, ReserveWriteDownLine)
@@ -554,6 +577,8 @@ defmodule Samen.Scopes.Finance do
       require Samen.Scopes.Finance.AssetBlueprint
 
       require Samen.Scopes.Finance.PrepaidBlueprint
+
+      require Samen.Scopes.Finance.LeaseBlueprint
 
       require Samen.Scopes.Finance.ReserveBlueprint
 
@@ -601,6 +626,8 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(asset_posting_mod))
         resource(unquote(prepaid_schedule_mod))
         resource(unquote(prepaid_release_mod))
+        resource(unquote(lease_mod))
+        resource(unquote(lease_payment_mod))
         resource(unquote(inventory_reserve_mod))
         resource(unquote(reserve_write_down_mod))
         resource(unquote(reserve_write_down_line_mod))
@@ -869,6 +896,33 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.prepaid_release),
         unquote(prepaid_schedule_mod),
+        unquote(entry_mod),
+        unquote(account_mod)
+      )
+
+      # Lease accounting — the office/lab contract and its exactly-once
+      # monthly payment facts. The lease posts its commencement entry on
+      # create; the payment cascade posts interest, principal and ROU
+      # amortization from the derived schedule.
+      Samen.Scopes.Finance.LeaseBlueprint.define_lease(
+        unquote(lease_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.lease),
+        unquote(lease_payment_mod),
+        unquote(entry_mod),
+        unquote(account_mod),
+        unquote(cost_object_mod)
+      )
+
+      Samen.Scopes.Finance.LeaseBlueprint.define_lease_payment(
+        unquote(lease_payment_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.lease_payment),
+        unquote(lease_mod),
         unquote(entry_mod),
         unquote(account_mod)
       )
