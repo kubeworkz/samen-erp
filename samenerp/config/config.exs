@@ -103,6 +103,14 @@ config :samen_core, :support_sla_breach_ticket_resource, Samenerp.Support.Ticket
 # wire it has no books to reverse and is an honest no-op.
 config :samen_core, Samen.Scopes.Finance.AccrualReversal, entry_module: Samenerp.Erp.JournalEntry
 
+# Payroll integration — an external payroll system supplies the register; the
+# reference importer lands it as a DRAFT on THIS host's journal. It never
+# computes pay/tax/withholding and never calls :post; the normal journal
+# approval/posting path stays authoritative. Wiring the entry module alone does
+# not select the provider: a host opts in with
+# `provider: Samen.Hr.Payroll.JournalProvider` (or its own adapter).
+config :samen_core, Samen.Hr.Payroll.JournalProvider, entry_module: Samenerp.Erp.JournalEntry
+
 # Lease accounting — the monthly lease run reads THIS host's lease contracts and
 # posts their derived payments through the host's LeasePayment cascade.
 config :samen_core, Samen.Scopes.Finance.LeasePaymentRun,

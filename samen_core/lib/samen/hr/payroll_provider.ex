@@ -26,9 +26,30 @@ defmodule Samen.Hr.PayrollProvider do
   :comp_changed` rows carry the comp facts a provider (or a human journaling
   through Finance) consumes.
 
+  ## Reference integration (import, never calculate)
+
+  `Samen.Hr.Payroll.JournalProvider` is the shipped reference adapter. The
+  external payroll system supplies a balanced register of GL lines; the adapter
+  validates it and lands a **draft** `JournalEntry` through the host's normal
+  `:create` action. It reads no hours, rates, gross, net, tax or deduction
+  fields and calls no `:post` — the host's journal approval/posting path stays
+  the only door into the ledger. A sequential re-import of the same
+  `provider`/`external_id` returns the existing entry; a changed entry date,
+  total or line set is refused. A host that may run concurrent importers must
+  serialize them.
+
+      config :samen_core, Samen.Hr.PayrollProvider,
+        provider: Samen.Hr.Payroll.JournalProvider
+
+      config :samen_core, Samen.Hr.Payroll.JournalProvider,
+        entry_module: MyApp.Finance.JournalEntry
+
+  A provider-specific adapter that computes or fetches payroll remains the
+  host's choice; the reference adapter is deliberately not one.
+
   ## Declared-not-built (the honest-claims discipline)
 
-  The default's refusal is pinned by a test (`Samen.Hr.PayrollTest`): calling
+  The default's refusal is pinned by a test (`Samen.HrScopeTest`): calling
   through the unwired seam refuses `{:error, :not_configured}`. This is the
   ADR-014 adapter-posture shape: the boundary is real, the default is
   fail-honest, and nothing pretends to compute what it does not.
@@ -50,9 +71,14 @@ defmodule Samen.Hr.PayrollProvider do
 
       :error ->
         case Application.get_env(:samen_core, __MODULE__, []) do
-          %{provider: mod} -> mod
-          kw when is_list(kw) -> Keyword.get(kw, :provider, Samen.Hr.PayrollProvider.NotConfigured)
-          _ -> Samen.Hr.PayrollProvider.NotConfigured
+          %{provider: mod} ->
+            mod
+
+          kw when is_list(kw) ->
+            Keyword.get(kw, :provider, Samen.Hr.PayrollProvider.NotConfigured)
+
+          _ ->
+            Samen.Hr.PayrollProvider.NotConfigured
         end
     end
   end

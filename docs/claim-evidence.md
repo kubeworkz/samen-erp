@@ -710,9 +710,11 @@ sabotage patch; every phase was adversarially gated.
 **Honest scope (the design §7 list is binding):** payroll/tax computation, multi-currency,
 lot costing, scheduling, accruals, forecasting, and depreciation are adapter-or-P2/P3 —
 WS-ERP ships the LEDGER + DOCUMENT spine and refuses to fake the rest; the payroll
-adapter boundary is a behaviour with NO engine. Every aggregate/freshness claim is
-documented as refresh-served reads, not real-time. The keyless-lane posture of the
-platform applies unchanged (no ERP surface requires a live vendor integration).
+adapter boundary is a behaviour with NO engine (the reference
+`Samen.Hr.Payroll.JournalProvider` imports an external register as a DRAFT, never computes or
+posts it). Every aggregate/freshness claim is documented as refresh-served reads, not
+real-time. The keyless-lane posture of the platform applies unchanged (no ERP surface requires
+a live vendor integration).
 
 **Defect the host gate caught (E8):** the F3.5 sweep on `samenerp` found `BudgetLine`,
 `StockLevel`, and `GoodsReceipt` carrying org-scoped `belongs_to` FKs with NO

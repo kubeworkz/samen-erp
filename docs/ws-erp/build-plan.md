@@ -243,8 +243,16 @@ latest-event-wins (the Consent mirror). `LeaveRequest :approve` rides the ADR-04
 (ungated refusal + distinct-approver decision proven; the governed decision schedules
 the employee reminder FAIL-SOFT — an unwired automation module never blocks a
 decision). `PayrollProvider` refuses `{:error, :not_configured}` (fail-honest),
-provider-override seam proven. `Samen.Web.Hr.Roster` is the E7 export surface: a
-bounded column allowlist over `Samen.Web.Csv` — the sensitive trio (dob/emails/phones)
+provider-override seam proven. The reference `Samen.Hr.Payroll.JournalProvider`
+imports an externally computed, balanced register as a DRAFT (no hours/rates/tax
+arithmetic, no `:post`); a sequential re-import is repeat-safe by
+provider/external id and a changed entry date, total or line set is refused.
+The anchor is not a unique index, so a host running concurrent importers must
+serialize them. Proven in `test/hr_payroll_journal_provider_test.exs` and the
+host's configured entry module is exercised by
+`samenerp/test/payroll_journal_provider_test.exs`.
+
+`Samen.Web.Hr.Roster` is the E7 export surface: a bounded column allowlist over `Samen.Web.Csv` — the sensitive trio (dob/emails/phones)
 is structurally ABSENT, narrowing allowed, widening REFUSED at the roster layer (the
  Csv-layer validation alone would have let a caller widen — caught by the widen red
 path at birth). Sabotage **308** (the roster plane-flip bypass — export resolves the

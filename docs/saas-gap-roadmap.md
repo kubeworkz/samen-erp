@@ -692,9 +692,10 @@ scopes + the `samenerp` host proof (design: `docs/ws-erp/design.md`; ADR-049; fu
 accruals, forecasting, depreciation are adapter-or-P2/P3 and were REFUSED into that list — the shipped
 thing is the ledger + document spine plus realized AP FX and AP period-end remeasurement, fail-honest about the rest.
 
-**Next-workstream candidates (from this workstream):** a reference payroll adapter (the behaviour has no
-engine), lot/serial costing on the stock ledger, the P2 AR-side customer statement/aging reads, and the
-operator-plane ERP cockpit (the six surfaces are tenant-plane today).
+**Next-workstream candidates (from this workstream):** provider-specific payroll adapters (the reference
+`Samen.Hr.Payroll.JournalProvider` now imports an external register draft without computing pay), lot/serial
+costing on the stock ledger, the P2 AR-side customer statement/aging reads, and the operator-plane ERP
+cockpit (the six surfaces are tenant-plane today).
 
 ---
 

@@ -488,7 +488,9 @@ reports an operator's disable/threshold edit as drift instead of overwriting it.
 7. **Generated narrative** — the board pack's prose is authored (D12).
 8. **Intercompany elimination** — consolidation stays dormant (D13).
 9. **Payroll computation** — unchanged: `PayRun`/`Payslip` produce the posting; the GL never
-   computes pay (ADR-049 §6).
+   computes pay (ADR-049 §6). `Samen.Hr.Payroll.JournalProvider` is a reference **register
+   importer** only: an external system's balanced lines land as a DRAFT, never a computed or
+   automatically posted payroll.
 10. **The doc's `E1–E5 Items Overview`** (line 5912: MLPerf acceptance model, ONNX quantization,
     golden vectors, power/energy boundaries) — **not accounting**. It appears to be from a
     different conversation. Excluded pending the operator's confirmation (§7 carry).

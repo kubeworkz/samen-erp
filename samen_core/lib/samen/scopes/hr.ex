@@ -42,7 +42,10 @@ defmodule Samen.Scopes.Hr do
   shape): ` {:error, :not_configured}` default (the registry refuses unregistered
   kinds — a host brings a provider or journals comp expense through Finance
   manually). The Journals (GL) record payroll *postings*; they never *compute*
-  them. The declared-not-built test pins the default.
+  them. The declared-not-built test pins the default. A reference adapter,
+  `Samen.Hr.Payroll.JournalProvider`, imports an externally computed balanced
+  register as a DRAFT (no hours/rates/tax arithmetic, no `:post`); the normal
+  journal approval/posting path remains authoritative.
 
   ## PII map — NON-EMPTY (INV-1, the watch-list discipline)
 
