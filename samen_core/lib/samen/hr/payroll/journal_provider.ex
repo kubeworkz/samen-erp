@@ -38,19 +38,20 @@ defmodule Samen.Hr.Payroll.JournalProvider do
 
   The entry is anchored `source_key: "payroll_register:<provider>:<external_id>"`
   (both components URL-encoded, so an id containing `:` cannot collide with
-  another provider). In the normal sequential retry path, re-importing the same
-  external run returns the existing entry when its entry date, lines and total
-  match; a changed date, total or line set for the same anchor is refused as
-  `:payroll_register_conflict`. The anchor is also visible to a reviewer, so a
-  duplicated external run is easy to spot. A provider that changes a payroll
-  run must correct it through a reversing entry, not by reusing its external
-  id.
+  another provider). The anchor is backed by a partial unique index on
+  `(org_id, source_key)` for `payroll_register:*` keys, so the database is the
+  arbiter. Re-importing the same external run returns the existing entry when
+  its entry date, lines and total match; a changed date, total or line set for
+  the same anchor is refused as `:payroll_register_conflict`. A concurrent
+  insert that loses the race is re-read and returned (or refused as a
+  conflict), so two importers cannot create two drafts. The anchor is also
+  visible to a reviewer, so a duplicated external run is easy to spot. A
+  provider that changes a payroll run must correct it through a reversing entry,
+  not by reusing its external id.
 
-  The anchor is read before create, not backed by a unique index of its own. A
-  host that can run two importers concurrently for one external run should
-  serialize them on that anchor (or add the matching unique index); the
-  reference adapter does not pretend a read-then-write is an atomic exactly-once
-  guarantee.
+  A host mount must carry the equivalent partial unique index in its Finance
+  migration (the core fixture and `samenerp` host migrations do). The adapter
+  does not fall back to a read-then-create guarantee.
 
   ## Configuration
 
@@ -84,13 +85,8 @@ defmodule Samen.Hr.Payroll.JournalProvider do
   def run_payroll(org_id, %Date{} = _period, opts) when is_binary(org_id) do
     with {:ok, entry_module} <- entry_module(opts),
          {:ok, raw_register} <- register(opts),
-         {:ok, register} <- normalize(raw_register, org_id),
-         {:ok, existing} <- find_existing(entry_module, register) do
-      if existing do
-        existing_result(existing, register)
-      else
-        create_draft(entry_module, register)
-      end
+         {:ok, register} <- normalize(raw_register, org_id) do
+      create_draft(entry_module, register)
     end
   end
 
@@ -352,15 +348,73 @@ defmodule Samen.Hr.Payroll.JournalProvider do
       lines: register.lines
     }
 
-    case entry_module
-         |> Ash.Changeset.for_create(:create, attrs, authorize?: false)
-         |> Ash.create(authorize?: false) do
-      {:ok, entry} ->
-        {:ok, result(entry, register.total_cents)}
+    try do
+      case entry_module
+           |> Ash.Changeset.for_create(:create, attrs, authorize?: false)
+           |> Ash.create(authorize?: false) do
+        {:ok, entry} ->
+          {:ok, result(entry, register.total_cents)}
 
-      {:error, reason} ->
-        {:error, {:payroll_journal_failed, reason}}
+        {:error, reason} ->
+          recover_create_error(entry_module, register, reason)
+      end
+    rescue
+      error ->
+        if unique_payroll_key_violation?(error) do
+          recover_existing(entry_module, register, error)
+        else
+          reraise error, __STACKTRACE__
+        end
     end
+  end
+
+  # The partial unique index is the guarantee; this path is the losing side of
+  # a race (or a retry that reaches the insert after an earlier winner). Re-read
+  # the winner and apply the same fingerprint check as the retry path.
+  defp recover_create_error(entry_module, register, reason) do
+    if unique_payroll_key_violation?(reason) do
+      recover_existing(entry_module, register, reason)
+    else
+      {:error, {:payroll_journal_failed, reason}}
+    end
+  end
+
+  defp recover_existing(entry_module, register, original_error) do
+    case find_existing(entry_module, register) do
+      {:ok, nil} -> {:error, {:payroll_journal_failed, original_error}}
+      {:ok, entry} -> existing_result(entry, register)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp unique_payroll_key_violation?(%Postgrex.Error{
+         postgres: %{code: :unique_violation}
+       }),
+       do: true
+
+  defp unique_payroll_key_violation?(%Ecto.ConstraintError{type: :unique}), do: true
+
+  defp unique_payroll_key_violation?(%{errors: errors}) when is_list(errors),
+    do: Enum.any?(errors, &unique_payroll_key_violation?/1)
+
+  defp unique_payroll_key_violation?(%{error: error}),
+    do: unique_payroll_key_violation?(error)
+
+  defp unique_payroll_key_violation?(error) do
+    message =
+      cond do
+        is_binary(error) -> error
+        is_map(error) -> Exception.message(error)
+        true -> ""
+      end
+
+    String.contains?(message, "unique_violation") or
+      String.contains?(message, "unique_constraint") or
+      String.contains?(message, "Ecto.ConstraintError") or
+      String.contains?(message, "sje_payroll_register_source_key_unique") or
+      String.contains?(message, "ecj_payroll_register_source_key_unique")
+  rescue
+    _ -> false
   end
 
   defp result(entry, total_cents) do

@@ -33,10 +33,12 @@ defmodule Samen.Hr.PayrollProvider do
   validates it and lands a **draft** `JournalEntry` through the host's normal
   `:create` action. It reads no hours, rates, gross, net, tax or deduction
   fields and calls no `:post` — the host's journal approval/posting path stays
-  the only door into the ledger. A sequential re-import of the same
+  the only door into the ledger. Re-importing the same
   `provider`/`external_id` returns the existing entry; a changed entry date,
-  total or line set is refused. A host that may run concurrent importers must
-  serialize them.
+  total or line set is refused. The anchor is backed by a partial unique index,
+  so concurrent importers converge on one draft instead of duplicating it. A
+  new host mount must carry the equivalent partial unique index in its Finance
+  migration.
 
       config :samen_core, Samen.Hr.PayrollProvider,
         provider: Samen.Hr.Payroll.JournalProvider

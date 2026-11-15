@@ -245,11 +245,15 @@ the employee reminder FAIL-SOFT — an unwired automation module never blocks a
 decision). `PayrollProvider` refuses `{:error, :not_configured}` (fail-honest),
 provider-override seam proven. The reference `Samen.Hr.Payroll.JournalProvider`
 imports an externally computed, balanced register as a DRAFT (no hours/rates/tax
-arithmetic, no `:post`); a sequential re-import is repeat-safe by
-provider/external id and a changed entry date, total or line set is refused.
-The anchor is not a unique index, so a host running concurrent importers must
-serialize them. Proven in `test/hr_payroll_journal_provider_test.exs` and the
-host's configured entry module is exercised by
+arithmetic, no `:post`); a re-import is repeat-safe by provider/external id and
+a changed entry date, total or line set is refused.
+The anchor is backed by a partial unique index on `(org_id, source_key)` for
+`payroll_register:*` keys; a losing concurrent insert re-reads the winner and
+returns it (or refuses a differing fingerprint), so importers converge on one
+draft without host-side serialization. Proven in
+`test/hr_payroll_journal_provider_test.exs`, under two concurrent importers in
+`test/hr_payroll_journal_provider_concurrency_test.exs`, and the host's
+configured entry module is exercised by
 `samenerp/test/payroll_journal_provider_test.exs`.
 
 `Samen.Web.Hr.Roster` is the E7 export surface: a bounded column allowlist over `Samen.Web.Csv` — the sensitive trio (dob/emails/phones)
