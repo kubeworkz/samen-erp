@@ -49,13 +49,29 @@ defmodule Samenerp.PayrollJournalProviderTest do
       )
       |> Ash.create!()
 
+    mapping = fn provider, external_code, account ->
+      Samenerp.Erp.PayrollAccountMapping
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          provider: provider,
+          external_code: external_code,
+          account_id: account.id
+        },
+        scope: scope
+      )
+      |> Ash.create!()
+    end
+
+    mapping.("kubeworkz_payroll", "6100", expense)
+    mapping.("kubeworkz_payroll", "2110", payable)
+
     {:ok, org: org, expense: expense, payable: payable}
   end
 
   test "imports a provider-computed register as one host draft, even on retry", %{
-    org: org,
-    expense: expense,
-    payable: payable
+    org: org
   } do
     register = %{
       provider: "kubeworkz_payroll",
@@ -63,10 +79,13 @@ defmodule Samenerp.PayrollJournalProviderTest do
       entry_date: ~D[2026-09-30],
       memo: "September 2026 payroll register",
       lines: [
-        %{account_id: expense.id, debit_cents: 240_000},
-        %{account_id: payable.id, credit_cents: 240_000}
+        %{account_code: "6100", debit_cents: 240_000},
+        %{account_code: "2110", credit_cents: 240_000}
       ]
     }
+
+    assert {:ok, %{status: :ready}} =
+             PayrollProvider.validate(org, register: register)
 
     assert {:ok, %{journal_entry_id: entry_id, total_cents: 240_000}} =
              PayrollProvider.run_payroll(org, ~D[2026-09-01],

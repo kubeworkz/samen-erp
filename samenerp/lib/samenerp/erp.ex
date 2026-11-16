@@ -32,6 +32,7 @@ defmodule Samenerp.Erp do
       account: "eca",
       journal_entry: "ecj",
       payroll_import: "esp",
+      payroll_account_mapping: "pse",
       journal_template: "ejr",
       journal_approval_policy: "ejp",
       approval_policy: "eap",
@@ -141,6 +142,7 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.JournalEntry)
     resource(Samenerp.Erp.JournalLine)
     resource(Samenerp.Erp.PayrollImport)
+    resource(Samenerp.Erp.PayrollAccountMapping)
     resource(Samenerp.Erp.JournalApprovalPolicy)
     resource(Samenerp.Erp.ApprovalPolicy)
     resource(Samenerp.Erp.ApInvoice)

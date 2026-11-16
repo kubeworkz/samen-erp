@@ -1143,6 +1143,116 @@ defmodule Samen.Scopes.Finance.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
+  # PayrollAccountMapping — a payroll provider's external account code -> this
+  # org's Finance.Account. The register carries only the provider's stable code;
+  # the host keeps the environment-specific account ids here.
+  # ---------------------------------------------------------------------------
+  defmacro define_payroll_account_mapping(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             account_mod
+           ) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.PayrollAccountMapping — maps a payroll provider's external
+        account code to this org's `Finance.Account`.
+
+        One row per `{org_id, provider, external_code}`. The account is a
+        same-org FK (`Samen.Policy.SameOrgFk`), so a mapping cannot point at
+        another tenant's account. Payroll registers carry only the provider's
+        stable external code; `Samen.Hr.Payroll.JournalProvider.validate/2`
+        resolves every code through this table and refuses missing or
+        cross-org mappings BEFORE any journal or provenance row is written.
+
+        The row is deliberately small: provider identity, external code and a
+        host account id. No PII (INV-1) and no payroll amounts — the mapping is
+        configuration, not a ledger fact.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_payroll_account_mapping")
+          repo(unquote(repo))
+          identity_index_names unique_payroll_account_mapping:
+                                 "#{unquote(abbrev)}_payroll_account_mapping_unique"
+        end
+
+        attributes do
+          attribute(:provider, :string,
+            public?: true,
+            allow_nil?: false,
+            constraints: [max_length: 200]
+          )
+
+          attribute(:external_code, :string,
+            public?: true,
+            allow_nil?: false,
+            constraints: [max_length: 200]
+          )
+        end
+
+        relationships do
+          belongs_to :account, unquote(account_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        identities do
+          identity(:unique_payroll_account_mapping, [:org_id, :provider, :external_code])
+        end
+
+        changes do
+          change(Samen.Policy.SameOrgFk)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([:org_id, :provider, :external_code, :account_id])
+            primary?(true)
+          end
+
+          update :update do
+            accept([:account_id])
+            require_atomic?(false)
+          end
+
+          destroy :destroy do
+            primary?(true)
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type([:create, :update, :destroy]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # JournalTemplate — a reusable, balanced line set plus an optional recurring
   # cadence. :generate creates an ORDINARY DRAFT journal entry; it never posts
   # and never opens an approval itself. The draft later rides the journal's

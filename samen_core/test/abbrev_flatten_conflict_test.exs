@@ -135,8 +135,9 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # +6 lease accounting: `Lease` + `LeasePayment` in the same three hosts
       # -> 788 flat.
       # +3 durable payroll-register provenance rows (`pfs`/`epw`/`esp`)
-      # -> 791 flat.
-      assert map_size(flat) == 791
+      # +3 payroll account-mapping rows (`aab`/`pwe`/`pse`)
+      # -> 794 flat.
+      assert map_size(flat) == 794
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

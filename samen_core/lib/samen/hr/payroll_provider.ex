@@ -45,13 +45,24 @@ defmodule Samen.Hr.PayrollProvider do
 
       config :samen_core, Samen.Hr.Payroll.JournalProvider,
         entry_module: MyApp.Finance.JournalEntry,
-        import_module: MyApp.Finance.PayrollImport
+        import_module: MyApp.Finance.PayrollImport,
+        mapping_module: MyApp.Finance.PayrollAccountMapping,
+        period_module: MyApp.Finance.FiscalPeriod
 
-  Those three parts are an all-or-nothing opt-in: the kernel boot guard
+  Those four parts are an all-or-nothing opt-in: the kernel boot guard
   (`Samen.Hr.Payroll.JournalProvider.assert_wiring!/0`) refuses a host that
   sets only some of them. A provider-specific adapter that computes or fetches
   payroll remains the host's choice; the reference adapter is deliberately not
   one.
+
+  ## Preflight
+
+  `validate/2` is the write-free gate: it checks the register's external
+  account-code coverage, same-org mappings, closed/soft-closed fiscal periods,
+  existing duplicate/conflict status, zero totals and malformed lines before
+  anything is written. `run_payroll/3` runs the same preflight and only then
+  creates the draft (or records a conflict provenance row for a genuine
+  provider-id conflict).
 
   ## Declared-not-built (the honest-claims discipline)
 
@@ -64,6 +75,16 @@ defmodule Samen.Hr.PayrollProvider do
   @callback run_payroll(org_id :: binary(), period :: Date.t(), opts :: keyword()) ::
               {:ok, %{journal_entry_id: binary(), total_cents: pos_integer()}}
               | {:error, :not_configured | term()}
+
+  @doc """
+  Optional write-free preflight. Providers that support it return a report or
+  a fail-closed error; `Samen.Hr.PayrollProvider.validate/2` returns
+  `{:error, :not_supported}` for a provider that does not export it.
+  """
+  @callback validate(org_id :: binary(), opts :: keyword()) ::
+              {:ok, map()} | {:error, :not_configured | term()}
+
+  @optional_callbacks validate: 2
 
   @doc """
   The configured provider module, or the `NotConfigured` default. Opts win over
@@ -100,6 +121,21 @@ defmodule Samen.Hr.PayrollProvider do
     provider(opts).run_payroll(org_id, period, opts)
   end
 
+  @doc """
+  Run the configured provider's write-free preflight. A provider that does not
+  implement `validate/2` refuses fail-honest with `{:error, :not_supported}`.
+  """
+  @spec validate(binary(), keyword()) :: {:ok, map()} | {:error, term()}
+  def validate(org_id, opts \\ []) do
+    provider = provider(opts)
+
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :validate, 2) do
+      provider.validate(org_id, opts)
+    else
+      {:error, :not_supported}
+    end
+  end
+
   defmodule NotConfigured do
     @moduledoc """
     The default `Samen.Hr.PayrollProvider`: **refuses everything** with
@@ -114,5 +150,8 @@ defmodule Samen.Hr.PayrollProvider do
 
     @impl true
     def run_payroll(_org_id, _period, _opts), do: {:error, :not_configured}
+
+    @impl true
+    def validate(_org_id, _opts), do: {:error, :not_configured}
   end
 end

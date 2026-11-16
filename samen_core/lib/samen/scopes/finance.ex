@@ -404,6 +404,9 @@ defmodule Samen.Scopes.Finance do
     # `samen_web` test host; the core fixture and samenerp pass their own
     # allocator reservations.
     payroll_import: "epw",
+    # Per-provider payroll account mapping. Allocator-reserved under the
+    # `samen_web` test host; the core fixture and samenerp pass their own.
+    payroll_account_mapping: "pwe",
     # Reusable/recurring journal templates. Reserved under the `samen_web`
     # test host (the fixture and samenerp pass their own reservations).
     journal_template: "fjr",
@@ -518,6 +521,7 @@ defmodule Samen.Scopes.Finance do
     line_mod = Module.concat(namespace, JournalLine)
     journal_template_mod = Module.concat(namespace, JournalTemplate)
     payroll_import_mod = Module.concat(namespace, PayrollImport)
+    payroll_account_mapping_mod = Module.concat(namespace, PayrollAccountMapping)
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     approval_policy_mod = Module.concat(namespace, ApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
@@ -610,6 +614,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(entry_mod))
         resource(unquote(line_mod))
         resource(unquote(payroll_import_mod))
+        resource(unquote(payroll_account_mapping_mod))
         resource(unquote(journal_template_mod))
         resource(unquote(journal_approval_policy_mod))
         resource(unquote(approval_policy_mod))
@@ -1091,6 +1096,17 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.payroll_import),
         unquote(entry_mod)
+      )
+
+      # The provider-code -> host-account mapping the payroll preflight resolves
+      # before it writes a draft. It has no ledger semantics of its own.
+      Samen.Scopes.Finance.Blueprint.define_payroll_account_mapping(
+        unquote(payroll_account_mapping_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.payroll_account_mapping),
+        unquote(account_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_journal_template(

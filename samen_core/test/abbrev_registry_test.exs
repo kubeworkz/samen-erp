@@ -191,9 +191,9 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
       # +3 each in WS-ERP E31 (#12): expense category/card/report tables.
-      assert map_size(hosts["samenerp"]) == 144
-      assert map_size(hosts["samen_core"]) == 135
-      assert map_size(hosts["samen_web"]) == 117
+      assert map_size(hosts["samenerp"]) == 145
+      assert map_size(hosts["samen_core"]) == 136
+      assert map_size(hosts["samen_web"]) == 118
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
       # mount via the sanctioned allocator (ADR-023 host-scoped reservations). ADR-035 T02
@@ -558,6 +558,8 @@ defmodule Samen.AbbrevRegistryTest do
                  "sjl" => "SamenCore.Support.FinanceFixture.JournalLine",
                  # WS-ERP E7: durable payroll-register provenance.
                  "pfs" => "SamenCore.Support.FinanceFixture.PayrollImport",
+                 # Preflight/import account mapping (external code -> host account).
+                 "aab" => "SamenCore.Support.FinanceFixture.PayrollAccountMapping",
                  # WS-ERP E2 (ADR-049 §3): the AP/AR documents + the R2 mirror-leg
                  # fixture rows, allocator-reserved under the samen_core host.
                  "sap" => "SamenCore.Support.FinanceFixture.ApInvoice",
@@ -773,6 +775,8 @@ defmodule Samen.AbbrevRegistryTest do
                  "fje" => "Samen.WebTest.Erp.JournalEntry",
                  # WS-ERP E7: durable payroll-register provenance.
                  "epw" => "Samen.WebTest.Erp.PayrollImport",
+                 # Preflight/import account mapping (external code -> host account).
+                 "pwe" => "Samen.WebTest.Erp.PayrollAccountMapping",
                  "fjl" => "Samen.WebTest.Erp.JournalLine",
                  "fai" => "Samen.WebTest.Erp.ApInvoice",
                  "frr" => "Samen.WebTest.Erp.PaymentReceipt",
@@ -857,6 +861,8 @@ defmodule Samen.AbbrevRegistryTest do
                  "ecj" => "Samenerp.Erp.JournalEntry",
                  # WS-ERP E7: durable payroll-register provenance.
                  "esp" => "Samenerp.Erp.PayrollImport",
+                 # Preflight/import account mapping (external code -> host account).
+                 "pse" => "Samenerp.Erp.PayrollAccountMapping",
                  "ejr" => "Samenerp.Erp.JournalTemplate",
                  "ecl" => "Samenerp.Erp.JournalLine",
                  "ecp" => "Samenerp.Erp.ApInvoice",
@@ -1170,7 +1176,7 @@ defmodule Samen.AbbrevRegistryTest do
       # in the three Finance hosts — samen_core `spf`/`psf`, samen_web
       # `wep`/`ewp`, samenerp `sep`/`spe`, allocator-reserved = 782 flat.)
       # (+3 durable payroll-register provenance rows = 791 flat.)
-      assert map_size(Reg.load()) == 791
+      assert map_size(Reg.load()) == 794
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

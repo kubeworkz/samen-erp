@@ -107,7 +107,7 @@ config :samen_core, Samen.Scopes.Finance.AccrualReversal, entry_module: Samenerp
 # no payroll caller and leaves the provider at the fail-honest
 # `{:error, :not_configured}` default. The test suite wires all three parts in
 # config/test.exs so the host migration and reference importer are exercised.
-# A production opt-in must set ALL THREE explicitly (the kernel boot guard
+# A production opt-in must set ALL FOUR explicitly (the kernel boot guard
 # rejects a half-wired host):
 #
 #     config :samen_core, Samen.Hr.PayrollProvider,
@@ -115,7 +115,9 @@ config :samen_core, Samen.Scopes.Finance.AccrualReversal, entry_module: Samenerp
 #
 #     config :samen_core, Samen.Hr.Payroll.JournalProvider,
 #       entry_module: Samenerp.Erp.JournalEntry,
-#       import_module: Samenerp.Erp.PayrollImport
+#       import_module: Samenerp.Erp.PayrollImport,
+#       mapping_module: Samenerp.Erp.PayrollAccountMapping,
+#       period_module: Samenerp.Erp.FiscalPeriod
 #
 # The reference importer lands an externally computed register as a DRAFT; it
 # never computes pay/tax/withholding and never calls :post. The normal journal

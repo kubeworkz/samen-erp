@@ -246,7 +246,14 @@ decision). `PayrollProvider` refuses `{:error, :not_configured}` (fail-honest),
 provider-override seam proven. The reference `Samen.Hr.Payroll.JournalProvider`
 imports an externally computed, balanced register as a DRAFT (no hours/rates/tax
 arithmetic, no `:post`); a re-import is repeat-safe by provider/external id and
-a changed entry date, total or line set is refused.
+a changed entry date, total or line set is refused. The register carries only
+provider `account_code`s, resolved through a per-provider
+`Finance.PayrollAccountMapping` (unique per org/provider/code, same-org account
+FK), so payloads are environment-portable. A write-free `validate/2` preflight
+checks mapping coverage, same-org accounts, closed/soft-closed periods,
+duplicate/conflict anchor status, zero totals and malformed lines before
+`run_payroll/3` writes; duplicate checks and conflicts during validation write
+nothing, and only an actual conflict import records provenance.
 The anchor is backed by a partial unique index on `(org_id, source_key)` for
 `payroll_register:*` keys; a losing concurrent insert re-reads the winner and
 returns it (or refuses a differing fingerprint), so importers converge on one
@@ -254,11 +261,12 @@ draft without host-side serialization. Proven in
 `test/hr_payroll_journal_provider_test.exs`, under two concurrent importers in
 `test/hr_payroll_journal_provider_concurrency_test.exs`, and the host's
 configured entry module is exercised by
-`samenerp/test/payroll_journal_provider_test.exs`. `samenerp` wires all three
-parts of the opt-in only in `config/test.exs`; production leaves payroll
-unwired at the fail-honest `{:error, :not_configured}` default until a host
-explicitly selects a provider, entry module and durable `PayrollImport`
-resource. The kernel boot guard refuses a half-wired host. Every successful
+`samenerp/test/payroll_journal_provider_test.exs`. `samenerp` wires all four
+parts of the opt-in (entry, import, mapping, period) only in `config/test.exs`;
+production leaves payroll unwired at the fail-honest `{:error, :not_configured}`
+default until a host explicitly selects a provider, entry module, durable
+`PayrollImport`, account mapping and `FiscalPeriod` resource. The kernel boot
+guard refuses a half-wired host. Every successful
 import lands one `PayrollImport` row (provider/external id, normalized
 line-set hash, total, entry date, imported-at/by, status, linked draft); a
 refused replay lands a `:conflict` row linked to the existing entry, so

@@ -20,7 +20,14 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
 
   alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
-  alias SamenCore.Support.FinanceFixture.{Account, JournalEntry, JournalLine, PayrollImport}
+  alias SamenCore.Support.FinanceFixture.{
+    Account,
+    FiscalPeriod,
+    JournalEntry,
+    JournalLine,
+    PayrollAccountMapping,
+    PayrollImport
+  }
 
   @repo SamenCore.TestRepo
   @source_key "payroll_register:acme_payroll:run-2026-09"
@@ -32,6 +39,8 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     admin = admin_scope(org)
     expense = account!(admin, org, "6000", :expense, :debit)
     payable = account!(admin, org, "2100", :liability, :credit)
+    mapping!(admin, org, "acme_payroll", "6000", expense)
+    mapping!(admin, org, "acme_payroll", "2100", payable)
 
     previous = Application.get_env(:samen_core, JournalProvider)
     Application.delete_env(:samen_core, JournalProvider)
@@ -125,20 +134,22 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
       provider: JournalProvider,
       entry_module: JournalEntry,
       import_module: PayrollImport,
+      mapping_module: PayrollAccountMapping,
+      period_module: FiscalPeriod,
       imported_by: "u:concurrent-importer",
       register: register
     )
   end
 
-  defp register(expense, payable) do
+  defp register(_expense, _payable) do
     %{
       provider: "acme_payroll",
       external_id: "run-2026-09",
       entry_date: ~D[2026-09-30],
       memo: "September 2026 payroll",
       lines: [
-        %{account_id: expense.id, debit_cents: 125_000},
-        %{account_id: payable.id, credit_cents: 125_000}
+        %{account_code: "6000", debit_cents: 125_000},
+        %{account_code: "2100", credit_cents: 125_000}
       ]
     }
   end
@@ -154,6 +165,21 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     |> Ash.Changeset.for_create(
       :create,
       %{org_id: org, code: code, name: "Account #{code}", kind: kind, normal_side: side},
+      scope: scope
+    )
+    |> Ash.create!()
+  end
+
+  defp mapping!(scope, org, provider, external_code, account) do
+    PayrollAccountMapping
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: org,
+        provider: provider,
+        external_code: external_code,
+        account_id: account.id
+      },
       scope: scope
     )
     |> Ash.create!()
@@ -206,6 +232,11 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     @repo.query!("DELETE FROM sjl_journal_line WHERE sjl_org_id = $1::text::uuid", [org])
 
     @repo.query!("DELETE FROM sje_journal_entry WHERE sje_org_id = $1::text::uuid", [org])
+
+    @repo.query!(
+      "DELETE FROM aab_payroll_account_mapping WHERE aab_org_id = $1::text::uuid",
+      [org]
+    )
 
     @repo.query!("DELETE FROM sac_account WHERE sac_org_id = $1::text::uuid", [org])
 

@@ -28,7 +28,9 @@ defmodule Samen.Hr.PayrollWiringTest do
 
     Application.put_env(:samen_core, JournalProvider,
       entry_module: __MODULE__,
-      import_module: __MODULE__
+      import_module: __MODULE__,
+      mapping_module: __MODULE__,
+      period_module: __MODULE__
     )
 
     assert :ok = JournalProvider.assert_wiring!()
@@ -59,6 +61,34 @@ defmodule Samen.Hr.PayrollWiringTest do
     end
   end
 
+  test "refuses the reference provider without a mapping module" do
+    Application.put_env(:samen_core, PayrollProvider, provider: JournalProvider)
+
+    Application.put_env(:samen_core, JournalProvider,
+      entry_module: __MODULE__,
+      import_module: __MODULE__,
+      period_module: __MODULE__
+    )
+
+    assert_raise RuntimeError, ~r/:mapping_module/, fn ->
+      JournalProvider.assert_wiring!()
+    end
+  end
+
+  test "refuses the reference provider without a period module" do
+    Application.put_env(:samen_core, PayrollProvider, provider: JournalProvider)
+
+    Application.put_env(:samen_core, JournalProvider,
+      entry_module: __MODULE__,
+      import_module: __MODULE__,
+      mapping_module: __MODULE__
+    )
+
+    assert_raise RuntimeError, ~r/:period_module/, fn ->
+      JournalProvider.assert_wiring!()
+    end
+  end
+
   test "refuses stale entry-module config beside a custom provider" do
     Application.put_env(:samen_core, PayrollProvider, provider: __MODULE__)
     Application.put_env(:samen_core, JournalProvider, entry_module: __MODULE__)
@@ -71,6 +101,15 @@ defmodule Samen.Hr.PayrollWiringTest do
   test "refuses stale import-module config beside a custom provider" do
     Application.put_env(:samen_core, PayrollProvider, provider: __MODULE__)
     Application.put_env(:samen_core, JournalProvider, import_module: __MODULE__)
+
+    assert_raise RuntimeError, ~r/payroll miswired/, fn ->
+      JournalProvider.assert_wiring!()
+    end
+  end
+
+  test "refuses stale mapping-module config beside a custom provider" do
+    Application.put_env(:samen_core, PayrollProvider, provider: __MODULE__)
+    Application.put_env(:samen_core, JournalProvider, mapping_module: __MODULE__)
 
     assert_raise RuntimeError, ~r/payroll miswired/, fn ->
       JournalProvider.assert_wiring!()

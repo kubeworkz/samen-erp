@@ -12,7 +12,15 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
   alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
-  alias SamenCore.Support.FinanceFixture.{Account, JournalEntry, JournalLine, PayrollImport}
+
+  alias SamenCore.Support.FinanceFixture.{
+    Account,
+    FiscalPeriod,
+    JournalEntry,
+    JournalLine,
+    PayrollAccountMapping,
+    PayrollImport
+  }
 
   @repo SamenCore.TestRepo
 
@@ -34,6 +42,11 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
     expense = account!(admin, org, "6000", :expense, :debit)
     payable = account!(admin, org, "2100", :liability, :credit)
+
+    for provider <- ~w(acme_payroll acme:payroll acme manual_control) do
+      mapping!(admin, org, provider, "6000", expense)
+      mapping!(admin, org, provider, "2100", payable)
+    end
 
     {:ok, org: org, admin: admin, expense: expense, payable: payable}
   end
@@ -175,8 +188,8 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     changed =
       register(expense, payable, %{
         lines: [
-          %{account_id: expense.id, debit_cents: 130_000},
-          %{account_id: payable.id, credit_cents: 130_000}
+          %{account_code: "6000", debit_cents: 130_000},
+          %{account_code: "2100", credit_cents: 130_000}
         ]
       })
 
@@ -199,8 +212,8 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     swapped =
       register(expense, payable, %{
         lines: [
-          %{account_id: payable.id, debit_cents: 125_000},
-          %{account_id: expense.id, credit_cents: 125_000}
+          %{account_code: "2100", debit_cents: 125_000},
+          %{account_code: "6000", credit_cents: 125_000}
         ]
       })
 
@@ -260,8 +273,8 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     register =
       register(expense, payable, %{
         lines: [
-          %{account_id: expense.id, debit_cents: 100_000},
-          %{account_id: payable.id, credit_cents: 90_000}
+          %{account_code: "6000", debit_cents: 100_000},
+          %{account_code: "2100", credit_cents: 90_000}
         ]
       })
 
@@ -275,12 +288,30 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     register =
       register(expense, payable, %{
         lines: [
-          %{account_id: expense.id, debit_cents: 0},
-          %{account_id: payable.id, credit_cents: 0}
+          %{account_code: "6000", debit_cents: 100},
+          %{account_code: "2100", credit_cents: 100},
+          %{account_code: "6000", debit_cents: 0, credit_cents: 0}
         ]
       })
 
-    assert {:error, {:invalid_payroll_register, {:one_non_zero_side, 0}}} = run(org, register)
+    assert {:error, {:invalid_payroll_register, {:one_non_zero_side, 2}}} = run(org, register)
+    assert entries(org) == []
+  end
+
+  test "refuses a zero-total register before touching the journal", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    register =
+      register(expense, payable, %{
+        lines: [
+          %{account_code: "6000", debit_cents: 0},
+          %{account_code: "2100", credit_cents: 0}
+        ]
+      })
+
+    assert {:error, {:invalid_payroll_register, :zero_total}} = run(org, register)
     assert entries(org) == []
   end
 
@@ -300,7 +331,9 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
              PayrollProvider.run_payroll(org, ~D[2026-09-01],
                provider: JournalProvider,
                entry_module: JournalEntry,
-               import_module: PayrollImport
+               import_module: PayrollImport,
+               mapping_module: PayrollAccountMapping,
+               period_module: FiscalPeriod
              )
 
     assert {:error, :not_configured} =
@@ -315,6 +348,197 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
              )
 
     assert entries(org) == []
+  end
+
+  describe "validate/2 preflight" do
+    test "reports ready, resolves external codes, and writes nothing", %{
+      org: org,
+      expense: expense,
+      payable: payable
+    } do
+      register = register(expense, payable)
+
+      assert {:ok, report} = validate(org, register)
+      assert report.status == :ready
+      assert report.total_cents == 125_000
+      assert report.line_set_hash == JournalProvider.line_set_hash(report.lines)
+
+      assert Enum.sort(Enum.map(report.lines, &{&1.account_id, &1.debit_cents, &1.credit_cents})) ==
+               Enum.sort([{expense.id, 125_000, 0}, {payable.id, 0, 125_000}])
+
+      assert entries(org) == []
+      assert imports(org) == []
+
+      assert {:ok, %{journal_entry_id: _entry_id}} = run(org, register)
+    end
+
+    test "resolves the same external code per provider, not globally", %{
+      org: org,
+      admin: admin,
+      expense: expense,
+      payable: payable
+    } do
+      mapping!(admin, org, "swapped_provider", "6000", payable)
+      mapping!(admin, org, "swapped_provider", "2100", expense)
+
+      register =
+        register(expense, payable, %{
+          provider: "swapped_provider"
+        })
+
+      assert {:ok, %{status: :ready, lines: lines}} = validate(org, register)
+
+      actual = Enum.map(lines, &{&1.account_id, &1.debit_cents, &1.credit_cents})
+      assert actual == [{payable.id, 125_000, 0}, {expense.id, 0, 125_000}]
+
+      assert entries(org) == []
+      assert imports(org) == []
+    end
+
+    test "refuses missing mapping coverage before any write", %{
+      org: org,
+      expense: expense,
+      payable: payable
+    } do
+      register =
+        register(expense, payable, %{
+          lines: [
+            %{account_code: "6000", debit_cents: 125_000},
+            %{account_code: "9999", credit_cents: 125_000}
+          ]
+        })
+
+      assert {:error, {:payroll_preflight_failed, errors}} = validate(org, register)
+
+      assert Enum.any?(errors, fn error ->
+               error.code == :mapping_missing and error.external_code == "9999"
+             end)
+
+      assert entries(org) == []
+      assert imports(org) == []
+    end
+
+    test "refuses a mapped account owned by another org", %{
+      org: org,
+      admin: admin,
+      expense: expense,
+      payable: payable
+    } do
+      foreign_org = Ash.UUID.generate()
+      foreign_admin = admin_scope(foreign_org)
+      foreign_account = account!(foreign_admin, foreign_org, "6000", :expense, :debit)
+
+      mapping!(admin, org, "foreign_provider", "2100", payable)
+
+      @repo.query!(
+        """
+        INSERT INTO aab_payroll_account_mapping
+          (aab_provider, aab_external_code, aab_org_id, aab_account_id, aab_inserted_at, aab_updated_at)
+        VALUES ($1, $2, $3::text::uuid, $4::text::uuid, now(), now())
+        """,
+        ["foreign_provider", "6000", org, foreign_account.id]
+      )
+
+      register =
+        register(expense, payable, %{
+          provider: "foreign_provider",
+          lines: [
+            %{account_code: "6000", debit_cents: 125_000},
+            %{account_code: "2100", credit_cents: 125_000}
+          ]
+        })
+
+      assert {:error, {:payroll_preflight_failed, errors}} = validate(org, register)
+      assert Enum.any?(errors, &(&1.code == :account_cross_org))
+      assert entries(org) == []
+      assert imports(org) == []
+    end
+
+    test "refuses closed and document-refusing soft-closed periods", %{
+      org: org,
+      admin: admin,
+      expense: expense,
+      payable: payable
+    } do
+      closed_period = period!(admin, org, 2026, 9)
+      close!(closed_period, admin)
+
+      assert {:error, {:payroll_preflight_failed, [%{code: :period_closed}]}} =
+               validate(org, register(expense, payable))
+
+      soft_period = period!(admin, org, 2026, 10)
+      soft_close!(soft_period, admin)
+
+      assert {:error, {:payroll_preflight_failed, [%{code: :period_soft_closed}]}} =
+               validate(
+                 org,
+                 register(expense, payable, %{entry_date: ~D[2026-10-01]})
+               )
+
+      assert entries(org) == []
+      assert imports(org) == []
+    end
+
+    test "reports duplicate/conflict status without writing conflict provenance", %{
+      org: org,
+      expense: expense,
+      payable: payable
+    } do
+      register = register(expense, payable)
+
+      assert {:ok, %{status: :ready}} = validate(org, register)
+      assert {:ok, %{journal_entry_id: entry_id}} = run(org, register)
+
+      assert {:ok, %{status: :duplicate, existing_entry_id: ^entry_id}} =
+               validate(org, register)
+
+      assert length(imports(org)) == 1
+
+      changed =
+        register(expense, payable, %{
+          lines: [
+            %{account_code: "6000", debit_cents: 130_000},
+            %{account_code: "2100", credit_cents: 130_000}
+          ]
+        })
+
+      assert {:ok, %{status: :conflict, existing_entry_id: ^entry_id}} = validate(org, changed)
+
+      # validate/2 is write-free: the conflict provenance row appears only when
+      # run_payroll/3 actually attempts the import.
+      assert length(imports(org)) == 1
+      assert {:error, :payroll_register_conflict} = run(org, changed)
+      assert length(imports(org)) == 2
+    end
+
+    test "refuses malformed lines and zero-total registers before any write", %{
+      org: org,
+      expense: expense,
+      payable: payable
+    } do
+      malformed =
+        register(expense, payable, %{
+          lines: [
+            %{debit_cents: 125_000},
+            %{account_code: "2100", credit_cents: 125_000}
+          ]
+        })
+
+      assert {:error, {:invalid_payroll_register, {:account_code_required, 0}}} =
+               validate(org, malformed)
+
+      zero =
+        register(expense, payable, %{
+          lines: [
+            %{account_code: "6000", debit_cents: 0},
+            %{account_code: "2100", credit_cents: 0}
+          ]
+        })
+
+      assert {:error, {:invalid_payroll_register, :zero_total}} = validate(org, zero)
+      assert entries(org) == []
+      assert imports(org) == []
+    end
   end
 
   describe "org isolation" do
@@ -408,12 +632,24 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
       provider: JournalProvider,
       entry_module: JournalEntry,
       import_module: PayrollImport,
+      mapping_module: PayrollAccountMapping,
+      period_module: FiscalPeriod,
       imported_by: "u:payroll-importer",
       register: register
     )
   end
 
-  defp register(expense, payable, overrides \\ %{}) do
+  defp validate(org, register) do
+    JournalProvider.validate(org,
+      entry_module: JournalEntry,
+      import_module: PayrollImport,
+      mapping_module: PayrollAccountMapping,
+      period_module: FiscalPeriod,
+      register: register
+    )
+  end
+
+  defp register(_expense, _payable, overrides \\ %{}) do
     Map.merge(
       %{
         provider: "acme_payroll",
@@ -421,8 +657,8 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
         entry_date: ~D[2026-09-30],
         memo: "September 2026 payroll",
         lines: [
-          %{account_id: expense.id, debit_cents: 125_000},
-          %{account_id: payable.id, credit_cents: 125_000}
+          %{account_code: "6000", debit_cents: 125_000},
+          %{account_code: "2100", credit_cents: 125_000}
         ]
       },
       overrides
@@ -443,6 +679,43 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
       scope: scope
     )
     |> Ash.create!()
+  end
+
+  defp mapping!(scope, org, provider, external_code, account) do
+    PayrollAccountMapping
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: org,
+        provider: provider,
+        external_code: external_code,
+        account_id: account.id
+      },
+      scope: scope
+    )
+    |> Ash.create!()
+  end
+
+  defp period!(scope, org, year, month) do
+    FiscalPeriod
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org, year: year, month: month},
+      scope: scope
+    )
+    |> Ash.create!()
+  end
+
+  defp close!(period, scope) do
+    period
+    |> Ash.Changeset.for_update(:close, %{}, scope: scope)
+    |> Ash.update!()
+  end
+
+  defp soft_close!(period, scope) do
+    period
+    |> Ash.Changeset.for_update(:soft_close, %{}, scope: scope)
+    |> Ash.update!()
   end
 
   defp entries(org) do

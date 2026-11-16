@@ -10089,6 +10089,54 @@
     {
       "fields": [
         {
+          "column_name": "pse_account_id",
+          "logical_name": "account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "pse_external_code",
+          "logical_name": "external_code",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "pse_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "pse_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "pse_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "pse_provider",
+          "logical_name": "provider",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "pse_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PayrollAccountMapping",
+      "table_name": "pse_payroll_account_mapping"
+    },
+    {
+      "fields": [
+        {
           "column_name": "pii_rne_secret",
           "logical_name": "secret",
           "pii": true,

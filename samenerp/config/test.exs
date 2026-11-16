@@ -21,7 +21,9 @@ config :samen_core, Samen.Hr.PayrollProvider, provider: Samen.Hr.Payroll.Journal
 
 config :samen_core, Samen.Hr.Payroll.JournalProvider,
   entry_module: Samenerp.Erp.JournalEntry,
-  import_module: Samenerp.Erp.PayrollImport
+  import_module: Samenerp.Erp.PayrollImport,
+  mapping_module: Samenerp.Erp.PayrollAccountMapping,
+  period_module: Samenerp.Erp.FiscalPeriod
 
 config :samenerp, start_repo?: false
 
