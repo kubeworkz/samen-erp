@@ -224,8 +224,11 @@ every link already has a home.
   `{:error, :not_configured}` default implementation, so a host brings a payroll provider
   (or journals comp expense through Finance manually). The shipped reference adapter
   (`Samen.Hr.Payroll.JournalProvider`) imports an externally computed, balanced register as
-  a DRAFT; it never posts, and provider-specific calculation stays outside the GL. The
-  Journals (GL) DO record payroll *postings*; they never *compute* them.
+  a DRAFT; it never posts, and provider-specific calculation stays outside the GL. Each
+  import also lands a thin `Finance.PayrollImport` provenance row — provider/external id,
+  normalized line-set hash (GL lines only, never employee data), total, imported-at/by,
+  status, and the linked draft — so retries, conflict triage and the finance inbox are
+  queryable. The Journals (GL) DO record payroll *postings*; they never *compute* them.
 - **PII posture:** Employee is the scope's only 🔒 resource; per-plane masking tests are
   MANDATORY (watch-list discipline) on every HR surface + the HR CSV export
   (mask-by-omission red-path per the WS-E discipline). Erasure: a former employee's vaulted

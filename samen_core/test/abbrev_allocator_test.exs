@@ -359,8 +359,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # samenerp `sep`/`spe`), allocator-reserved -> 36_951 bytes, 782 flat.
       # +6 lease accounting: `Lease` + `LeasePayment` in the same three hosts,
       # allocator-reserved -> 37_232 bytes, 788 flat.
-      assert byte_size(committed) == 37_232
-      assert map_size(R.load()) == 788
+      # +3 durable payroll-register provenance rows (`pfs`/`epw`/`esp`)
+      # -> 37_386 bytes, 791 flat.
+      assert byte_size(committed) == 37_386
+      assert map_size(R.load()) == 791
     end
   end
 

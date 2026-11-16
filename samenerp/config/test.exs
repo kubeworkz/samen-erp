@@ -14,11 +14,14 @@ config :samenerp, Samenerp.Repo,
 config :logger, level: :warning
 
 # Test-only payroll opt-in: the host suite exercises the reference importer
-# against THIS host's journal/migration. Both halves are intentional; the
-# kernel boot guard refuses a half-wired host. Production config sets neither.
+# against THIS host's journal/migration and the durable PayrollImport record.
+# All three parts are intentional; the kernel boot guard refuses a half-wired
+# host. Production config sets none of them.
 config :samen_core, Samen.Hr.PayrollProvider, provider: Samen.Hr.Payroll.JournalProvider
 
-config :samen_core, Samen.Hr.Payroll.JournalProvider, entry_module: Samenerp.Erp.JournalEntry
+config :samen_core, Samen.Hr.Payroll.JournalProvider,
+  entry_module: Samenerp.Erp.JournalEntry,
+  import_module: Samenerp.Erp.PayrollImport
 
 config :samenerp, start_repo?: false
 

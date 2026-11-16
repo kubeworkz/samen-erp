@@ -25,7 +25,11 @@ defmodule Samen.Hr.PayrollWiringTest do
 
   test "accepts a complete reference wiring" do
     Application.put_env(:samen_core, PayrollProvider, provider: JournalProvider)
-    Application.put_env(:samen_core, JournalProvider, entry_module: __MODULE__)
+
+    Application.put_env(:samen_core, JournalProvider,
+      entry_module: __MODULE__,
+      import_module: __MODULE__
+    )
 
     assert :ok = JournalProvider.assert_wiring!()
   end
@@ -41,7 +45,16 @@ defmodule Samen.Hr.PayrollWiringTest do
   test "refuses the reference provider without an entry module" do
     Application.put_env(:samen_core, PayrollProvider, provider: JournalProvider)
 
-    assert_raise RuntimeError, ~r/has no :entry_module/, fn ->
+    assert_raise RuntimeError, ~r/:entry_module/, fn ->
+      JournalProvider.assert_wiring!()
+    end
+  end
+
+  test "refuses the reference provider without an import module" do
+    Application.put_env(:samen_core, PayrollProvider, provider: JournalProvider)
+    Application.put_env(:samen_core, JournalProvider, entry_module: __MODULE__)
+
+    assert_raise RuntimeError, ~r/:import_module/, fn ->
       JournalProvider.assert_wiring!()
     end
   end
@@ -49,6 +62,15 @@ defmodule Samen.Hr.PayrollWiringTest do
   test "refuses stale entry-module config beside a custom provider" do
     Application.put_env(:samen_core, PayrollProvider, provider: __MODULE__)
     Application.put_env(:samen_core, JournalProvider, entry_module: __MODULE__)
+
+    assert_raise RuntimeError, ~r/payroll miswired/, fn ->
+      JournalProvider.assert_wiring!()
+    end
+  end
+
+  test "refuses stale import-module config beside a custom provider" do
+    Application.put_env(:samen_core, PayrollProvider, provider: __MODULE__)
+    Application.put_env(:samen_core, JournalProvider, import_module: __MODULE__)
 
     assert_raise RuntimeError, ~r/payroll miswired/, fn ->
       JournalProvider.assert_wiring!()

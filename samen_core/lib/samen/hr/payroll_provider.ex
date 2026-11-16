@@ -44,12 +44,14 @@ defmodule Samen.Hr.PayrollProvider do
         provider: Samen.Hr.Payroll.JournalProvider
 
       config :samen_core, Samen.Hr.Payroll.JournalProvider,
-        entry_module: MyApp.Finance.JournalEntry
+        entry_module: MyApp.Finance.JournalEntry,
+        import_module: MyApp.Finance.PayrollImport
 
-  Those two halves are an all-or-nothing opt-in: the kernel boot guard
+  Those three parts are an all-or-nothing opt-in: the kernel boot guard
   (`Samen.Hr.Payroll.JournalProvider.assert_wiring!/0`) refuses a host that
-  sets only one. A provider-specific adapter that computes or fetches payroll
-  remains the host's choice; the reference adapter is deliberately not one.
+  sets only some of them. A provider-specific adapter that computes or fetches
+  payroll remains the host's choice; the reference adapter is deliberately not
+  one.
 
   ## Declared-not-built (the honest-claims discipline)
 

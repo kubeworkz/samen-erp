@@ -20,7 +20,7 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
 
   alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
-  alias SamenCore.Support.FinanceFixture.{Account, JournalEntry, JournalLine}
+  alias SamenCore.Support.FinanceFixture.{Account, JournalEntry, JournalLine, PayrollImport}
 
   @repo SamenCore.TestRepo
   @source_key "payroll_register:acme_payroll:run-2026-09"
@@ -91,6 +91,11 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     assert entry.status == :draft
     assert entry.source_key == @source_key
     assert length(entry_lines(org, entry.id)) == 2
+
+    assert [import] = imports(org)
+    assert import.entry_id == entry.id
+    assert import.status == :imported
+    assert import.imported_by == "u:concurrent-importer"
   end
 
   test "escaped payroll index constrains literal keys but allows lookalike duplicates" do
@@ -119,6 +124,8 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     PayrollProvider.run_payroll(org, ~D[2026-09-01],
       provider: JournalProvider,
       entry_module: JournalEntry,
+      import_module: PayrollImport,
+      imported_by: "u:concurrent-importer",
       register: register
     )
   end
@@ -164,6 +171,12 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     |> Ash.read!(authorize?: false)
   end
 
+  defp imports(org) do
+    PayrollImport
+    |> Ash.Query.filter(org_id == ^org)
+    |> Ash.read!(authorize?: false)
+  end
+
   defp insert_index_probe(org, source_key) do
     @repo.query(
       """
@@ -189,6 +202,7 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
   end
 
   defp cleanup(org) do
+    @repo.query!("DELETE FROM pfs_payroll_import WHERE pfs_org_id = $1::text::uuid", [org])
     @repo.query!("DELETE FROM sjl_journal_line WHERE sjl_org_id = $1::text::uuid", [org])
 
     @repo.query!("DELETE FROM sje_journal_entry WHERE sje_org_id = $1::text::uuid", [org])

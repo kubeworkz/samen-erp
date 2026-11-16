@@ -1000,6 +1000,149 @@ defmodule Samen.Scopes.Finance.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
+  # PayrollImport — durable provenance for one normalized payroll register
+  # import. Deliberately NOT a payroll engine: it stores no pay, tax, hours or
+  # rate fields, only the bounded GL-line identity and the linked draft.
+  # ---------------------------------------------------------------------------
+  defmacro define_payroll_import(module, otp_app, domain, repo, abbrev, entry_mod) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.PayrollImport — the durable provenance row for a payroll
+        register import (WS-ERP E7 reference importer).
+
+        The row is intentionally thin: it holds the external provider identity,
+        the normalized GL line-set hash, the total, the import timestamp and
+        importer, and the linked draft journal entry. It holds NO pay, tax,
+        withholding, hours, rate, employee or raw-register fields — those stay
+        in the payroll provider that computed the register.
+
+        `line_set_hash` is a SHA-256 hex digest over the normalized GL lines
+        (account ids, unsigned debit/credit cents, line memos and bounded
+        dimension refs). Line order and map key order do not affect it. A
+        changed line set, total or entry date is a separate row with status
+        `:conflict`, linked to the existing entry for triage; the duplicate
+        import itself is refused by `Samen.Hr.Payroll.JournalProvider`.
+
+        `status` is `:imported` for a successful import and `:conflict` for a
+        refused replay under the same provider/external id. The journal entry's
+        own `:draft`/`:posted`/`:void` lifecycle remains authoritative.
+
+        No PII (INV-1): this is a GL-line provenance record, not an employee
+        register. The identity is unique per org, provider, external id,
+        line-set hash and entry date so retries converge on one row while a
+        different candidate is retained as conflict history.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_payroll_import")
+          repo(unquote(repo))
+        end
+
+        attributes do
+          attribute(:provider, :string,
+            public?: true,
+            allow_nil?: false,
+            constraints: [max_length: 200]
+          )
+
+          attribute(:external_id, :string,
+            public?: true,
+            allow_nil?: false,
+            constraints: [max_length: 200]
+          )
+
+          attribute(:line_set_hash, :string,
+            public?: true,
+            allow_nil?: false,
+            constraints: [min_length: 64, max_length: 64]
+          )
+
+          attribute(:total_cents, :integer, public?: true, allow_nil?: false)
+          attribute(:entry_date, :date, public?: true, allow_nil?: false)
+          attribute(:imported_at, :utc_datetime, public?: true, allow_nil?: false)
+
+          attribute(:imported_by, :string,
+            public?: true,
+            constraints: [max_length: 200]
+          )
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :imported,
+            constraints: [one_of: [:imported, :conflict]]
+          )
+        end
+
+        relationships do
+          belongs_to :entry, unquote(entry_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        identities do
+          identity(:unique_payroll_import, [
+            :org_id,
+            :provider,
+            :external_id,
+            :line_set_hash,
+            :entry_date
+          ])
+        end
+
+        changes do
+          change(Samen.Policy.SameOrgFk)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          create :create do
+            accept([
+              :org_id,
+              :provider,
+              :external_id,
+              :line_set_hash,
+              :total_cents,
+              :entry_date,
+              :imported_at,
+              :imported_by,
+              :status,
+              :entry_id
+            ])
+
+            primary?(true)
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          policy action_type(:create) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # JournalTemplate — a reusable, balanced line set plus an optional recurring
   # cadence. :generate creates an ORDINARY DRAFT journal entry; it never posts
   # and never opens an approval itself. The draft later rides the journal's

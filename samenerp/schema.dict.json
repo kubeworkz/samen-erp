@@ -9309,6 +9309,90 @@
     {
       "fields": [
         {
+          "column_name": "esp_entry_date",
+          "logical_name": "entry_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "esp_entry_id",
+          "logical_name": "entry_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esp_external_id",
+          "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esp_imported_at",
+          "logical_name": "imported_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esp_imported_by",
+          "logical_name": "imported_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esp_line_set_hash",
+          "logical_name": "line_set_hash",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "esp_provider",
+          "logical_name": "provider",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "esp_total_cents",
+          "logical_name": "total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "esp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PayrollImport",
+      "table_name": "esp_payroll_import"
+    },
+    {
+      "fields": [
+        {
           "column_name": "esv_actual_amount_cents",
           "logical_name": "actual_amount_cents",
           "pii": false,

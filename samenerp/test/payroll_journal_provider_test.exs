@@ -69,10 +69,16 @@ defmodule Samenerp.PayrollJournalProviderTest do
     }
 
     assert {:ok, %{journal_entry_id: entry_id, total_cents: 240_000}} =
-             PayrollProvider.run_payroll(org, ~D[2026-09-01], register: register)
+             PayrollProvider.run_payroll(org, ~D[2026-09-01],
+               register: register,
+               imported_by: "u:payroll-host"
+             )
 
     assert {:ok, %{journal_entry_id: ^entry_id}} =
-             PayrollProvider.run_payroll(org, ~D[2026-09-01], register: register)
+             PayrollProvider.run_payroll(org, ~D[2026-09-01],
+               register: register,
+               imported_by: "u:payroll-host"
+             )
 
     entries =
       Samenerp.Erp.JournalEntry
@@ -85,6 +91,20 @@ defmodule Samenerp.PayrollJournalProviderTest do
     assert entry.status == :draft
     assert entry.source_key == "payroll_register:kubeworkz_payroll:run-2026-09"
     assert entry.entry_date == ~D[2026-09-30]
+    assert entry.prepared_by == "u:payroll-host"
+
+    import =
+      Samenerp.Erp.PayrollImport
+      |> Ash.Query.filter(org_id == ^org and entry_id == ^entry_id)
+      |> Ash.read_one!(authorize?: false)
+
+    assert import.provider == "kubeworkz_payroll"
+    assert import.external_id == "run-2026-09"
+    assert import.total_cents == 240_000
+    assert import.status == :imported
+    assert import.imported_by == "u:payroll-host"
+    assert import.entry_id == entry.id
+    assert byte_size(import.line_set_hash) == 64
   end
 
   test "escaped payroll index constrains literal keys but allows lookalike duplicates" do

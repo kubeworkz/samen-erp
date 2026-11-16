@@ -6,10 +6,10 @@ defmodule Samen.Scopes.Finance do
   host-owned resources in the host's namespace, each a normal `use Samen.Resource`
   with the host's `otp_app`, `repo`, and `domain`.
 
-  ## Resources — `account · journal_entry · journal_line · journal_template ·
-  ## ap_invoice · payment_receipt · receipt_allocation · statement_delivery ·
-  ## collection_case · collection_cadence · credit_note · vendor_credit ·
-  ## posting_account`
+  ## Resources — `account · journal_entry · journal_line · payroll_import ·
+  ## journal_template · ap_invoice · payment_receipt · receipt_allocation ·
+  ## statement_delivery · collection_case · collection_cadence · credit_note ·
+  ## vendor_credit · posting_account`
 
   - **`Account`** — the chart of accounts (Tier-0 config row): `code` (unique
     per org), `name`, `kind ∈ {asset, liability, equity, income, expense}`,
@@ -32,6 +32,12 @@ defmodule Samen.Scopes.Finance do
     `RecurringJournalWorker` runs due templates and advances their schedule.
     The generated draft then rides the journal's normal `:post` and
     `JournalApprovalPolicy` path.
+  - **`PayrollImport`** — durable provenance for the reference payroll
+    importer (not a payroll engine): provider, external id, SHA-256 line-set
+    hash, total, entry date, imported-at/by, status (`:imported`/`:conflict`)
+    and a linked draft `JournalEntry`. The hash covers normalized GL lines
+    only; no raw employee or register fields are stored. This is the finance
+    payroll-import inbox's read model.
   - **`ApInvoice`** — a vendor bill (AP document; E2): `vendor_id` (the
     SalesOps.Vendor reference), `number`, dates, embedded jsonb `lines`
     (`account_id` + `amount_cents` + `memo` — the design's P2-promote-if-hot
@@ -394,6 +400,10 @@ defmodule Samen.Scopes.Finance do
     account: "fca",
     journal_entry: "fje",
     journal_line: "fjl",
+    # Reference payroll register provenance. The default belongs to the
+    # `samen_web` test host; the core fixture and samenerp pass their own
+    # allocator reservations.
+    payroll_import: "epw",
     # Reusable/recurring journal templates. Reserved under the `samen_web`
     # test host (the fixture and samenerp pass their own reservations).
     journal_template: "fjr",
@@ -507,6 +517,7 @@ defmodule Samen.Scopes.Finance do
     entry_mod = Module.concat(namespace, JournalEntry)
     line_mod = Module.concat(namespace, JournalLine)
     journal_template_mod = Module.concat(namespace, JournalTemplate)
+    payroll_import_mod = Module.concat(namespace, PayrollImport)
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     approval_policy_mod = Module.concat(namespace, ApprovalPolicy)
     ap_invoice_mod = Module.concat(namespace, ApInvoice)
@@ -598,6 +609,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(account_mod))
         resource(unquote(entry_mod))
         resource(unquote(line_mod))
+        resource(unquote(payroll_import_mod))
         resource(unquote(journal_template_mod))
         resource(unquote(journal_approval_policy_mod))
         resource(unquote(approval_policy_mod))
@@ -1070,6 +1082,17 @@ defmodule Samen.Scopes.Finance do
       # DRAFT entry through the entry resource's own :create action, so the
       # generated instance later rides the same :post/approval path as any
       # hand-entered draft.
+      # Durable provenance for the reference payroll importer. The row names the
+      # host entry resource directly; it is not a payroll calculation engine.
+      Samen.Scopes.Finance.Blueprint.define_payroll_import(
+        unquote(payroll_import_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.payroll_import),
+        unquote(entry_mod)
+      )
+
       Samen.Scopes.Finance.Blueprint.define_journal_template(
         unquote(journal_template_mod),
         unquote(otp_app),

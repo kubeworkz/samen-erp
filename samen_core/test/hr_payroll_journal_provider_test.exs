@@ -12,7 +12,7 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
   alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
-  alias SamenCore.Support.FinanceFixture.{Account, JournalEntry, JournalLine}
+  alias SamenCore.Support.FinanceFixture.{Account, JournalEntry, JournalLine, PayrollImport}
 
   @repo SamenCore.TestRepo
 
@@ -66,7 +66,91 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
              Enum.sum(Enum.map(lines, & &1.credit_cents))
   end
 
-  test "a repeated import returns the same draft and never creates a second entry", %{
+  test "records durable provenance for the imported register", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    register = register(expense, payable)
+
+    assert {:ok, %{journal_entry_id: entry_id}} = run(org, register)
+
+    import =
+      PayrollImport
+      |> Ash.Query.filter(org_id == ^org and entry_id == ^entry_id)
+      |> Ash.read_one!(authorize?: false)
+
+    expected_hash =
+      JournalProvider.line_set_hash([
+        %{
+          account_id: expense.id,
+          debit_cents: 125_000,
+          credit_cents: 0,
+          memo: nil,
+          dimension_refs: %{}
+        },
+        %{
+          account_id: payable.id,
+          debit_cents: 0,
+          credit_cents: 125_000,
+          memo: nil,
+          dimension_refs: %{}
+        }
+      ])
+
+    assert import.provider == "acme_payroll"
+    assert import.external_id == "run-2026-09"
+    assert import.entry_date == ~D[2026-09-30]
+    assert import.total_cents == 125_000
+    assert import.line_set_hash == expected_hash
+    assert byte_size(import.line_set_hash) == 64
+    assert import.status == :imported
+    assert import.imported_by == "u:payroll-importer"
+    assert %DateTime{} = import.imported_at
+  end
+
+  test "line-set hash is stable across line and dimension key order", %{
+    expense: expense,
+    payable: payable
+  } do
+    first = [
+      %{
+        account_id: expense.id,
+        debit_cents: 125_000,
+        credit_cents: 0,
+        memo: "payroll",
+        dimension_refs: %{project: "p1", cost_pool: "c1"}
+      },
+      %{
+        account_id: payable.id,
+        debit_cents: 0,
+        credit_cents: 125_000,
+        memo: nil,
+        dimension_refs: %{}
+      }
+    ]
+
+    second = [
+      %{
+        account_id: payable.id,
+        debit_cents: 0,
+        credit_cents: 125_000,
+        memo: nil,
+        dimension_refs: %{}
+      },
+      %{
+        account_id: expense.id,
+        debit_cents: 125_000,
+        credit_cents: 0,
+        memo: "payroll",
+        dimension_refs: %{"cost_pool" => "c1", "project" => "p1"}
+      }
+    ]
+
+    assert JournalProvider.line_set_hash(first) == JournalProvider.line_set_hash(second)
+  end
+
+  test "a repeated import returns the same draft and record and never creates a second entry", %{
     org: org,
     expense: expense,
     payable: payable
@@ -78,6 +162,7 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
     assert first == second
     assert length(entries(org)) == 1
+    assert length(imports(org)) == 1
   end
 
   test "a changed total under the same external id is refused as a conflict", %{
@@ -97,6 +182,11 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
     assert {:error, :payroll_register_conflict} = run(org, changed)
     assert length(entries(org)) == 1
+
+    conflict = Enum.find(imports(org), &(&1.status == :conflict))
+    assert conflict != nil
+    assert conflict.entry_id == List.first(entries(org)).id
+    assert conflict.total_cents == 130_000
   end
 
   test "a changed line set with the same total is refused as a conflict", %{
@@ -209,7 +299,8 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     assert {:error, :payroll_register_required} =
              PayrollProvider.run_payroll(org, ~D[2026-09-01],
                provider: JournalProvider,
-               entry_module: JournalEntry
+               entry_module: JournalEntry,
+               import_module: PayrollImport
              )
 
     assert {:error, :not_configured} =
@@ -226,10 +317,98 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     assert entries(org) == []
   end
 
+  describe "org isolation" do
+    test "PayrollImport reads and creates are org-scoped (RED) with owning-org CONTROL", %{
+      org: org,
+      expense: expense,
+      payable: payable
+    } do
+      own_scope = Samen.RedPath.actor_scope(org, :admin)
+      foreign_org = Ash.UUID.generate()
+      foreign_scope = Samen.RedPath.actor_scope(foreign_org, :admin)
+
+      assert {:ok, %{journal_entry_id: own_entry_id}} = run(org, register(expense, payable))
+      assert [own_import] = imports(org)
+      assert own_import.entry_id == own_entry_id
+
+      # CONTROL: the owning org can read its provenance row through the real
+      # authorizer (the denial below is OrgScope, not a broken read).
+      assert [read] =
+               PayrollImport
+               |> Ash.Query.select([:id, :org_id])
+               |> Ash.Query.filter(id == ^own_import.id)
+               |> Ash.read!(scope: own_scope)
+
+      assert read.org_id == org
+
+      # RED: another org's actor cannot see the row. OrgScope is a filter, so
+      # the foreign row is invisible rather than leaking its existence.
+      assert [] =
+               PayrollImport
+               |> Ash.Query.filter(id == ^own_import.id)
+               |> Ash.read!(scope: foreign_scope)
+
+      # A second draft gives the direct-create controls a real linked entry.
+      assert {:ok, %{journal_entry_id: second_entry_id}} =
+               run(
+                 org,
+                 register(expense, payable, %{
+                   provider: "manual_control",
+                   external_id: "entry-for-create"
+                 })
+               )
+
+      attrs = %{
+        org_id: org,
+        provider: "manual_import",
+        external_id: "manual-1",
+        line_set_hash: String.duplicate("b", 64),
+        total_cents: 100,
+        entry_date: ~D[2026-09-30],
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        imported_by: "u:manual-import",
+        status: :imported,
+        entry_id: second_entry_id
+      }
+
+      # CONTROL: the owning org can create a provenance row through the real
+      # create policy, linked to its own draft.
+      assert {:ok, created} =
+               PayrollImport
+               |> Ash.Changeset.for_create(:create, attrs, scope: own_scope)
+               |> Ash.create()
+
+      assert [created_read] =
+               PayrollImport
+               |> Ash.Query.select([:id, :org_id, :entry_id])
+               |> Ash.Query.filter(id == ^created.id)
+               |> Ash.read!(scope: own_scope)
+
+      assert created_read.org_id == org
+      assert created_read.entry_id == second_entry_id
+
+      # RED: a foreign-org actor cannot create a row in the owning org. The
+      # OrgScope create policy forbids it, and no row may land.
+      forged = %{attrs | external_id: "manual-foreign"}
+
+      assert {:error, %Ash.Error.Forbidden{}} =
+               PayrollImport
+               |> Ash.Changeset.for_create(:create, forged, scope: foreign_scope)
+               |> Ash.create()
+
+      assert [] =
+               PayrollImport
+               |> Ash.Query.filter(external_id == "manual-foreign")
+               |> Ash.read!(authorize?: false)
+    end
+  end
+
   defp run(org, register) do
     PayrollProvider.run_payroll(org, ~D[2026-09-01],
       provider: JournalProvider,
       entry_module: JournalEntry,
+      import_module: PayrollImport,
+      imported_by: "u:payroll-importer",
       register: register
     )
   end
@@ -268,6 +447,12 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
   defp entries(org) do
     JournalEntry
+    |> Ash.Query.filter(org_id == ^org)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp imports(org) do
+    PayrollImport
     |> Ash.Query.filter(org_id == ^org)
     |> Ash.read!(authorize?: false)
   end
