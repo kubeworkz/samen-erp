@@ -1148,9 +1148,11 @@ defmodule Samen.Web.Router do
   and the printable advice at `<path>/ap-payments/:id/remittance`, the AP aging /
   vendor-statement page at `<path>/ap-aging` (`ApAging` over the mounted AP
   bills and effective payment runs), the AR receipt intake at `<path>/ar-receipts`
-  (one customer payment across open invoices), and the AR aging / customer
+  (one customer payment across open invoices), the AR aging / customer
   statements page at `<path>/ar-aging` (`ArAging` over the mounted Billing
-  invoices and posted receipts). The ERP landing dashboard at `<path>` reads
+  invoices and posted receipts), and the payroll account mapping admin page at
+  `<path>/payroll-mappings` (the per-provider external-code -> host-account map
+  the payroll preflight resolves). The ERP landing dashboard at `<path>` reads
   the org's hosted-OCR budget (so exhaustion is visible before capture) and
   links every ERP page. No host-authored LiveView exists to
   mis-wire, there is no export path, and every write affordance (create/edit/
@@ -1227,6 +1229,11 @@ defmodule Samen.Web.Router do
         # flux read. A literal segment, so it is declared BEFORE `:surface` for
         # the same reason as the other operations pages above.
         live("#{path}/reconciliation", Samen.Web.Finance.Reconciliation.Live)
+        # The per-provider payroll account mapping admin page: external provider
+        # code -> the org's chart-of-accounts account. A literal segment declared
+        # BEFORE `:surface` (same reason as reconciliation), writing through the
+        # mapping resource's OWN admin-gated create/update actions.
+        live("#{path}/payroll-mappings", Samen.Web.Finance.PayrollAccountMappings.Live)
         # One parameterized route feeds the closed surface allowlist. The LiveView
         # validates `:surface` through `Samen.Web.Erp.surface/1`; expanding the
         # six literal paths here would bypass the LiveView's `%{"surface" => ...}`

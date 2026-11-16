@@ -123,7 +123,7 @@ defmodule Samen.UI.Nav do
       :erp_ap_capture | :erp_ap_payments | :erp_ap_aging | :erp_ap_approval |
       :erp_ar_receipts | :erp_ar_aging | :erp_ar_settings | :erp_stock |
       :erp_purchase_orders | :erp_goods_receipts | :erp_work_orders | :erp_grants | :erp_close |
-      :erp_reconciliation | :erp_board` (or `nil`).
+      :erp_reconciliation | :erp_payroll_mappings | :erp_board` (or `nil`).
     * `crm_path` / `billing_path` / `support_path` — the mount path prefix per module
       (default `/crm`, `/billing`, `/support`). A host that mounted CRM at `/customers`
       passes `crm_path: "/customers"`.
@@ -477,6 +477,15 @@ defmodule Samen.UI.Nav do
       >
         <:icon>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h7M15 7h5M4 17h5M13 17h7" /><circle cx="13" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></svg>
+        </:icon>
+      </.nav_item>
+      <.nav_item
+        label={Samen.Web.Erp.payroll_mappings_label()}
+        href={"#{@erp_path}/payroll-mappings?org=#{@org_id}"}
+        active={@active == :erp_payroll_mappings}
+      >
+        <:icon>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h6M14 7h6M4 17h6M14 17h6" /><path d="M10 4v6M14 14v6" /><circle cx="10" cy="12" r="2" /><circle cx="14" cy="10" r="2" /></svg>
         </:icon>
       </.nav_item>
       <.nav_item

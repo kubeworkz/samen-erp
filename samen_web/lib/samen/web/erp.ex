@@ -241,6 +241,10 @@ defmodule Samen.Web.Erp do
   @spec ar_settings_label() :: String.t()
   def ar_settings_label, do: "AR settings"
 
+  @doc "The payroll account mapping page's label (the nav item + page heading)."
+  @spec payroll_mappings_label() :: String.t()
+  def payroll_mappings_label, do: "Payroll mappings"
+
   @doc """
   The org's AP bill resource (`ApInvoice`), DERIVED from the host's mounted
   Finance namespace. `nil` when the host has not mounted that scope — the
