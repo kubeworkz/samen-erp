@@ -10,7 +10,6 @@ defmodule Samenerp.PayrollJournalProviderTest do
 
   require Ash.Query
 
-  alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
 
   setup do
@@ -70,16 +69,10 @@ defmodule Samenerp.PayrollJournalProviderTest do
     }
 
     assert {:ok, %{journal_entry_id: entry_id, total_cents: 240_000}} =
-             PayrollProvider.run_payroll(org, ~D[2026-09-01],
-               provider: JournalProvider,
-               register: register
-             )
+             PayrollProvider.run_payroll(org, ~D[2026-09-01], register: register)
 
     assert {:ok, %{journal_entry_id: ^entry_id}} =
-             PayrollProvider.run_payroll(org, ~D[2026-09-01],
-               provider: JournalProvider,
-               register: register
-             )
+             PayrollProvider.run_payroll(org, ~D[2026-09-01], register: register)
 
     entries =
       Samenerp.Erp.JournalEntry

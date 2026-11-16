@@ -4,6 +4,11 @@ defmodule SamenCore.Application do
 
   @impl true
   def start(_type, _args) do
+    # Payroll is an opt-in adapter. Refuse a host that wires only one half
+    # (the journal entry module or the reference provider) before any child
+    # starts, instead of letting it look configured and silently no-op.
+    Samen.Hr.Payroll.JournalProvider.assert_wiring!()
+
     # The test harness (test/test_helper.exs) owns the Repo lifecycle so it can
     # storage_up + migrate before connections open. A host application supervises
     # its own repo; samen_core ships no runtime repo of its own.

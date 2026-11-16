@@ -254,7 +254,11 @@ draft without host-side serialization. Proven in
 `test/hr_payroll_journal_provider_test.exs`, under two concurrent importers in
 `test/hr_payroll_journal_provider_concurrency_test.exs`, and the host's
 configured entry module is exercised by
-`samenerp/test/payroll_journal_provider_test.exs`.
+`samenerp/test/payroll_journal_provider_test.exs`. `samenerp` wires both halves
+of the opt-in only in `config/test.exs`; production leaves payroll unwired at
+the fail-honest `{:error, :not_configured}` default until a host explicitly
+selects a provider and entry module. The kernel boot guard refuses a
+half-wired host.
 
 `Samen.Web.Hr.Roster` is the E7 export surface: a bounded column allowlist over `Samen.Web.Csv` — the sensitive trio (dob/emails/phones)
 is structurally ABSENT, narrowing allowed, widening REFUSED at the roster layer (the

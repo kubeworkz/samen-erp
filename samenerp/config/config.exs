@@ -103,13 +103,22 @@ config :samen_core, :support_sla_breach_ticket_resource, Samenerp.Support.Ticket
 # wire it has no books to reverse and is an honest no-op.
 config :samen_core, Samen.Scopes.Finance.AccrualReversal, entry_module: Samenerp.Erp.JournalEntry
 
-# Payroll integration — an external payroll system supplies the register; the
-# reference importer lands it as a DRAFT on THIS host's journal. It never
-# computes pay/tax/withholding and never calls :post; the normal journal
-# approval/posting path stays authoritative. Wiring the entry module alone does
-# not select the provider: a host opts in with
-# `provider: Samen.Hr.Payroll.JournalProvider` (or its own adapter).
-config :samen_core, Samen.Hr.Payroll.JournalProvider, entry_module: Samenerp.Erp.JournalEntry
+# Payroll integration is deliberately TEST-ONLY in this host: production has
+# no payroll caller and leaves the provider at the fail-honest
+# `{:error, :not_configured}` default. The test suite wires both halves in
+# config/test.exs so the host migration and reference importer are exercised.
+# A production opt-in must set BOTH halves explicitly (the kernel boot guard
+# rejects a half-wired host):
+#
+#     config :samen_core, Samen.Hr.PayrollProvider,
+#       provider: Samen.Hr.Payroll.JournalProvider
+#
+#     config :samen_core, Samen.Hr.Payroll.JournalProvider,
+#       entry_module: Samenerp.Erp.JournalEntry
+#
+# The reference importer lands an externally computed register as a DRAFT; it
+# never computes pay/tax/withholding and never calls :post. The normal journal
+# approval/posting path stays authoritative.
 
 # Lease accounting — the monthly lease run reads THIS host's lease contracts and
 # posts their derived payments through the host's LeasePayment cascade.

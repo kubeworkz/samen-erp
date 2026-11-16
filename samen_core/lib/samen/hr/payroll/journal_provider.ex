@@ -70,6 +70,9 @@ defmodule Samen.Hr.Payroll.JournalProvider do
         register: register
       )
 
+  A host must configure both halves or neither; the kernel boot guard
+  (`assert_wiring!/0`) refuses a half-wired host.
+
   `period` is the caller's payroll period label. The journal date is the
   register's explicit `entry_date`; the adapter does not infer one.
   """
@@ -98,10 +101,59 @@ defmodule Samen.Hr.Payroll.JournalProvider do
     end
   end
 
-  defp configured_entry_module do
+  @doc """
+  The host's configured journal-entry module, or nil when the importer is not
+  wired. This is the `entry_module` half of the opt-in; the provider half is
+  `Samen.Hr.PayrollProvider` selecting `Samen.Hr.Payroll.JournalProvider`.
+  """
+  @spec configured_entry_module() :: module() | nil
+  def configured_entry_module do
     case Application.get_env(:samen_core, @config_key, []) do
+      %{entry_module: entry_module} -> entry_module
       config when is_list(config) -> Keyword.get(config, :entry_module)
       _ -> nil
+    end
+  end
+
+  @doc """
+  Refuse a half-wired payroll importer at host boot.
+
+  The reference importer is opt-in in two halves: `Samen.Hr.PayrollProvider`
+  must select this module, and this module must have an `entry_module`. Either
+  half alone is a silent no-op/miswire, so both must be present or neither.
+  A custom payroll provider does not need this module's `entry_module`; setting
+  it alongside a different provider is also rejected as stale wiring.
+  """
+  @spec assert_wiring!() :: :ok
+  def assert_wiring! do
+    provider = Samen.Hr.PayrollProvider.provider()
+    entry_module = configured_entry_module()
+
+    cond do
+      provider == __MODULE__ and is_nil(entry_module) ->
+        raise """
+        payroll miswired: Samen.Hr.PayrollProvider selects
+        #{inspect(__MODULE__)} but #{inspect(@config_key)} has no :entry_module.
+        Configure both halves or neither:
+          config :samen_core, Samen.Hr.PayrollProvider,
+            provider: Samen.Hr.Payroll.JournalProvider
+          config :samen_core, Samen.Hr.Payroll.JournalProvider,
+            entry_module: MyApp.Finance.JournalEntry
+        """
+
+      provider != __MODULE__ and not is_nil(entry_module) ->
+        raise """
+        payroll miswired: #{inspect(@config_key)} configures :entry_module
+        #{inspect(entry_module)} but Samen.Hr.PayrollProvider selects
+        #{inspect(provider)}. Configure both halves or neither:
+          config :samen_core, Samen.Hr.PayrollProvider,
+            provider: Samen.Hr.Payroll.JournalProvider
+          config :samen_core, Samen.Hr.Payroll.JournalProvider,
+            entry_module: MyApp.Finance.JournalEntry
+        """
+
+      true ->
+        :ok
     end
   end
 
