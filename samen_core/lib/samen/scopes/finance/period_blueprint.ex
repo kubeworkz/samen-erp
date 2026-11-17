@@ -185,12 +185,16 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         anchored Work tasks and both review/sign-off refuse while the phase's
         task is still open (WS-ACCT Phase 12) — see `CloseRunGuard`.
 
-        When the host passes `payroll: [import: ..., period: ...]`, `:finish`
+        When the host passes
+        `payroll: [import: ..., period: ..., labour_allocation: ...]`, `:finish`
         also reads the period's imported payroll registers and refuses while any
         is neither posted, voided, nor held with a named exception
-        (`Samen.Scopes.Finance.PayrollCloseCheck`). A phase checklist can be
-        fully signed while a payroll draft is still unposted; the payroll gate
-        is what keeps that draft out of a signed close.
+        (`Samen.Scopes.Finance.PayrollCloseCheck`). When the host also supplies
+        its mounted `LabourAllocation`, the same gate ties each posted register's
+        salary-expense debit to the allocation header for that period and refuses
+        a drift. A phase checklist can be fully signed while a payroll draft is
+        still unposted; the payroll gate is what keeps that draft out of a
+        signed close.
 
         One run per period per org (the unique index), because a period has one
         close. A `:completed` run is a signed fact: its checklist can no longer

@@ -80,8 +80,16 @@ defmodule Samen.Web.Finance.CloseDashboard do
          {:ok, payroll_mod} <- resource(mount, :PayrollImport) do
       scope = Mount.scope(mount, org_id)
       task_mod = task_module(mount)
+      labour_allocation_mod = optional_resource(mount, :LabourAllocation)
       {period, run} = current_cycle(run_mod, period_mod, scope)
-      payroll = PayrollCloseCheck.report(org_id, period, import_module: payroll_mod, scope: scope)
+
+      payroll =
+        PayrollCloseCheck.report(org_id, period,
+          import_module: payroll_mod,
+          labour_allocation_module: labour_allocation_mod,
+          scope: scope
+        )
+
       settlements = PayrollSettlements.load(mount, org_id, payroll, scope: scope)
 
       report =
@@ -267,6 +275,13 @@ defmodule Samen.Web.Finance.CloseDashboard do
       {:ok, module}
     else
       {:error, :finance_not_mounted}
+    end
+  end
+
+  defp optional_resource(mount, name) do
+    case resource(mount, name) do
+      {:ok, module} -> module
+      {:error, _reason} -> nil
     end
   end
 

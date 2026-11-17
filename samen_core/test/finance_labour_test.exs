@@ -15,13 +15,17 @@ defmodule Samen.FinanceLabourTest do
       discarded (kept as evidence), and a re-draft of the same period posts;
     * l5 R10 — a closed period refuses the post and leaves the draft alone;
     * l6 finality — a posted allocation cannot be re-posted or discarded, and
-      its shares are append-only in the DB.
+      its shares are append-only in the DB;
+    * l7 tie-out — a posted register's salary-expense debit ties to the
+      allocation header by source account and period, while a drifted register
+      is reported as blocking drift, never as clear.
   """
   use ExUnit.Case, async: false
 
   require Ash.Query
 
   alias Samen.Scopes.Finance.DimensionReconcile
+  alias Samen.Scopes.Finance.LabourAllocationTieOut
   alias Samen.Scopes.Finance.LabourDriver
   alias Samen.Scopes.Finance.Reconcile
 
@@ -32,7 +36,8 @@ defmodule Samen.FinanceLabourTest do
     JournalEntry,
     JournalLine,
     LabourAllocation,
-    LabourAllocationShare
+    LabourAllocationShare,
+    PayrollImport
   }
 
   alias SamenCore.Support.WorkFixture.{Timesheet, TimesheetEntry}
@@ -345,6 +350,7 @@ defmodule Samen.FinanceLabourTest do
         ])
 
       {:ok, stale} = draft(tenant, org, ctx, ~D[2026-09-01], ~D[2026-09-30], 100_000)
+
       assert Map.new(shares(org, stale.id), &{&1.cost_object_id, &1.minutes}) == %{
                ctx.riscv64.id => 480,
                ctx.gpu.id => 480
@@ -454,6 +460,181 @@ defmodule Samen.FinanceLabourTest do
 
       assert header_message =~ "final"
       assert length(entries(org)) == 1
+    end
+  end
+
+  # ── l7: the register ↔ allocation tie-out ───────────────────────────────────
+
+  describe "l7 — payroll registers tie to the labour allocation header" do
+    test "a posted register's salary-expense debit ties to the source account", %{
+      org: org,
+      admin: admin,
+      tenant: tenant
+    } do
+      ctx = books!(admin, org)
+
+      _sheet =
+        approved_sheet!(admin, tenant, org, @emp1, ~D[2026-09-01], ~D[2026-09-30], [
+          {ctx.riscv64, ~D[2026-09-02], 480},
+          {ctx.gpu, ~D[2026-09-03], 240}
+        ])
+
+      {:ok, header} = draft(tenant, org, ctx, ~D[2026-09-01], ~D[2026-09-30], 100_000)
+
+      entry = payroll_entry!(admin, org, ctx, 100_000, :posted)
+      _import = payroll_import!(admin, org, entry, 100_000)
+
+      report = tie_out(org)
+
+      assert report.status == :clear
+      assert report.clear?
+      refute report.blocking?
+      assert report.counts == %{total: 1, reconciled: 1, drift: 0}
+
+      assert [row] = report.allocations
+      assert row.allocation_id == header.id
+      assert row.source_account_id == ctx.payroll.id
+      assert row.allocated_cents == 100_000
+      assert row.register_debit_cents == 100_000
+      assert row.variance_cents == 0
+      assert row.reconciled?
+    end
+
+    test "sums only the allocation's source account, not every register debit", %{
+      org: org,
+      admin: admin,
+      tenant: tenant
+    } do
+      ctx = books!(admin, org)
+      tax_expense = new_account(admin, org, "6200", "Payroll Tax Expense", :expense)
+
+      _sheet =
+        approved_sheet!(admin, tenant, org, @emp1, ~D[2026-09-01], ~D[2026-09-30], [
+          {ctx.riscv64, ~D[2026-09-02], 480},
+          {ctx.gpu, ~D[2026-09-03], 240}
+        ])
+
+      {:ok, _header} = draft(tenant, org, ctx, ~D[2026-09-01], ~D[2026-09-30], 100_000)
+
+      entry =
+        JournalEntry
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            org_id: org,
+            entry_date: ~D[2026-09-30],
+            memo: "September payroll with employer tax",
+            lines: [
+              %{account_id: ctx.payroll.id, debit_cents: 100_000},
+              %{account_id: tax_expense.id, debit_cents: 25_000},
+              %{account_id: ctx.ap.id, credit_cents: 125_000}
+            ]
+          },
+          scope: admin
+        )
+        |> Ash.create!()
+        |> then(fn entry ->
+          entry |> Ash.Changeset.for_update(:post, %{}, scope: admin) |> Ash.update!()
+        end)
+
+      _import = payroll_import!(admin, org, entry, 125_000)
+
+      report = tie_out(org)
+
+      assert report.status == :clear
+      assert [row] = report.allocations
+      assert row.register_debit_cents == 100_000
+    end
+
+    test "a register that disagrees with the declared total is blocking drift", %{
+      org: org,
+      admin: admin,
+      tenant: tenant
+    } do
+      ctx = books!(admin, org)
+
+      _sheet =
+        approved_sheet!(admin, tenant, org, @emp1, ~D[2026-09-01], ~D[2026-09-30], [
+          {ctx.riscv64, ~D[2026-09-02], 480},
+          {ctx.gpu, ~D[2026-09-03], 240}
+        ])
+
+      {:ok, header} = draft(tenant, org, ctx, ~D[2026-09-01], ~D[2026-09-30], 100_000)
+
+      entry = payroll_entry!(admin, org, ctx, 125_000, :posted)
+      _import = payroll_import!(admin, org, entry, 125_000)
+
+      report = tie_out(org)
+
+      assert report.status == :drift
+      refute report.clear?
+      assert report.blocking?
+      assert report.drift?
+      assert report.counts == %{total: 1, reconciled: 0, drift: 1}
+      assert report.exceptions == [{:labour_allocation_drift, header.id, 25_000}]
+
+      assert [row] = report.drift
+      assert row.allocated_cents == 100_000
+      assert row.register_debit_cents == 125_000
+      assert row.variance_cents == 25_000
+      refute row.reconciled?
+    end
+
+    test "draft and superseded registers do not contribute to the source debit", %{
+      org: org,
+      admin: admin,
+      tenant: tenant
+    } do
+      ctx = books!(admin, org)
+
+      _sheet =
+        approved_sheet!(admin, tenant, org, @emp1, ~D[2026-09-01], ~D[2026-09-30], [
+          {ctx.riscv64, ~D[2026-09-02], 480},
+          {ctx.gpu, ~D[2026-09-03], 240}
+        ])
+
+      {:ok, header} = draft(tenant, org, ctx, ~D[2026-09-01], ~D[2026-09-30], 100_000)
+
+      posted_entry = payroll_entry!(admin, org, ctx, 100_000, :posted)
+      posted_import = payroll_import!(admin, org, posted_entry, 100_000)
+
+      draft_entry = payroll_entry!(admin, org, ctx, 25_000, :draft)
+      _draft_import = payroll_import!(admin, org, draft_entry, 25_000)
+
+      superseded_entry = payroll_entry!(admin, org, ctx, 25_000, :posted)
+
+      _superseded_import =
+        payroll_import!(admin, org, superseded_entry, 25_000, %{status: :superseded})
+
+      report = tie_out(org)
+      assert report.status == :clear
+      assert [row] = report.allocations
+      assert row.allocation_id == header.id
+      assert row.register_debit_cents == 100_000
+      assert row.import_ids == [posted_import.id]
+    end
+
+    test "an allocation with no posted register debit is drift, not clear", %{
+      org: org,
+      admin: admin,
+      tenant: tenant
+    } do
+      ctx = books!(admin, org)
+
+      _sheet =
+        approved_sheet!(admin, tenant, org, @emp1, ~D[2026-09-01], ~D[2026-09-30], [
+          {ctx.riscv64, ~D[2026-09-02], 480},
+          {ctx.gpu, ~D[2026-09-03], 240}
+        ])
+
+      {:ok, _header} = draft(tenant, org, ctx, ~D[2026-09-01], ~D[2026-09-30], 100_000)
+
+      report = tie_out(org)
+
+      assert report.status == :drift
+      assert [row] = report.drift
+      assert row.register_debit_cents == 0
+      assert row.variance_cents == -100_000
     end
   end
 
@@ -594,6 +775,66 @@ defmodule Samen.FinanceLabourTest do
     FiscalPeriod
     |> Ash.Changeset.for_create(:create, %{org_id: org, year: year, month: month}, scope: scope)
     |> Ash.create!()
+  end
+
+  defp payroll_entry!(scope, org, ctx, cents, status) do
+    entry =
+      JournalEntry
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          entry_date: ~D[2026-09-30],
+          memo: "September payroll",
+          lines: [
+            %{account_id: ctx.payroll.id, debit_cents: cents},
+            %{account_id: ctx.ap.id, credit_cents: cents}
+          ]
+        },
+        scope: scope
+      )
+      |> Ash.create!()
+
+    case status do
+      :draft ->
+        entry
+
+      :posted ->
+        entry
+        |> Ash.Changeset.for_update(:post, %{}, scope: scope)
+        |> Ash.update!()
+    end
+  end
+
+  defp payroll_import!(scope, org, entry, cents, overrides \\ %{}) do
+    attrs =
+      Map.merge(
+        %{
+          org_id: org,
+          provider: "acme_payroll",
+          external_id: "run-#{Ash.UUID.generate()}",
+          line_set_hash: String.duplicate("a", 64),
+          total_cents: cents,
+          entry_date: entry.entry_date,
+          imported_at: DateTime.utc_now() |> DateTime.truncate(:second),
+          imported_by: "u:payroll-importer",
+          status: :imported,
+          entry_id: entry.id
+        },
+        overrides
+      )
+
+    PayrollImport
+    |> Ash.Changeset.for_create(:create, attrs, scope: scope)
+    |> Ash.create!()
+  end
+
+  defp tie_out(org) do
+    LabourAllocationTieOut.report(org, %{year: 2026, month: 9},
+      allocation_module: LabourAllocation,
+      import_module: PayrollImport,
+      authorize?: false
+    )
   end
 
   defp reload(header), do: Ash.get!(LabourAllocation, header.id, authorize?: false)

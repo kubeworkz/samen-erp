@@ -66,6 +66,7 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
           unresolved: [entry()],
           held: [entry()],
           counts: map(),
+          labour_tie_out: map() | nil,
           reason: term() | nil
         }
 
@@ -76,6 +77,11 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
 
     * `:import_module` — the host's mounted `PayrollImport` module (required
       for a readable check; absent is `:unavailable` and therefore blocking).
+    * `:labour_allocation_module` — the host's mounted `LabourAllocation`
+      module. When supplied, the payroll register's salary-expense debit is
+      reconciled to the allocation header for the same period; a drift blocks
+      the close. Omit it only for a host that has not mounted the allocation
+      resource.
     * `:scope` — the tenant actor scope for the org-pinned read. When omitted,
       `:authorize?` defaults to `false` (the kernel guard path).
     * `:authorize?` — use Ash authorization when no `:scope` is supplied.
@@ -118,7 +124,7 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
         held = Enum.filter(entries, &(&1.disposition == :held))
         status = if truncated? or unresolved != [], do: :blocked, else: :clear
 
-        %{
+        report = %{
           status: status,
           blocking?: status != :clear,
           clear?: status == :clear,
@@ -129,8 +135,11 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
           unresolved: unresolved,
           held: held,
           counts: counts(entries),
+          labour_tie_out: nil,
           reason: if(truncated?, do: :truncated, else: nil)
         }
+
+        attach_labour_tie_out(report, import_module, org_id, period, opts)
 
       {:error, reason} ->
         unavailable(reason, period)
@@ -145,6 +154,51 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
       scope -> Ash.read(query, scope: scope)
     end
   end
+
+  defp attach_labour_tie_out(report, import_module, org_id, period, opts) do
+    case Keyword.get(opts, :labour_allocation_module) do
+      nil ->
+        report
+
+      allocation_module when is_atom(allocation_module) ->
+        tie =
+          Samen.Scopes.Finance.LabourAllocationTieOut.report(org_id, period,
+            allocation_module: allocation_module,
+            import_module: import_module,
+            scope: Keyword.get(opts, :scope),
+            authorize?: Keyword.get(opts, :authorize?, false)
+          )
+
+        merge_labour_tie_out(report, tie)
+
+      _invalid ->
+        report
+    end
+  end
+
+  defp merge_labour_tie_out(report, %{status: :drift} = tie) do
+    %{
+      report
+      | status: :blocked,
+        blocking?: true,
+        clear?: false,
+        labour_tie_out: tie,
+        reason: :labour_allocation_drift
+    }
+  end
+
+  defp merge_labour_tie_out(report, %{status: :unavailable} = tie) do
+    %{
+      report
+      | status: :unavailable,
+        blocking?: true,
+        clear?: false,
+        labour_tie_out: tie,
+        reason: tie.reason
+    }
+  end
+
+  defp merge_labour_tie_out(report, tie), do: %{report | labour_tie_out: tie}
 
   defp entry_view(import) do
     entry_status = entry_status(Map.get(import, :entry))
@@ -210,6 +264,7 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
       unresolved: [],
       held: [],
       counts: counts([]),
+      labour_tie_out: nil,
       reason: reason
     }
   end

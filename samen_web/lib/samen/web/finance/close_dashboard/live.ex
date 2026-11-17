@@ -809,6 +809,11 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
           <div id="close-payroll-clear" style="margin-top:6px;color:var(--muted)">
             Every imported register is posted, explicitly voided, or held with a named exception.
           </div>
+        <% @payroll.labour_tie_out && @payroll.labour_tie_out.status == :drift -> %>
+          <div id="close-payroll-labour-blocked" style="margin-top:6px;color:#B45309">
+            The close is blocked by labour allocation drift. The posted payroll register does
+            not tie to the allocation header for this period.
+          </div>
         <% true -> %>
           <div id="close-payroll-blocked" style="margin-top:6px;color:#B45309">
             The close is blocked until every imported payroll entry is posted, explicitly voided,
@@ -820,6 +825,65 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         posted {@payroll.counts.posted} · voided {@payroll.counts.voided} · held
         {@payroll.counts.held} · draft {@payroll.counts.draft} · conflict
         {@payroll.counts.conflict} · missing {@payroll.counts.missing}
+      </div>
+
+      <div
+        :if={@payroll.labour_tie_out}
+        id="close-payroll-labour-tie-out"
+        data-status={@payroll.labour_tie_out.status}
+        style="margin-top:8px;padding:8px 10px;border:1px solid var(--border, #e5e7eb);border-radius:6px"
+      >
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+          <b style="font-size:12px">Labour allocation tie-out</b>
+          <span
+            id="close-payroll-labour-tie-out-status"
+            data-status={@payroll.labour_tie_out.status}
+          >
+            <.pill variant={labour_tie_out_variant(@payroll.labour_tie_out.status)}>
+              {labour_tie_out_label(@payroll.labour_tie_out.status)}
+            </.pill>
+          </span>
+          <span style="color:var(--muted);font-size:11px">
+            {@payroll.labour_tie_out.counts.total} allocation header(s) ·
+            {@payroll.labour_tie_out.counts.reconciled} tied
+          </span>
+        </div>
+
+        <div
+          :if={@payroll.labour_tie_out.status == :clear}
+          style="margin-top:4px;color:var(--muted);font-size:11px"
+        >
+          The posted payroll register's salary-expense debit ties to every live allocation
+          header for this period.
+        </div>
+
+        <div
+          :if={@payroll.labour_tie_out.status == :unavailable}
+          style="margin-top:4px;color:#B45309;font-size:11px"
+        >
+          The labour allocation tie-out could not be read. The close is blocked rather than
+          treating an unreadable allocation as tied.
+        </div>
+
+        <ul
+          :if={@payroll.labour_tie_out.status == :drift}
+          style="margin:4px 0 0 16px;color:#B45309;font-size:11px"
+        >
+          <li
+            :for={row <- Enum.take(@payroll.labour_tie_out.drift, 20)}
+            id={"close-payroll-labour-drift-#{row.allocation_id}"}
+          >
+            <b>{row.source_account_code || row.source_account_id}</b>
+            · allocation {money(row.allocated_cents)} · register
+            {money(row.register_debit_cents)} · variance {money(row.variance_cents)}
+          </li>
+        </ul>
+        <div
+          :if={@payroll.labour_tie_out.status == :drift and length(@payroll.labour_tie_out.drift) > 20}
+          style="margin-top:4px;color:var(--muted);font-size:11px"
+        >
+          and {length(@payroll.labour_tie_out.drift) - 20} more allocation drift(s)
+        </div>
       </div>
 
       <div :if={@payroll.unresolved != []} id="close-payroll-unresolved" style="margin-top:8px">
@@ -1234,6 +1298,14 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   defp payroll_variant(:clear), do: "ok"
   defp payroll_variant(_status), do: "warn"
+
+  defp labour_tie_out_label(:clear), do: "tied"
+  defp labour_tie_out_label(:drift), do: "drift"
+  defp labour_tie_out_label(:unavailable), do: "unavailable"
+  defp labour_tie_out_label(status), do: to_string(status)
+
+  defp labour_tie_out_variant(:clear), do: "ok"
+  defp labour_tie_out_variant(_status), do: "warn"
 
   defp payroll_border(:clear), do: "#0A5C42"
   defp payroll_border(_status), do: "#B45309"

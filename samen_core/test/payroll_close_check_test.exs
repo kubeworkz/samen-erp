@@ -12,12 +12,17 @@ defmodule Samen.PayrollCloseCheckTest do
   alias SamenCore.Support.FinanceFixture.{
     Account,
     CloseRun,
+    CostObject,
     FiscalPeriod,
     JournalEntry,
+    LabourAllocation,
     PayrollImport
   }
 
+  alias SamenCore.Support.WorkFixture.{Timesheet, TimesheetEntry}
+
   @repo SamenCore.TestRepo
+  @employee "00000000-0000-4000-8000-000000000001"
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(@repo)
@@ -234,6 +239,44 @@ defmodule Samen.PayrollCloseCheckTest do
       assert %{status: :unavailable, blocking?: true, clear?: false} =
                PayrollCloseCheck.report(org, period, import_module: nil)
     end
+
+    test "a drifted labour allocation is visible and blocks the close", %{
+      org: org,
+      admin: admin,
+      member: member,
+      period: period,
+      expense: expense,
+      payable: payable
+    } do
+      _allocation = labour_allocation!(admin, member, org, expense)
+
+      entry = entry!(admin, org, expense, payable, ~D[2026-09-30], :posted)
+      _import = import!(admin, org, entry, %{total_cents: 125_000})
+
+      report = report(org, period, labour_allocation_module: LabourAllocation)
+
+      assert report.status == :blocked
+      assert report.blocking?
+      refute report.clear?
+      assert report.reason == :labour_allocation_drift
+
+      assert %{status: :drift, counts: %{total: 1, reconciled: 0, drift: 1}} =
+               report.labour_tie_out
+
+      assert [drift] = report.labour_tie_out.drift
+      assert drift.source_account_code == "6000"
+      assert drift.allocated_cents == 100_000
+      assert drift.register_debit_cents == 125_000
+      assert drift.variance_cents == 25_000
+
+      run = signed_run!(admin, org, period)
+
+      assert {:error, error} = finish(run, admin)
+      assert inspect(error) =~ "labour allocation header"
+      assert inspect(error) =~ "25000"
+
+      assert Ash.get!(CloseRun, run.id, authorize?: false).status == :in_progress
+    end
   end
 
   describe "the close-run finish guard" do
@@ -279,10 +322,11 @@ defmodule Samen.PayrollCloseCheckTest do
     end
   end
 
-  defp report(org, period) do
-    PayrollCloseCheck.report(org, period,
-      import_module: PayrollImport,
-      authorize?: false
+  defp report(org, period, opts \\ []) do
+    PayrollCloseCheck.report(
+      org,
+      period,
+      Keyword.merge([import_module: PayrollImport, authorize?: false], opts)
     )
   end
 
@@ -293,6 +337,74 @@ defmodule Samen.PayrollCloseCheckTest do
   end
 
   defp hold!(import, scope, exception), do: hold(import, scope, exception) |> elem(1)
+
+  defp labour_allocation!(admin, member, org, expense) do
+    target = account!(admin, org, "1300", :asset, :debit)
+    first = cost_object!(admin, org, "tie-a")
+    second = cost_object!(admin, org, "tie-b")
+
+    sheet =
+      Timesheet
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          employee_id: @employee,
+          period_start: ~D[2026-09-01],
+          period_end: ~D[2026-09-30]
+        },
+        scope: member
+      )
+      |> Ash.create!()
+
+    Enum.each([{first, ~D[2026-09-02], 480}, {second, ~D[2026-09-03], 240}], fn {cost_object, day,
+                                                                                 minutes} ->
+      TimesheetEntry
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          timesheet_id: sheet.id,
+          worked_on: day,
+          minutes: minutes,
+          cost_object_id: cost_object.id
+        },
+        scope: member
+      )
+      |> Ash.create!()
+    end)
+
+    {:ok, submitted} =
+      sheet |> Ash.Changeset.for_update(:submit, %{}, scope: member) |> Ash.update()
+
+    {:ok, _approved} =
+      submitted |> Ash.Changeset.for_update(:approve, %{}, scope: admin) |> Ash.update()
+
+    LabourAllocation
+    |> Ash.Changeset.for_create(
+      :draft,
+      %{
+        org_id: org,
+        period_start: ~D[2026-09-01],
+        period_end: ~D[2026-09-30],
+        total_cents: 100_000,
+        source_account_id: expense.id,
+        target_account_id: target.id
+      },
+      scope: admin
+    )
+    |> Ash.create!()
+  end
+
+  defp cost_object!(scope, org, code) do
+    CostObject
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org, code: code, name: "Programme #{code}", kind: :chip},
+      scope: scope
+    )
+    |> Ash.create!()
+  end
 
   defp finish(run, scope) do
     run

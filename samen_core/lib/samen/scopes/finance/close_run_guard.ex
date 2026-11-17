@@ -292,7 +292,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
           org_id ->
             case Ash.get(period_module, run.period_id, authorize?: false) do
               {:ok, period} ->
-                payroll_result(import_module, org_id, period)
+                payroll_result(payroll, import_module, org_id, period)
 
               _ ->
                 {:error,
@@ -303,10 +303,17 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     end
   end
 
-  defp payroll_result(import_module, org_id, period) do
-    case Samen.Scopes.Finance.PayrollCloseCheck.report(org_id, period,
-           import_module: import_module
-         ) do
+  defp payroll_result(payroll, import_module, org_id, period) do
+    opts =
+      case Keyword.get(payroll, :labour_allocation) do
+        allocation_module when is_atom(allocation_module) and not is_nil(allocation_module) ->
+          [import_module: import_module, labour_allocation_module: allocation_module]
+
+        _ ->
+          [import_module: import_module]
+      end
+
+    case Samen.Scopes.Finance.PayrollCloseCheck.report(org_id, period, opts) do
       %{clear?: true} ->
         :ok
 
@@ -314,6 +321,14 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
         {:error,
          "the payroll close check found more than 500 imported payroll entries for this " <>
            "period; refusing to close until the payroll inbox can be read within the bound"}
+
+      %{labour_tie_out: %{status: :drift} = tie_out} ->
+        {:error, labour_message(tie_out)}
+
+      %{labour_tie_out: %{status: :unavailable}} ->
+        {:error,
+         "the labour allocation tie-out could not be read for this period; refusing to " <>
+           "close rather than certifying payroll unseen"}
 
       %{status: :unavailable} ->
         {:error,
@@ -341,6 +356,28 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     "the close run cannot be completed while #{count} imported payroll #{noun} " <>
       "unresolved: #{sample}#{more}. Post or void the linked journal entry, or record a " <>
       "named hold exception on the import."
+  end
+
+  defp labour_message(tie_out) do
+    rows = tie_out.drift
+    count = length(rows)
+    noun = if count == 1, do: "allocation header is", else: "allocation headers are"
+
+    sample =
+      rows
+      |> Enum.take(5)
+      |> Enum.map_join(", ", fn row ->
+        account = row.source_account_code || row.source_account_id
+
+        "#{account} declares #{row.allocated_cents} cents but the posted register " <>
+          "debits #{row.register_debit_cents} (variance #{row.variance_cents})"
+      end)
+
+    more = if count > 5, do: " and #{count - 5} more", else: ""
+
+    "the close run cannot be completed while #{count} labour #{noun} out of tie " <>
+      "with the payroll register: #{sample}#{more}. Correct the register or the " <>
+      "allocation before signing the close."
   end
 
   defp disposition_label(:draft), do: "unposted draft"

@@ -1042,7 +1042,8 @@ defmodule Samen.Scopes.Finance do
           repo: unquote(repo)
         ],
         import: unquote(payroll_import_mod),
-        period: unquote(fiscal_period_mod)
+        period: unquote(fiscal_period_mod),
+        labour_allocation: unquote(labour_allocation_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_cost_object(
