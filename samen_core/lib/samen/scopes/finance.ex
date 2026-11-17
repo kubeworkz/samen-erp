@@ -411,6 +411,9 @@ defmodule Samen.Scopes.Finance do
     # `samen_web` test host; the core fixture and samenerp pass their own
     # allocator reservations.
     payroll_import: "epw",
+    # Payroll settlement batches. Allocator-reserved under the `samen_web`
+    # test host; the core fixture and samenerp pass their own reservations.
+    payroll_settlement: "pst",
     # Per-provider payroll account mapping. Allocator-reserved under the
     # `samen_web` test host; the core fixture and samenerp pass their own.
     payroll_account_mapping: "pwe",
@@ -528,6 +531,7 @@ defmodule Samen.Scopes.Finance do
     line_mod = Module.concat(namespace, JournalLine)
     journal_template_mod = Module.concat(namespace, JournalTemplate)
     payroll_import_mod = Module.concat(namespace, PayrollImport)
+    payroll_settlement_mod = Module.concat(namespace, PayrollSettlement)
     payroll_account_mapping_mod = Module.concat(namespace, PayrollAccountMapping)
     journal_approval_policy_mod = Module.concat(namespace, JournalApprovalPolicy)
     approval_policy_mod = Module.concat(namespace, ApprovalPolicy)
@@ -621,6 +625,7 @@ defmodule Samen.Scopes.Finance do
         resource(unquote(entry_mod))
         resource(unquote(line_mod))
         resource(unquote(payroll_import_mod))
+        resource(unquote(payroll_settlement_mod))
         resource(unquote(payroll_account_mapping_mod))
         resource(unquote(journal_template_mod))
         resource(unquote(journal_approval_policy_mod))
@@ -1107,6 +1112,19 @@ defmodule Samen.Scopes.Finance do
         unquote(repo),
         unquote(abbrevs.payroll_import),
         unquote(entry_mod)
+      )
+
+      # One payment/remittance batch per posted register. Preparing drafts
+      # ordinary entries; posting rides each entry's own gated :post action.
+      Samen.Scopes.Finance.Blueprint.define_payroll_settlement(
+        unquote(payroll_settlement_mod),
+        unquote(otp_app),
+        unquote(domain),
+        unquote(repo),
+        unquote(abbrevs.payroll_settlement),
+        unquote(payroll_import_mod),
+        unquote(entry_mod),
+        unquote(account_mod)
       )
 
       # The provider-code -> host-account mapping the payroll preflight resolves

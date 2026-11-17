@@ -32,6 +32,7 @@ defmodule Samenerp.Erp do
       account: "eca",
       journal_entry: "ecj",
       payroll_import: "esp",
+      payroll_settlement: "psy",
       payroll_account_mapping: "pse",
       journal_template: "ejr",
       journal_approval_policy: "ejp",

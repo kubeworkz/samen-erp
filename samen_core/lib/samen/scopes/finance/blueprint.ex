@@ -1294,6 +1294,167 @@ defmodule Samen.Scopes.Finance.Blueprint do
   end
 
   # ---------------------------------------------------------------------------
+  # PayrollSettlement — one payment/remittance batch for a posted payroll
+  # register. Preparing it drafts one ordinary journal entry per register
+  # liability account (debit the liability, credit cash); posting it goes
+  # through each entry's own :post action, never a bulk ledger write.
+  # ---------------------------------------------------------------------------
+  defmacro define_payroll_settlement(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             payroll_import_mod,
+             entry_mod,
+             account_mod
+           ) do
+    quote do
+      defmodule unquote(module) do
+        @moduledoc """
+        Finance.PayrollSettlement — the payment/remittance batch that clears
+        the payroll payable and tax liabilities created by one posted payroll
+        register.
+
+        The register's journal entry credits payroll payable and tax liability
+        accounts. `:prepare` reads those PERSISTED credits and creates one
+        ordinary DRAFT journal entry per liability account:
+
+            Dr  payroll payable / tax liability
+                Cr  cash / bank
+
+        The settlement stores only the batch identity, the chosen cash account,
+        the settlement date/reference, the generated entry ids and the totals.
+        It does not store pay, tax, hours, rate or employee facts, and it does
+        not replace the journal entry as the ledger record.
+
+        `:post` invokes the journal entry's own `:post` action for every
+        generated entry. PostBalance, PeriodGuard, DimensionBalance, the void
+        guard and any journal approval policy therefore still decide whether
+        the cash movement reaches the ledger. If one entry is refused, the
+        batch stays draft.
+
+        Bank reconciliation is the existing `Banking.Match` row against a
+        posted settlement entry's cash leg. The tie-out report
+        (`PayrollTieOut`) reads those matches instead of maintaining a second
+        link. A settlement is unique per org and payroll import; a register
+        cannot be paid twice through this resource.
+        """
+        use Samen.Resource,
+          otp_app: unquote(otp_app),
+          domain: unquote(domain),
+          data_layer: AshPostgres.DataLayer,
+          authorizers: [Ash.Policy.Authorizer],
+          abbrev: unquote(abbrev)
+
+        postgres do
+          table("#{unquote(abbrev)}_payroll_settlement")
+          repo(unquote(repo))
+
+          identity_index_names unique_payroll_settlement:
+                                 "#{unquote(abbrev)}_payroll_settlement_unique"
+        end
+
+        attributes do
+          attribute(:settlement_date, :date, public?: true, allow_nil?: false)
+
+          attribute(:status, :atom,
+            public?: true,
+            allow_nil?: false,
+            default: :draft,
+            constraints: [one_of: [:draft, :posted]]
+          )
+
+          attribute(:total_cents, :integer, public?: true, allow_nil?: false, default: 0)
+          attribute(:payment_count, :integer, public?: true, allow_nil?: false, default: 0)
+
+          attribute(:entry_ids, {:array, :uuid},
+            public?: true,
+            allow_nil?: false,
+            default: []
+          )
+
+          attribute(:reference, :string, public?: true, constraints: [max_length: 200])
+          attribute(:prepared_by, :string, public?: true, constraints: [max_length: 200])
+          attribute(:prepared_at, :utc_datetime, public?: true)
+          attribute(:posted_by, :string, public?: true, constraints: [max_length: 200])
+          attribute(:posted_at, :utc_datetime, public?: true)
+        end
+
+        relationships do
+          belongs_to :payroll_import, unquote(payroll_import_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+
+          belongs_to :cash_account, unquote(account_mod) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(false)
+          end
+        end
+
+        identities do
+          identity(:unique_payroll_settlement, [:org_id, :payroll_import_id])
+        end
+
+        changes do
+          change(Samen.Policy.SameOrgFk)
+        end
+
+        actions do
+          read :read do
+            primary?(true)
+            pagination(keyset?: true, required?: false)
+          end
+
+          # The only create route. It mints the batch id, reads the posted
+          # register liability credits and drafts one settlement entry per
+          # liability account. It never posts.
+          create :prepare do
+            accept([
+              :org_id,
+              :payroll_import_id,
+              :cash_account_id,
+              :settlement_date,
+              :reference
+            ])
+
+            change(
+              {Samen.Scopes.Finance.PayrollSettlementPrepare,
+               import: unquote(payroll_import_mod),
+               entry: unquote(entry_mod),
+               account: unquote(account_mod)}
+            )
+          end
+
+          # The only post route. It posts every generated entry through the
+          # journal's own :post action and only then marks the batch posted.
+          update :post do
+            accept([])
+            require_atomic?(false)
+            change({Samen.Scopes.Finance.PayrollSettlementPost, entry: unquote(entry_mod)})
+          end
+        end
+
+        policies do
+          policy action_type(:read) do
+            authorize_if(Samen.Policy.OrgScope)
+          end
+
+          # Preparing and posting a payment batch are controller-level actions.
+          policy action([:prepare, :post]) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
+            authorize_if(always())
+          end
+        end
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # JournalTemplate — a reusable, balanced line set plus an optional recurring
   # cadence. :generate creates an ORDINARY DRAFT journal entry; it never posts
   # and never opens an approval itself. The draft later rides the journal's

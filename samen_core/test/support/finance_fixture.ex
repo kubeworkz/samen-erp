@@ -57,6 +57,7 @@ defmodule SamenCore.Support.FinanceFixture do
       journal_entry: "sje",
       journal_line: "sjl",
       payroll_import: "pfs",
+      payroll_settlement: "pss",
       payroll_account_mapping: "aab",
       journal_template: "sjt",
       ap_invoice: "sap",

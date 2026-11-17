@@ -10155,6 +10155,108 @@
     {
       "fields": [
         {
+          "column_name": "psy_cash_account_id",
+          "logical_name": "cash_account_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "psy_entry_ids",
+          "logical_name": "entry_ids",
+          "pii": false,
+          "type": "{:array, Ash.Type.UUID}"
+        },
+        {
+          "column_name": "psy_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "psy_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "psy_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "psy_payment_count",
+          "logical_name": "payment_count",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "psy_payroll_import_id",
+          "logical_name": "payroll_import_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "psy_posted_at",
+          "logical_name": "posted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "psy_posted_by",
+          "logical_name": "posted_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "psy_prepared_at",
+          "logical_name": "prepared_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "psy_prepared_by",
+          "logical_name": "prepared_by",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "psy_reference",
+          "logical_name": "reference",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "psy_settlement_date",
+          "logical_name": "settlement_date",
+          "pii": false,
+          "type": "Date"
+        },
+        {
+          "column_name": "psy_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "psy_total_cents",
+          "logical_name": "total_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "psy_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.PayrollSettlement",
+      "table_name": "psy_payroll_settlement"
+    },
+    {
+      "fields": [
+        {
           "column_name": "pii_rne_secret",
           "logical_name": "secret",
           "pii": true,
