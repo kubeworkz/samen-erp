@@ -77,8 +77,7 @@ defmodule Samen.Web.Finance.PayrollSettlements do
          {:ok, import_mod} <- resource(mount, :PayrollImport),
          {:ok, account_mod} <- resource(mount, :Account) do
       {visible_posted, more_posted?} = Enum.split(posted_imports(payroll), @row_limit)
-      remaining = max(@row_limit - length(visible_posted), 0)
-      {visible_voided, more_voided?} = Enum.split(voided_imports(payroll), remaining)
+      {visible_voided, more_voided?} = Enum.split(voided_imports(payroll), @row_limit)
       visible = visible_posted ++ visible_voided
       more_registers? = more_posted? != [] or more_voided? != []
       import_ids = Enum.map(visible, & &1.id)

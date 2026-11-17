@@ -135,7 +135,10 @@ defmodule Samen.Web.CloseDashboardTest do
   defp payroll_entry!(org_id, status) do
     expense = account!(org_id, "6000", :expense, :debit)
     payable = account!(org_id, "2100", :liability, :credit)
+    payroll_entry_with_accounts!(org_id, expense, payable, status)
+  end
 
+  defp payroll_entry_with_accounts!(org_id, expense, payable, status) do
     entry =
       JournalEntry
       |> Ash.Changeset.for_create(
@@ -581,6 +584,61 @@ defmodule Samen.Web.CloseDashboardTest do
       refute html =~ ~s(id="close-payroll-settlement-post-#{import.id}")
       refute html =~ ~s(id="close-payroll-settlement-form-#{import.id}")
       refute html =~ "Admin required to post."
+    end
+
+    test "keeps a voided-register settlement visible when posted rows fill the cap" do
+      org_id = Ash.UUID.generate()
+      _period = seed_period!(org_id, 2026, 10)
+      expense = account!(org_id, "6000", :expense, :debit)
+      payable = account!(org_id, "2100", :liability, :credit)
+      cash = account!(org_id, "1010", :asset, :debit)
+
+      posted_entries =
+        for _ <- 1..20 do
+          payroll_entry_with_accounts!(org_id, expense, payable, :posted)
+        end
+
+      posted_imports = Enum.map(posted_entries, &payroll_import!(org_id, &1))
+
+      voided_entry = payroll_entry_with_accounts!(org_id, expense, payable, :posted)
+      voided_import = payroll_import!(org_id, voided_entry)
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+
+      _socket =
+        dispatch(socket, "prepare_payroll_settlement", %{
+          "import_id" => voided_import.id,
+          "cash_account_id" => cash.id,
+          "settlement_date" => "2026-10-31"
+        })
+
+      voided_entry
+      |> Ash.Changeset.for_update(:void, %{}, scope: admin_scope(org_id))
+      |> Ash.update!()
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, socket.assigns)
+      rows = socket.assigns.state.settlements.rows
+
+      assert length(rows) == 21
+      assert Enum.count(rows, &(&1.status == :unsettled)) == 20
+
+      assert Enum.any?(rows, fn row ->
+               row.import.id == voided_import.id and row.status == :voided
+             end)
+
+      assert html =~
+               ~s(id="close-payroll-settlement-status-#{voided_import.id}" data-status="voided")
+
+      assert html =~
+               ~s(id="close-payroll-tie-out-#{voided_import.id}" data-status="voided")
+
+      refute html =~ ~s(id="close-payroll-settlement-post-#{voided_import.id}")
+      refute html =~ ~s(id="close-payroll-settlement-form-#{voided_import.id}")
+
+      assert Enum.all?(posted_imports, fn import ->
+               html =~ ~s(id="close-payroll-settlement-#{import.id}")
+             end)
     end
 
     test "offers prepare and post only to an admin and refuses a crafted non-admin event" do

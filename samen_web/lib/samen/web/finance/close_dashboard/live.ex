@@ -1000,8 +1000,8 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
             :if={@settlements.truncated?}
             style="margin-top:6px;color:var(--muted);font-size:11px"
           >
-            Showing the first {@settlements.limit} posted or voided registers; more exist in this
-            period.
+            Showing up to {@settlements.limit} posted registers and {@settlements.limit} voided
+            registers; more exist in this period.
           </div>
       <% end %>
     </div>
