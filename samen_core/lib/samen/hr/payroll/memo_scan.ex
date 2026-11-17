@@ -20,17 +20,20 @@ defmodule Samen.Hr.Payroll.MemoScan do
     * labelled tax identifiers;
     * labelled employee/payee/worker names; and
     * a name-shaped phrase in a name-taking context (`for`, `to`, `by`,
-      `from`) such as `Payroll for Jane Doe`, unless every word is a known
-      payroll/prose term.
+      `from`) such as `Payroll for Jane Doe`, including lowercase and
+      all-caps forms, unless every word is a known payroll/prose term.
 
   The bare-name rule is deliberately narrow rather than a global scan of
   every proper-case phrase: ordinary memos such as `Payroll Reversal`,
-  `September 2026 payroll`, and `Payroll Clearing` stay valid. Names are
-  still hard to distinguish from arbitrary proper nouns, so the import
-  convention is the stronger control: memos should carry **opaque
-  references** such as `employee_ref: emp_1042`, and cost-object identity
-  belongs in `dimension_refs` (which is already ids-only). The scanner is a
-  fail-closed belt, not a taint proof.
+  `September 2026 payroll`, and `Payroll Clearing` stay valid. A single word
+  after a name-taking preposition (`Payroll for audit`, `Payroll for
+  off-cycle`) is ordinary prose; the bare-name rule targets full two- or
+  three-word names, including lowercase and all-caps forms. Names are still
+  hard to distinguish from arbitrary proper nouns, so the import convention
+  is the stronger control: memos should carry **opaque references** such as
+  `employee_ref: emp_1042`, and cost-object identity belongs in
+  `dimension_refs` (which is already ids-only). The scanner is a fail-closed
+  belt, not a taint proof.
 
   ## Error shape
 
@@ -70,15 +73,18 @@ defmodule Samen.Hr.Payroll.MemoScan do
     taxes the third total union vacation wage wages withholding year yearly
     january february march april may june july august september october november december
     jan feb mar apr jun jul aug sep sept oct nov dec
-    all each every reversal
+    all each every reversal review approval processing note notes team staff
+    department division company entity location site branch office region country
+    state city store shop remote pto fsa hsa loa reimbursement reimbursements
+    expenses off-cycle offcycle audit trail cycle
   ))
 
-  # Only a name-shaped phrase in a name-taking context is a candidate. A
-  # memo like "Payroll Reversal" has no such context and is not scanned as a
-  # name.
-  @name_context_phrase ~r/\b(?i:for|to|by|from)\s+([A-Z][a-z]+(?:['-][A-Z][a-z]+)*)\s+([A-Z][a-z]+(?:['-][A-Z][a-z]+)*)(?:\s+([A-Z][a-z]+(?:['-][A-Z][a-z]+)*))?(?![\p{L}\d])/u
-
-  @single_name_context ~r/\b(?i:for|to|by|from)\s+([A-Z][a-z]+(?:['-][A-Z][a-z]+)*)(?![\p{L}\d])/u
+  # Only a full two- or three-word name in a name-taking context is a
+  # candidate. The token pattern accepts lowercase and all-caps names as
+  # well as title case. A memo like "Payroll Reversal" has no such context,
+  # and a single word like "Payroll for audit" is ordinary prose rather than
+  # a name.
+  @name_context_phrase ~r/\b(?i:for|to|by|from)\s+([A-Za-z][A-Za-z'.-]*)\s+([A-Za-z][A-Za-z'.-]*)(?:\s+([A-Za-z][A-Za-z'.-]*))?(?![\p{L}\d])/u
 
   # Keep these patterns deliberately conservative: this is an ingress belt for
   # obvious PII literals, not a completeness guarantee. The first match names
@@ -121,7 +127,7 @@ defmodule Samen.Hr.Payroll.MemoScan do
   end
 
   defp bare_name?(text) do
-    name_context?(text, @name_context_phrase) or name_context?(text, @single_name_context)
+    name_context?(text, @name_context_phrase)
   end
 
   defp name_context?(text, pattern) do

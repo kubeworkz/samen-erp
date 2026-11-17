@@ -560,6 +560,38 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     assert imports(org) == []
   end
 
+  test "keeps ordinary words after a name-taking preposition", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    for memo <- ["Payroll for audit", "Payroll for off-cycle"] do
+      register =
+        register(expense, payable, %{
+          external_id: "run-#{Ash.UUID.generate()}",
+          memo: memo
+        })
+
+      assert {:ok, %{journal_entry_id: entry_id}} = run(org, register)
+      assert Ash.get!(JournalEntry, entry_id, authorize?: false).memo == memo
+    end
+  end
+
+  test "refuses lowercase and all-caps bare-name memos before any GL row lands", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    for memo <- ["Payroll for jane doe", "Payroll for JANE DOE"] do
+      assert {:error, {:invalid_payroll_register, {:pii_memo, :memo, :bare_name}}} =
+               run(org, register(expense, payable, %{memo: memo}))
+    end
+
+    assert entries(org) == []
+    assert journal_lines(org) == []
+    assert imports(org) == []
+  end
+
   test "refuses a PII-shaped line memo before any GL or provenance row lands", %{
     org: org,
     expense: expense,
