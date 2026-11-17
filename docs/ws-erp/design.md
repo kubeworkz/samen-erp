@@ -235,7 +235,9 @@ every link already has a home.
   thin `Finance.PayrollImport` provenance row — provider/external id, normalized line-set
   hash (GL lines only, never employee data), total, imported-at/by, status, and the linked
   draft — so retries, conflict triage and the finance inbox are queryable. The Journals
-  (GL) DO record payroll *postings*; they never *compute* them.
+  (GL) DO record payroll *postings*; they never *compute* them. The register contract is
+  deliberately single-currency and integer-cents; multi-currency payroll registers are a
+  known boundary (§7.1), not a missing field.
 - **PII posture:** Employee is the scope's only 🔒 resource; per-plane masking tests are
   MANDATORY (watch-list discipline) on every HR surface + the HR CSV export
   (mask-by-omission red-path per the WS-E discipline). Erasure: a former employee's vaulted
@@ -289,8 +291,11 @@ WS-B/B2 reconciliation discipline.
 1. **Payroll computation** (§5 adapter boundary instead) — worst half-claim risk in ERP.
 2. **Tax engines / VAT filing** — rates/rules are jurisdictional; GL handles tax accounts,
    calculation is an adapter/P3.
-3. **Multi-currency revaluation, FX gain/loss** — single-currency base; `Account.currency`
-   field exists so the schema doesn't lie, revaluation is P2.
+3. **Multi-currency revaluation, FX gain/loss, and multi-currency payroll registers** —
+   single-currency base; `Account.currency` exists so the schema doesn't lie, and AP has
+   its own functional-currency/FX policy (ADR-054). Advanced AR/cash/intercompany
+   revaluation is P2; payroll-register currency is a separate known boundary, not next
+   (§7.1).
 4. **Fractional/serial/lot inventory** (integer base-UOM binding decision) — lot/serial
    tracking (recall traceability) is P2.
 5. **Shop-floor scheduling / capacity planning / MES** — P3.
@@ -303,6 +308,34 @@ WS-B/B2 reconciliation discipline.
 
 Each is an honest boundary with an adapter or P2/P3 path, per the fail-honest house rule —
 an ERP that half-implements payroll or tax is worse than one that says `:not_implemented`.
+
+### 7.1 Known boundary — multi-currency payroll registers (deferred, not next)
+
+**Current contract.** `Samen.Hr.Payroll.JournalProvider` takes `debit_cents`/`credit_cents`
+and `PayrollImport` stores `total_cents`; neither carries a currency code or minor-unit
+precision. The cents are the host's base currency. This is honest for one base currency
+and a provider that computes in it, and it is not evidence that the ledger can post a
+foreign-currency payroll.
+
+**Why it is not a field addition.** A currency-aware register needs all three of:
+
+1. **FX policy** — rate source and effective date, transaction-date vs period-end
+   revaluation, gain/loss accounts, and whether the provider or the host owns the rate.
+   AP's functional-currency/FX path (ADR-054) prices and settles vendor bills; it is not a
+   payroll policy.
+2. **Account-currency rules** — functional/reporting currency, which accounts may hold a
+   foreign currency, how a foreign register balances, and how it reconciles to the
+   base-currency ledger.
+3. **Jurisdictional tax handling** — provider-computed withholding and tax totals remain
+   authoritative; host-side tax allocation, filing, or remittance is a separate
+   adapter/P3, not a currency conversion.
+
+**Revisit trigger.** A real international payroll customer requires a register in a
+currency other than the host's base currency. Until then, the register stays integer cents
+in the host's base currency; a currency field or a silent conversion is not an acceptable
+shortcut, and a non-base-currency provider must not be wired into the current contract.
+Revisit only with the three policies above designed and a contract/schema migration plan;
+this is deliberately not next.
 
 ---
 

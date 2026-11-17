@@ -338,6 +338,10 @@ Status: **DONE, execution-verified (2026-09-14).**
 - Design §7 honesty list is binding: payroll/tax/multi-currency/lots/scheduling/accruals/
   forecasting/depreciation are adapter-or-P2/P3 — every "just also compute X" gets refused
   into that list.
+- **Multi-currency payroll registers are a known boundary, not next** (design §7.1). The
+  register contract is integer cents in the host's base currency with no currency code;
+  a currency-aware register requires FX policy, account-currency rules, and jurisdictional
+  tax handling first. Revisit only when a real international payroll customer requires it.
 - E5's SalesOrder lives in the Inventory scope by decision (design §3.3); do not grow a
   seventh scope for it.
 - Rollup freshness: StockLevel check at post time is in-transaction live-sum; the rollup
