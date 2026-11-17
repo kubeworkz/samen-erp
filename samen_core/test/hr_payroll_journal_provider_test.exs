@@ -265,6 +265,76 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
            ]
   end
 
+  test "refuses a PII-shaped header memo before any GL or provenance row lands", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    register =
+      register(expense, payable, %{
+        memo: "Payroll for jane.doe@example.com"
+      })
+
+    assert {:error, {:invalid_payroll_register, {:pii_memo, :memo, :email}}} =
+             run(org, register)
+
+    assert entries(org) == []
+    assert journal_lines(org) == []
+    assert imports(org) == []
+  end
+
+  test "keeps ordinary payroll prose without a name-taking context", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    register = register(expense, payable, %{memo: "Payroll Reversal"})
+
+    assert {:ok, %{journal_entry_id: entry_id}} = run(org, register)
+
+    entry = Ash.get!(JournalEntry, entry_id, authorize?: false)
+    assert entry.memo == "Payroll Reversal"
+  end
+
+  test "refuses a bare-name memo before any GL or provenance row lands", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    register =
+      register(expense, payable, %{
+        memo: "Payroll for Jane Doe"
+      })
+
+    assert {:error, {:invalid_payroll_register, {:pii_memo, :memo, :bare_name}}} =
+             run(org, register)
+
+    assert entries(org) == []
+    assert journal_lines(org) == []
+    assert imports(org) == []
+  end
+
+  test "refuses a PII-shaped line memo before any GL or provenance row lands", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    register =
+      register(expense, payable, %{
+        lines: [
+          %{account_code: "6000", debit_cents: 125_000, memo: "employee: Jane Doe"},
+          %{account_code: "2100", credit_cents: 125_000}
+        ]
+      })
+
+    assert {:error, {:invalid_payroll_register, {:pii_memo, {:line_memo, 0}, :employee_name}}} =
+             run(org, register)
+
+    assert entries(org) == []
+    assert journal_lines(org) == []
+    assert imports(org) == []
+  end
+
   test "refuses an unbalanced register before touching the journal", %{
     org: org,
     expense: expense,
@@ -733,6 +803,12 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
   defp entry_lines(org, entry_id) do
     JournalLine
     |> Ash.Query.filter(org_id == ^org and entry_id == ^entry_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp journal_lines(org) do
+    JournalLine
+    |> Ash.Query.filter(org_id == ^org)
     |> Ash.read!(authorize?: false)
   end
 end

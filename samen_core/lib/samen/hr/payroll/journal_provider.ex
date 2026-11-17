@@ -14,10 +14,17 @@ defmodule Samen.Hr.Payroll.JournalProvider do
         entry_date: ~D[2026-09-30],
         memo: "September 2026 payroll",       # optional
         lines: [
-          %{account_code: "6000", debit_cents: 125_000},
+          %{account_code: "6000", debit_cents: 125_000, memo: "employee_ref: emp_1042"},
           %{account_code: "2100", credit_cents: 125_000}
         ]
       }
+
+  `memo` and each line's `memo` are plaintext and unvaulted once they reach the
+  journal. They are therefore scanned by `Samen.Hr.Payroll.MemoScan` before any
+  write: obvious employee names, bank details, tax identifiers and name-shaped
+  phrases in a name-taking context refuse the import. Memos should carry opaque
+  references (for example `employee_ref: emp_1042`), and cost-object identity
+  belongs in the line's ids-only `dimension_refs`, never in memo prose.
 
   Every line names a provider account CODE and exactly one non-zero integer-cents
   side. Codes are resolved through the host's per-provider
@@ -34,6 +41,9 @@ defmodule Samen.Hr.Payroll.JournalProvider do
 
     * mapping coverage for every line's external code;
     * the mapped account exists and belongs to the same org;
+    * neither the header memo nor any line memo carries an obvious PII shape
+      or a name-shaped phrase in a name-taking context
+      (`Samen.Hr.Payroll.MemoScan`);
     * a new draft's entry date is not in a closed (or document-refusing
       soft-closed) fiscal period;
     * the existing anchor is `:duplicate` (same date/lines/total) or
@@ -123,6 +133,8 @@ defmodule Samen.Hr.Payroll.JournalProvider do
 
   @source_key_prefix "payroll_register"
   @config_key __MODULE__
+
+  alias Samen.Hr.Payroll.MemoScan
 
   @impl true
   def run_payroll(org_id, %Date{} = _period, opts) when is_binary(org_id) do
@@ -407,6 +419,7 @@ defmodule Samen.Hr.Payroll.JournalProvider do
          {:ok, entry_date} <- entry_date(register),
          {:ok, lines} <- lines(register),
          {:ok, memo} <- memo(register, provider, external_id),
+         :ok <- MemoScan.check(memo, :memo),
          :ok <- balanced(lines) do
       total_cents = Enum.sum(Enum.map(lines, & &1.debit_cents))
 
@@ -507,6 +520,7 @@ defmodule Samen.Hr.Payroll.JournalProvider do
          {:ok, credit_cents} <- amount(line, :credit_cents, index),
          :ok <- one_side(debit_cents, credit_cents, index),
          {:ok, line_memo} <- line_memo(line, index),
+         :ok <- MemoScan.check(line_memo, {:line_memo, index}),
          {:ok, dimension_refs} <- dimension_refs(line, index) do
       {:ok,
        %{
