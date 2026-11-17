@@ -9393,6 +9393,12 @@
           "type": "Atom"
         },
         {
+          "column_name": "esp_supersedes_id",
+          "logical_name": "supersedes_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
           "column_name": "esp_total_cents",
           "logical_name": "total_cents",
           "pii": false,
