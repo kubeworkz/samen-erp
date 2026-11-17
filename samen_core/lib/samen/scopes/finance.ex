@@ -37,7 +37,10 @@ defmodule Samen.Scopes.Finance do
     hash, total, entry date, imported-at/by, status (`:imported`/`:conflict`)
     and a linked draft `JournalEntry`. The hash covers normalized GL lines
     only; no raw employee or register fields are stored. This is the finance
-    payroll-import inbox's read model.
+    payroll-import inbox's read model. A register that cannot be posted or
+    voided before a close can be held with an attributable named exception
+    (`:hold` → `exception`/`held_at`/`held_by`); the hold bypasses only the
+    close precondition, never the journal's posting gate.
   - **`ApInvoice`** — a vendor bill (AP document; E2): `vendor_id` (the
     SalesOps.Vendor reference), `number`, dates, embedded jsonb `lines`
     (`account_id` + `amount_cents` + `memo` — the design's P2-promote-if-hot
@@ -103,7 +106,11 @@ defmodule Samen.Scopes.Finance do
   - **`CloseRun`** — one row per period, holding the source manual's ten close
     phases (`Samen.Scopes.Finance.ClosePhases`) and the `:complete_phase` /
     `:finish` lifecycle. A run cannot be completed with a phase outstanding and
-    a completed run is final.
+    a completed run is final. `:finish` also reads the period's
+    `PayrollImport` rows and refuses while any imported payroll entry is
+    neither posted, explicitly voided, nor held with a named exception
+    (`Samen.Scopes.Finance.PayrollCloseCheck`), so a fully signed checklist
+    cannot silently omit imported payroll.
 
   A host that mounts the Work scope passes its Task module at mount time and
   the checklist becomes CHECKABLE work (WS-ACCT Phase 12):
@@ -1020,13 +1027,17 @@ defmodule Samen.Scopes.Finance do
         unquote(abbrevs.close_run),
         unquote(fiscal_period_mod),
         unquote(work[:task]),
-        period: unquote(fiscal_period_mod),
-        ap_invoice: unquote(ap_invoice_mod),
-        entry: unquote(entry_mod),
-        posting_account: unquote(posting_account_mod),
-        org_fx_settings: unquote(org_fx_settings_mod),
-        exchange_rate: unquote(exchange_rate_mod),
-        repo: unquote(repo)
+        [
+          period: unquote(fiscal_period_mod),
+          ap_invoice: unquote(ap_invoice_mod),
+          entry: unquote(entry_mod),
+          posting_account: unquote(posting_account_mod),
+          org_fx_settings: unquote(org_fx_settings_mod),
+          exchange_rate: unquote(exchange_rate_mod),
+          repo: unquote(repo)
+        ],
+        import: unquote(payroll_import_mod),
+        period: unquote(fiscal_period_mod)
       )
 
       Samen.Scopes.Finance.Blueprint.define_cost_object(

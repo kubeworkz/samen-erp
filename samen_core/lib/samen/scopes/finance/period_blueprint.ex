@@ -153,12 +153,13 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
              abbrev,
              period_mod,
              work_task \\ nil,
-             fx \\ []
+             fx \\ [],
+             payroll \\ []
            ) do
     unless fx[:period] && fx[:ap_invoice] && fx[:entry] && fx[:posting_account] &&
              fx[:org_fx_settings] && fx[:exchange_rate] && fx[:repo] do
       raise ArgumentError,
-            "define_close_run/8 requires the fx: wiring " <>
+            "define_close_run/9 requires the fx: wiring " <>
               "(period, ap_invoice, entry, posting_account, org_fx_settings, exchange_rate, repo)"
     end
 
@@ -183,6 +184,13 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
         When the host wires Work (`work_task`), `:start` also creates the ten
         anchored Work tasks and both review/sign-off refuse while the phase's
         task is still open (WS-ACCT Phase 12) — see `CloseRunGuard`.
+
+        When the host passes `payroll: [import: ..., period: ...]`, `:finish`
+        also reads the period's imported payroll registers and refuses while any
+        is neither posted, voided, nor held with a named exception
+        (`Samen.Scopes.Finance.PayrollCloseCheck`). A phase checklist can be
+        fully signed while a payroll draft is still unposted; the payroll gate
+        is what keeps that draft out of a signed close.
 
         One run per period per org (the unique index), because a period has one
         close. A `:completed` run is a signed fact: its checklist can no longer
@@ -254,7 +262,11 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
           create :start do
             accept([:org_id, :period_id])
             primary?(true)
-            change({Samen.Scopes.Finance.CloseRunGuard, op: :seed, work_task: unquote(work_task)})
+
+            change(
+              {Samen.Scopes.Finance.CloseRunGuard,
+               op: :seed, work_task: unquote(work_task), payroll: unquote(payroll)}
+            )
           end
 
           update :review_phase do
@@ -266,7 +278,7 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
 
             change(
               {Samen.Scopes.Finance.CloseRunGuard,
-               op: :review_phase, work_task: unquote(work_task)}
+               op: :review_phase, work_task: unquote(work_task), payroll: unquote(payroll)}
             )
           end
 
@@ -278,7 +290,7 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
 
             change(
               {Samen.Scopes.Finance.CloseRunGuard,
-               op: :complete_phase, work_task: unquote(work_task)}
+               op: :complete_phase, work_task: unquote(work_task), payroll: unquote(payroll)}
             )
           end
 
@@ -287,7 +299,8 @@ defmodule Samen.Scopes.Finance.PeriodBlueprint do
             require_atomic?(false)
 
             change(
-              {Samen.Scopes.Finance.CloseRunGuard, op: :finish, work_task: unquote(work_task)}
+              {Samen.Scopes.Finance.CloseRunGuard,
+               op: :finish, work_task: unquote(work_task), payroll: unquote(payroll)}
             )
           end
 

@@ -9321,8 +9321,26 @@
           "type": "UUID"
         },
         {
+          "column_name": "esp_exception",
+          "logical_name": "exception",
+          "pii": false,
+          "type": "String"
+        },
+        {
           "column_name": "esp_external_id",
           "logical_name": "external_id",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "esp_held_at",
+          "logical_name": "held_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "esp_held_by",
+          "logical_name": "held_by",
           "pii": false,
           "type": "String"
         },

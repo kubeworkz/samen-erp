@@ -49,7 +49,11 @@ defmodule Samen.Scopes.Finance.CloseBoard do
     * `:tasks` — total/completed/open plus `missing` (phases with no anchored
       task — the honest measure of an unanchored checklist);
     * `:discrepancies` — signed phases that disagree with their task, evidence,
-      reviewer or signer.
+      reviewer or signer;
+    * `:payroll` — the read-only imported-payroll precondition supplied by the
+      caller (`Samen.Scopes.Finance.PayrollCloseCheck`), or `nil` when the
+      caller did not run it. A blocking check is shown beside the checklist so
+      payroll cannot be omitted from a signed close without the board saying so.
 
   ## No task module, no invented task state
 
@@ -72,11 +76,14 @@ defmodule Samen.Scopes.Finance.CloseBoard do
     * `:task` — the host's mounted Work Task module. When absent, tasks are not
       read (`task: nil`, `tasks.total: 0`).
     * `:period` — the `FiscalPeriod` row, for the month/status header.
+    * `:payroll` — a precomputed `PayrollCloseCheck.report/3` map. The board
+      stays a pure read and does not re-query payroll on its own.
   """
   @spec report(struct(), keyword()) :: map()
   def report(run, opts \\ []) do
     task_mod = Keyword.get(opts, :task)
     period = Keyword.get(opts, :period)
+    payroll = Keyword.get(opts, :payroll)
 
     tasks =
       if is_nil(task_mod) do
@@ -107,7 +114,8 @@ defmodule Samen.Scopes.Finance.CloseBoard do
       },
       next_phase: Enum.find(phases, &(&1.status == :open)),
       tasks: task_totals(tasks, task_mod),
-      discrepancies: discrepancies(phases)
+      discrepancies: discrepancies(phases),
+      payroll: payroll
     }
   end
 

@@ -1028,6 +1028,15 @@ defmodule Samen.Scopes.Finance.Blueprint do
         refused replay under the same provider/external id. The journal entry's
         own `:draft`/`:posted`/`:void` lifecycle remains authoritative.
 
+        A close may not silently omit an imported register. When a register
+        cannot be posted or voided before the close, `:hold` records an
+        attributable named exception (`exception`, `held_at`, `held_by`); the
+        close precondition (`PayrollCloseCheck`) accepts that hold in place of
+        a posted or voided entry. Posting and voiding remain the journal's own
+        governed actions — the hold is an exception, not a ledger write. The
+        exception is freeform and not vaulted, so it carries the tenant
+        free-text write chokepoint (`Samen.Pii.FreeTextScan`).
+
         No PII (INV-1): this is a GL-line provenance record, not an employee
         register. The identity is unique per org, provider, external id,
         line-set hash and entry date so retries converge on one row while a
@@ -1079,6 +1088,13 @@ defmodule Samen.Scopes.Finance.Blueprint do
             default: :imported,
             constraints: [one_of: [:imported, :conflict]]
           )
+
+          # The close's named-exception escape hatch. These are SYSTEM writes
+          # from the `:hold` action (PayrollHold), never accepted create/update
+          # inputs: a hold must name its reason and the principal who set it.
+          attribute(:exception, :string, public?: true, constraints: [max_length: 500])
+          attribute(:held_at, :utc_datetime, public?: true)
+          attribute(:held_by, :string, public?: true, constraints: [max_length: 200])
         end
 
         relationships do
@@ -1101,6 +1117,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
         changes do
           change(Samen.Policy.SameOrgFk)
+          change({Samen.Pii.FreeTextScan, fields: [:exception]})
         end
 
         actions do
@@ -1125,6 +1142,21 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
             primary?(true)
           end
+
+          # Record the explicit close exception for this register. The linked
+          # journal entry is left untouched: posting or voiding it stays the
+          # ledger's decision, and a conflict row stays a conflict row.
+          update :hold do
+            accept([])
+            require_atomic?(false)
+
+            argument(:exception, :string,
+              allow_nil?: false,
+              constraints: [max_length: 500]
+            )
+
+            change(Samen.Scopes.Finance.PayrollHold)
+          end
         end
 
         policies do
@@ -1135,6 +1167,14 @@ defmodule Samen.Scopes.Finance.Blueprint do
           policy action_type(:create) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
+            authorize_if(always())
+          end
+
+          # A hold excuses payroll from a signed close, so it is an admin
+          # decision, not a member convenience.
+          policy action(:hold) do
+            forbid_unless(Samen.Policy.OrgScope)
+            forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
             authorize_if(always())
           end
         end
@@ -1182,6 +1222,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
         postgres do
           table("#{unquote(abbrev)}_payroll_account_mapping")
           repo(unquote(repo))
+
           identity_index_names unique_payroll_account_mapping:
                                  "#{unquote(abbrev)}_payroll_account_mapping_unique"
         end

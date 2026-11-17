@@ -17,16 +17,19 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   ## Governed commands
 
   The page can START a period's close, RECORD a phase's evidence and independent
-  reviewer sign-off, SIGN OFF the phase, and COMPLETE the run once every phase is
-  done. None of these commands is implemented here: the page calls the host's
-  OWN `CloseRun` `:start` / `:review_phase` / `:complete_phase` / `:finish`
-  actions with `Samen.Web.TenantRole.attributed_admin_scope/2` (the disarmed dev
-  posture's `:admin`, or the authenticated principal's REAL membership role on
-  an armed host, with the actor id naming the principal when one resolves). The
-  kernel's `OrgScope` + `RoleAtLeast :admin` are the final authority, and a
-  refusal (an open Work task, an open phase, a completed run) is shown in the
-  banner verbatim. The buttons are offered on the tenant plane to a derived
-  admin only; a crafted event still runs through the same governed action.
+  reviewer sign-off, SIGN OFF the phase, COMPLETE the run once every phase is
+  done, and HOLD one unresolved imported payroll register with a named
+  exception. None of these commands is implemented here: the page calls the
+  host's OWN `CloseRun` `:start` / `:review_phase` / `:complete_phase` /
+  `:finish` and `PayrollImport` `:hold` actions with
+  `Samen.Web.TenantRole.attributed_admin_scope/2` (the disarmed dev posture's
+  `:admin`, or the authenticated principal's REAL membership role on an armed
+  host, with the actor id naming the principal when one resolves). The kernel's
+  `OrgScope` + `RoleAtLeast :admin` are the final authority, and a refusal (an
+  open Work task, an open phase, a completed run, a blank or PII-shaped
+  exception) is shown in the banner verbatim. The buttons are offered on the
+  tenant plane to a derived admin only; a crafted event still runs through the
+  same governed action.
 
   The same scope means the kernel's `started_by`, `done_by` and `completed_by`
   stamps name the authenticated principal when the host can resolve one. The
@@ -199,6 +202,36 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
       {:noreply, socket}
     end
   end
+
+  def handle_event("hold_payroll", %{"import_id" => import_id, "exception" => exception}, socket)
+      when is_binary(import_id) and is_binary(exception) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+
+    if can_admin? and state do
+      case CloseDashboard.hold_payroll(mount, org_id, import_id, exception) do
+        {:ok, import} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice:
+               "Held #{import.provider}/#{import.external_id} with a named exception."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("hold_payroll", _params, socket), do: {:noreply, socket}
 
   def handle_event("finish_run", _params, socket) do
     %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
@@ -376,7 +409,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         </div>
 
         <div
-          :if={@can_admin? and @state.run.status == :in_progress and all_phases_done?(@state.report)}
+          :if={@can_admin? and @state.run.status == :in_progress and close_ready?(@state.report)}
           style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"
         >
           <button
@@ -423,6 +456,14 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
           </span>
         <% end %>
       </div>
+
+      <.payroll_card
+        :if={@state.report.payroll}
+        payroll={@state.report.payroll}
+        period={@state.period}
+        actor_id={@actor_id}
+        can_admin?={@can_admin?}
+      />
 
       <div
         :if={@state.report.discrepancies != []}
@@ -662,6 +703,136 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     """
   end
 
+  attr(:payroll, :map, required: true)
+  attr(:period, :map, default: nil)
+  attr(:actor_id, :string, default: nil)
+  attr(:can_admin?, :boolean, default: false)
+
+  defp payroll_card(assigns) do
+    ~H"""
+    <div
+      class="card"
+      id="close-payroll-check"
+      data-status={@payroll.status}
+      style={"padding:12px 16px;margin-bottom:12px;border-left:3px solid #{payroll_border(@payroll.status)}"}
+    >
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <b>Imported payroll</b>
+        <span id="close-payroll-status" data-status={@payroll.status}>
+          <.pill variant={payroll_variant(@payroll.status)}>{payroll_status_label(@payroll.status)}</.pill>
+        </span>
+        <span style="color:var(--muted);font-size:12px">
+          {period_label(@period)} · {@payroll.counts.total} imported register(s)
+        </span>
+      </div>
+
+      <%= cond do %>
+        <% @payroll.status == :unavailable -> %>
+          <div id="close-payroll-unavailable" style="margin-top:6px;color:#B45309">
+            The payroll check could not be read. The close is blocked rather than certifying
+            payroll unseen.
+          </div>
+        <% @payroll.truncated? -> %>
+          <div id="close-payroll-truncated" style="margin-top:6px;color:#B45309">
+            More than {@payroll.limit} imported payroll rows fall in this period. The close is
+            blocked until the payroll inbox can be read within the bound.
+          </div>
+        <% @payroll.counts.total == 0 -> %>
+          <div id="close-payroll-empty" style="margin-top:6px;color:var(--muted)">
+            No imported payroll registers in this period.
+          </div>
+        <% @payroll.status == :clear -> %>
+          <div id="close-payroll-clear" style="margin-top:6px;color:var(--muted)">
+            Every imported register is posted, explicitly voided, or held with a named exception.
+          </div>
+        <% true -> %>
+          <div id="close-payroll-blocked" style="margin-top:6px;color:#B45309">
+            The close is blocked until every imported payroll entry is posted, explicitly voided,
+            or held with a named exception.
+          </div>
+      <% end %>
+
+      <div :if={@payroll.counts.total > 0} style="margin-top:6px;color:var(--muted);font-size:12px">
+        posted {@payroll.counts.posted} · voided {@payroll.counts.voided} · held
+        {@payroll.counts.held} · draft {@payroll.counts.draft} · conflict
+        {@payroll.counts.conflict} · missing {@payroll.counts.missing}
+      </div>
+
+      <div :if={@payroll.unresolved != []} id="close-payroll-unresolved" style="margin-top:8px">
+        <b style="font-size:12px">Unresolved</b>
+        <ul style="margin:4px 0 0 18px;color:#B45309;font-size:12px">
+          <li :for={entry <- Enum.take(@payroll.unresolved, 20)} id={"close-payroll-entry-#{entry.id}"}>
+            <div>
+              <b>{entry.provider}/{entry.external_id}</b>
+              · {payroll_disposition_label(entry.disposition)}
+            </div>
+
+            <form
+              :if={@can_admin?}
+              phx-submit="hold_payroll"
+              id={"close-payroll-hold-form-#{entry.id}"}
+              style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap"
+            >
+              <input type="hidden" name="import_id" value={entry.id} />
+              <input
+                type="text"
+                name="exception"
+                required
+                maxlength="500"
+                placeholder="Named exception (required)"
+                aria-label={"Named exception for #{entry.provider}/#{entry.external_id}"}
+                style="font-size:11px;padding:3px 5px;min-width:220px"
+              />
+              <button
+                type="submit"
+                class="button"
+                id={"close-payroll-hold-#{entry.id}"}
+                style="font-size:11px"
+                data-confirm={"Hold #{entry.provider}/#{entry.external_id}? This is final and lets the close proceed without posting or voiding it."}
+              >
+                Hold
+              </button>
+            </form>
+          </li>
+        </ul>
+        <div :if={length(@payroll.unresolved) > 20} style="margin-top:4px;color:var(--muted);font-size:11px">
+          and {length(@payroll.unresolved) - 20} more unresolved register(s)
+        </div>
+      </div>
+
+      <div :if={@payroll.held != []} id="close-payroll-held" style="margin-top:8px">
+        <b style="font-size:12px">Held with exception</b>
+        <ul style="margin:4px 0 0 18px;color:var(--muted);font-size:12px">
+          <li :for={entry <- Enum.take(@payroll.held, 20)} id={"close-payroll-held-#{entry.id}"}>
+            <b>{entry.provider}/{entry.external_id}</b>
+            · {entry.exception}
+            <span :if={entry.held_by}>
+              · held by {actor_label(entry.held_by, @actor_id)}
+            </span>
+          </li>
+        </ul>
+      </div>
+    </div>
+    """
+  end
+
+  defp payroll_status_label(:clear), do: "clear"
+  defp payroll_status_label(:blocked), do: "blocked"
+  defp payroll_status_label(:unavailable), do: "unavailable"
+  defp payroll_status_label(status), do: to_string(status)
+
+  defp payroll_variant(:clear), do: "ok"
+  defp payroll_variant(_status), do: "warn"
+
+  defp payroll_border(:clear), do: "#0A5C42"
+  defp payroll_border(_status), do: "#B45309"
+
+  defp payroll_disposition_label(:draft), do: "unposted draft"
+  defp payroll_disposition_label(:conflict), do: "unresolved conflict"
+  defp payroll_disposition_label(:missing), do: "missing journal entry"
+  defp payroll_disposition_label(:unknown), do: "unknown journal state"
+  defp payroll_disposition_label(disposition), do: to_string(disposition)
+
   defp crumbs(mount, org_id), do: [Crumbs.org(mount, org_id), "ERP", "Close"]
 
   defp close_href(mount, org_id) do
@@ -675,6 +846,12 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     do: done == total
 
   defp all_phases_done?(_report), do: false
+
+  # The finish affordance is offered only when the kernel is also prepared to
+  # accept it. The `:finish` guard remains the authority; this keeps the page
+  # from presenting a button that can only be refused.
+  defp close_ready?(%{payroll: %{blocking?: true}}), do: false
+  defp close_ready?(report), do: all_phases_done?(report)
 
   defp parse_evidence_files(value) do
     value

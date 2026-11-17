@@ -23,7 +23,7 @@ defmodule Samen.Web.CloseDashboardTest do
   alias Samen.Web.Plane
 
   alias Samen.WebTest.Docs.Doc
-  alias Samen.WebTest.Erp.{CloseRun, FiscalPeriod}
+  alias Samen.WebTest.Erp.{Account, CloseRun, FiscalPeriod, JournalEntry, PayrollImport}
   alias Samen.WebTest.Repo
   alias Samen.WebTest.Work.Task
 
@@ -117,6 +117,79 @@ defmodule Samen.Web.CloseDashboardTest do
     run
     |> Ash.Changeset.for_update(:finish, %{}, scope: admin_scope(org_id))
     |> Ash.update!()
+  end
+
+  defp sign_all!(run, org_id) do
+    Enum.reduce(ClosePhases.keys(), run, fn key, run -> sign!(run, key, org_id) end)
+  end
+
+  defp payroll_entry!(org_id, status) do
+    expense = account!(org_id, "6000", :expense, :debit)
+    payable = account!(org_id, "2100", :liability, :credit)
+
+    entry =
+      JournalEntry
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org_id,
+          entry_date: ~D[2026-10-31],
+          memo: "October payroll",
+          lines: [
+            %{account_id: expense.id, debit_cents: 125_000},
+            %{account_id: payable.id, credit_cents: 125_000}
+          ]
+        },
+        scope: admin_scope(org_id)
+      )
+      |> Ash.create!()
+
+    case status do
+      :draft ->
+        entry
+
+      :posted ->
+        entry
+        |> Ash.Changeset.for_update(:post, %{}, scope: admin_scope(org_id))
+        |> Ash.update!()
+    end
+  end
+
+  defp payroll_import!(org_id, entry) do
+    PayrollImport
+    |> Ash.Changeset.for_create(
+      :create,
+      %{
+        org_id: org_id,
+        provider: "acme_payroll",
+        external_id: "run-#{Ash.UUID.generate()}",
+        line_set_hash: String.duplicate("a", 64),
+        total_cents: 125_000,
+        entry_date: entry.entry_date,
+        imported_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        imported_by: "u:payroll-importer",
+        status: :imported,
+        entry_id: entry.id
+      },
+      scope: admin_scope(org_id)
+    )
+    |> Ash.create!()
+  end
+
+  defp hold_payroll!(import, org_id, exception) do
+    import
+    |> Ash.Changeset.for_update(:hold, %{exception: exception}, scope: admin_scope(org_id))
+    |> Ash.update!()
+  end
+
+  defp account!(org_id, code, kind, side) do
+    Account
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org_id, code: code, name: "Account #{code}", kind: kind, normal_side: side},
+      scope: admin_scope(org_id)
+    )
+    |> Ash.create!()
   end
 
   defp socket(mount, params) do
@@ -259,6 +332,131 @@ defmodule Samen.Web.CloseDashboardTest do
       html = mount_smoke(Live, mount, %{"org" => org_id})
       assert html =~ ~s(id="close-dashboard-unavailable")
       assert html =~ "no Finance mount"
+    end
+
+    test "shows an unposted payroll import as a close blocker" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      _run = sign_all!(run, org_id)
+      entry = payroll_entry!(org_id, :draft)
+      _import = payroll_import!(org_id, entry)
+
+      html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
+
+      assert html =~ ~s(id="close-payroll-check" data-status="blocked")
+      assert html =~ ~s(id="close-payroll-status" data-status="blocked")
+      assert html =~ "acme_payroll"
+      assert html =~ "unposted draft"
+      assert html =~ "The close is blocked until every imported payroll entry"
+      refute html =~ ~s(id="close-finish-run")
+
+      # A crafted event still reaches the kernel's finish guard.
+      socket = socket(mount(org_id), %{"org" => org_id})
+      socket = dispatch(socket, "finish_run")
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ ~s(id="close-action-error")
+      assert html =~ "imported payroll entry is unresolved"
+      refute html =~ "Close completed"
+      assert Ash.get!(CloseRun, run.id, authorize?: false).status == :in_progress
+    end
+
+    test "holds an unresolved payroll row from the page with actor attribution" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      _run = sign_all!(run, org_id)
+      entry = payroll_entry!(org_id, :draft)
+      import = payroll_import!(org_id, entry)
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ ~s(id="close-payroll-hold-form-#{import.id}")
+      assert html =~ ~s(id="close-payroll-hold-#{import.id}")
+      assert html =~ "Named exception (required)"
+      refute html =~ ~s(id="close-payroll-held")
+
+      socket =
+        dispatch(socket, "hold_payroll", %{"import_id" => import.id, "exception" => "  "})
+
+      html = render_html(Live, socket.assigns)
+      assert html =~ "exception is required"
+      assert Ash.get!(PayrollImport, import.id, authorize?: false).held_at == nil
+
+      exception = "Payment run arrives after close; controller approved"
+
+      socket =
+        dispatch(socket, "hold_payroll", %{
+          "import_id" => import.id,
+          "exception" => exception
+        })
+
+      html = render_html(Live, socket.assigns)
+      assert html =~ "Held acme_payroll/#{import.external_id} with a named exception."
+      assert html =~ ~s(id="close-payroll-check" data-status="clear")
+      assert html =~ ~s(id="close-payroll-held")
+      assert html =~ exception
+      assert html =~ "held by the workspace"
+      assert html =~ ~s(id="close-finish-run")
+
+      held = Ash.get!(PayrollImport, import.id, authorize?: false)
+      page_actor = Samen.Web.TenantRole.attributed_admin_scope(mount(org_id), org_id).actor.id
+
+      assert held.exception == exception
+      assert held.held_by == page_actor
+      assert held.held_at != nil
+    end
+
+    test "offers the payroll hold only to an admin and refuses a crafted non-admin event" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      _run = sign_all!(run, org_id)
+      entry = payroll_entry!(org_id, :draft)
+      import = payroll_import!(org_id, entry)
+      socket = socket(mount(org_id), %{"org" => org_id})
+
+      html = render_html(Live, Map.put(socket.assigns, :can_admin?, false))
+      refute html =~ ~s(id="close-payroll-hold-form-#{import.id}")
+      refute html =~ "Named exception (required)"
+
+      socket = %{socket | assigns: Map.put(socket.assigns, :can_admin?, false)}
+
+      _socket =
+        dispatch(socket, "hold_payroll", %{
+          "import_id" => import.id,
+          "exception" => "A member should not be able to hold this"
+        })
+
+      assert Ash.get!(PayrollImport, import.id, authorize?: false).held_at == nil
+    end
+
+    test "shows a named payroll hold and permits the close" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      _run = sign_all!(run, org_id)
+      entry = payroll_entry!(org_id, :draft)
+      import = payroll_import!(org_id, entry)
+      exception = "Payment run arrives after close; controller approved"
+      _held = hold_payroll!(import, org_id, exception)
+
+      html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
+
+      assert html =~ ~s(id="close-payroll-check" data-status="clear")
+      assert html =~ ~s(id="close-payroll-held")
+      assert html =~ exception
+      assert html =~ ~s(id="close-finish-run")
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      socket = dispatch(socket, "finish_run")
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ "Close completed for October 2026."
+      assert html =~ "close run completed"
+      assert Ash.get!(CloseRun, run.id, authorize?: false).status == :completed
     end
   end
 

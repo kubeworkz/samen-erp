@@ -22,7 +22,10 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     * `op: :finish` — `:in_progress → :completed`, one-way (the
       `PeriodTransition` posture), and only when EVERY phase is done. A run
       marked complete with a phase outstanding would be a close certificate that
-      certifies nothing. It stamps `completed_at` and `completed_by`, the acting
+      certifies nothing. It also refuses while an imported payroll register for
+      the run's fiscal month is neither posted, voided, nor held with a named
+      exception (`PayrollCloseCheck`), so payroll cannot be omitted from a
+      signed close. It stamps `completed_at` and `completed_by`, the acting
       principal's id when the caller supplies one.
 
   ## Work anchoring (WS-ACCT Phase 12)
@@ -54,6 +57,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
   def change(changeset, opts, context) do
     op = Keyword.fetch!(opts, :op)
     work_task = Keyword.get(opts, :work_task)
+    payroll = Keyword.get(opts, :payroll, [])
 
     # Captured at change-REGISTRATION time, the same posture as
     # `Samen.Pii.WriteGuard`: a nested action can rebuild the changeset's private
@@ -65,7 +69,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
         actor_id(get_in(changeset.context, [:private, :actor]))
 
     changeset
-    |> Ash.Changeset.before_action(&apply_op(&1, op, work_task, actor))
+    |> Ash.Changeset.before_action(&apply_op(&1, op, work_task, actor, payroll))
     |> seed_tasks_after(op, work_task)
   end
 
@@ -93,14 +97,14 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
 
   defp seed_tasks_after(changeset, _op, _task_mod), do: changeset
 
-  defp apply_op(changeset, :seed, _work_task, actor) do
+  defp apply_op(changeset, :seed, _work_task, actor, _payroll) do
     changeset
     |> Ash.Changeset.force_change_attribute(:phases, Samen.Scopes.Finance.ClosePhases.seeded())
     |> Ash.Changeset.force_change_attribute(:started_at, now())
     |> Ash.Changeset.force_change_attribute(:started_by, actor)
   end
 
-  defp apply_op(changeset, :review_phase, work_task, actor) do
+  defp apply_op(changeset, :review_phase, work_task, actor, _payroll) do
     key = Ash.Changeset.get_argument(changeset, :phase)
     evidence_files = Ash.Changeset.get_argument(changeset, :evidence_files) || []
     phases = phases(changeset)
@@ -155,7 +159,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     end
   end
 
-  defp apply_op(changeset, :complete_phase, work_task, actor) do
+  defp apply_op(changeset, :complete_phase, work_task, actor, _payroll) do
     key = Ash.Changeset.get_argument(changeset, :phase)
     phases = phases(changeset)
     phase = phase_for(phases, key)
@@ -223,7 +227,7 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
     end
   end
 
-  defp apply_op(changeset, :finish, _work_task, actor) do
+  defp apply_op(changeset, :finish, _work_task, actor, payroll) do
     phases = phases(changeset)
 
     cond do
@@ -244,14 +248,106 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
         )
 
       true ->
-        changeset
-        |> Ash.Changeset.force_change_attribute(:status, :completed)
-        |> Ash.Changeset.force_change_attribute(:completed_at, now())
-        |> Ash.Changeset.force_change_attribute(:completed_by, actor)
+        case payroll_block(changeset, payroll) do
+          :ok ->
+            changeset
+            |> Ash.Changeset.force_change_attribute(:status, :completed)
+            |> Ash.Changeset.force_change_attribute(:completed_at, now())
+            |> Ash.Changeset.force_change_attribute(:completed_by, actor)
+
+          {:error, message} ->
+            error(changeset, message)
+        end
     end
   end
 
   # ── helpers ────────────────────────────────────────────────────────────────
+
+  # The payroll precondition is deliberately checked only after every phase is
+  # done, so an early finish keeps its existing "phases open" refusal and the
+  # payroll read is paid only on the transition that could actually complete.
+  defp payroll_block(_changeset, payroll) when payroll in [nil, []], do: :ok
+
+  defp payroll_block(changeset, payroll) do
+    import_module = Keyword.get(payroll, :import)
+    period_module = Keyword.get(payroll, :period)
+    run = changeset.data
+
+    cond do
+      is_nil(import_module) ->
+        :ok
+
+      is_nil(period_module) ->
+        {:error,
+         "the payroll close check is not wired with its fiscal period; refusing to close " <>
+           "rather than certifying payroll unseen"}
+
+      true ->
+        case org_id(run) do
+          nil ->
+            {:error,
+             "the payroll close check could not resolve this run's org; refusing to close " <>
+               "rather than certifying payroll unseen"}
+
+          org_id ->
+            case Ash.get(period_module, run.period_id, authorize?: false) do
+              {:ok, period} ->
+                payroll_result(import_module, org_id, period)
+
+              _ ->
+                {:error,
+                 "the payroll close check could not load this run's fiscal period; refusing " <>
+                   "to close rather than certifying payroll unseen"}
+            end
+        end
+    end
+  end
+
+  defp payroll_result(import_module, org_id, period) do
+    case Samen.Scopes.Finance.PayrollCloseCheck.report(org_id, period,
+           import_module: import_module
+         ) do
+      %{clear?: true} ->
+        :ok
+
+      %{truncated?: true} ->
+        {:error,
+         "the payroll close check found more than 500 imported payroll entries for this " <>
+           "period; refusing to close until the payroll inbox can be read within the bound"}
+
+      %{status: :unavailable} ->
+        {:error,
+         "the payroll close check could not be read for this period; refusing to close " <>
+           "rather than certifying payroll unseen"}
+
+      %{unresolved: unresolved} ->
+        {:error, payroll_message(unresolved)}
+    end
+  end
+
+  defp payroll_message(unresolved) do
+    count = length(unresolved)
+    noun = if count == 1, do: "entry is", else: "entries are"
+
+    sample =
+      unresolved
+      |> Enum.take(5)
+      |> Enum.map_join(", ", fn entry ->
+        "#{entry.provider}/#{entry.external_id} (#{disposition_label(entry.disposition)})"
+      end)
+
+    more = if count > 5, do: " and #{count - 5} more", else: ""
+
+    "the close run cannot be completed while #{count} imported payroll #{noun} " <>
+      "unresolved: #{sample}#{more}. Post or void the linked journal entry, or record a " <>
+      "named hold exception on the import."
+  end
+
+  defp disposition_label(:draft), do: "unposted draft"
+  defp disposition_label(:conflict), do: "unresolved conflict"
+  defp disposition_label(:missing), do: "missing journal entry"
+  defp disposition_label(:unknown), do: "unknown journal state"
+  defp disposition_label(other), do: to_string(other)
 
   # The anchored task, when the host wired Work. `nil` means "no obligation" —
   # either the mount has no Work scope, or this run's tasks were never created.
@@ -318,6 +414,22 @@ defmodule Samen.Scopes.Finance.CloseRunGuard do
       %Ash.NotLoaded{} -> Map.get(changeset.data, :status)
       nil -> Map.get(changeset.data, :status)
       status -> status
+    end
+  end
+
+  # `org_id` is often `%Ash.NotLoaded{}` on a run read without an explicit
+  # select (the E4 lesson). A payroll check without a tenant would be unsafe,
+  # so load it and let the caller refuse when it cannot be resolved.
+  defp org_id(run) do
+    case Map.get(run, :org_id) do
+      id when is_binary(id) ->
+        id
+
+      _ ->
+        case Ash.load(run, [:org_id], authorize?: false) do
+          {:ok, %{org_id: id}} when is_binary(id) -> id
+          _ -> nil
+        end
     end
   end
 

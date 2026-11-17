@@ -25,6 +25,12 @@ defmodule Samen.Web.Finance.CloseDashboard do
   on every phase) and the page says Work is not wired rather than inventing
   task state.
 
+  The imported-payroll precondition is resolved from the mount's own
+  `PayrollImport` resource and computed by `PayrollCloseCheck`. The run's
+  `:finish` guard reads the same check, so a board that says payroll is clear
+  and a kernel that refuses the close cannot disagree. A read error or a
+  truncated inbox stays visibly blocking; the page never renders it as clear.
+
   Evidence titles are resolved from the optional `:docs_namespace` mount label
   (`<namespace>.Doc`). The picker lists the org's live Docs pages by title, and
   every stored evidence UUID is resolved through that same org-scoped read; an
@@ -38,7 +44,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.CloseBoard
+  alias Samen.Scopes.Finance.{CloseBoard, PayrollCloseCheck}
   alias Samen.Web.Mount
   alias Samen.Web.TenantRole
 
@@ -50,6 +56,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
           period: struct() | nil,
           run: struct() | nil,
           report: map() | nil,
+          payroll: map(),
           task_wired?: boolean(),
           docs: [doc()],
           docs_wired?: boolean(),
@@ -60,19 +67,24 @@ defmodule Samen.Web.Finance.CloseDashboard do
   @doc """
   Load the current close cycle for `mount` + `org_id`.
 
-  Returns `{:ok, %{period:, run:, report:, task_wired?:, docs:, docs_wired?:,
-  evidence_titles:}}` — `report` is `nil` when no run exists — or
-  `{:error, :no_mount | :no_org | :finance_not_mounted}`.
+  Returns `{:ok, %{period:, run:, report:, payroll:, task_wired?:, docs:,
+  docs_wired?:, evidence_titles:}}` — `report` is `nil` when no run exists —
+  or `{:error, :no_mount | :no_org | :finance_not_mounted}`.
   """
   @spec load(Mount.t() | nil, String.t() | nil) :: {:ok, state()} | {:error, atom()}
   def load(%Mount{} = mount, org_id) when is_binary(org_id) do
     with {:ok, period_mod} <- resource(mount, :FiscalPeriod),
-         {:ok, run_mod} <- resource(mount, :CloseRun) do
+         {:ok, run_mod} <- resource(mount, :CloseRun),
+         {:ok, payroll_mod} <- resource(mount, :PayrollImport) do
       scope = Mount.scope(mount, org_id)
       task_mod = task_module(mount)
       {period, run} = current_cycle(run_mod, period_mod, scope)
+      payroll = PayrollCloseCheck.report(org_id, period, import_module: payroll_mod, scope: scope)
 
-      report = if run, do: CloseBoard.report(run, task: task_mod, period: period)
+      report =
+        if run,
+          do: CloseBoard.report(run, task: task_mod, period: period, payroll: payroll)
+
       evidence = evidence_context(mount, scope, report)
 
       {:ok,
@@ -80,6 +92,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
          period: period,
          run: run,
          report: report,
+         payroll: payroll,
          task_wired?: task_mod != nil,
          docs: evidence.docs,
          docs_wired?: evidence.wired?,
@@ -367,10 +380,43 @@ defmodule Samen.Web.Finance.CloseDashboard do
     end
   end
 
+  @doc """
+  Hold one imported payroll register with a named exception through the host's
+  OWN governed `PayrollImport.:hold` action.
+
+  The hold is the close board's only escape hatch for a register that cannot be
+  posted or voided before the close. It is final, requires a nonblank bounded
+  exception, and is stamped with the authenticated principal's id through
+  `TenantRole.attributed_admin_scope/2` (or the workspace pseudo-principal when
+  no principal resolves). The kernel's `OrgScope` + `RoleAtLeast :admin` policy
+  and `Samen.Pii.FreeTextScan` remain the authority; this module never writes
+  with `authorize?: false`.
+  """
+  @spec hold_payroll(Mount.t(), String.t(), String.t(), String.t()) ::
+          {:ok, struct()} | {:error, term()}
+  def hold_payroll(%Mount{} = mount, org_id, import_id, exception)
+      when is_binary(org_id) and is_binary(import_id) and is_binary(exception) do
+    scope = TenantRole.attributed_admin_scope(mount, org_id)
+
+    with {:ok, import_mod} <- resource(mount, :PayrollImport),
+         {:ok, import} <- fetch_payroll(import_mod, import_id, scope) do
+      import
+      |> Ash.Changeset.for_update(:hold, %{exception: exception}, scope: scope)
+      |> Ash.update()
+    end
+  end
+
   defp fetch_run(run_mod, run_id, scope) do
     case Ash.get(run_mod, run_id, scope: scope) do
       {:ok, run} -> {:ok, run}
       {:error, _reason} -> {:error, :not_found}
+    end
+  end
+
+  defp fetch_payroll(import_mod, import_id, scope) do
+    case Ash.get(import_mod, import_id, scope: scope) do
+      {:ok, import} -> {:ok, import}
+      {:error, _reason} -> {:error, :payroll_not_found}
     end
   end
 
@@ -389,6 +435,10 @@ defmodule Samen.Web.Finance.CloseDashboard do
   defp leaf_message(%{message: message}) when is_binary(message), do: message
   defp leaf_message(message) when is_binary(message), do: message
   defp leaf_message(:not_found), do: "That close run is not in this workspace."
+
+  defp leaf_message(:payroll_not_found),
+    do: "That imported payroll register is not in this workspace."
+
   defp leaf_message(reason) when is_atom(reason), do: "Could not apply that change (#{reason})."
   defp leaf_message(other), do: Exception.message(other)
 end
