@@ -573,10 +573,17 @@ defmodule SamenerpWeb.Router do
   # `unknown_provider` — nothing verified, nothing persisted. Mounting on its
   # OWN CSRF-exempt pipeline (vendors cannot carry tokens; the signature is the
   # gate) — the one scope here outside `:browser`.
+  #
+  # The SIGNED PROVIDER INGESTION contract (`POST /ingest/:provider`) rides the
+  # SAME pipeline and the same endpoint raw-body reader. Its design-partner
+  # adapter is `Samenerp.Payroll.GustoAdapter`, selected by the `Samen.Ingest`
+  # registry in host config; with no provider configured every delivery is the
+  # honest fail-closed 404, exactly like the webhook route above.
   scope "/" do
     pipe_through(:webhook_ingress)
 
     samen_webhook_routes()
+    samen_ingest_routes()
   end
 
   # ADR-010 — the OPERATOR / SaaS-company workspace, mounted in ONE line over the
