@@ -343,6 +343,52 @@ defmodule Samen.Gen.TemplatesParityTest do
              """)
   end
 
+  # SESSION-WRITE MEMBERSHIP GATE (the operator act-as fix, generated-host posture): every
+  # scaffolded WEB router must pass its Identity mount to `samen_session_routes`, never the
+  # bare form. The bare macro trusts a client-selected org on an armed host — exactly the
+  # "Open account" cross-tenant write the framework controller now refuses when a mount is
+  # present. Asserted on the RENDERED output (not the golden), so reverting the template and
+  # re-capturing the golden still fails HERE; the headless set is the RED half (no web layer,
+  # no router, nothing to gate).
+  test "every generated web router membership-gates the session org write on the identity mount" do
+    rendered = render_all()
+
+    for {set, files} <- rendered do
+      router = files["lib/acme_web/router.ex"]
+
+      if is_binary(router) do
+        refute router =~ ~r/samen_session_routes\(\s*\)/,
+               "#{set}/router.ex still mounts `samen_session_routes()` BARE — a scaffolded app " <>
+                 "would write any client-selected org into the session on an armed host."
+
+        assert router =~ ~r/samen_session_routes\(\s*mount:/,
+               "#{set}/router.ex does not pass a `:mount` to `samen_session_routes` — the " <>
+                 "generated session switch is not membership-gated by default."
+
+        assert router =~ ~r/Samen\.Web\.Mount\.new\(:auth, Acme\.Operator, Acme\.Repo,/,
+               "#{set}/router.ex's session mount is not this app's Identity mount " <>
+                 "(Acme.Operator / Acme.Repo)."
+
+        # The mount must carry the SAME armed posture every tenant mount uses, so the
+        # session controller's `authorized_orgs/2` check keys on the generated app's own
+        # `:auth_required?` flag and Identity namespace.
+        [_, session_mount] =
+          Regex.run(~r/samen_session_routes\((.*?)\n    \)/s, router) ||
+            flunk("#{set}/router.ex has no parsable `samen_session_routes(...)` block")
+
+        assert session_mount =~ "authn: {:app_env, :acme, :auth_required?}",
+               "#{set}/router.ex's session mount is not armed by the app's :auth_required? flag."
+
+        assert session_mount =~ "identity_namespace: Acme.Operator",
+               "#{set}/router.ex's session mount does not name the Identity namespace."
+      end
+    end
+
+    # Non-vacuous: a web set really emits the router and really carries the mount.
+    assert rendered["headless"]["lib/acme_web/router.ex"] == nil
+    assert rendered["web"]["lib/acme_web/router.ex"] =~ ~r/samen_session_routes\(\s*mount:/
+  end
+
   test "every generated app RELEASES its per-run keystore dir at exit (no $TMPDIR accumulation)" do
     for {set, files} <- render_all() do
       helper = files["test/test_helper.exs"]

@@ -424,12 +424,20 @@ defmodule Samen.Gen.AppTest do
       router = Gen.render(router_t, b)
 
       # The design's default mount set: the authored scope + notifications + the
-      # operator plane (+ the session write), via Samen.Web.Router macros.
+      # operator plane (+ the identity-gated session write), via Samen.Web.Router macros.
       assert router =~ "import Samen.Web.Router"
       assert router =~ "samen_module_routes(:billing, Widgetco.Billing, repo: Widgetco.Repo, labels: @current_org_labels)"
       assert router =~ "samen_notifications_routes(:notifications, Widgetco.Primitives,"
       assert router =~ "samen_operator_routes(Widgetco.Operator,"
-      assert router =~ "samen_session_routes()"
+
+      # ADR-013 §4.3 — the session write is membership-gated by DEFAULT: the generated
+      # router passes this app's Identity mount, never the bare macro (which would trust
+      # a client-selected org on an armed host).
+      refute router =~ ~r/samen_session_routes\(\s*\)/
+      assert router =~ "samen_session_routes(\n      mount:"
+      assert router =~ "Samen.Web.Mount.new(:auth, Widgetco.Operator, Widgetco.Repo,"
+      assert router =~ "authn: {:app_env, :widgetco, :auth_required?}"
+      assert router =~ "identity_namespace: Widgetco.Operator"
       assert router =~ "flags_namespace: Widgetco.Primitives"
 
       # A9 (T10) — the FULL auth spine is emitted by DEFAULT: the ADR-035 §5 identity

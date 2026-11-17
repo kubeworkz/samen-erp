@@ -13,8 +13,9 @@ defmodule AcmeWeb.Router do
       platform billing · revenue · flags · analytics · desk) over the operator
       namespace; the `flags_namespace` label activates the flag admin over this
       app's FeatureFlag rows,
-    * `samen_session_routes()` — the ADR-013 current-org session write (the
-      workspace switcher + the operator "Open account →" target),
+    * `samen_session_routes(mount: ...)` — the ADR-013 current-org session write (the
+      workspace switcher + the operator "Open account →" target), membership-gated on an
+      armed host by this app's Identity mount,
     * `samen_auth_routes(...)` — the ADR-035 §5 IDENTITY-SPINE pre-actor surfaces
       (signup A1 · verify A2 · reset A3 · login A4 · 2fa A7 · invite A5), over
       this app's sole Identity mount (`Acme.Operator`),
@@ -120,8 +121,18 @@ defmodule AcmeWeb.Router do
 
     # ADR-013 §4.3 — the framework SESSION-write endpoint (`POST /session/org/:org_id`;
     # the stale GET redirects without switching — luminary S7. CSRF-protected via this
-    # pipeline's `protect_from_forgery`).
-    samen_session_routes()
+    # pipeline's `protect_from_forgery`). The identity mount makes the switch
+    # membership-gated on an armed host: an org outside the authenticated principal's
+    # `CurrentOrg.authorized_orgs/2` is refused, and the session is never written.
+    samen_session_routes(
+      mount:
+        Samen.Web.Mount.new(:auth, Acme.Operator, Acme.Repo,
+          labels: %{
+            authn: {:app_env, :acme, :auth_required?},
+            identity_namespace: Acme.Operator
+          }
+        )
+    )
 
     # ADR-035 §5 A1–A5/A7 — the IDENTITY-SPINE pre-actor auth surfaces
     # (signup → verify → reset → login → 2fa → invite), mounted over this app's
