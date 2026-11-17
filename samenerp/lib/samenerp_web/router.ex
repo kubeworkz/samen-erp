@@ -201,8 +201,17 @@ defmodule SamenerpWeb.Router do
 
     # ADR-013 §4.3 — the framework SESSION-write endpoint (`POST /session/org/:org_id`;
     # the stale GET redirects without switching — luminary S7. CSRF-protected via this
-    # pipeline's `protect_from_forgery`).
-    samen_session_routes()
+    # pipeline's `protect_from_forgery`). The mount makes the switch membership-gated on
+    # an armed host: an operator cannot "Open account" into a tenant they do not belong to.
+    samen_session_routes(
+      mount:
+        Samen.Web.Mount.new(:auth, Samenerp.Operator, Samenerp.Repo,
+          labels: %{
+            authn: {:app_env, :samenerp, :auth_required?},
+            identity_namespace: Samenerp.Operator
+          }
+        )
+    )
 
     # ADR-035 §5 A1–A5/A7 — the IDENTITY-SPINE pre-actor auth surfaces
     # (signup → verify → reset → login → 2fa → invite), mounted over this app's

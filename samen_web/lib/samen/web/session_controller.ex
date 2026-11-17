@@ -35,6 +35,7 @@ defmodule Samen.Web.SessionController do
   import Plug.Conn
 
   alias Samen.Web.CurrentOrg
+  alias Samen.Web.Mount
 
   @default_return "/crm/contacts"
 
@@ -44,14 +45,20 @@ defmodule Samen.Web.SessionController do
   `stale_get/2` instead.
   """
   def put_current_org(conn, %{"org_id" => org_id} = params) do
-    # WS-B / G12 (design §4.2): the framework session choke point emits a bounded,
-    # token-blind `session.signed_in` product event — best-effort (a capture failure
-    # never affects the session write). Verticals inherit emission at 0 LOC.
-    _ = Samen.Analytics.Sources.session_signed_in(org_id)
+    if authorized_org?(conn, org_id) do
+      # WS-B / G12 (design §4.2): the framework session choke point emits a bounded,
+      # token-blind `session.signed_in` product event — best-effort (a capture failure
+      # never affects the session write). Verticals inherit emission at 0 LOC.
+      _ = Samen.Analytics.Sources.session_signed_in(org_id)
 
-    conn
-    |> put_session(CurrentOrg.session_key(), org_id)
-    |> redirect(to: safe_return(params["return_to"]))
+      conn
+      |> put_session(CurrentOrg.session_key(), org_id)
+      |> redirect(to: safe_return(params["return_to"]))
+    else
+      conn
+      |> put_status(:forbidden)
+      |> text("You are not a member of that workspace.")
+    end
   end
 
   @doc """
@@ -64,6 +71,24 @@ defmodule Samen.Web.SessionController do
   """
   def stale_get(conn, params) do
     redirect(conn, to: safe_return(params["return_to"]))
+  end
+
+  # A host can pass its session mount through `samen_session_routes(mount: ...)`; on an
+  # armed host the target org must be in the authenticated principal's authorized set.
+  # A mountless invocation keeps the legacy disarmed/dev behavior (and all existing
+  # framework route-shape tests). When the host is DISARMED, the documented dev
+  # convenience remains: the client-selected org is trusted, exactly as `CurrentOrg.resolve`
+  # trusts it. This closes the operator "Open account" clear-act-as path for a tenant the
+  # operator does not belong to: the session is never written, so no later read can resolve it.
+  defp authorized_org?(conn, org_id) do
+    case conn.private[:samen_session_mount] do
+      %Mount{} = mount ->
+        not CurrentOrg.tenant_gate_armed?(mount) or
+          org_id in CurrentOrg.authorized_orgs(mount, get_session(conn))
+
+      _ ->
+        true
+    end
   end
 
   # Only a same-origin absolute path (starts with a single "/") is honored; anything else

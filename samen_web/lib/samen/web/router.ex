@@ -2385,6 +2385,11 @@ defmodule Samen.Web.Router do
   target of the workspace switcher + the operator "Open account →" clear act-as. Every vertical
   inherits the same durable current-org write. `:path` overrides the default `/session/org`.
 
+  Pass `:mount` (a `Samen.Web.Mount` carrying the host's Identity namespace) to authorize the
+  target org on an armed host: the controller refuses to write a session org outside the
+  authenticated principal's `CurrentOrg.authorized_orgs/2`. A bare call preserves the legacy
+  disarmed/dev behavior; hosts should opt in as they adopt the tenant-auth seam.
+
   POST-only (luminary S7/S16): the org switch is a session WRITE, so it is CSRF-protected —
   callers submit a zero-JS `<form method="post">` with the Phoenix `_csrf_token`, and the host
   `:browser` pipeline's `protect_from_forgery` enforces it. The macro ALSO declares
@@ -2394,9 +2399,13 @@ defmodule Samen.Web.Router do
   """
   defmacro samen_session_routes(opts \\ []) do
     path = Keyword.get(opts, :path, "/session/org")
+    mount = Keyword.get(opts, :mount)
 
-    quote bind_quoted: [path: path] do
-      post("#{path}/:org_id", Samen.Web.SessionController, :put_current_org)
+    quote bind_quoted: [path: path, mount: mount] do
+      post("#{path}/:org_id", Samen.Web.SessionController, :put_current_org,
+        private: %{samen_session_mount: mount}
+      )
+
       get("#{path}/:org_id", Samen.Web.SessionController, :stale_get)
     end
   end
