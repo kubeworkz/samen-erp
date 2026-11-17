@@ -47,6 +47,8 @@ defmodule Samen.Web.RateLimit do
   |---|---|---|---|
   | `:webhook_ingress` | `"webhook:{provider}"` (per-provider AGGREGATE) | 1000/min | Over → 429; providers retry with backoff, no loss |
   | `:webhook_bad_sig` | per remote IP | 60/min | Counted on verification FAILURE only; 429 BEFORE the crypto work |
+  | `:provider_ingest` | per provider | 1000/min | Over → 429; the provider retries with backoff, never loses the delivery |
+  | `:provider_ingest_bad_sig` | per remote IP | 60/min | Counted on signature failure only; 429 BEFORE the crypto work |
 
   Tune via:
 
@@ -90,6 +92,12 @@ defmodule Samen.Web.RateLimit do
     # Webhook ingress (ADR-038 §6.3; T19).
     webhook_ingress: {1000, 60_000},
     webhook_bad_sig: {60, 60_000},
+    # Signed provider ingestion (`POST /ingest/:provider`). Same two-axis shape as
+    # the webhook ingress: a per-provider aggregate flood guard, plus a separate
+    # per-IP invalid-signature budget consumed ONLY on verification failure (and
+    # checked BEFORE the HMAC work, so a forgery flood cannot burn crypto).
+    provider_ingest: {1000, 60_000},
+    provider_ingest_bad_sig: {60, 60_000},
     # ERP: hosted OCR document submissions, per ORGANIZATION (AP capture). Every
     # PDF/image handed to the OCR adapter is a billable provider call; pasted
     # text and text files never consult this surface (`Samen.Web.Erp.OcrQuota`).

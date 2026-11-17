@@ -381,6 +381,52 @@ defmodule Samen.Web.Router do
   end
 
   @doc """
+  Mount the SIGNED PROVIDER INGESTION contract (provider-generic) —
+  `POST /ingest/:provider` — in ONE line.
+
+      import Samen.Web.Router
+
+      scope "/" do
+        pipe_through :webhook_ingress   # a pipeline running Plug.Parsers with the
+                                        # Samen.Web.Webhook.RawBodyReader body reader
+        samen_ingest_routes()
+      end
+
+  Every external provider connector (payroll first) shares this one endpoint, so
+  the HMAC/timestamp/replay/idempotency/schema-version/retry posture is identical
+  for all of them. The adapter + secret are resolved at runtime from
+
+      config :samen_core, Samen.Ingest,
+        repo: MyApp.Repo,
+        providers: %{"acme_payroll" => {MyApp.Payroll.IngestAdapter, %{secret: "whsec_..."}}}
+
+  and the adapter must implement `Samen.Ingest.Provider`. An unknown provider is
+  a 404; a half-implemented adapter is a 503 (fail closed).
+
+  ## One-time host endpoint add (raw-body capture)
+
+  Signature verification needs the exact signed bytes, so the endpoint MUST cache
+  the raw body BEFORE `Plug.Parsers` decodes it (the same body reader the webhook
+  ingress uses):
+
+      plug Plug.Parsers,
+        parsers: [:urlencoded, :json],
+        body_reader: {Samen.Web.Webhook.RawBodyReader, :read_body, []},
+        json_decoder: Jason
+
+  ## Options
+
+    * `:path` — the ingress path prefix (default `/ingest`).
+  """
+  defmacro samen_ingest_routes(opts \\ []) do
+    path = Keyword.get(opts, :path, "/ingest")
+
+    quote bind_quoted: [path: path] do
+      post("#{path}/:provider", Samen.Web.IngestController, :create)
+    end
+  end
+
+  @doc """
   Mount the **reporting side** of the fleet (ADR-044 §3.2/§4.4a/§9.1, WS-J J1) —
   `GET /fleet/health` + `POST /fleet/directive`. Every product mounts this,
   INCLUDING a fleet cockpit (§9.2: "two lines to report"). ≈0-LOC adoption:
