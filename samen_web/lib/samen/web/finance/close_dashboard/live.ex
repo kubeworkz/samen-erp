@@ -911,8 +911,8 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
           </div>
         <% @settlements.rows == [] -> %>
           <div id="close-payroll-settlements-empty" style="margin-top:6px;color:var(--muted)">
-            No posted imported payroll registers in this period. Post the register above before
-            settling it.
+            No settleable posted registers or settlements tied to voided registers in this
+            period.
           </div>
         <% true -> %>
           <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -1000,7 +1000,8 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
             :if={@settlements.truncated?}
             style="margin-top:6px;color:var(--muted);font-size:11px"
           >
-            Showing the first {@settlements.limit} posted registers; more exist in this period.
+            Showing the first {@settlements.limit} posted or voided registers; more exist in this
+            period.
           </div>
       <% end %>
     </div>
@@ -1090,7 +1091,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
       <% @row.settlement != nil and @row.settlement.status == :draft and @row.status == :unposted -> %>
         <span style="font-size:11px;color:var(--muted)">Admin required to post.</span>
       <% @row.status == :voided -> %>
-        <span style="font-size:11px;color:var(--muted)">Register voided.</span>
+        <span style="font-size:11px;color:var(--muted)">{voided_action_label(@row)}</span>
       <% @row.status == :unavailable -> %>
         <span style="font-size:11px;color:#B45309">Tie-out unavailable.</span>
       <% @row.status == :register_unposted -> %>
@@ -1155,6 +1156,9 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     </div>
     """
   end
+
+  defp voided_action_label(%{import: %{entry_status: :void}}), do: "Register voided."
+  defp voided_action_label(_row), do: "Settlement entry voided."
 
   defp settlement_entries_label(1), do: "1 entry"
   defp settlement_entries_label(count), do: "#{count} entries"

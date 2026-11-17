@@ -542,6 +542,47 @@ defmodule Samen.Web.CloseDashboardTest do
       refute html =~ ~s(id="close-payroll-settlements-empty")
     end
 
+    test "surfaces a settlement tied to a voided register with no post action" do
+      org_id = Ash.UUID.generate()
+      _period = seed_period!(org_id, 2026, 10)
+      entry = payroll_entry!(org_id, :posted)
+      import = payroll_import!(org_id, entry)
+      cash = account!(org_id, "1010", :asset, :debit)
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+
+      socket =
+        dispatch(socket, "prepare_payroll_settlement", %{
+          "import_id" => import.id,
+          "cash_account_id" => cash.id,
+          "settlement_date" => "2026-10-31"
+        })
+
+      [prepared_row] = socket.assigns.state.settlements.rows
+      settlement = prepared_row.settlement
+      assert settlement.status == :draft
+
+      entry
+      |> Ash.Changeset.for_update(:void, %{}, scope: admin_scope(org_id))
+      |> Ash.update!()
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, socket.assigns)
+
+      assert [row] = socket.assigns.state.settlements.rows
+      assert row.import.id == import.id
+      assert row.settlement.id == settlement.id
+      assert row.status == :voided
+      assert row.tie_out.status == :voided
+      assert html =~ ~s(id="close-payroll-settlement-status-#{import.id}" data-status="voided")
+      assert html =~ ~s(id="close-payroll-tie-out-#{import.id}" data-status="voided")
+      assert html =~ "Register voided."
+      assert html =~ "payroll entry was voided"
+      refute html =~ ~s(id="close-payroll-settlement-post-#{import.id}")
+      refute html =~ ~s(id="close-payroll-settlement-form-#{import.id}")
+      refute html =~ "Admin required to post."
+    end
+
     test "offers prepare and post only to an admin and refuses a crafted non-admin event" do
       org_id = Ash.UUID.generate()
       _period = seed_period!(org_id, 2026, 10)

@@ -4,7 +4,9 @@ defmodule Samen.Web.Finance.PayrollSettlements do
 
   The close board already knows which imported registers belong to the current
   period. This module answers the next control question for each POSTED
-  register:
+  register, plus any VOIDED register that already has a settlement batch
+  (which must remain visible so the void cannot be mistaken for an unposted
+  settlement):
 
     * has a settlement batch been prepared?
     * is it still draft, or posted?
@@ -58,11 +60,11 @@ defmodule Samen.Web.Finance.PayrollSettlements do
 
   @doc """
   Load the settlement rows for the posted imports in a `PayrollCloseCheck`
-  report.
+  report, plus any voided register that already has a settlement.
 
   `payroll` is the report map already computed by the close dashboard. A
-  register that is not posted is not offered here; the payroll card above
-  shows why it cannot be settled yet.
+  voided register with no settlement is not offered here; the payroll card
+  above already shows its void disposition.
   """
   @spec load(Mount.t() | nil, String.t() | nil, map(), keyword()) :: state()
   def load(mount, org_id, payroll, opts \\ [])
@@ -74,8 +76,11 @@ defmodule Samen.Web.Finance.PayrollSettlements do
          {:ok, entry_mod} <- resource(mount, :JournalEntry),
          {:ok, import_mod} <- resource(mount, :PayrollImport),
          {:ok, account_mod} <- resource(mount, :Account) do
-      imports = posted_imports(payroll)
-      {visible, more_registers?} = Enum.split(imports, @row_limit)
+      {visible_posted, more_posted?} = Enum.split(posted_imports(payroll), @row_limit)
+      remaining = max(@row_limit - length(visible_posted), 0)
+      {visible_voided, more_voided?} = Enum.split(voided_imports(payroll), remaining)
+      visible = visible_posted ++ visible_voided
+      more_registers? = more_posted? != [] or more_voided? != []
       import_ids = Enum.map(visible, & &1.id)
 
       {accounts, accounts_error?} =
@@ -95,7 +100,7 @@ defmodule Samen.Web.Finance.PayrollSettlements do
         accounts: accounts,
         accounts_error?: accounts_error?,
         accounts_truncated?: length(accounts) == @account_limit,
-        truncated?: more_registers? != [],
+        truncated?: more_registers?,
         limit: @row_limit
       }
 
@@ -169,6 +174,14 @@ defmodule Samen.Web.Finance.PayrollSettlements do
 
   defp posted_imports(_payroll), do: []
 
+  defp voided_imports(%{entries: entries}) when is_list(entries) do
+    Enum.filter(entries, fn entry ->
+      entry.entry_status == :void and entry.import_status == :imported
+    end)
+  end
+
+  defp voided_imports(_payroll), do: []
+
   defp payroll_unavailable?(%{status: :unavailable}), do: true
   defp payroll_unavailable?(_payroll), do: false
 
@@ -214,7 +227,7 @@ defmodule Samen.Web.Finance.PayrollSettlements do
   defp build_rows(imports, settlements, accounts, imports_by_id, org_id, tie_out_opts) do
     accounts_by_id = Map.new(accounts, &{&1.id, &1})
 
-    Enum.map(imports, fn report_import ->
+    Enum.flat_map(imports, fn report_import ->
       full_import = Map.get(imports_by_id, report_import.id, %{})
 
       import =
@@ -224,38 +237,50 @@ defmodule Samen.Web.Finance.PayrollSettlements do
 
       case Map.get(settlements, import.id) do
         nil ->
-          %{
-            import: import,
-            settlement: nil,
-            cash_account: nil,
-            tie_out: nil,
-            status: :unsettled,
-            error: nil
-          }
+          # A voided register with no settlement has nothing to surface here;
+          # the payroll card above already reports its void disposition.
+          if import.entry_status == :void do
+            []
+          else
+            [
+              %{
+                import: import,
+                settlement: nil,
+                cash_account: nil,
+                tie_out: nil,
+                status: :unsettled,
+                error: nil
+              }
+            ]
+          end
 
         settlement ->
           tie_out = PayrollTieOut.report(org_id, import.id, tie_out_opts)
 
           case tie_out do
             {:ok, report} ->
-              %{
-                import: import,
-                settlement: settlement,
-                cash_account: Map.get(accounts_by_id, settlement.cash_account_id),
-                tie_out: report,
-                status: report.status,
-                error: nil
-              }
+              [
+                %{
+                  import: import,
+                  settlement: settlement,
+                  cash_account: Map.get(accounts_by_id, settlement.cash_account_id),
+                  tie_out: report,
+                  status: report.status,
+                  error: nil
+                }
+              ]
 
             {:error, reason} ->
-              %{
-                import: import,
-                settlement: settlement,
-                cash_account: Map.get(accounts_by_id, settlement.cash_account_id),
-                tie_out: nil,
-                status: :unavailable,
-                error: reason
-              }
+              [
+                %{
+                  import: import,
+                  settlement: settlement,
+                  cash_account: Map.get(accounts_by_id, settlement.cash_account_id),
+                  tie_out: nil,
+                  status: :unavailable,
+                  error: reason
+                }
+              ]
           end
       end
     end)
