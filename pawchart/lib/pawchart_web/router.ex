@@ -170,7 +170,13 @@ defmodule PawChartWeb.Router do
     # GET redirects without switching — luminary S7), the target of the workspace switcher + the
     # operator "Open account →". Sets the session current org so tenant/shared navigation is
     # sticky without a hand-typed UUID. CSRF-protected by this pipeline's `protect_from_forgery`.
-    samen_session_routes()
+    # The mount carries the SAME labels as every tenant mount, so on an armed host the write is
+    # membership-gated by the identical `:authn` + `:authorized_orgs` seams the read path uses:
+    # an org outside the authenticated principal's authorized set is refused and never written.
+    samen_session_routes(
+      mount:
+        Samen.Web.Mount.new(:auth, PawChart.Operator, PawChart.Repo, labels: @current_org_labels)
+    )
 
     # ADR-035 §5 — the pre-actor auth surfaces (signup → verify → reset → login → 2fa → invite),
     # mounted over PawChart's sole Identity mount in ONE line (the generated golden-app pattern).

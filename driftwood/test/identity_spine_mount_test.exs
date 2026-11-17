@@ -27,6 +27,10 @@ defmodule DriftwoodWeb.IdentitySpineMountTest do
     end
   end
 
+  test "the session-write endpoint is mounted (sticky current org for switcher + Open account)" do
+    assert "/session/org/:org_id" in paths()
+  end
+
   test "/login is the framework LoginLive, not a bespoke controller (migrated to the identity spine)" do
     login = Enum.find(@routes, &(&1.path == "/login" and &1.verb == :get))
     assert login, "expected a GET /login route mounted by the framework identity spine"
