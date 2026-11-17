@@ -1024,9 +1024,13 @@ defmodule Samen.Scopes.Finance.Blueprint do
         `:conflict`, linked to the existing entry for triage; the duplicate
         import itself is refused by `Samen.Hr.Payroll.JournalProvider`.
 
-        `status` is `:imported` for a successful import and `:conflict` for a
-        refused replay under the same provider/external id. The journal entry's
-        own `:draft`/`:posted`/`:void` lifecycle remains authoritative.
+        `status` is `:imported` for a successful import, `:conflict` for a
+        refused replay under the same provider/external id, and `:superseded`
+        once an amendment has replaced this import. `supersedes_id` links a
+        replacement import to the import it supersedes; the original row is
+        retained, so the provider/external-id audit chain is never rewritten.
+        The journal entry's own `:draft`/`:posted`/`:void` lifecycle remains
+        authoritative.
 
         A close may not silently omit an imported register. When a register
         cannot be posted or voided before the close, `:hold` records an
@@ -1039,8 +1043,9 @@ defmodule Samen.Scopes.Finance.Blueprint do
 
         No PII (INV-1): this is a GL-line provenance record, not an employee
         register. The identity is unique per org, provider, external id,
-        line-set hash and entry date so retries converge on one row while a
-        different candidate is retained as conflict history.
+        line-set hash, entry date and status, so retries converge while a
+        refused candidate can be retained as conflict history even after a
+        later amendment imports that same line set successfully.
         """
         use Samen.Resource,
           otp_app: unquote(otp_app),
@@ -1086,7 +1091,7 @@ defmodule Samen.Scopes.Finance.Blueprint do
             public?: true,
             allow_nil?: false,
             default: :imported,
-            constraints: [one_of: [:imported, :conflict]]
+            constraints: [one_of: [:imported, :conflict, :superseded]]
           )
 
           # The close's named-exception escape hatch. These are SYSTEM writes
@@ -1102,6 +1107,15 @@ defmodule Samen.Scopes.Finance.Blueprint do
             public?(true)
             attribute_type(:uuid)
             allow_nil?(false)
+          end
+
+          # A replacement import points at the prior import it supersedes.
+          # The original row is retained; this is a self-referential audit
+          # chain, not a replacement of the provider/external-id identity.
+          belongs_to :supersedes, unquote(module) do
+            public?(true)
+            attribute_type(:uuid)
+            allow_nil?(true)
           end
         end
 
@@ -1137,7 +1151,8 @@ defmodule Samen.Scopes.Finance.Blueprint do
               :imported_at,
               :imported_by,
               :status,
-              :entry_id
+              :entry_id,
+              :supersedes_id
             ])
 
             primary?(true)
@@ -1156,6 +1171,15 @@ defmodule Samen.Scopes.Finance.Blueprint do
             )
 
             change(Samen.Scopes.Finance.PayrollHold)
+          end
+
+          # System write used by the amendment workflow after the replacement
+          # draft and its provenance row have landed. The original row is
+          # never deleted or rewritten; only its lifecycle status changes.
+          update :supersede do
+            accept([])
+            require_atomic?(false)
+            change(set_attribute(:status, :superseded))
           end
         end
 
@@ -1176,6 +1200,14 @@ defmodule Samen.Scopes.Finance.Blueprint do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
             authorize_if(always())
+          end
+
+          # System-only: the amendment workflow calls this with
+          # `authorize?: false` after the replacement and its provenance row
+          # have landed. A direct caller must not be able to orphan a posted
+          # import from its replacement.
+          policy action(:supersede) do
+            forbid_if(always())
           end
         end
       end
@@ -1429,12 +1461,18 @@ defmodule Samen.Scopes.Finance.Blueprint do
             )
           end
 
-          # The only post route. It posts every generated entry through the
-          # journal's own :post action and only then marks the batch posted.
+          # The only post route. It locks the linked payroll import row,
+          # re-checks that the register is still imported and posted, posts
+          # every generated entry through the journal's own :post action, and
+          # only then marks the batch posted.
           update :post do
             accept([])
             require_atomic?(false)
-            change({Samen.Scopes.Finance.PayrollSettlementPost, entry: unquote(entry_mod)})
+
+            change(
+              {Samen.Scopes.Finance.PayrollSettlementPost,
+               entry: unquote(entry_mod), import: unquote(payroll_import_mod)}
+            )
           end
         end
 

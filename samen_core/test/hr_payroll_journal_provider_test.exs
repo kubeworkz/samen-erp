@@ -12,6 +12,7 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
   alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
+  alias Samen.Scopes.Finance.PayrollCloseCheck
 
   alias SamenCore.Support.FinanceFixture.{
     Account,
@@ -19,7 +20,8 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
     JournalEntry,
     JournalLine,
     PayrollAccountMapping,
-    PayrollImport
+    PayrollImport,
+    PayrollSettlement
   }
 
   @repo SamenCore.TestRepo
@@ -232,6 +234,250 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
 
     assert {:error, :payroll_register_conflict} = run(org, changed)
     assert length(entries(org)) == 1
+  end
+
+  test "amends a posted register by voiding the original and importing a replacement draft", %{
+    org: org,
+    admin: admin,
+    expense: expense,
+    payable: payable
+  } do
+    original_register = register(expense, payable)
+    assert {:ok, %{journal_entry_id: original_id}} = run(org, original_register)
+
+    original = post!(Ash.get!(JournalEntry, original_id, authorize?: false), admin)
+    assert original.status == :posted
+
+    amended =
+      register(expense, payable, %{
+        lines: [
+          %{account_code: "6000", debit_cents: 130_000},
+          %{account_code: "2100", credit_cents: 130_000}
+        ]
+      })
+
+    # The old path still refuses the changed register; amendment is the guided
+    # correction after that conflict, and the conflict row remains as history.
+    assert {:error, :payroll_register_conflict} = run(org, amended)
+
+    assert {:ok,
+            %{
+              journal_entry_id: replacement_id,
+              total_cents: 130_000,
+              superseded_entry_id: ^original_id,
+              superseded_import_id: superseded_import_id
+            }} = amend(org, amended)
+
+    original = Ash.get!(JournalEntry, original_id, authorize?: false)
+    assert original.status == :void
+    assert original.voided_entry_id
+
+    reversal = Ash.get!(JournalEntry, original.voided_entry_id, authorize?: false)
+    assert reversal.status == :posted
+    assert reversal.source_key == "journal_entry"
+    assert reversal.source_id == original.id
+    assert reversal.entry_date == original.entry_date
+
+    replacement = Ash.get!(JournalEntry, replacement_id, authorize?: false)
+    assert replacement.status == :draft
+    assert replacement.entry_date == ~D[2026-09-30]
+    assert String.starts_with?(replacement.source_key, original.source_key <> ":revision:")
+    assert sum_debits(org, replacement.id) == 130_000
+
+    imports = imports(org)
+
+    original_import = Enum.find(imports, &(&1.id == superseded_import_id))
+    replacement_import = Enum.find(imports, &(&1.entry_id == replacement_id))
+
+    assert original_import.entry_id == original_id
+    assert original_import.status == :superseded
+    assert original_import.external_id == "run-2026-09"
+    assert original_import.supersedes_id == nil
+
+    assert replacement_import.status == :imported
+    assert replacement_import.provider == "acme_payroll"
+    assert replacement_import.external_id == original_import.external_id
+    assert replacement_import.supersedes_id == original_import.id
+    assert replacement_import.line_set_hash != original_import.line_set_hash
+
+    conflict_import =
+      Enum.find(
+        imports,
+        &(&1.line_set_hash == replacement_import.line_set_hash and &1.status == :superseded)
+      )
+
+    assert conflict_import.entry_id == original_id
+    assert conflict_import.id != original_import.id
+    assert length(imports) == 3
+
+    post!(replacement, admin)
+
+    assert %{status: :clear} =
+             PayrollCloseCheck.report(org, %{year: 2026, month: 9}, import_module: PayrollImport)
+  end
+
+  test "refuses to amend a draft target without voiding anything", %{
+    org: org,
+    expense: expense,
+    payable: payable
+  } do
+    assert {:ok, %{journal_entry_id: original_id}} = run(org, register(expense, payable))
+
+    amended =
+      register(expense, payable, %{
+        lines: [
+          %{account_code: "6000", debit_cents: 130_000},
+          %{account_code: "2100", credit_cents: 130_000}
+        ]
+      })
+
+    assert {:error, :payroll_register_not_posted} = amend(org, amended)
+
+    assert Ash.get!(JournalEntry, original_id, authorize?: false).status == :draft
+    assert length(entries(org)) == 1
+    assert length(imports(org)) == 1
+  end
+
+  test "refuses to amend a register that has a posted settlement, preserving its cash leg", %{
+    org: org,
+    admin: admin,
+    expense: expense,
+    payable: payable
+  } do
+    cash = account!(admin, org, "1010", :asset, :debit)
+    assert {:ok, %{journal_entry_id: original_id}} = run(org, register(expense, payable))
+    post!(Ash.get!(JournalEntry, original_id, authorize?: false), admin)
+
+    original_import =
+      PayrollImport
+      |> Ash.Query.filter(org_id == ^org and entry_id == ^original_id)
+      |> Ash.read_one!(authorize?: false)
+
+    settlement =
+      PayrollSettlement
+      |> Ash.Changeset.for_create(
+        :prepare,
+        %{
+          org_id: org,
+          payroll_import_id: original_import.id,
+          cash_account_id: cash.id,
+          settlement_date: ~D[2026-10-05]
+        },
+        scope: admin
+      )
+      |> Ash.create!()
+
+    settlement =
+      settlement
+      |> Ash.Changeset.for_update(:post, %{}, scope: admin)
+      |> Ash.update!()
+
+    assert settlement.status == :posted
+
+    amended = register(expense, payable, %{lines: payroll_lines(130_000)})
+
+    assert {:error, :payroll_settlement_exists} = amend(org, amended)
+
+    original = Ash.get!(JournalEntry, original_id, authorize?: false)
+    assert original.status == :posted
+    assert original.voided_entry_id == nil
+    assert Ash.get!(PayrollSettlement, settlement.id, authorize?: false).status == :posted
+    assert length(entries(org)) == 2
+    assert length(imports(org)) == 1
+  end
+
+  test "refuses an unchanged amendment without writing a second revision", %{
+    org: org,
+    admin: admin,
+    expense: expense,
+    payable: payable
+  } do
+    register = register(expense, payable)
+    assert {:ok, %{journal_entry_id: original_id}} = run(org, register)
+    post!(Ash.get!(JournalEntry, original_id, authorize?: false), admin)
+
+    assert {:error, :payroll_register_unchanged} = amend(org, register)
+    assert length(entries(org)) == 1
+    assert length(imports(org)) == 1
+  end
+
+  test "finishes the supersedes link after a partial amendment retry", %{
+    org: org,
+    admin: admin,
+    expense: expense,
+    payable: payable
+  } do
+    assert {:ok, %{journal_entry_id: original_id}} = run(org, register(expense, payable))
+    post!(Ash.get!(JournalEntry, original_id, authorize?: false), admin)
+
+    amended = register(expense, payable, %{lines: payroll_lines(130_000)})
+    assert {:ok, %{journal_entry_id: replacement_id}} = amend(org, amended)
+
+    original_import = Enum.find(imports(org), &(&1.entry_id == original_id))
+    assert original_import.status == :superseded
+    original_import_id = original_import.id
+
+    # Simulate a crash after the replacement landed but before the original's
+    # status write. The retry must finish the chain, not report "unchanged".
+    @repo.query!(
+      "UPDATE pfs_payroll_import SET pfs_status = 'imported', pfs_imported_at = now() - interval '1 hour' WHERE pfs_id = $1::text::uuid",
+      [original_import.id]
+    )
+
+    assert {:ok,
+            %{
+              journal_entry_id: ^replacement_id,
+              superseded_entry_id: ^original_id,
+              superseded_import_id: ^original_import_id
+            }} = amend(org, amended)
+
+    assert Ash.get!(PayrollImport, original_import.id, authorize?: false).status == :superseded
+    assert length(entries(org)) == 3
+    assert length(imports(org)) == 2
+  end
+
+  test "chains multiple revisions while preserving the external id and original entry", %{
+    org: org,
+    admin: admin,
+    expense: expense,
+    payable: payable
+  } do
+    assert {:ok, %{journal_entry_id: first_id}} = run(org, register(expense, payable))
+    post!(Ash.get!(JournalEntry, first_id, authorize?: false), admin)
+
+    second = register(expense, payable, %{lines: payroll_lines(130_000)})
+    assert {:ok, %{journal_entry_id: second_id}} = amend(org, second)
+    post!(Ash.get!(JournalEntry, second_id, authorize?: false), admin)
+
+    third = register(expense, payable, %{lines: payroll_lines(140_000)})
+    assert {:ok, %{journal_entry_id: third_id}} = amend(org, third)
+
+    first = Ash.get!(JournalEntry, first_id, authorize?: false)
+    second_entry = Ash.get!(JournalEntry, second_id, authorize?: false)
+    third_entry = Ash.get!(JournalEntry, third_id, authorize?: false)
+
+    assert first.status == :void
+    assert second_entry.status == :void
+    assert third_entry.status == :draft
+    assert first.source_key == "payroll_register:acme_payroll:run-2026-09"
+    assert String.starts_with?(second_entry.source_key, first.source_key <> ":revision:")
+    assert String.starts_with?(third_entry.source_key, first.source_key <> ":revision:")
+    assert second_entry.source_key != third_entry.source_key
+
+    imports = imports(org)
+    first_import = Enum.find(imports, &(&1.entry_id == first_id))
+    second_import = Enum.find(imports, &(&1.entry_id == second_id))
+    third_import = Enum.find(imports, &(&1.entry_id == third_id))
+
+    assert first_import.status == :superseded
+    assert second_import.status == :superseded
+    assert third_import.status == :imported
+    assert first_import.external_id == second_import.external_id
+    assert second_import.external_id == third_import.external_id
+    assert first_import.supersedes_id == nil
+    assert second_import.supersedes_id == first_import.id
+    assert third_import.supersedes_id == second_import.id
+    assert length(imports) == 3
   end
 
   test "URL-encodes colons in provider and external id so naive source keys cannot collide", %{
@@ -717,6 +963,38 @@ defmodule Samen.Hr.PayrollJournalProviderTest do
       period_module: FiscalPeriod,
       register: register
     )
+  end
+
+  defp amend(org, register) do
+    PayrollProvider.amend_payroll(org, ~D[2026-09-01],
+      provider: JournalProvider,
+      entry_module: JournalEntry,
+      import_module: PayrollImport,
+      mapping_module: PayrollAccountMapping,
+      period_module: FiscalPeriod,
+      settlement_module: PayrollSettlement,
+      imported_by: "u:payroll-importer",
+      register: register
+    )
+  end
+
+  defp post!(entry, scope) do
+    entry
+    |> Ash.Changeset.for_update(:post, %{}, scope: scope)
+    |> Ash.update!()
+  end
+
+  defp payroll_lines(total_cents) do
+    [
+      %{account_code: "6000", debit_cents: total_cents},
+      %{account_code: "2100", credit_cents: total_cents}
+    ]
+  end
+
+  defp sum_debits(org, entry_id) do
+    org
+    |> entry_lines(entry_id)
+    |> Enum.sum_by(& &1.debit_cents)
   end
 
   defp register(_expense, _payable, overrides \\ %{}) do

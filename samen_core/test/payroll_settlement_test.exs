@@ -134,7 +134,7 @@ defmodule Samen.PayrollSettlementTest do
       # settlement insert; there is no orphan batch.
       settlement_entries =
         JournalEntry
-        |> Ash.Query.filter(source_key == "payroll_settlement")
+        |> Ash.Query.filter(org_id == ^org and source_key == "payroll_settlement")
         |> Ash.read!(authorize?: false)
 
       assert length(settlement_entries) == 2
@@ -191,6 +191,29 @@ defmodule Samen.PayrollSettlementTest do
                {:bank_match_missing, "2100"},
                {:bank_match_missing, "2200"}
              ]
+    end
+
+    test "refuses to post after the register entry was voided", %{
+      org: org,
+      admin: admin,
+      expense: expense,
+      payable: payable,
+      tax: tax,
+      cash: cash
+    } do
+      entry = payroll_entry!(admin, org, expense, payable, tax, :posted)
+      import = import!(admin, org, entry, 500_000)
+      settlement = prepare!(admin, org, import, cash, ~D[2026-10-05])
+
+      entry
+      |> Ash.Changeset.for_update(:void, %{}, scope: admin)
+      |> Ash.update!()
+
+      assert {:error, error} = post(settlement, admin)
+      assert inspect(error) =~ "no longer imported and posted"
+
+      assert Ash.get!(PayrollSettlement, settlement.id, authorize?: false).status == :draft
+      assert Enum.all?(entries!(settlement.entry_ids), &(&1.status == :draft))
     end
 
     test "refuses a member post", %{

@@ -20,13 +20,15 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
 
   alias Samen.Hr.Payroll.JournalProvider
   alias Samen.Hr.PayrollProvider
+
   alias SamenCore.Support.FinanceFixture.{
     Account,
     FiscalPeriod,
     JournalEntry,
     JournalLine,
     PayrollAccountMapping,
-    PayrollImport
+    PayrollImport,
+    PayrollSettlement
   }
 
   @repo SamenCore.TestRepo
@@ -107,6 +109,75 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     assert import.imported_by == "u:concurrent-importer"
   end
 
+  test "a settlement prepared while an amendment waits forces the amendment to refuse" do
+    org = Ash.UUID.generate()
+    admin = admin_scope(org)
+    expense = account!(admin, org, "6000", :expense, :debit)
+    payable = account!(admin, org, "2100", :liability, :credit)
+    mapping!(admin, org, "acme_payroll", "6000", expense)
+    mapping!(admin, org, "acme_payroll", "2100", payable)
+    cash = account!(admin, org, "1010", :asset, :debit)
+    external_id = "run-race-#{System.unique_integer([:positive])}"
+    register = register(expense, payable, %{external_id: external_id})
+
+    on_exit(fn -> cleanup(org) end)
+
+    assert {:ok, %{journal_entry_id: original_id}} = run(org, register)
+    post!(Ash.get!(JournalEntry, original_id, authorize?: false), admin)
+
+    import =
+      PayrollImport
+      |> Ash.Query.filter(org_id == ^org and entry_id == ^original_id)
+      |> Ash.read_one!(authorize?: false)
+
+    parent = self()
+
+    assert {:ok, {settlement, task}} =
+             @repo.transaction(fn ->
+               # Prepare holds the import row lock until this transaction commits.
+               settlement = prepare!(admin, org, import, cash, ~D[2026-10-05])
+
+               task =
+                 Task.async(fn ->
+                   send(parent, {:amendment_started, self()})
+                   {self(), amend(org, register)}
+                 end)
+
+               assert_receive {:amendment_started, task_pid}, 1_000
+               assert task_pid == task.pid
+
+               # The amendment must be waiting on the same row lock, not racing
+               # through the settlement check and voiding the original.
+               assert nil == Task.yield(task, 500)
+
+               {settlement, task}
+             end)
+
+    assert settlement.status == :draft
+    assert {_pid, {:error, :payroll_settlement_exists}} = Task.await(task, 5_000)
+
+    original = Ash.get!(JournalEntry, original_id, authorize?: false)
+    assert original.status == :posted
+    assert original.voided_entry_id == nil
+    assert Ash.get!(PayrollSettlement, settlement.id, authorize?: false).status == :draft
+
+    base_key = "payroll_register:acme_payroll:#{external_id}"
+
+    related_entries =
+      org
+      |> entries()
+      |> Enum.filter(&String.starts_with?(&1.source_key || "", base_key))
+
+    assert [%{id: ^original_id}] = related_entries
+
+    assert [remaining_import] =
+             org
+             |> imports()
+             |> Enum.filter(&(&1.external_id == external_id))
+
+    assert remaining_import.status == :imported
+  end
+
   test "escaped payroll index constrains literal keys but allows lookalike duplicates" do
     org = Ash.UUID.generate()
     literal = "payroll_register:index-probe"
@@ -141,17 +212,54 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
     )
   end
 
-  defp register(_expense, _payable) do
-    %{
-      provider: "acme_payroll",
-      external_id: "run-2026-09",
-      entry_date: ~D[2026-09-30],
-      memo: "September 2026 payroll",
-      lines: [
-        %{account_code: "6000", debit_cents: 125_000},
-        %{account_code: "2100", credit_cents: 125_000}
-      ]
-    }
+  defp register(_expense, _payable, overrides \\ %{}) do
+    Map.merge(
+      %{
+        provider: "acme_payroll",
+        external_id: "run-2026-09",
+        entry_date: ~D[2026-09-30],
+        memo: "September 2026 payroll",
+        lines: [
+          %{account_code: "6000", debit_cents: 125_000},
+          %{account_code: "2100", credit_cents: 125_000}
+        ]
+      },
+      overrides
+    )
+  end
+
+  defp amend(org, register) do
+    PayrollProvider.amend_payroll(org, ~D[2026-09-01],
+      provider: JournalProvider,
+      entry_module: JournalEntry,
+      import_module: PayrollImport,
+      mapping_module: PayrollAccountMapping,
+      period_module: FiscalPeriod,
+      settlement_module: PayrollSettlement,
+      imported_by: "u:concurrent-importer",
+      register: register
+    )
+  end
+
+  defp post!(entry, scope) do
+    entry
+    |> Ash.Changeset.for_update(:post, %{}, scope: scope)
+    |> Ash.update!()
+  end
+
+  defp prepare!(scope, org, import, cash, date) do
+    PayrollSettlement
+    |> Ash.Changeset.for_create(
+      :prepare,
+      %{
+        org_id: org,
+        payroll_import_id: import.id,
+        cash_account_id: cash.id,
+        settlement_date: date
+      },
+      scope: scope
+    )
+    |> Ash.create!()
   end
 
   defp admin_scope(org_id) do
@@ -228,17 +336,34 @@ defmodule Samen.Hr.PayrollJournalProviderConcurrencyTest do
   end
 
   defp cleanup(org) do
-    @repo.query!("DELETE FROM pfs_payroll_import WHERE pfs_org_id = $1::text::uuid", [org])
-    @repo.query!("DELETE FROM sjl_journal_line WHERE sjl_org_id = $1::text::uuid", [org])
+    # The journal's append-only belts intentionally refuse DELETE of posted
+    # lines. This is test cleanup, so arm the same transaction-local marker the
+    # governed posting path uses, return the org's entries to draft, then
+    # remove the whole random-org fixture. The marker is transaction-local and
+    # cannot leak to another test.
+    {:ok, _} =
+      @repo.transaction(fn ->
+        @repo.query!("SELECT set_config('samen.finance_posting', 'on', true)", [])
 
-    @repo.query!("DELETE FROM sje_journal_entry WHERE sje_org_id = $1::text::uuid", [org])
+        @repo.query!(
+          "UPDATE sje_journal_entry SET sje_status = 'draft' WHERE sje_org_id = $1::text::uuid",
+          [org]
+        )
 
-    @repo.query!(
-      "DELETE FROM aab_payroll_account_mapping WHERE aab_org_id = $1::text::uuid",
-      [org]
-    )
+        @repo.query!("DELETE FROM pss_payroll_settlement WHERE pss_org_id = $1::text::uuid", [org])
 
-    @repo.query!("DELETE FROM sac_account WHERE sac_org_id = $1::text::uuid", [org])
+        @repo.query!("DELETE FROM pfs_payroll_import WHERE pfs_org_id = $1::text::uuid", [org])
+        @repo.query!("DELETE FROM sjl_journal_line WHERE sjl_org_id = $1::text::uuid", [org])
+
+        @repo.query!("DELETE FROM sje_journal_entry WHERE sje_org_id = $1::text::uuid", [org])
+
+        @repo.query!(
+          "DELETE FROM aab_payroll_account_mapping WHERE aab_org_id = $1::text::uuid",
+          [org]
+        )
+
+        @repo.query!("DELETE FROM sac_account WHERE sac_org_id = $1::text::uuid", [org])
+      end)
 
     :ok
   end

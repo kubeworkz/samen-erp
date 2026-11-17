@@ -91,10 +91,15 @@ defmodule Samen.Scopes.Finance.PayrollSettlementPrepare do
     end
   end
 
+  # Serializes with payroll amendment. Amendment locks this same import row
+  # for the whole check/void/replacement sequence, so a prepare that commits
+  # first is observed by the guard, while a prepare that waits sees the
+  # superseded import and refuses instead of settling a voided register.
   defp load_import(import_mod, org_id, import_id) do
     import_mod
     |> Ash.Query.filter(id == ^import_id and org_id == ^org_id)
     |> Ash.Query.load(entry: [lines: :account])
+    |> Ash.Query.lock(:for_update)
     |> Ash.read_one(authorize?: false)
     |> case do
       {:ok, %{} = import} ->

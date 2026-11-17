@@ -67,7 +67,7 @@ defmodule Samenerp.PayrollJournalProviderTest do
     mapping.("kubeworkz_payroll", "6100", expense)
     mapping.("kubeworkz_payroll", "2110", payable)
 
-    {:ok, org: org, expense: expense, payable: payable}
+    {:ok, org: org, scope: scope, expense: expense, payable: payable}
   end
 
   test "imports a provider-computed register as one host draft, even on retry", %{
@@ -126,6 +126,70 @@ defmodule Samenerp.PayrollJournalProviderTest do
     assert byte_size(import.line_set_hash) == 64
   end
 
+  test "amends a posted register through the host journal's governed void path", %{
+    org: org,
+    scope: scope
+  } do
+    original_register = register(240_000)
+
+    assert {:ok, %{journal_entry_id: original_id}} =
+             PayrollProvider.run_payroll(org, ~D[2026-09-01],
+               register: original_register,
+               imported_by: "u:payroll-host"
+             )
+
+    original = Ash.get!(Samenerp.Erp.JournalEntry, original_id, authorize?: false)
+
+    original =
+      original
+      |> Ash.Changeset.for_update(:post, %{}, scope: scope)
+      |> Ash.update!()
+
+    assert original.status == :posted
+
+    amended = register(250_000)
+
+    assert {:ok,
+            %{
+              journal_entry_id: replacement_id,
+              total_cents: 250_000,
+              superseded_entry_id: ^original_id
+            }} =
+             PayrollProvider.amend_payroll(org, ~D[2026-09-01],
+               register: amended,
+               imported_by: "u:payroll-host"
+             )
+
+    original = Ash.get!(Samenerp.Erp.JournalEntry, original_id, authorize?: false)
+    assert original.status == :void
+    assert original.voided_entry_id
+
+    reversal = Ash.get!(Samenerp.Erp.JournalEntry, original.voided_entry_id, authorize?: false)
+    assert reversal.status == :posted
+    assert reversal.source_key == "journal_entry"
+    assert reversal.source_id == original.id
+
+    replacement = Ash.get!(Samenerp.Erp.JournalEntry, replacement_id, authorize?: false)
+    assert replacement.status == :draft
+    assert String.starts_with?(replacement.source_key, original.source_key <> ":revision:")
+
+    original_import =
+      Samenerp.Erp.PayrollImport
+      |> Ash.Query.filter(org_id == ^org and entry_id == ^original_id)
+      |> Ash.read_one!(authorize?: false)
+
+    replacement_import =
+      Samenerp.Erp.PayrollImport
+      |> Ash.Query.filter(org_id == ^org and entry_id == ^replacement_id)
+      |> Ash.read_one!(authorize?: false)
+
+    assert original_import.status == :superseded
+    assert original_import.external_id == "run-2026-09"
+    assert replacement_import.status == :imported
+    assert replacement_import.external_id == original_import.external_id
+    assert replacement_import.supersedes_id == original_import.id
+  end
+
   test "escaped payroll index constrains literal keys but allows lookalike duplicates" do
     org = Ecto.UUID.generate()
     literal = "payroll_register:index-probe"
@@ -142,6 +206,19 @@ defmodule Samenerp.PayrollJournalProviderTest do
     assert {:ok, %{num_rows: 1}} = insert_index_probe(org, lookalike)
     assert {:ok, %{num_rows: 1}} = insert_index_probe(org, lookalike)
     assert count_index_probe(org, lookalike) == 2
+  end
+
+  defp register(total_cents) do
+    %{
+      provider: "kubeworkz_payroll",
+      external_id: "run-2026-09",
+      entry_date: ~D[2026-09-30],
+      memo: "September 2026 payroll register",
+      lines: [
+        %{account_code: "6100", debit_cents: total_cents},
+        %{account_code: "2110", credit_cents: total_cents}
+      ]
+    }
   end
 
   defp insert_index_probe(org, source_key) do

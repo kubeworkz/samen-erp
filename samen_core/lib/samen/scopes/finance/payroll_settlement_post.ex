@@ -8,7 +8,9 @@ defmodule Samen.Scopes.Finance.PayrollSettlementPost do
   approval policy as a hand-entered entry. If any entry is refused, the
   settlement update fails and the surrounding transaction leaves the whole
   batch in draft; the settlement is only marked `:posted` when every entry is
-  posted.
+  posted. Posting also locks the linked payroll import row and re-checks that
+  it is still `:imported` with a `:posted` register entry, so a settlement
+  cannot post cash legs against a register voided by a concurrent amendment.
   """
 
   use Ash.Resource.Change
@@ -17,6 +19,7 @@ defmodule Samen.Scopes.Finance.PayrollSettlementPost do
   @impl true
   def change(changeset, opts, context) do
     entry_mod = Keyword.fetch!(opts, :entry)
+    import_mod = Keyword.fetch!(opts, :import)
 
     actor_struct =
       actor_struct(context) || actor_struct(get_in(changeset.context, [:private, :actor]))
@@ -25,16 +28,17 @@ defmodule Samen.Scopes.Finance.PayrollSettlementPost do
     org_id = actor_org_id(actor_struct)
 
     Ash.Changeset.before_action(changeset, fn changeset ->
-      post(changeset, entry_mod, actor_struct, actor_id, org_id)
+      post(changeset, entry_mod, import_mod, actor_struct, actor_id, org_id)
     end)
   end
 
-  defp post(changeset, entry_mod, actor, actor_id, org_id) do
+  defp post(changeset, entry_mod, import_mod, actor, actor_id, org_id) do
     settlement = changeset.data
 
     with :ok <- require_actor(actor_id),
          :ok <- require_org(org_id),
          :ok <- ensure_draft(settlement),
+         :ok <- ensure_register_current(import_mod, org_id, settlement),
          :ok <- ensure_entries_present(settlement.entry_ids),
          {:ok, entries} <- load_entries(entry_mod, org_id, settlement.entry_ids),
          :ok <- ensure_all_present(settlement.entry_ids, entries),
@@ -60,6 +64,32 @@ defmodule Samen.Scopes.Finance.PayrollSettlementPost do
 
   defp ensure_draft(%{status: status}),
     do: {:error, "only a draft settlement can be posted (status: #{status})"}
+
+  # Lock the same row payroll amendment uses. Whichever action gets the lock
+  # first decides the outcome: a committed amendment leaves the import
+  # superseded and the entry void, so posting is refused; a committed posting
+  # is visible to the amendment guard before it can void the register.
+  defp ensure_register_current(import_mod, org_id, settlement) do
+    import_mod
+    |> Ash.Query.filter(id == ^settlement.payroll_import_id and org_id == ^org_id)
+    |> Ash.Query.load(entry: [])
+    |> Ash.Query.lock(:for_update)
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, %{status: :imported, entry: %{status: :posted}}} ->
+        :ok
+
+      {:ok, %{status: import_status, entry: %{status: entry_status}}} ->
+        {:error,
+         "the payroll register is no longer imported and posted (import: #{import_status}, entry: #{entry_status})"}
+
+      {:ok, _} ->
+        {:error, "the payroll register for this settlement was not found"}
+
+      {:error, reason} ->
+        {:error, "the payroll register could not be read: #{inspect(reason)}"}
+    end
+  end
 
   defp ensure_entries_present(ids) when is_list(ids) and ids != [], do: :ok
   defp ensure_entries_present(_), do: {:error, "the settlement has no journal entries to post"}

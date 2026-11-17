@@ -35,9 +35,15 @@ defmodule Samen.Hr.PayrollProvider do
   fields and calls no `:post` — the host's journal approval/posting path stays
   the only door into the ledger. Re-importing the same
   `provider`/`external_id` returns the existing entry; a changed entry date,
-  total or line set is refused. The anchor is backed by a partial unique index,
-  so concurrent importers converge on one draft instead of duplicating it. A
-  new host mount must carry the equivalent partial unique index in its Finance
+  total or line set is refused. An amended register is handled by the explicit
+  `amend_payroll/3` path: the current posted import is voided through the
+  journal's governed `:void` action, the replacement lands as a new draft, and
+  the new import row points at the prior one with `supersedes_id` while keeping
+  the provider/external id unchanged. A register with any `PayrollSettlement`
+  in its import chain is refused before the void, so the settlement's cash leg
+  cannot be stranded. The anchor is backed by partial unique indexes, so
+  concurrent importers converge on one draft instead of duplicating it. A new
+  host mount must carry the equivalent partial unique indexes in its Finance
   migration.
 
       config :samen_core, Samen.Hr.PayrollProvider,
@@ -84,7 +90,24 @@ defmodule Samen.Hr.PayrollProvider do
   @callback validate(org_id :: binary(), opts :: keyword()) ::
               {:ok, map()} | {:error, :not_configured | term()}
 
-  @optional_callbacks validate: 2
+  @doc """
+  Optional amendment path. A provider that supports revisions voids the
+  current posted entry through the governed journal reversal path, imports the
+  replacement as a new draft, and returns the replacement and superseded ids.
+  Providers without this callback refuse `{:error, :not_supported}` at the
+  boundary rather than silently mutating posted facts.
+  """
+  @callback amend_payroll(org_id :: binary(), period :: Date.t(), opts :: keyword()) ::
+              {:ok,
+               %{
+                 journal_entry_id: binary(),
+                 total_cents: pos_integer(),
+                 superseded_entry_id: binary(),
+                 superseded_import_id: binary()
+               }}
+              | {:error, :not_configured | :not_supported | term()}
+
+  @optional_callbacks validate: 2, amend_payroll: 3
 
   @doc """
   The configured provider module, or the `NotConfigured` default. Opts win over
@@ -131,6 +154,22 @@ defmodule Samen.Hr.PayrollProvider do
 
     if Code.ensure_loaded?(provider) and function_exported?(provider, :validate, 2) do
       provider.validate(org_id, opts)
+    else
+      {:error, :not_supported}
+    end
+  end
+
+  @doc """
+  Amend the current posted payroll import for `org_id`/`period`. The provider
+  must expose `amend_payroll/3`; otherwise this refuses `{:error, :not_supported}`
+  instead of guessing how to correct the register.
+  """
+  @spec amend_payroll(binary(), Date.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def amend_payroll(org_id, %Date{} = period, opts \\ []) do
+    provider = provider(opts)
+
+    if Code.ensure_loaded?(provider) and function_exported?(provider, :amend_payroll, 3) do
+      provider.amend_payroll(org_id, period, opts)
     else
       {:error, :not_supported}
     end

@@ -77,17 +77,35 @@ defmodule Samen.Hr.Payroll.JournalProvider do
   insert that loses the race is re-read and returned (or refused as a
   conflict), so two importers cannot create two drafts. The anchor is also
   visible to a reviewer, so a duplicated external run is easy to spot. A
-  provider that changes a payroll run must correct it through a reversing entry,
-  not by reusing its external id.
+  provider that changes a payroll run uses `amend_payroll/3`: the current
+  posted entry is voided through the journal's governed reversal path, the
+  replacement becomes a new draft under a revision source key, and the new
+  `PayrollImport` row points at the prior one. The external id is never reused
+  for a different posting, and posted journal facts are never mutated.
+
+  ## Amendments
+
+  `amend_payroll/3` targets the latest `:imported` provenance row for the
+  provider/external id. It refuses an unchanged register and a target whose
+  entry is still `:draft`; a posted target is voided through the normal
+  `JournalEntry.:void` action (which creates the linked reversal and keeps any
+  approval/period guards), then the replacement is imported as a new draft.
+  If the original was already voided and the replacement exists, a retry
+  completes the `supersedes_id` link instead of writing twice. The original
+  import row is retained as `:superseded` for the audit chain.
 
   Every successful import also lands one `PayrollImport` provenance row with
   the provider/external id, line-set hash, total, entry date, imported-at/by
   and status, linked to the draft. A refused replay under the same identity
   lands (or reuses) a `:conflict` row linked to the existing entry instead of
-  overwriting the successful provenance. The hash covers only normalized GL
-  lines; no raw register or employee data is stored or hashed.
+  overwriting the successful provenance. That conflict row is retained as
+  history if a later amendment successfully imports the same line set, and is
+  marked `:superseded` so the close precondition does not keep blocking on a
+  resolved conflict; the database keeps separate partial identities for
+  `:imported` and `:conflict` rows. The hash covers only normalized GL lines;
+  no raw register or employee data is stored or hashed.
 
-  A host mount must carry the equivalent partial unique index in its Finance
+  A host mount must carry the equivalent partial unique indexes in its Finance
   migration (the core fixture and `samenerp` host migrations do). The adapter
   does not fall back to a read-then-create guarantee.
 
@@ -100,7 +118,8 @@ defmodule Samen.Hr.Payroll.JournalProvider do
         entry_module: MyApp.Finance.JournalEntry,
         import_module: MyApp.Finance.PayrollImport,
         mapping_module: MyApp.Finance.PayrollAccountMapping,
-        period_module: MyApp.Finance.FiscalPeriod
+        period_module: MyApp.Finance.FiscalPeriod,
+        settlement_module: MyApp.Finance.PayrollSettlement
 
   The `import_module` is the Finance scope's `PayrollImport` resource. It
   stores the durable provenance row (provider, external id, normalized
@@ -120,8 +139,10 @@ defmodule Samen.Hr.Payroll.JournalProvider do
         register: register
       )
 
-  A host must configure all four or neither; the kernel boot guard
-  (`assert_wiring!/0`) refuses a half-wired host.
+  A host must configure the four core modules or neither; the kernel boot
+  guard (`assert_wiring!/0`) refuses a half-wired host. `settlement_module`
+  is additionally required by `amend_payroll/3`; without it amendment refuses
+  fail-honest rather than voiding a register it cannot check for a settlement.
 
   `period` is the caller's payroll period label. The journal date is the
   register's explicit `entry_date`; the adapter does not infer one.
@@ -142,6 +163,76 @@ defmodule Samen.Hr.Payroll.JournalProvider do
          {:ok, imported_by} <- imported_by(opts),
          {:ok, report} <- validate(org_id, opts) do
       import_report(config, report, imported_by)
+    end
+  end
+
+  @doc """
+  Amend one provider register through the governed reversal path.
+
+  The latest `:imported` provenance row for this provider/external id is the
+  amendment target. Its entry must be `:posted` (or already `:void` from a
+  partially completed amendment); a `:draft` target is refused because it has
+  not entered the ledger yet. A register with any `PayrollSettlement` in its
+  import chain is refused before the void, because voiding only the register
+  entry would strand the settlement's cash leg. A posted target is voided with
+  the journal's normal `:void` action, which creates the linked reversal and
+  preserves any approval/period guards. The replacement is then imported as a
+  new `:draft` with a revision source key and a distinct `PayrollImport` row
+  whose `supersedes_id` points at the prior import. The provider/external id
+  stays the same.
+
+  A retry after the original was voided but before the replacement landed finds
+  the existing replacement and completes the supersedes link. Re-amending an
+  unchanged register, or trying to amend a draft target, refuses without
+  writing.
+  """
+  @impl true
+  @spec amend_payroll(binary(), Date.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def amend_payroll(org_id, %Date{} = _period, opts) when is_binary(org_id) do
+    with {:ok, config} <- amend_config(opts),
+         {:ok, imported_by} <- imported_by(opts),
+         {:ok, report} <- validate(org_id, opts),
+         :ok <- period_check(config.period_module, org_id, report.entry_date, :ready) do
+      amend_locked(config, report, imported_by)
+    end
+  end
+
+  # The settlement actions lock the PayrollImport row before they read the
+  # register or write a settlement. Amendment must hold the SAME locks across
+  # its settlement check, void, replacement and supersede writes, or a
+  # settlement can commit between the check and the void and leave cash legs
+  # against a voided register. The whole amendment is one transaction so an
+  # error after the void rolls the void and replacement back together.
+  defp amend_locked(config, report, imported_by) do
+    repo = repo!(config.import_module)
+
+    case repo.transaction(fn ->
+           with {:ok, import_ids} <- lock_import_ids(config.import_module, report),
+                {:ok, latest} <- latest_import(config.import_module, report),
+                :ok <-
+                  ensure_no_settlement_rows(
+                    config.settlement_module,
+                    report.org_id,
+                    import_ids
+                  ) do
+             result =
+               if same_register?(latest.entry, report) do
+                 settle_unchanged_amendment(config, latest, report)
+               else
+                 revision = revision_register(report, latest.id)
+                 amend_import(config, latest, revision, imported_by)
+               end
+
+             case result do
+               {:ok, _amendment} = ok -> ok
+               {:error, reason} -> repo.rollback(reason)
+             end
+           else
+             {:error, reason} -> repo.rollback(reason)
+           end
+         end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -172,6 +263,13 @@ defmodule Samen.Hr.Payroll.JournalProvider do
 
   def validate(_org_id, _opts), do: {:error, :invalid_org_id}
 
+  defp amend_config(opts) do
+    with {:ok, config} <- config(opts),
+         {:ok, settlement_module} <- settlement_module(opts) do
+      {:ok, Map.put(config, :settlement_module, settlement_module)}
+    end
+  end
+
   defp config(opts) do
     with {:ok, entry_module} <- entry_module(opts),
          {:ok, import_module} <- import_module(opts),
@@ -199,6 +297,252 @@ defmodule Samen.Hr.Payroll.JournalProvider do
 
   defp import_report(config, %{status: :conflict, existing_entry: entry} = report, imported_by) do
     existing_result(entry, report, config.import_module, imported_by, :conflict)
+  end
+
+  defp latest_import(import_module, report) do
+    import_module
+    |> Ash.Query.filter(
+      org_id == ^report.org_id and provider == ^report.provider and
+        external_id == ^report.external_id and status == :imported
+    )
+    |> Ash.Query.sort(imported_at: :desc, id: :desc)
+    |> Ash.Query.limit(1)
+    |> Ash.Query.load(entry: [:lines])
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, nil} -> {:error, :payroll_import_not_found}
+      {:ok, import} -> {:ok, import}
+      {:error, reason} -> {:error, {:payroll_import_lookup_failed, reason}}
+    end
+  end
+
+  # The amendment only touches the register entry, so any settlement already
+  # attached to this provider/external-id chain would keep its cash movement
+  # while the payable side is reversed. Refuse before the void instead of
+  # pretending a register-level correction can reverse a payment batch.
+  #
+  # Lock every provenance row in the provider/external-id chain, not just the
+  # latest: an older `:imported` row can still be the target of a settlement
+  # prepare while an amendment is in flight. Sorting gives concurrent
+  # amendments a stable lock order.
+  defp lock_import_ids(import_module, report) do
+    import_module
+    |> Ash.Query.filter(
+      org_id == ^report.org_id and provider == ^report.provider and
+        external_id == ^report.external_id
+    )
+    |> Ash.Query.sort(id: :asc)
+    |> Ash.Query.select([:id])
+    |> Ash.Query.lock(:for_update)
+    |> Ash.read(authorize?: false)
+    |> case do
+      {:ok, imports} -> {:ok, Enum.map(imports, & &1.id)}
+      {:error, reason} -> {:error, {:payroll_import_lookup_failed, reason}}
+    end
+  end
+
+  defp repo!(resource) do
+    AshPostgres.DataLayer.Info.repo(resource, :mutate) ||
+      AshPostgres.DataLayer.Info.repo(resource) ||
+      raise ArgumentError,
+            "payroll amendment requires a Postgres repo for #{inspect(resource)}"
+  end
+
+  defp ensure_no_settlement_rows(settlement_module, org_id, import_ids) do
+    settlement_module
+    |> Ash.Query.filter(org_id == ^org_id and payroll_import_id in ^import_ids)
+    |> Ash.Query.limit(1)
+    |> Ash.read(authorize?: false)
+    |> case do
+      {:ok, []} -> :ok
+      {:ok, [_settlement]} -> {:error, :payroll_settlement_exists}
+      {:error, reason} -> {:error, {:payroll_settlement_lookup_failed, reason}}
+    end
+  end
+
+  # A retry can reach this branch after the replacement import landed but the
+  # predecessor's `:superseded` write did not. The replacement is already the
+  # latest active import, so finish the chain and return the existing result
+  # rather than reporting a false "unchanged" error.
+  defp settle_unchanged_amendment(config, latest, report) do
+    case latest.supersedes_id do
+      nil ->
+        {:error, :payroll_register_unchanged}
+
+      predecessor_id ->
+        with {:ok, predecessor} <- import_with_entry(config.import_module, predecessor_id),
+             :ok <- resolve_conflict_imports(config.import_module, report),
+             :ok <- supersede_import_chain(config.import_module, predecessor.id) do
+          total = Enum.sum(Enum.map(latest.entry.lines, & &1.debit_cents))
+          {:ok, amendment_result(result(latest.entry, total), predecessor)}
+        end
+    end
+  end
+
+  defp import_with_entry(import_module, import_id) do
+    import_module
+    |> Ash.Query.filter(id == ^import_id)
+    |> Ash.Query.load(entry: [:lines])
+    |> Ash.read_one(authorize?: false)
+    |> case do
+      {:ok, nil} -> {:error, :payroll_import_not_found}
+      {:ok, import} -> {:ok, import}
+      {:error, reason} -> {:error, {:payroll_import_lookup_failed, reason}}
+    end
+  end
+
+  defp revision_register(report, supersedes_id) do
+    report
+    |> Map.put(:source_key, revision_source_key(report))
+    |> Map.put(:supersedes_id, supersedes_id)
+  end
+
+  defp revision_source_key(report) do
+    base = source_key(report.provider, report.external_id)
+    "#{base}:revision:#{report.line_set_hash}:#{Date.to_iso8601(report.entry_date)}"
+  end
+
+  defp amend_import(config, latest, revision, imported_by) do
+    case find_existing(config.entry_module, revision) do
+      {:ok, nil} ->
+        amend_new_target(config, latest, revision, imported_by)
+
+      {:ok, existing_entry} ->
+        settle_existing_revision(config, latest, existing_entry, revision, imported_by)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp amend_new_target(config, latest, revision, imported_by) do
+    case latest.entry.status do
+      :draft ->
+        {:error, :payroll_register_not_posted}
+
+      status when status in [:posted, :void] ->
+        with {:ok, _voided} <- maybe_void(latest.entry, imported_by),
+             {:ok, result} <-
+               create_draft(config.entry_module, config.import_module, revision, imported_by),
+             :ok <- resolve_conflict_imports(config.import_module, revision),
+             :ok <- supersede_import_chain(config.import_module, latest.id) do
+          {:ok, amendment_result(result, latest)}
+        end
+
+      status ->
+        {:error, {:payroll_amendment_invalid_status, status}}
+    end
+  end
+
+  defp settle_existing_revision(config, latest, existing_entry, revision, imported_by) do
+    with {:ok, loaded} <- Ash.load(existing_entry, [:lines], authorize?: false) do
+      cond do
+        not same_register?(loaded, revision) ->
+          {:error, :payroll_register_conflict}
+
+        loaded.status == :void ->
+          {:error, :payroll_register_already_voided}
+
+        loaded.status in [:draft, :posted] ->
+          # The entry can exist from a partial attempt that failed before its
+          # provenance row landed. Recording is idempotent; it either reuses
+          # the replacement row or creates the missing one before the chain is
+          # marked superseded.
+          with {:ok, _record} <-
+                 record_import(config.import_module, revision, loaded, :imported, imported_by),
+               :ok <- resolve_conflict_imports(config.import_module, revision),
+               :ok <- supersede_import_chain(config.import_module, latest.id) do
+            total = Enum.sum(Enum.map(loaded.lines, & &1.debit_cents))
+            {:ok, amendment_result(result(loaded, total), latest)}
+          end
+
+        true ->
+          {:error, {:payroll_amendment_invalid_status, loaded.status}}
+      end
+    end
+  end
+
+  defp maybe_void(%{status: :void}, _imported_by), do: {:ok, nil}
+
+  defp maybe_void(entry, imported_by) do
+    actor = if imported_by, do: %{id: imported_by}, else: nil
+
+    case entry
+         |> Ash.Changeset.for_update(:void, %{}, actor: actor, authorize?: false)
+         |> Ash.update(authorize?: false) do
+      {:ok, voided} -> {:ok, voided}
+      {:error, reason} -> {:error, {:payroll_amendment_void_failed, reason}}
+    end
+  end
+
+  defp supersede_import_chain(import_module, import_id) do
+    supersede_import_chain(import_module, import_id, MapSet.new())
+  end
+
+  defp supersede_import_chain(_import_module, nil, _seen), do: :ok
+
+  defp supersede_import_chain(import_module, import_id, seen) do
+    if MapSet.member?(seen, import_id) do
+      :ok
+    else
+      case Ash.get(import_module, import_id, authorize?: false) do
+        {:ok, import} ->
+          with :ok <- mark_import_superseded(import) do
+            supersede_import_chain(
+              import_module,
+              import.supersedes_id,
+              MapSet.put(seen, import.id)
+            )
+          end
+
+        {:error, reason} ->
+          {:error, {:payroll_import_lookup_failed, reason}}
+      end
+    end
+  end
+
+  # The old hard-stop path could leave a `:conflict` row for exactly the line
+  # set the amendment now imports. Retain the row for history, but mark it
+  # superseded so the close precondition does not keep blocking on a conflict
+  # the amendment has already resolved.
+  defp resolve_conflict_imports(import_module, register) do
+    import_module
+    |> Ash.Query.filter(
+      org_id == ^register.org_id and provider == ^register.provider and
+        external_id == ^register.external_id and
+        line_set_hash == ^register.line_set_hash and entry_date == ^register.entry_date and
+        status == :conflict
+    )
+    |> Ash.read(authorize?: false)
+    |> case do
+      {:ok, rows} ->
+        Enum.reduce_while(rows, :ok, fn row, :ok ->
+          case mark_import_superseded(row) do
+            :ok -> {:cont, :ok}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+
+      {:error, reason} ->
+        {:error, {:payroll_import_lookup_failed, reason}}
+    end
+  end
+
+  defp mark_import_superseded(%{status: :superseded}), do: :ok
+
+  defp mark_import_superseded(import) do
+    case import
+         |> Ash.Changeset.for_update(:supersede, %{}, authorize?: false)
+         |> Ash.update(authorize?: false) do
+      {:ok, _superseded} -> :ok
+      {:error, reason} -> {:error, {:payroll_import_supersede_failed, reason}}
+    end
+  end
+
+  defp amendment_result(result, latest) do
+    result
+    |> Map.put(:superseded_entry_id, latest.entry.id)
+    |> Map.put(:superseded_import_id, latest.id)
   end
 
   defp entry_module(opts) do
@@ -230,6 +574,14 @@ defmodule Samen.Hr.Payroll.JournalProvider do
       nil -> {:error, :not_configured}
       module when is_atom(module) -> {:ok, module}
       _ -> {:error, :invalid_period_module}
+    end
+  end
+
+  defp settlement_module(opts) do
+    case Keyword.get(opts, :settlement_module) || configured_settlement_module() do
+      nil -> {:error, :payroll_settlement_not_configured}
+      module when is_atom(module) -> {:ok, module}
+      _ -> {:error, :invalid_settlement_module}
     end
   end
 
@@ -315,6 +667,19 @@ defmodule Samen.Hr.Payroll.JournalProvider do
     case Application.get_env(:samen_core, @config_key, []) do
       %{period_module: period_module} -> period_module
       config when is_list(config) -> Keyword.get(config, :period_module)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The host's configured `PayrollSettlement` module, or nil when the amendment
+  cash-leg guard is not wired. Amendment refuses fail-honest without it.
+  """
+  @spec configured_settlement_module() :: module() | nil
+  def configured_settlement_module do
+    case Application.get_env(:samen_core, @config_key, []) do
+      %{settlement_module: settlement_module} -> settlement_module
+      config when is_list(config) -> Keyword.get(config, :settlement_module)
       _ -> nil
     end
   end
@@ -902,7 +1267,7 @@ defmodule Samen.Hr.Payroll.JournalProvider do
   end
 
   defp record_import(import_module, register, entry, status, imported_by) do
-    case find_import(import_module, register) do
+    case find_import(import_module, register, status) do
       {:ok, nil} ->
         create_import(import_module, register, entry, status, imported_by)
 
@@ -925,7 +1290,8 @@ defmodule Samen.Hr.Payroll.JournalProvider do
       imported_at: DateTime.utc_now() |> DateTime.truncate(:second),
       imported_by: imported_by,
       status: status,
-      entry_id: entry.id
+      entry_id: entry.id,
+      supersedes_id: Map.get(register, :supersedes_id)
     }
 
     try do
@@ -933,21 +1299,21 @@ defmodule Samen.Hr.Payroll.JournalProvider do
            |> Ash.Changeset.for_create(:create, attrs, authorize?: false)
            |> Ash.create(authorize?: false) do
         {:ok, record} -> {:ok, record}
-        {:error, reason} -> recover_import(import_module, register, reason)
+        {:error, reason} -> recover_import(import_module, register, status, reason)
       end
     rescue
       error ->
         if unique_payroll_key_violation?(error) do
-          recover_import(import_module, register, error)
+          recover_import(import_module, register, status, error)
         else
           reraise error, __STACKTRACE__
         end
     end
   end
 
-  defp recover_import(import_module, register, original_error) do
+  defp recover_import(import_module, register, status, original_error) do
     if unique_payroll_key_violation?(original_error) do
-      case find_import(import_module, register) do
+      case find_import(import_module, register, status) do
         {:ok, nil} -> {:error, {:payroll_import_failed, original_error}}
         {:ok, existing} -> {:ok, existing}
         {:error, reason} -> {:error, {:payroll_import_lookup_failed, reason}}
@@ -957,12 +1323,16 @@ defmodule Samen.Hr.Payroll.JournalProvider do
     end
   end
 
-  defp find_import(import_module, register) do
+  # Match the same status the caller is recording. A conflict row is retained
+  # as history when a later amendment imports the same line set successfully;
+  # the database has separate partial unique indexes for the two states.
+  defp find_import(import_module, register, import_status) do
     import_module
     |> Ash.Query.filter(
       org_id == ^register.org_id and provider == ^register.provider and
         external_id == ^register.external_id and
-        line_set_hash == ^register.line_set_hash and entry_date == ^register.entry_date
+        line_set_hash == ^register.line_set_hash and entry_date == ^register.entry_date and
+        status == ^import_status
     )
     |> Ash.Query.limit(1)
     |> Ash.read_one(authorize?: false)

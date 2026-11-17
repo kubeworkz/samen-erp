@@ -13,9 +13,11 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
 
   Anything else blocks the close: an unposted `:draft`, an unresolved
   `:conflict` provenance row, a missing linked entry, an unreadable check, or a
-  result too large to inspect within the bound. The check itself writes
-  nothing; a hold is recorded through `PayrollImport.:hold`, and posting or
-  voiding stays on the journal's ordinary governed actions.
+  result too large to inspect within the bound. A superseded row follows its
+  linked entry: the voided original is accepted, while the replacement draft
+  blocks until it is posted. The check itself writes nothing; a hold is
+  recorded through `PayrollImport.:hold`, and posting or voiding stays on the
+  journal's ordinary governed actions.
 
   ## Fail closed at the read boundary
 
@@ -44,7 +46,7 @@ defmodule Samen.Scopes.Finance.PayrollCloseCheck do
           external_id: String.t(),
           entry_id: term(),
           entry_status: :draft | :posted | :void | nil,
-          import_status: :imported | :conflict | nil,
+          import_status: :imported | :conflict | :superseded | nil,
           disposition: disposition(),
           accepted?: boolean(),
           held?: boolean(),
