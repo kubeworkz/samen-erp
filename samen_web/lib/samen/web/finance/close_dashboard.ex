@@ -45,6 +45,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
   require Ash.Query
 
   alias Samen.Scopes.Finance.{CloseBoard, PayrollCloseCheck}
+  alias Samen.Web.Finance.PayrollSettlements
   alias Samen.Web.Mount
   alias Samen.Web.TenantRole
 
@@ -57,6 +58,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
           run: struct() | nil,
           report: map() | nil,
           payroll: map(),
+          settlements: PayrollSettlements.state(),
           task_wired?: boolean(),
           docs: [doc()],
           docs_wired?: boolean(),
@@ -67,9 +69,9 @@ defmodule Samen.Web.Finance.CloseDashboard do
   @doc """
   Load the current close cycle for `mount` + `org_id`.
 
-  Returns `{:ok, %{period:, run:, report:, payroll:, task_wired?:, docs:,
-  docs_wired?:, evidence_titles:}}` — `report` is `nil` when no run exists —
-  or `{:error, :no_mount | :no_org | :finance_not_mounted}`.
+  Returns `{:ok, %{period:, run:, report:, payroll:, settlements:, task_wired?:,
+  docs:, docs_wired?:, evidence_titles:}}` — `report` is `nil` when no run
+  exists — or `{:error, :no_mount | :no_org | :finance_not_mounted}`.
   """
   @spec load(Mount.t() | nil, String.t() | nil) :: {:ok, state()} | {:error, atom()}
   def load(%Mount{} = mount, org_id) when is_binary(org_id) do
@@ -80,6 +82,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
       task_mod = task_module(mount)
       {period, run} = current_cycle(run_mod, period_mod, scope)
       payroll = PayrollCloseCheck.report(org_id, period, import_module: payroll_mod, scope: scope)
+      settlements = PayrollSettlements.load(mount, org_id, payroll, scope: scope)
 
       report =
         if run,
@@ -93,6 +96,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
          run: run,
          report: report,
          payroll: payroll,
+         settlements: settlements,
          task_wired?: task_mod != nil,
          docs: evidence.docs,
          docs_wired?: evidence.wired?,
@@ -438,6 +442,13 @@ defmodule Samen.Web.Finance.CloseDashboard do
 
   defp leaf_message(:payroll_not_found),
     do: "That imported payroll register is not in this workspace."
+
+  defp leaf_message(:settlement_not_found),
+    do: "That payroll settlement is not in this workspace."
+
+  defp leaf_message(:invalid_settlement_date), do: "Enter a valid settlement date."
+  defp leaf_message(:payroll_import_required), do: "Choose a posted payroll register."
+  defp leaf_message(:cash_account_required), do: "Choose a cash account."
 
   defp leaf_message(reason) when is_atom(reason), do: "Could not apply that change (#{reason})."
   defp leaf_message(other), do: Exception.message(other)

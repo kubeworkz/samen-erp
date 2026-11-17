@@ -49,6 +49,7 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
   alias Samen.Web.Finance.CloseDashboard
+  alias Samen.Web.Finance.PayrollSettlements
   alias Samen.Web.Mount
   alias Samen.Web.TenantRole
 
@@ -232,6 +233,61 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
   end
 
   def handle_event("hold_payroll", _params, socket), do: {:noreply, socket}
+
+  def handle_event("prepare_payroll_settlement", params, socket) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+
+    if can_admin? and state do
+      case PayrollSettlements.prepare(mount, org_id, params) do
+        {:ok, _settlement} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice: "Prepared payroll settlement."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("post_payroll_settlement", %{"settlement_id" => settlement_id}, socket)
+      when is_binary(settlement_id) do
+    %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
+
+    if can_admin? and state do
+      case PayrollSettlements.post(mount, org_id, settlement_id) do
+        {:ok, _settlement} ->
+          {:noreply,
+           socket
+           |> assign(
+             action_error: nil,
+             action_notice: "Posted payroll settlement."
+           )
+           |> load()}
+
+        {:error, error} ->
+          {:noreply,
+           assign(socket,
+             action_error: CloseDashboard.error_message(error),
+             action_notice: nil
+           )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("post_payroll_settlement", _params, socket), do: {:noreply, socket}
 
   def handle_event("finish_run", _params, socket) do
     %{samen_mount: mount, org_id: org_id, state: state, can_admin?: can_admin?} = socket.assigns
@@ -668,6 +724,14 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         </tbody>
       </table>
     <% end %>
+
+    <.settlement_card
+      :if={@state.settlements}
+      settlements={@state.settlements}
+      period={@state.period}
+      can_admin?={@can_admin?}
+      actor_id={@actor_id}
+    />
     """
   end
 
@@ -815,6 +879,349 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
     </div>
     """
   end
+
+  attr(:settlements, :map, required: true)
+  attr(:period, :map, default: nil)
+  attr(:can_admin?, :boolean, default: false)
+  attr(:actor_id, :string, default: nil)
+
+  defp settlement_card(assigns) do
+    ~H"""
+    <div class="card" id="close-payroll-settlements" style="padding:12px 16px;margin-bottom:12px;border-left:3px solid #0A5C42">
+      <div class="gtitle">
+        <h3>Payroll settlement &amp; bank tie-out</h3>
+        <span class="n">{length(@settlements.rows)}</span>
+        <span class="lane">· register → payable/tax → cash → bank</span>
+      </div>
+
+      <%= cond do %>
+        <% @settlements.wired? == false -> %>
+          <div id="close-payroll-settlements-unavailable" style="margin-top:6px;color:#B45309">
+            Payroll settlement is not mounted on this host.
+          </div>
+        <% @settlements.error == :payroll_unavailable -> %>
+          <div id="close-payroll-settlements-payroll-unavailable" style="margin-top:6px;color:#B45309">
+            The payroll gate could not be read for this period, so this card cannot decide what
+            is settleable. Resolve the payroll read above before preparing a settlement.
+          </div>
+        <% @settlements.error != nil -> %>
+          <div id="close-payroll-settlements-error" style="margin-top:6px;color:#B45309">
+            The settlement and tie-out read could not be completed. This card does not treat
+            an unreadable settlement as reconciled.
+          </div>
+        <% @settlements.rows == [] -> %>
+          <div id="close-payroll-settlements-empty" style="margin-top:6px;color:var(--muted)">
+            No posted imported payroll registers in this period. Post the register above before
+            settling it.
+          </div>
+        <% true -> %>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:24%">
+                  Register
+                </th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:22%">
+                  Settlement
+                </th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:34%">
+                  Tie-out
+                </th>
+                <th scope="col" style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border, #e5e7eb);color:var(--muted);width:20%">
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                :for={row <- @settlements.rows}
+                id={"close-payroll-settlement-#{row.import.id}"}
+              >
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                  <b>{row.import.provider}/{row.import.external_id}</b>
+                  <div style="color:var(--muted);font-size:12px">
+                    register {money(row.import.total_cents)} · {date_label(row.import.entry_date)}
+                  </div>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                  <span
+                    id={"close-payroll-settlement-status-#{row.import.id}"}
+                    data-status={row.status}
+                  >
+                    <.pill variant={settlement_variant(row.status)}>
+                      {settlement_label(row.status)}
+                    </.pill>
+                  </span>
+
+                  <div :if={row.settlement} style="color:var(--muted);font-size:12px">
+                    {money(row.settlement.total_cents)} · {settlement_entries_label(row.settlement.payment_count)} · {date_label(row.settlement.settlement_date)}
+                    <div :if={row.settlement.reference}>{row.settlement.reference}</div>
+                    <div :if={row.cash_account}>
+                      cash {row.cash_account.code} · {row.cash_account.name}
+                    </div>
+                    <div :if={row.settlement.prepared_by}>
+                      prepared by {actor_label(row.settlement.prepared_by, @actor_id)}
+                    </div>
+                    <div :if={row.settlement.posted_by}>
+                      posted by {actor_label(row.settlement.posted_by, @actor_id)}
+                    </div>
+                  </div>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                  <%= cond do %>
+                    <% row.tie_out -> %>
+                      <.settlement_tie_out tie_out={row.tie_out} import_id={row.import.id} />
+                    <% row.error -> %>
+                      <span style="color:#B45309">Tie-out unavailable.</span>
+                    <% true -> %>
+                      <span style="color:var(--muted)">Not prepared.</span>
+                  <% end %>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid var(--border, #f3f4f6)">
+                  <.settlement_action
+                    row={row}
+                    can_admin?={@can_admin?}
+                    accounts={@settlements.accounts}
+                    accounts_error?={@settlements.accounts_error?}
+                    period={@period}
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div
+            :if={@settlements.accounts_truncated?}
+            style="margin-top:6px;color:var(--muted);font-size:11px"
+          >
+            The cash account picker is capped at 500 asset accounts; only the first 500 are listed.
+          </div>
+          <div
+            :if={@settlements.truncated?}
+            style="margin-top:6px;color:var(--muted);font-size:11px"
+          >
+            Showing the first {@settlements.limit} posted registers; more exist in this period.
+          </div>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr(:row, :map, required: true)
+  attr(:can_admin?, :boolean, default: false)
+  attr(:accounts, :list, default: [])
+  attr(:accounts_error?, :boolean, default: false)
+  attr(:period, :map, default: nil)
+
+  defp settlement_action(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @row.status == :unsettled and @can_admin? -> %>
+        <%= cond do %>
+          <% @accounts_error? -> %>
+            <span style="color:#B45309;font-size:11px">
+              The cash account picker could not be read.
+            </span>
+          <% @accounts == [] -> %>
+            <span style="color:#B45309;font-size:11px">
+              No asset cash account is available to settle against.
+            </span>
+          <% true -> %>
+            <form
+              phx-submit="prepare_payroll_settlement"
+              id={"close-payroll-settlement-form-#{@row.import.id}"}
+              style="display:flex;flex-direction:column;gap:4px"
+            >
+              <input type="hidden" name="import_id" value={@row.import.id} />
+              <select
+                name="cash_account_id"
+                required
+                aria-label={"Cash account for #{@row.import.provider}/#{@row.import.external_id}"}
+                id={"close-payroll-settlement-cash-#{@row.import.id}"}
+                style="font-size:11px;padding:3px 5px"
+              >
+                <option value="">Cash account</option>
+                <option :for={account <- @accounts} value={account.id}>
+                  {account.code} · {account.name}
+                </option>
+              </select>
+              <input
+                type="date"
+                name="settlement_date"
+                required
+                value={default_settlement_date(@period)}
+                aria-label="Settlement date"
+                id={"close-payroll-settlement-date-#{@row.import.id}"}
+                style="font-size:11px;padding:3px 5px"
+              />
+              <input
+                type="text"
+                name="reference"
+                maxlength="200"
+                placeholder="Reference (optional)"
+                aria-label="Settlement reference"
+                id={"close-payroll-settlement-reference-#{@row.import.id}"}
+                style="font-size:11px;padding:3px 5px"
+              />
+              <button
+                type="submit"
+                class="button"
+                id={"close-payroll-settlement-prepare-#{@row.import.id}"}
+                style="font-size:11px"
+              >
+                Prepare settlement
+              </button>
+            </form>
+        <% end %>
+      <% @row.status == :unsettled -> %>
+        <span style="font-size:11px;color:var(--muted)">Admin required.</span>
+      <% @row.settlement != nil and @row.settlement.status == :draft and @row.status == :unposted and @can_admin? -> %>
+        <button
+          type="button"
+          class="button"
+          id={"close-payroll-settlement-post-#{@row.import.id}"}
+          phx-click="post_payroll_settlement"
+          phx-value-settlement_id={@row.settlement.id}
+          data-confirm={"Post this payroll settlement? Every settlement entry will ride the journal's posting gate."}
+          style="font-size:11px"
+        >
+          Post settlement
+        </button>
+      <% @row.settlement != nil and @row.settlement.status == :draft and @row.status == :unposted -> %>
+        <span style="font-size:11px;color:var(--muted)">Admin required to post.</span>
+      <% @row.status == :voided -> %>
+        <span style="font-size:11px;color:var(--muted)">Register voided.</span>
+      <% @row.status == :unavailable -> %>
+        <span style="font-size:11px;color:#B45309">Tie-out unavailable.</span>
+      <% @row.status == :register_unposted -> %>
+        <span style="font-size:11px;color:var(--muted)">Register not posted.</span>
+      <% true -> %>
+        <span style="font-size:11px;color:var(--muted)">Posted.</span>
+    <% end %>
+    """
+  end
+
+  attr(:tie_out, :map, required: true)
+  attr(:import_id, :string, required: true)
+
+  defp settlement_tie_out(assigns) do
+    ~H"""
+    <div id={"close-payroll-tie-out-#{@import_id}"} data-status={@tie_out.status}>
+      <span id={"close-payroll-tie-out-status-#{@import_id}"} data-status={@tie_out.status}>
+        <.pill variant={settlement_variant(@tie_out.status)}>
+          {settlement_label(@tie_out.status)}
+        </.pill>
+      </span>
+
+      <div style="color:var(--muted);font-size:11px;margin-top:3px">
+        register {money(@tie_out.totals.register_liability_cents)} · settled
+        {money(@tie_out.totals.settlement_cents)} · cash {money(@tie_out.totals.cash_cents)} ·
+        bank matched {money(@tie_out.totals.matched_cents)}
+      </div>
+
+      <div
+        :if={@tie_out.totals.variance_cents != 0}
+        style="color:#B45309;font-size:11px"
+      >
+        settlement variance {money(@tie_out.totals.variance_cents)}
+      </div>
+      <div
+        :if={@tie_out.totals.cash_variance_cents != 0}
+        style="color:#B45309;font-size:11px"
+      >
+        cash variance {money(@tie_out.totals.cash_variance_cents)}
+      </div>
+      <div
+        :if={@tie_out.bank_wired? == false}
+        style="color:var(--muted);font-size:11px"
+      >
+        Bank matching is not wired on this host.
+      </div>
+
+      <ul
+        :if={@tie_out.exceptions != []}
+        style="margin:4px 0 0 16px;color:#B45309;font-size:11px"
+      >
+        <li :for={exception <- Enum.take(@tie_out.exceptions, 6)}>
+          {exception_label(exception)}
+        </li>
+      </ul>
+      <div
+        :if={length(@tie_out.exceptions) > 6}
+        style="color:var(--muted);font-size:11px"
+      >
+        and {length(@tie_out.exceptions) - 6} more exception(s)
+      </div>
+    </div>
+    """
+  end
+
+  defp settlement_entries_label(1), do: "1 entry"
+  defp settlement_entries_label(count), do: "#{count} entries"
+
+  defp date_label(nil), do: "—"
+  defp date_label(%Date{} = date), do: Date.to_iso8601(date)
+  defp date_label(date), do: to_string(date)
+
+  defp settlement_label(:unsettled), do: "not prepared"
+  defp settlement_label(:unposted), do: "draft · not posted"
+  defp settlement_label(:unreconciled), do: "posted · bank unreconciled"
+  defp settlement_label(:reconciled), do: "reconciled"
+  defp settlement_label(:mismatch), do: "mismatch"
+  defp settlement_label(:voided), do: "voided"
+  defp settlement_label(:register_unposted), do: "register not posted"
+  defp settlement_label(:unavailable), do: "unavailable"
+  defp settlement_label(status), do: to_string(status)
+
+  defp settlement_variant(:reconciled), do: "ok"
+  defp settlement_variant(:mismatch), do: "bad"
+  defp settlement_variant(:voided), do: "bad"
+  defp settlement_variant(:unavailable), do: "bad"
+  defp settlement_variant(_status), do: "warn"
+
+  defp exception_label(:settlement_not_prepared), do: "settlement not prepared"
+  defp exception_label(:settlement_not_posted), do: "settlement is still draft"
+  defp exception_label(:register_not_posted), do: "payroll register is not posted"
+  defp exception_label(:voided_payroll_entry), do: "payroll entry was voided"
+
+  defp exception_label(:settlement_amount_mismatch),
+    do: "settlement amount does not match the register"
+
+  defp exception_label(:settlement_entry_missing), do: "a settlement entry is missing"
+  defp exception_label(:bank_match_missing), do: "cash movement has no bank match"
+
+  defp exception_label({:liability_variance, code, cents}),
+    do: "#{code} liability variance #{money(cents)}"
+
+  defp exception_label({:cash_variance, code, cents}),
+    do: "#{code} cash variance #{money(cents)}"
+
+  defp exception_label({:bank_match_missing, code}), do: "#{code} has no bank match"
+
+  defp exception_label({:bank_match_amount_mismatch, code, cents}),
+    do: "#{code} bank amount variance #{money(cents)}"
+
+  defp exception_label(exception), do: inspect(exception)
+
+  defp default_settlement_date(%{year: year, month: month})
+       when is_integer(year) and is_integer(month) do
+    Date.new!(year, month, 1)
+    |> Date.end_of_month()
+    |> Date.to_iso8601()
+  end
+
+  defp default_settlement_date(_period), do: Date.utc_today() |> Date.to_iso8601()
+
+  defp money(nil), do: "—"
+
+  defp money(cents) when is_integer(cents) do
+    sign = if cents < 0, do: "-", else: ""
+    abs_cents = abs(cents)
+
+    "#{sign}$#{div(abs_cents, 100)}.#{abs_cents |> rem(100) |> Integer.to_string() |> String.pad_leading(2, "0")}"
+  end
+
+  defp money(other), do: to_string(other)
 
   defp payroll_status_label(:clear), do: "clear"
   defp payroll_status_label(:blocked), do: "blocked"

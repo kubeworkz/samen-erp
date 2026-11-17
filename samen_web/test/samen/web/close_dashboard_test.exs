@@ -23,7 +23,16 @@ defmodule Samen.Web.CloseDashboardTest do
   alias Samen.Web.Plane
 
   alias Samen.WebTest.Docs.Doc
-  alias Samen.WebTest.Erp.{Account, CloseRun, FiscalPeriod, JournalEntry, PayrollImport}
+
+  alias Samen.WebTest.Erp.{
+    Account,
+    CloseRun,
+    FiscalPeriod,
+    JournalEntry,
+    PayrollImport,
+    PayrollSettlement
+  }
+
   alias Samen.WebTest.Repo
   alias Samen.WebTest.Work.Task
 
@@ -457,6 +466,106 @@ defmodule Samen.Web.CloseDashboardTest do
       assert html =~ "Close completed for October 2026."
       assert html =~ "close run completed"
       assert Ash.get!(CloseRun, run.id, authorize?: false).status == :completed
+    end
+  end
+
+  describe "payroll settlement surface" do
+    test "prepares and posts a settlement and shows its tie-out status" do
+      org_id = Ash.UUID.generate()
+      _period = seed_period!(org_id, 2026, 10)
+      entry = payroll_entry!(org_id, :posted)
+      import = payroll_import!(org_id, entry)
+      cash = account!(org_id, "1010", :asset, :debit)
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ ~s(id="close-payroll-settlements")
+      assert html =~ ~s(id="close-payroll-settlement-#{import.id}")
+      assert html =~ ~s(id="close-payroll-settlement-status-#{import.id}" data-status="unsettled")
+      assert html =~ ~s(id="close-payroll-settlement-form-#{import.id}")
+      assert html =~ "1010"
+      refute html =~ ~s(id="close-payroll-settlement-post-#{import.id}")
+
+      socket =
+        dispatch(socket, "prepare_payroll_settlement", %{
+          "import_id" => import.id,
+          "cash_account_id" => cash.id,
+          "settlement_date" => "2026-10-31",
+          "reference" => "October payroll clearance"
+        })
+
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ "Prepared payroll settlement."
+      assert html =~ ~s(id="close-payroll-settlement-status-#{import.id}" data-status="unposted")
+      assert html =~ "draft · not posted"
+      assert html =~ "1 entry"
+      assert html =~ ~s(id="close-payroll-settlement-post-#{import.id}")
+      assert html =~ "October payroll clearance"
+
+      [row] = socket.assigns.state.settlements.rows
+      settlement = row.settlement
+      assert settlement.status == :draft
+      assert settlement.total_cents == 125_000
+      assert settlement.payment_count == 1
+
+      socket =
+        dispatch(socket, "post_payroll_settlement", %{"settlement_id" => settlement.id})
+
+      html = render_html(Live, socket.assigns)
+
+      assert html =~ "Posted payroll settlement."
+
+      assert html =~
+               ~s(id="close-payroll-settlement-status-#{import.id}" data-status="unreconciled")
+
+      assert html =~ ~s(id="close-payroll-tie-out-#{import.id}" data-status="unreconciled")
+      assert html =~ "posted · bank unreconciled"
+      assert html =~ "Bank matching is not wired on this host."
+      assert html =~ "$1250.00"
+      assert html =~ "posted by the workspace"
+
+      posted = Ash.get!(PayrollSettlement, settlement.id, authorize?: false)
+      assert posted.status == :posted
+      assert posted.posted_at != nil
+    end
+
+    test "names an unreadable payroll gate instead of implying there are no registers" do
+      org_id = Ash.UUID.generate()
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, socket.assigns)
+
+      assert socket.assigns.state.payroll.status == :unavailable
+      assert socket.assigns.state.settlements.error == :payroll_unavailable
+      assert html =~ ~s(id="close-payroll-settlements-payroll-unavailable")
+      refute html =~ ~s(id="close-payroll-settlements-empty")
+    end
+
+    test "offers prepare and post only to an admin and refuses a crafted non-admin event" do
+      org_id = Ash.UUID.generate()
+      _period = seed_period!(org_id, 2026, 10)
+      entry = payroll_entry!(org_id, :posted)
+      import = payroll_import!(org_id, entry)
+      cash = account!(org_id, "1010", :asset, :debit)
+
+      socket = socket(mount(org_id), %{"org" => org_id})
+      html = render_html(Live, Map.put(socket.assigns, :can_admin?, false))
+
+      refute html =~ ~s(id="close-payroll-settlement-form-#{import.id}")
+      refute html =~ ~s(id="close-payroll-settlement-post-#{import.id}")
+      assert html =~ "Admin required."
+
+      socket = %{socket | assigns: Map.put(socket.assigns, :can_admin?, false)}
+
+      _socket =
+        dispatch(socket, "prepare_payroll_settlement", %{
+          "import_id" => import.id,
+          "cash_account_id" => cash.id,
+          "settlement_date" => "2026-10-31"
+        })
+
+      assert Ash.read!(PayrollSettlement, authorize?: false) == []
     end
   end
 

@@ -317,7 +317,8 @@ defmodule SamenerpWeb.Router do
       repo: Samenerp.Repo,
       labels: @current_org_labels,
       work_namespace: Samenerp.Work,
-      docs_namespace: Samenerp.Docs
+      docs_namespace: Samenerp.Docs,
+      banking_namespace: Samenerp.Banking
     )
 
     # 1c-4. WS-ACCT Phase 13 — the board reporting package over the same

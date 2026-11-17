@@ -1374,6 +1374,12 @@ defmodule Samen.Web.Router do
   Without it the form keeps the manual Doc-ID input and the page shows the
   evidence count — a host that has not mounted Docs still works, and the page
   never invents a document name.
+
+  `:banking_namespace` names the host's mounted Banking namespace (the Match
+  resource is derived as `<namespace>.Match`). When present, the payroll
+  settlement card includes bank reconciliation in the tie-out status; without
+  it the card still shows register -> settlement -> cash and explicitly says
+  bank matching is not wired.
   """
   defmacro samen_close_routes(kind, namespace, opts \\ []) do
     kind = Macro.expand(kind, __CALLER__)
@@ -1402,6 +1408,12 @@ defmodule Samen.Web.Router do
           case Keyword.get(opts, :docs_namespace) do
             nil -> labels
             ns -> Map.put(labels, :docs_namespace, ns)
+          end
+        end)
+        |> then(fn labels ->
+          case Keyword.get(opts, :banking_namespace) do
+            nil -> labels
+            ns -> Map.put(labels, :banking_namespace, ns)
           end
         end)
 

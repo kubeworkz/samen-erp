@@ -13,8 +13,11 @@ defmodule Samenerp.PayrollSettlementTest do
   require Ash.Query
 
   alias Samen.Scopes.Finance.PayrollTieOut
+  alias Samen.Web.Finance.CloseDashboard
+  alias Samen.Web.Finance.CloseDashboard.Live, as: CloseBoardLive
+  alias Samen.Web.Mount
   alias Samenerp.Banking
-  alias Samenerp.Erp.{Account, JournalEntry, PayrollImport, PayrollSettlement}
+  alias Samenerp.Erp.{Account, FiscalPeriod, JournalEntry, PayrollImport, PayrollSettlement}
 
   setup do
     org = Ecto.UUID.generate()
@@ -79,6 +82,48 @@ defmodule Samenerp.PayrollSettlementTest do
     assert report.exceptions == []
   end
 
+  test "the close board renders a reconciled settlement after every bank match", %{
+    org: org,
+    scope: scope,
+    expense: expense,
+    payable: payable,
+    tax: tax,
+    cash: cash,
+    bank: bank
+  } do
+    _period = period!(scope, org, 2026, 9)
+    entry = payroll_entry!(scope, org, expense, payable, tax)
+    import = import!(scope, org, entry, 500_000)
+    settlement = prepare!(scope, org, import, cash)
+    posted = post!(settlement, scope)
+
+    entries = settlement_entries!(posted.entry_ids)
+
+    Enum.each(entries, fn entry ->
+      line = statement_line!(org, bank.id, -cash_credit(entry, cash.id))
+      assert {:ok, _match} = match(scope, line, entry)
+    end)
+
+    mount = close_mount()
+
+    assert {:ok, state} = CloseDashboard.load(mount, org)
+    assert [row] = state.settlements.rows
+    assert row.status == :reconciled
+    assert row.tie_out.status == :reconciled
+    assert row.tie_out.bank_wired?
+    assert row.tie_out.exceptions == []
+    assert row.tie_out.totals.matched_cents == 500_000
+    assert row.cash_account.id == cash.id
+
+    html = close_html!(mount, org)
+
+    assert html =~ ~s(id="close-payroll-settlement-#{import.id}")
+    assert html =~ ~s(id="close-payroll-settlement-status-#{import.id}" data-status="reconciled")
+    assert html =~ ~s(id="close-payroll-tie-out-#{import.id}" data-status="reconciled")
+    assert html =~ "$5000.00"
+    refute html =~ "Bank matching is not wired on this host."
+  end
+
   test "a bank match within the amount tolerance is still a tie-out mismatch", %{
     org: org,
     scope: scope,
@@ -108,6 +153,38 @@ defmodule Samenerp.PayrollSettlementTest do
     refute report.reconciled?
     assert report.totals.bank_variance_cents == -1
     assert Enum.any?(report.exceptions, &match?({:bank_match_amount_mismatch, _, _}, &1))
+  end
+
+  defp period!(scope, org, year, month) do
+    FiscalPeriod
+    |> Ash.Changeset.for_create(:create, %{org_id: org, year: year, month: month}, scope: scope)
+    |> Ash.create!()
+  end
+
+  defp close_mount do
+    Mount.new(:erp, Samenerp.Erp, Samenerp.Repo,
+      labels: %{
+        close_path: "/close",
+        erp_path: "/erp",
+        banking_namespace: Samenerp.Banking
+      }
+    )
+  end
+
+  defp close_html!(mount, org) do
+    params = %{"org" => org}
+    session = %{"samen_mount" => Mount.to_session(mount)}
+
+    {:ok, socket} = CloseBoardLive.mount(params, session, %Phoenix.LiveView.Socket{})
+
+    {:noreply, socket} =
+      CloseBoardLive.handle_params(params, "http://localhost/close", socket)
+
+    socket.assigns
+    |> Map.put(:__changed__, %{})
+    |> CloseBoardLive.render()
+    |> Phoenix.HTML.Safe.to_iodata()
+    |> IO.iodata_to_binary()
   end
 
   defp payroll_entry!(scope, org, expense, payable, tax) do
