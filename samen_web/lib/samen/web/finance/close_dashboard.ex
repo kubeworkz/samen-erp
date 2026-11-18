@@ -31,6 +31,12 @@ defmodule Samen.Web.Finance.CloseDashboard do
   and a kernel that refuses the close cannot disagree. A read error or a
   truncated inbox stays visibly blocking; the page never renders it as clear.
 
+  R12 is computed before the board is built: the invoice resource comes from the
+  host's `:billing_invoice` mount label, the receipt/credit/GL resources from the
+  mounted Finance namespace, and the period-end date is the `as_of`. The report
+  is passed through `CloseBoard.report/2` unchanged; the board remains a pure
+  read and the page shows the tie and provider-contamination verdict.
+
   Evidence titles are resolved from the optional `:docs_namespace` mount label
   (`<namespace>.Doc`). The picker lists the org's live Docs pages by title, and
   every stored evidence UUID is resolved through that same org-scoped read; an
@@ -44,7 +50,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
 
   require Ash.Query
 
-  alias Samen.Scopes.Finance.{CloseBoard, PayrollCloseCheck}
+  alias Samen.Scopes.Finance.{CloseBoard, PayrollCloseCheck, ReconcileAr}
   alias Samen.Web.Finance.PayrollSettlements
   alias Samen.Web.Mount
   alias Samen.Web.TenantRole
@@ -58,6 +64,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
           run: struct() | nil,
           report: map() | nil,
           payroll: map(),
+          ar_reconciliation: map() | nil,
           settlements: PayrollSettlements.state(),
           task_wired?: boolean(),
           docs: [doc()],
@@ -69,9 +76,9 @@ defmodule Samen.Web.Finance.CloseDashboard do
   @doc """
   Load the current close cycle for `mount` + `org_id`.
 
-  Returns `{:ok, %{period:, run:, report:, payroll:, settlements:, task_wired?:,
-  docs:, docs_wired?:, evidence_titles:}}` — `report` is `nil` when no run
-  exists — or `{:error, :no_mount | :no_org | :finance_not_mounted}`.
+  Returns `{:ok, %{period:, run:, report:, payroll:, ar_reconciliation:, settlements:,
+  task_wired?:, docs:, docs_wired?:, evidence_titles:}}` — `report` is `nil`
+  when no run exists — or `{:error, :no_mount | :no_org | :finance_not_mounted}`.
   """
   @spec load(Mount.t() | nil, String.t() | nil) :: {:ok, state()} | {:error, atom()}
   def load(%Mount{} = mount, org_id) when is_binary(org_id) do
@@ -92,9 +99,20 @@ defmodule Samen.Web.Finance.CloseDashboard do
 
       settlements = PayrollSettlements.load(mount, org_id, payroll, scope: scope)
 
-      report =
+      ar_reconciliation =
         if run,
-          do: CloseBoard.report(run, task: task_mod, period: period, payroll: payroll)
+          do: ar_reconciliation(mount, org_id, period, scope),
+          else: nil
+
+      report =
+        if run do
+          CloseBoard.report(run,
+            task: task_mod,
+            period: period,
+            payroll: payroll,
+            ar_reconciliation: ar_reconciliation
+          )
+        end
 
       evidence = evidence_context(mount, scope, report)
 
@@ -104,6 +122,7 @@ defmodule Samen.Web.Finance.CloseDashboard do
          run: run,
          report: report,
          payroll: payroll,
+         ar_reconciliation: ar_reconciliation,
          settlements: settlements,
          task_wired?: task_mod != nil,
          docs: evidence.docs,
@@ -283,6 +302,76 @@ defmodule Samen.Web.Finance.CloseDashboard do
       {:ok, module} -> module
       {:error, _reason} -> nil
     end
+  end
+
+  # ── R12 AR reconciliation ─────────────────────────────────────────────────
+
+  defp ar_reconciliation(mount, org_id, period, scope) do
+    invoice_mod = billing_invoice_module(mount)
+    receipt_mod = optional_resource(mount, :PaymentReceipt)
+    posting_account_mod = optional_resource(mount, :PostingAccount)
+    entry_mod = optional_resource(mount, :JournalEntry)
+    line_mod = optional_resource(mount, :JournalLine)
+    as_of = period_end(period)
+
+    if invoice_mod && receipt_mod && posting_account_mod && entry_mod && line_mod && as_of do
+      opts = [
+        org_id: org_id,
+        scope: scope,
+        as_of: as_of,
+        invoice: invoice_mod,
+        receipt: receipt_mod,
+        receipt_allocation: optional_resource(mount, :ReceiptAllocation),
+        credit_note: optional_resource(mount, :CreditNote),
+        posting_account: posting_account_mod,
+        entry: entry_mod,
+        line: line_mod,
+        repo: mount.repo
+      ]
+
+      case ReconcileAr.for_org(opts) do
+        {:ok, report} -> report
+        {:error, reason} -> unavailable_ar_reconciliation(reason, as_of)
+      end
+    end
+  rescue
+    _ -> unavailable_ar_reconciliation(:read_failed, period_end(period))
+  end
+
+  defp billing_invoice_module(%Mount{} = mount) do
+    case Mount.label(mount, :billing_invoice, nil) do
+      module when is_atom(module) and not is_nil(module) ->
+        if Code.ensure_loaded?(module), do: module
+
+      _ ->
+        nil
+    end
+  end
+
+  defp period_end(%{year: year, month: month})
+       when is_integer(year) and is_integer(month) and month in 1..12 do
+    Date.new!(year, month, 1) |> Date.end_of_month()
+  end
+
+  defp period_end(_period), do: nil
+
+  defp unavailable_ar_reconciliation(reason, as_of) do
+    %{
+      status: :unavailable,
+      reason: reason,
+      as_of: as_of,
+      aging_cents: nil,
+      unapplied_cents: nil,
+      expected_gl_cents: nil,
+      gl_cents: nil,
+      difference_cents: nil,
+      balanced?: false,
+      excluded_provider_invoices: 0,
+      provider_linked_receipts: 0,
+      provider_linked_credit_notes: 0,
+      provider_linked_allocations: 0,
+      contaminated?: false
+    }
   end
 
   # ── governed commands ─────────────────────────────────────────────────────

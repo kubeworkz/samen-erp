@@ -54,6 +54,10 @@ defmodule Samen.Scopes.Finance.CloseBoard do
       caller (`Samen.Scopes.Finance.PayrollCloseCheck`), or `nil` when the
       caller did not run it. A blocking check is shown beside the checklist so
       payroll cannot be omitted from a signed close without the board saying so.
+    * `:ar_reconciliation` — the read-only R12 report supplied by the caller
+      (`Samen.Scopes.Finance.ReconcileAr`), or `nil` when the caller did not run
+      it. Its `balanced?` and `contaminated?` verdicts are surfaced beside the
+      checklist without the board re-querying the subledger or GL.
 
   ## No task module, no invented task state
 
@@ -78,12 +82,15 @@ defmodule Samen.Scopes.Finance.CloseBoard do
     * `:period` — the `FiscalPeriod` row, for the month/status header.
     * `:payroll` — a precomputed `PayrollCloseCheck.report/3` map. The board
       stays a pure read and does not re-query payroll on its own.
+    * `:ar_reconciliation` — a precomputed `ReconcileAr.for_org/1` report. The
+      board stays a pure read and does not re-query the AR subledger or GL.
   """
   @spec report(struct(), keyword()) :: map()
   def report(run, opts \\ []) do
     task_mod = Keyword.get(opts, :task)
     period = Keyword.get(opts, :period)
     payroll = Keyword.get(opts, :payroll)
+    ar_reconciliation = Keyword.get(opts, :ar_reconciliation)
 
     tasks =
       if is_nil(task_mod) do
@@ -115,7 +122,8 @@ defmodule Samen.Scopes.Finance.CloseBoard do
       next_phase: Enum.find(phases, &(&1.status == :open)),
       tasks: task_totals(tasks, task_mod),
       discrepancies: discrepancies(phases),
-      payroll: payroll
+      payroll: payroll,
+      ar_reconciliation: ar_reconciliation
     }
   end
 

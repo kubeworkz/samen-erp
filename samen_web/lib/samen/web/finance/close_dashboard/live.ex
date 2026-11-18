@@ -521,6 +521,12 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         can_admin?={@can_admin?}
       />
 
+      <.ar_reconciliation_card
+        :if={@state.report.ar_reconciliation}
+        reconciliation={@state.report.ar_reconciliation}
+        period={@state.period}
+      />
+
       <div
         :if={@state.report.discrepancies != []}
         class="card"
@@ -762,6 +768,76 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
         </div>
       <% else %>
         <span style="color:var(--muted)">No fiscal period declared.</span>
+      <% end %>
+    </div>
+    """
+  end
+
+  attr(:reconciliation, :map, required: true)
+  attr(:period, :map, default: nil)
+
+  defp ar_reconciliation_card(assigns) do
+    ~H"""
+    <div
+      class="card"
+      id="close-ar-reconciliation"
+      data-status={ar_status(@reconciliation)}
+      style={"padding:12px 16px;margin-bottom:12px;border-left:3px solid #{ar_border(ar_status(@reconciliation))}"}
+    >
+      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <b>AR reconciliation (R12)</b>
+        <span id="close-ar-reconciliation-status" data-status={ar_status(@reconciliation)}>
+          <.pill variant={ar_variant(ar_status(@reconciliation))}>
+            {ar_status_label(ar_status(@reconciliation))}
+          </.pill>
+        </span>
+        <span style="color:var(--muted);font-size:12px">
+          {period_label(@period)} · as of {@reconciliation.as_of}
+        </span>
+      </div>
+
+      <%= if ar_status(@reconciliation) == :unavailable do %>
+        <div id="close-ar-reconciliation-unavailable" style="margin-top:6px;color:#B45309">
+          The R12 AR reconciliation could not be read. The board does not claim local AR ties.
+        </div>
+      <% else %>
+        <div
+          id="close-ar-reconciliation-tie"
+          style="margin-top:6px;color:var(--muted);font-size:12px"
+        >
+          Local AR aging {money(@reconciliation.aging_cents)} less on-account cash
+          {money(@reconciliation.unapplied_cents)} = {money(@reconciliation.expected_gl_cents)}
+          expected · posted AR clearing {money(@reconciliation.gl_cents)} · difference
+          {money(@reconciliation.difference_cents)}
+        </div>
+
+        <div
+          :if={@reconciliation.excluded_provider_invoices > 0}
+          id="close-ar-reconciliation-excluded"
+          style="margin-top:6px;color:var(--muted);font-size:11px"
+        >
+          {@reconciliation.excluded_provider_invoices} provider-mirror invoice(s) excluded from local AR aging.
+        </div>
+
+        <div
+          :if={@reconciliation.contaminated?}
+          id="close-ar-reconciliation-contaminated"
+          style="margin-top:6px;color:#B45309;font-size:12px"
+        >
+          Provider-linked cash or credit contaminates this reconciliation
+          ({@reconciliation.provider_linked_receipts} receipt(s),
+          {@reconciliation.provider_linked_credit_notes} credit note(s),
+          {@reconciliation.provider_linked_allocations} allocation(s)). The board does not
+          treat it as tied even when the cents net.
+        </div>
+
+        <div
+          :if={ar_status(@reconciliation) == :difference}
+          id="close-ar-reconciliation-difference"
+          style="margin-top:6px;color:#B45309;font-size:12px"
+        >
+          Local AR does not tie to the posted AR clearing balance at period end.
+        </div>
       <% end %>
     </div>
     """
@@ -1309,6 +1385,22 @@ defmodule Samen.Web.Finance.CloseDashboard.Live do
 
   defp payroll_border(:clear), do: "#0A5C42"
   defp payroll_border(_status), do: "#B45309"
+
+  defp ar_status(%{status: :unavailable}), do: :unavailable
+  defp ar_status(%{contaminated?: true}), do: :contaminated
+  defp ar_status(%{balanced?: true}), do: :tied
+  defp ar_status(_reconciliation), do: :difference
+
+  defp ar_status_label(:unavailable), do: "unavailable"
+  defp ar_status_label(:contaminated), do: "contaminated"
+  defp ar_status_label(:tied), do: "tied"
+  defp ar_status_label(_status), do: "difference"
+
+  defp ar_variant(:tied), do: "ok"
+  defp ar_variant(_status), do: "warn"
+
+  defp ar_border(:tied), do: "#0A5C42"
+  defp ar_border(_status), do: "#B45309"
 
   defp payroll_disposition_label(:draft), do: "unposted draft"
   defp payroll_disposition_label(:conflict), do: "unresolved conflict"

@@ -16,12 +16,13 @@ defmodule Samen.Web.CloseDashboardTest do
 
   use Samen.WebTest.DataCase, async: false
 
-  alias Samen.Scopes.Finance.{CloseChecklist, ClosePhases}
+  alias Samen.Scopes.Finance.{ArReceiptApplication, CloseChecklist, ClosePhases}
   alias Samen.Web.Finance.CloseDashboard
   alias Samen.Web.Finance.CloseDashboard.Live
   alias Samen.Web.Mount
   alias Samen.Web.Plane
 
+  alias Samen.WebTest.Billing.{Customer, Invoice}
   alias Samen.WebTest.Docs.Doc
 
   alias Samen.WebTest.Erp.{
@@ -29,8 +30,10 @@ defmodule Samen.Web.CloseDashboardTest do
     CloseRun,
     FiscalPeriod,
     JournalEntry,
+    PaymentReceipt,
     PayrollImport,
-    PayrollSettlement
+    PayrollSettlement,
+    PostingAccount
   }
 
   alias Samen.WebTest.Repo
@@ -44,7 +47,12 @@ defmodule Samen.Web.CloseDashboardTest do
 
   defp mount(_org_id, opts \\ []) do
     labels =
-      %{close_path: "/close", erp_path: "/erp", pages_path: "/pages"}
+      %{
+        billing_invoice: Samen.WebTest.Billing.Invoice,
+        close_path: "/close",
+        erp_path: "/erp",
+        pages_path: "/pages"
+      }
       |> then(fn labels ->
         if Keyword.get(opts, :work, true) do
           Map.put(labels, :work_namespace, Samen.WebTest.Work)
@@ -202,6 +210,78 @@ defmodule Samen.Web.CloseDashboardTest do
       scope: admin_scope(org_id)
     )
     |> Ash.create!()
+  end
+
+  defp posting_account!(org_id, key, account) do
+    PostingAccount
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org_id, key: key, account_id: account.id},
+      scope: admin_scope(org_id)
+    )
+    |> Ash.create!()
+  end
+
+  defp billing_customer!(org_id) do
+    Customer
+    |> Ash.Changeset.for_create(
+      :create,
+      %{org_id: org_id, billing_name: "R12 fixture customer"},
+      scope: admin_scope(org_id)
+    )
+    |> Ash.create!()
+  end
+
+  defp billing_invoice!(org_id, customer_id, attrs) do
+    Invoice
+    |> Ash.Changeset.for_create(
+      :create,
+      Map.merge(
+        %{
+          org_id: org_id,
+          customer_id: customer_id,
+          status: :open,
+          amount_due_cents: 10_000,
+          amount_paid_cents: 0,
+          currency: "USD",
+          due_date: ~U[2026-10-31 00:00:00Z],
+          line_items: []
+        },
+        attrs
+      ),
+      scope: admin_scope(org_id)
+    )
+    |> Ash.create!()
+  end
+
+  defp local_ar_tie!(org_id, customer_id) do
+    ar = account!(org_id, "1100", :asset, :debit)
+    revenue = account!(org_id, "4000", :income, :credit)
+    posting_account!(org_id, :ar_clearing, ar)
+
+    journal_entry =
+      JournalEntry
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org_id,
+          entry_date: ~D[2026-10-31],
+          memo: "October AR",
+          lines: [
+            %{account_id: ar.id, debit_cents: 10_000},
+            %{account_id: revenue.id, credit_cents: 10_000}
+          ]
+        },
+        scope: admin_scope(org_id)
+      )
+      |> Ash.create!()
+      |> then(fn entry ->
+        Ash.Changeset.for_update(entry, :post, %{}, scope: admin_scope(org_id))
+        |> Ash.update!()
+      end)
+
+    invoice = billing_invoice!(org_id, customer_id, %{})
+    %{invoice: invoice, journal_entry: journal_entry}
   end
 
   defp socket(mount, params) do
@@ -665,6 +745,111 @@ defmodule Samen.Web.CloseDashboardTest do
         })
 
       assert Ash.read!(PayrollSettlement, authorize?: false) == []
+    end
+  end
+
+  describe "R12 AR reconciliation" do
+    test "computes R12 from the host finance modules and shows the period-end tie" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      run = start_run!(org_id, period)
+      customer = billing_customer!(org_id)
+      %{invoice: invoice} = local_ar_tie!(org_id, customer.id)
+
+      assert {:ok, state} = CloseDashboard.load(mount(org_id), org_id)
+      reconciliation = state.report.ar_reconciliation
+
+      assert state.ar_reconciliation == reconciliation
+      assert reconciliation.as_of == ~D[2026-10-31]
+      assert reconciliation.aging_cents == 10_000
+      assert reconciliation.unapplied_cents == 0
+      assert reconciliation.expected_gl_cents == 10_000
+      assert reconciliation.gl_cents == 10_000
+      assert reconciliation.difference_cents == 0
+      assert reconciliation.balanced?
+      refute reconciliation.contaminated?
+      assert reconciliation.excluded_provider_invoices == 0
+      assert invoice.status == :open
+      assert run.status == :in_progress
+
+      html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
+
+      assert html =~ ~s(id="close-ar-reconciliation")
+      assert html =~ ~s(id="close-ar-reconciliation-status" data-status="tied")
+      assert html =~ "AR reconciliation (R12)"
+      assert html =~ "Local AR aging $100.00"
+      assert html =~ "posted AR clearing $100.00"
+      refute html =~ ~s(id="close-ar-reconciliation-contaminated")
+    end
+
+    test "shows unavailable and makes no tie claim when ar_clearing is unmapped" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      _run = start_run!(org_id, period)
+      customer = billing_customer!(org_id)
+      _invoice = billing_invoice!(org_id, customer.id, %{})
+
+      assert {:ok, state} = CloseDashboard.load(mount(org_id), org_id)
+      reconciliation = state.report.ar_reconciliation
+
+      assert reconciliation.status == :unavailable
+      assert reconciliation.reason == {:unmapped_posting_account, :ar_clearing}
+      refute reconciliation.balanced?
+      refute reconciliation.contaminated?
+
+      html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
+
+      assert html =~ ~s(id="close-ar-reconciliation" data-status="unavailable")
+      assert html =~ ~s(id="close-ar-reconciliation-status" data-status="unavailable")
+      assert html =~ ~s(id="close-ar-reconciliation-unavailable")
+      assert html =~ "The R12 AR reconciliation could not be read"
+      refute html =~ ~s(id="close-ar-reconciliation-tie")
+      refute html =~ "Local AR aging"
+      refute html =~ ~s(data-status="tied")
+    end
+
+    test "keeps the contamination verdict on the period-end board when provider cash nets" do
+      org_id = Ash.UUID.generate()
+      period = seed_period!(org_id, 2026, 10)
+      _run = start_run!(org_id, period)
+      customer = billing_customer!(org_id)
+      local_ar_tie!(org_id, customer.id)
+
+      cash = account!(org_id, "1000", :asset, :debit)
+      posting_account!(org_id, :cash, cash)
+
+      provider_invoice =
+        billing_invoice!(org_id, customer.id, %{
+          provider_invoice_ref: "in_r12_provider_mirror",
+          amount_due_cents: 5_000
+        })
+
+      assert {:ok, _posted} =
+               ArReceiptApplication.apply(
+                 invoice: Invoice,
+                 receipt: PaymentReceipt,
+                 repo: Repo,
+                 scope: Plane.scope(Plane.tenant(), org_id),
+                 org_id: org_id,
+                 customer_id: customer.id,
+                 paid_at: ~D[2026-10-31],
+                 reference: "R12-CONTAM",
+                 allocations: [%{invoice_id: provider_invoice.id, amount_cents: 5_000}]
+               )
+
+      assert {:ok, state} = CloseDashboard.load(mount(org_id), org_id)
+      reconciliation = state.report.ar_reconciliation
+
+      assert reconciliation.contaminated?
+      refute reconciliation.balanced?
+      assert reconciliation.provider_linked_receipts == 1
+      assert reconciliation.excluded_provider_invoices == 1
+
+      html = mount_smoke(Live, mount(org_id), %{"org" => org_id})
+
+      assert html =~ ~s(id="close-ar-reconciliation-status" data-status="contaminated")
+      assert html =~ ~s(id="close-ar-reconciliation-contaminated")
+      assert html =~ "Provider-linked cash or credit contaminates this reconciliation"
     end
   end
 

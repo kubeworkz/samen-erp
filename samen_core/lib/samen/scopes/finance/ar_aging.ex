@@ -164,7 +164,8 @@ defmodule Samen.Scopes.Finance.ArAging do
           paid_cents: paid_cents,
           credited_cents: credited_cents,
           outstanding_cents: max(amount - paid_cents - credited_cents, 0),
-          status: value_of(invoice, :status)
+          status: value_of(invoice, :status),
+          provider_invoice_ref: provider_invoice_ref(invoice)
         }
       end)
       |> Enum.sort_by(&{&1.currency, &1.invoice_date || ~D[9999-12-31], &1.invoice_id})
@@ -286,7 +287,8 @@ defmodule Samen.Scopes.Finance.ArAging do
       due_date: date_of(Map.get(invoice, :due_date)),
       amount_cents: Map.get(invoice, :amount_due_cents) || 0,
       currency: Map.get(invoice, :currency) || "USD",
-      status: Map.get(invoice, :status)
+      status: Map.get(invoice, :status),
+      provider_invoice_ref: provider_invoice_ref(invoice)
     }
   end
 
@@ -345,7 +347,8 @@ defmodule Samen.Scopes.Finance.ArAging do
         credited_cents: credited_cents,
         outstanding_cents: outstanding,
         days_overdue: days_overdue,
-        bucket: bucket_for(due_date, days_overdue)
+        bucket: bucket_for(due_date, days_overdue),
+        provider_invoice_ref: provider_invoice_ref(invoice)
       }
     end
   end
@@ -506,6 +509,14 @@ defmodule Samen.Scopes.Finance.ArAging do
 
   defp posted_adjustment?(credit) do
     value_of(credit, :status) in [:open, :applied, "open", "applied"]
+  end
+
+  defp provider_invoice_ref(invoice) do
+    case value_of(invoice, :provider_invoice_ref) do
+      %Ash.NotLoaded{} -> nil
+      nil -> nil
+      ref -> ref
+    end
   end
 
   defp value_of(map, key) when is_map(map) do
