@@ -67,7 +67,7 @@ defmodule Samen.Scopes.Finance.PayrollTieOut do
     with {:ok, import} <- load_import(import_mod, org_id, payroll_import_id),
          {:ok, settlement} <- load_settlement(settlement_mod, org_id, payroll_import_id),
          {:ok, settlement_entries} <- load_settlement_entries(entry_mod, org_id, settlement),
-         {:ok, matches} <- load_matches(match_mod, settlement_entries) do
+         {:ok, matches} <- load_matches(match_mod, org_id, settlement_entries) do
       {:ok, build(import, settlement, settlement_entries, matches, not is_nil(match_mod), org_id)}
     end
   end
@@ -105,15 +105,15 @@ defmodule Samen.Scopes.Finance.PayrollTieOut do
     end
   end
 
-  defp load_matches(nil, _entries), do: {:ok, []}
+  defp load_matches(nil, _org_id, _entries), do: {:ok, []}
 
-  defp load_matches(_match_mod, []), do: {:ok, []}
+  defp load_matches(_match_mod, _org_id, []), do: {:ok, []}
 
-  defp load_matches(match_mod, entries) do
+  defp load_matches(match_mod, org_id, entries) do
     ids = Enum.map(entries, & &1.id)
 
     match_mod
-    |> Ash.Query.filter(entry_id in ^ids)
+    |> Ash.Query.filter(org_id == ^org_id and entry_id in ^ids)
     |> Ash.Query.load(:statement_line)
     |> Ash.read(authorize?: false)
   end
