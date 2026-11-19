@@ -361,9 +361,11 @@ defmodule Samen.Abbrev.AllocatorTest do
       # allocator-reserved -> 37_232 bytes, 788 flat.
       # +3 durable payroll-register provenance rows (`pfs`/`epw`/`esp`)
       # +3 payroll account-mapping rows (`aab`/`pwe`/`pse`)
-      # -> 37_564 bytes, 794 flat.
-      assert byte_size(committed) == 37_564
-      assert map_size(R.load()) == 794
+      # +3 payroll-settlement rows (`pss` samen_core, `pst` samen_web, `psy`
+      # samenerp — the PayrollSettlement batch per Finance host), all
+      # allocator-reserved -> 37_730 bytes, 797 flat.
+      assert byte_size(committed) == 37_730
+      assert map_size(R.load()) == 797
     end
   end
 

@@ -12,3 +12,6 @@ samen_core/priv/abbrev_registry.json text eol=lf
 # The templates-parity golden fixtures (the renderer emits LF; the fixtures
 # must hold it byte-exactly).
 *.golden text eol=lf
+# The per-app schema dicts are BYTE-GOLDEN too (each gate diffs the committed
+# file byte-exactly against a fresh LF dump) — keep them LF on every host.
+schema.dict.json text eol=lf
