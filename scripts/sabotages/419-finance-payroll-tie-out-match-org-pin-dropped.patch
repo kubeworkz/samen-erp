@@ -1,0 +1,31 @@
+# SABOTAGE: the payroll tie-out's Banking.Match read loses its org pin — the match scan
+# trusts the entry ids it was handed and filters on `entry_id` alone.
+#
+# `load_settlement_entries/3` already org-filters the settlement journal entries, so the
+# ids are org-bound by construction and a match row pointing at any of them belongs to the
+# same org. That is exactly the plausible reasoning: the FK makes the extra conjunct look
+# redundant, and the report's behavior tests stay green because no cross-org row is ever
+# reachable through the org-scoped entry set.
+#
+# The T132 read-scope lint exists precisely because that reasoning is local and stops
+# holding when the read is copied, refactored, or handed ids from a wider source: the
+# `authorize?: false` read itself must carry a genuine org/PK narrowing filter. Dropping
+# the `org_id` conjunct leaves only `entry_id in ^ids` — not a pin — so the lint's
+# whole-tree GREEN sweep flags `payroll_tie_out.ex`.
+#
+# APP: samen_web
+# TEST_FILES: test/samen/web/authz_read_scope_lint_test.exs
+# MUST_FAIL: EVERY direct authorize?: false read across all five trees is pinned or sanctioned
+diff --git a/samen_core/lib/samen/scopes/finance/payroll_tie_out.ex b/samen_core/lib/samen/scopes/finance/payroll_tie_out.ex
+index b91d9470..f2c177a4 100644
+--- a/samen_core/lib/samen/scopes/finance/payroll_tie_out.ex
++++ b/samen_core/lib/samen/scopes/finance/payroll_tie_out.ex
+@@ -113,7 +113,7 @@ defmodule Samen.Scopes.Finance.PayrollTieOut do
+     ids = Enum.map(entries, & &1.id)
+ 
+     match_mod
+-    |> Ash.Query.filter(org_id == ^org_id and entry_id in ^ids)
++    |> Ash.Query.filter(entry_id in ^ids)
+     |> Ash.Query.load(:statement_line)
+     |> Ash.read(authorize?: false)
+   end
