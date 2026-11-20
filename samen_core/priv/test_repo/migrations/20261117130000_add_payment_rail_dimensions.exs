@@ -17,7 +17,10 @@ defmodule SamenCore.TestRepo.Migrations.AddPaymentRailDimensions do
   profile/artifact rows is configuration only and is dropped with its table.
   """
 
-  use Samen.Migration
+  # Additive expand: USD defaults preserve every existing row, and the custom
+  # down/0 refuses to erase live CAD rows. Marked :expand so the host gate's
+  # `mix samen.verify.migrations` exercises the down/0 in a scratch database.
+  use Samen.Migration, phase: :expand
 
   def up do
     create_originator_profile()

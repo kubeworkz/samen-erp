@@ -1,7 +1,9 @@
 # B2 payment-rail schema — deliberate schema-first slice
 
 - **Status:** step 1 of B2, landed ahead of the B2 code. No runtime module reads
-  these columns or the originator table yet; B2 is still not implemented.
+  these columns or the originator table yet; B2 is still not implemented. Both
+  copies are tagged `phase: :expand` so the host gate's scratch-DB down-check
+  exercises the custom `down/0`.
 - **Migrations:**
   - `samen_core/priv/test_repo/migrations/20261117130000_add_payment_rail_dimensions.exs`
   - `samenerp/priv/repo/migrations/20261117130000_add_payment_rail_dimensions.exs`
@@ -63,9 +65,19 @@ The `ascii` / `crlf` originator defaults are TD profile values pending TD's
 ## Verification and next steps
 
 The migrations are applied by both repos' test-DB setup during `./ci.sh`; their
-shape is enforced by the database constraints above. There is deliberately no
-behavioural test yet, because no application path reads or writes the CAD
-columns — the B2 code commit must bring the green/red/sabotage proofs with it.
+shape is enforced by the database constraints above. `MIX_ENV=test mix
+samen.verify.migrations` passes in both `samen_core` and `samenerp`, rolling the
+discovered expand migrations down and back up in a scratch database; this
+migration's clean round trip is now part of both gates.
+
+The empty-DB down-check cannot exercise `refuse_cad_rows/0`'s refusal branch,
+because it has no CAD rows to protect, nor can it prove that a seeded ACH row
+survives the down. Those are the two real-row behaviours left to the B2 code
+commit: the first code that can create a CAD row must add the test that seeds
+one valid ACH profile/artifact and one CAD profile/artifact, runs the migration
+down, asserts the ACH rows survive, and asserts the CAD refusal leaves the
+schema intact. Until then, no application path can create a CAD row, so there
+is no separate migration test duplicating the gate's empty-DB round trip.
 
 B2 remains the eight-step deliverable: resources and FCN allocation, the pure
 CPA-005 renderer and its golden, profile/artifact actions, the web surface, and
