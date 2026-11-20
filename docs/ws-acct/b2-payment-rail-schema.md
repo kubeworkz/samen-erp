@@ -72,12 +72,14 @@ migration's clean round trip is now part of both gates.
 
 The empty-DB down-check cannot exercise `refuse_cad_rows/0`'s refusal branch,
 because it has no CAD rows to protect, nor can it prove that a seeded ACH row
-survives the down. Those are the two real-row behaviours left to the B2 code
-commit: the first code that can create a CAD row must add the test that seeds
-one valid ACH profile/artifact and one CAD profile/artifact, runs the migration
-down, asserts the ACH rows survive, and asserts the CAD refusal leaves the
-schema intact. Until then, no application path can create a CAD row, so there
-is no separate migration test duplicating the gate's empty-DB round trip.
+survives the down. The seeded test in
+`samen_core/test/payment_rail_dimensions_migration_test.exs` now covers both:
+it seeds a valid ACH profile/artifact, rolls the rail migration down, proves
+those rows and the old shape survive, re-applies it, seeds valid CAD rows, and
+proves `down/0` refuses while leaving the rail schema and both sets of rows
+intact. The test runs against the kernel copy; the host copy is byte-identical
+apart from the module name, and both down gates pass. No separate migration
+test remains outstanding for this slice.
 
 B2 remains the eight-step deliverable: resources and FCN allocation, the pure
 CPA-005 renderer and its golden, profile/artifact actions, the web surface, and
