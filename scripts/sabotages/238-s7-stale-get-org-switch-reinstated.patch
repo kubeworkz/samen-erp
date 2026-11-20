@@ -10,10 +10,10 @@
 # MUST_FAIL: does NOT switch the org
 # MUST_FAIL: prefetch is a no-op
 diff --git a/samen_web/lib/samen/web/session_controller.ex b/samen_web/lib/samen/web/session_controller.ex
-index e3970ef8..77aad08a 100644
+index 91faf6f..3851e08 100644
 --- a/samen_web/lib/samen/web/session_controller.ex
 +++ b/samen_web/lib/samen/web/session_controller.ex
-@@ -69,8 +69,10 @@ defmodule Samen.Web.SessionController do
+@@ -80,6 +80,8 @@ defmodule Samen.Web.SessionController do
    nothing was switched, nothing signed in). The viewer lands wherever they were headed,
    still on whatever org their session already held.
    """
@@ -24,5 +24,3 @@ index e3970ef8..77aad08a 100644
 +    |> put_session(CurrentOrg.session_key(), org_id)
 +    |> redirect(to: safe_return(params["return_to"]))
    end
- 
-   # A host can pass its session mount through `samen_session_routes(mount: ...)`; on an

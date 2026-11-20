@@ -11,7 +11,18 @@ defmodule Samen.Web.SessionController do
   `session["samen_current_org"] = org_id` and redirects to `return_to` (default
   `/crm/contacts`). This is the target of BOTH the workspace switcher (§5.1) and the operator
   "Open account →" clear act-as drill-in (§5.2). Mounted via the one-line host helper
-  `samen_session_routes()` (`Samen.Web.Router`), so every vertical inherits it.
+  `samen_session_routes(mount: ...)` (`Samen.Web.Router`), so every vertical inherits it.
+
+  ## The write gate is the read gate: the route's `:mount`
+
+  `samen_session_routes/1` REQUIRES `mount:` (compile-enforced), and threads it through the
+  route's `private[:samen_session_mount]`. On an ARMED host (`CurrentOrg.tenant_gate_armed?/1`)
+  the target org must be in the authenticated principal's `CurrentOrg.authorized_orgs/2` — the
+  SAME set the tenant reads gate on — or the write is REFUSED: 403, and the session is never
+  written, so no later read can resolve that org. The mount carries the host's own `:authn` /
+  `:authorized_orgs` / `:identity_namespace` labels, so the write gate and the reads beside it
+  always agree. On a DISARMED host (dev/test, or no `:authn` seam) the documented `?org=`
+  convenience is unchanged.
 
   ## POST-only: the org switch is a STATE CHANGE (luminary S7/S16)
 
@@ -73,13 +84,14 @@ defmodule Samen.Web.SessionController do
     redirect(conn, to: safe_return(params["return_to"]))
   end
 
-  # A host can pass its session mount through `samen_session_routes(mount: ...)`; on an
-  # armed host the target org must be in the authenticated principal's authorized set.
-  # A mountless invocation keeps the legacy disarmed/dev behavior (and all existing
-  # framework route-shape tests). When the host is DISARMED, the documented dev
+  # The route's mount — REQUIRED by `samen_session_routes/1`, which refuses to compile without
+  # one — is the write gate's authority. On an ARMED host the target org must be in the
+  # authenticated principal's authorized set. When the host is DISARMED, the documented dev
   # convenience remains: the client-selected org is trusted, exactly as `CurrentOrg.resolve`
   # trusts it. This closes the operator "Open account" clear-act-as path for a tenant the
   # operator does not belong to: the session is never written, so no later read can resolve it.
+  # The mountless branch is reachable only by a hand-declared route or a direct controller call
+  # (never by the macro), and keeps the legacy trusted behavior for that shape.
   defp authorized_org?(conn, org_id) do
     case conn.private[:samen_session_mount] do
       %Mount{} = mount ->

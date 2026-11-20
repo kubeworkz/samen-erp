@@ -10,7 +10,18 @@ defmodule Samen.Web.SessionControllerTest do
   import Plug.Conn
 
   alias Samen.Web.CurrentOrg
+  alias Samen.Web.Mount
   alias Samen.Web.SessionController
+
+  # The DISARMED mount `samen_session_routes/1` now compiles into
+  # `private[:samen_session_mount]`. The fictional `:otp_app` label keeps the dev/test posture
+  # (`tenant_gate_armed?/1` false) independent of another suite's host arming, so these direct
+  # calls exercise the same gated route shape a real router emits.
+  defp disarmed_mount do
+    Mount.new(:auth, Samen.WebTest.Operator, Samen.WebTest.Repo,
+      labels: %{otp_app: :samen_web_session_probe_host}
+    )
+  end
 
   # A minimal conn with the session plug installed, as the host :browser pipeline provides.
   defp session_conn(method \\ :get, path \\ "/") do
@@ -20,6 +31,7 @@ defmodule Samen.Web.SessionControllerTest do
     |> Map.put(:secret_key_base, String.duplicate("a", 64))
     |> Plug.Session.call(opts)
     |> fetch_session()
+    |> put_private(:samen_session_mount, disarmed_mount())
   end
 
   test "put_current_org/2 writes the session current org and redirects to return_to" do

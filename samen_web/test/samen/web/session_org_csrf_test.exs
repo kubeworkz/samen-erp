@@ -5,7 +5,7 @@ defmodule Samen.Web.SessionOrgCsrfTest do
   `GET /session/org/:org_id` used to write `session["samen_current_org"]` directly: an
   attacker page could flip a logged-in operator's current org with `<img
   src="/session/org/X">` (CSRF), and a link-hover prefetcher could mutate the session
-  without any click. The fix: `samen_session_routes()` now binds the session write to
+  without any click.   The fix: `samen_session_routes(mount: ...)` now binds the session write to
   `POST` (CSRF-protected by the host `:browser` pipeline's `protect_from_forgery`)
   and keeps the GET path as a STALE-SAFE landing (`SessionController.stale_get/2`)
   that redirects WITHOUT touching the session.
@@ -38,8 +38,16 @@ defmodule Samen.Web.SessionOrgCsrfTest do
     use Phoenix.Router
     import Samen.Web.Router
 
+    # A DISARMED mount — the dev/test posture: `CurrentOrg.tenant_gate_armed?/1` is false, so the
+    # session write is the documented `?org=` convenience, not the armed membership gate. The
+    # fictional `:otp_app` label keeps another suite's host arming (`:samen_web, :auth_required?`)
+    # out of these CSRF/route-shape assertions.
+    @mount Samen.Web.Mount.new(:auth, Samen.WebTest.Operator, Samen.WebTest.Repo,
+             labels: %{otp_app: :samen_web_session_probe_host}
+           )
+
     # The REAL host shape: session + CSRF (driftwood router.ex:94, pawchart
-    # router.ex:114, both generated router templates).
+    # router.ex:114, both generated router templates). `:mount` is REQUIRED by the macro.
     pipeline :browser do
       plug(:accepts, ["html"])
       plug(:fetch_session)
@@ -48,7 +56,7 @@ defmodule Samen.Web.SessionOrgCsrfTest do
 
     scope "/" do
       pipe_through(:browser)
-      samen_session_routes()
+      samen_session_routes(mount: @mount)
     end
   end
 

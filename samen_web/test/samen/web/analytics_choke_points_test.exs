@@ -64,6 +64,9 @@ defmodule Samen.Web.AnalyticsChokePointsTest do
 
   # -- session.signed_in ---------------------------------------------------------
 
+  # The DISARMED mount the session route carries (the macro requires one): the write is the
+  # documented dev/test convenience, and the fictional `:otp_app` label keeps host arming out of
+  # this suite's emission assertions.
   defp session_conn do
     opts = Plug.Session.init(store: :cookie, key: "_t", signing_salt: "s", encryption_salt: "e")
 
@@ -71,6 +74,12 @@ defmodule Samen.Web.AnalyticsChokePointsTest do
     |> Map.put(:secret_key_base, String.duplicate("a", 64))
     |> Plug.Session.call(opts)
     |> fetch_session()
+    |> Plug.Conn.put_private(
+      :samen_session_mount,
+      Samen.Web.Mount.new(:auth, Samen.WebTest.Operator, Samen.WebTest.Repo,
+        labels: %{otp_app: :samen_web_session_probe_host}
+      )
+    )
   end
 
   test "session.signed_in — the session controller choke point lands one pae row" do

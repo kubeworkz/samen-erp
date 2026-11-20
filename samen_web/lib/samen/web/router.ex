@@ -2378,17 +2378,37 @@ defmodule Samen.Web.Router do
 
       scope "/" do
         pipe_through :browser
-        samen_session_routes()
+
+        samen_session_routes(
+          mount: Samen.Web.Mount.new(:auth, MyApp.Identity, MyApp.Repo, labels: @current_org_labels)
+        )
       end
 
   Declares `POST /session/org/:org_id` → `Samen.Web.SessionController.put_current_org/2`, the
   target of the workspace switcher + the operator "Open account →" clear act-as. Every vertical
   inherits the same durable current-org write. `:path` overrides the default `/session/org`.
 
-  Pass `:mount` (a `Samen.Web.Mount` carrying the host's Identity namespace) to authorize the
-  target org on an armed host: the controller refuses to write a session org outside the
-  authenticated principal's `CurrentOrg.authorized_orgs/2`. A bare call preserves the legacy
-  disarmed/dev behavior; hosts should opt in as they adopt the tenant-auth seam.
+  ## `:mount` is REQUIRED — the write gate's authority
+
+  The mount the host passes to its tenant reads (`samen_module_routes/3`) is REQUIRED here too,
+  for the same reason: on an ARMED host `Samen.Web.SessionController.put_current_org/2` refuses
+  (403, the session is never written) an org outside the authenticated principal's
+  `CurrentOrg.authorized_orgs/2` — the exact set the tenant read path gates on — so the operator
+  "Open account →" clear act-as can never pin a tenant the operator does not belong to. Pass
+  each host's own Identity mount (it carries the `:authn` / `:authorized_orgs` /
+  `:identity_namespace` labels that decide armed-ness), and the write gate matches the reads
+  beside it.
+
+  A DISARMED host (`CurrentOrg.tenant_gate_armed?/1` is false — dev/test, or no `:authn` seam)
+  keeps the documented `?org=` convenience unchanged; a dev/test router still passes a mount,
+  exactly like its tenant routes:
+
+      samen_session_routes(mount: Samen.Web.Mount.new(:auth, Demo.Identity, Demo.Repo))
+
+  A bare `samen_session_routes()` no longer compiles: it would leave the ONE persisted org
+  selection ungated on an armed host. The refusal warns that the bare call is deprecated, then
+  raises (`__require_session_mount__!/1`); `mount: nil` and non-`%Samen.Web.Mount{}` values are
+  refused with the same message.
 
   POST-only (luminary S7/S16): the org switch is a session WRITE, so it is CSRF-protected —
   callers submit a zero-JS `<form method="post">` with the Phoenix `_csrf_token`, and the host
@@ -2399,15 +2419,62 @@ defmodule Samen.Web.Router do
   """
   defmacro samen_session_routes(opts \\ []) do
     path = Keyword.get(opts, :path, "/session/org")
-    mount = Keyword.get(opts, :mount)
 
-    quote bind_quoted: [path: path, mount: mount] do
+    quote bind_quoted: [path: path, opts: opts] do
+      mount = Samen.Web.Router.__require_session_mount__!(opts)
+
       post("#{path}/:org_id", Samen.Web.SessionController, :put_current_org,
         private: %{samen_session_mount: mount}
       )
 
       get("#{path}/:org_id", Samen.Web.SessionController, :stale_get)
     end
+  end
+
+  @doc false
+  # The compile-time `:mount` requirement for `samen_session_routes/1`. Evaluated in the router
+  # module body, so the option has been EVALUATED, not merely parsed — a literal `Mount.new/4`
+  # call and a module attribute both work. A missing/garbled mount fails the BUILD, not a request.
+  #
+  # The bare call WARNS first: it is the deprecated shape an adopter may still carry, and the
+  # warning names the fix before the raise makes it mandatory. `nil` and non-mount values get the
+  # raise alone — they are not a legacy shape, just a wrong one.
+  def __require_session_mount__!(opts) do
+    case Keyword.fetch(opts, :mount) do
+      {:ok, %Samen.Web.Mount{} = mount} ->
+        mount
+
+      {:ok, other} ->
+        raise ArgumentError, session_mount_error("`:mount` was given as #{inspect(other)}")
+
+      :error ->
+        IO.warn(session_mount_deprecation())
+        raise ArgumentError, session_mount_error("no `:mount` was given")
+    end
+  end
+
+  defp session_mount_error(detail) do
+    """
+    samen_session_routes/1 requires `mount:` (a %Samen.Web.Mount{}); #{detail}.
+
+    The current-org session write is the ONE persisted org selection (the workspace switcher and
+    the operator "Open account" clear act-as). Without the mount the controller cannot derive the
+    authenticated principal's authorized orgs, so an ARMED host would trust a client-supplied org
+    id on that path. Pass the host's own Identity mount — the SAME one its tenant routes use:
+
+        samen_session_routes(
+          mount: Samen.Web.Mount.new(:auth, MyApp.Identity, MyApp.Repo, labels: @current_org_labels)
+        )
+
+    On a DISARMED (dev/test) host the mount is inert and the `?org=` convenience is unchanged.
+    See Samen.Web.SessionController and docs/adr/ADR-013-demo-coherence.md §4.3.
+    """
+  end
+
+  defp session_mount_deprecation do
+    "samen_session_routes/1 was called without `:mount` — deprecated and no longer supported: " <>
+      "the session org write would be ungated on an armed host. Pass `mount:` with a " <>
+      "%Samen.Web.Mount{} (see Samen.Web.Router.samen_session_routes/1)."
   end
 
   @doc """

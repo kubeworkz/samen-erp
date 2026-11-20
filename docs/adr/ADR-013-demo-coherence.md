@@ -182,8 +182,8 @@ A LiveView cannot set a cookie mid-mount (the session is established on the dead
 - `Samen.Web.SessionController.put_current_org/2` (new) — `POST/GET /session/org/:org_id` — sets
   `session["samen_current_org"] = org_id` and redirects to a `return_to` (default `/crm/contacts`).
   This is the switcher's target and the operator drill-in's target.
-- Mounted by a one-line host helper `samen_session_routes()` in `Samen.Web.Router` (like the other
-  route macros), so every vertical inherits the endpoint.
+- Mounted by a one-line host helper `samen_session_routes(mount: …)` in `Samen.Web.Router` (like the other
+  route macros), so every vertical inherits the endpoint. `:mount` is REQUIRED (compile-enforced, `Samen.Web.Router.__require_session_mount__!/1`): it is the session WRITE gate's authority — on an ARMED host `put_current_org/2` refuses (403, session untouched) an org outside the principal's `CurrentOrg.authorized_orgs/2`, the same set the tenant reads gate on, so the operator “Open account →” clear act-as can never pin a tenant the operator does not belong to. Pass the SAME Identity mount (its `:authn`/`:authorized_orgs` labels) the tenant routes use; on a DISARMED (dev/test) host the mount is inert and the `?org=` convenience is unchanged.
 - Rule of thumb (kept from ADR-010): reads happen in LiveViews; the **one** state-changing nav
   (choose current org) goes through a controller so the cookie is set on a real HTTP response.
 
