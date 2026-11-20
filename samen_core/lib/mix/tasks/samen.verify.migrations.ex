@@ -58,9 +58,15 @@ defmodule Mix.Tasks.Samen.Verify.Migrations do
       Mix.raise("migrations path does not exist: #{migrations_path}")
     end
 
+    stale_violations = stale_build_violations_for(migrations_path, base_repo)
+
+    # Never run a migration that exists only in the build's priv copy: it has no
+    # source file to review, and a deleted migration can reference removed modules.
+    scratch_violations =
+      if stale_violations == [], do: check_in_scratch_db(base_repo, migrations_path), else: []
+
     violations =
-      check_in_scratch_db(base_repo, migrations_path) ++
-        min_expand_violations(migrations_path, opts)
+      stale_violations ++ scratch_violations ++ min_expand_violations(migrations_path, opts)
 
     Samen.Verifier.halt_if_violations(@task_name, violations)
   end
@@ -96,6 +102,28 @@ defmodule Mix.Tasks.Samen.Verify.Migrations do
   end
 
   @doc """
+  Return violations for migration files present in `migrations_path` but absent
+  from `source_path`. A build's priv copy is not pruned when a source migration
+  is deleted, so without this check the verifier can execute a migration that no
+  longer exists in the reviewed source tree.
+  """
+  @spec stale_build_violations(Path.t(), Path.t()) :: [String.t()]
+  def stale_build_violations(migrations_path, source_path) do
+    build_names = migration_names(migrations_path)
+    source_names = migration_names(source_path)
+
+    build_names
+    |> MapSet.difference(source_names)
+    |> Enum.sort()
+    |> Enum.map(fn name ->
+      "#{name} exists in #{migrations_path} but not in #{source_path}. " <>
+        "A deleted source migration is still present in the build's priv copy, so " <>
+        "`mix samen.verify.migrations` would run it. Run `mix clean` (or delete the " <>
+        "stale file) and rebuild before rerunning the verifier."
+    end)
+  end
+
+  @doc """
   Return violation strings for the OPT-IN `--min-expand` floor, or `[]` if no floor
   was declared (`opts` carries no `:min_expand`) or the discovered `:expand`-phase
   migration count under `migrations_path` meets it. Pure and source-level — reuses
@@ -123,6 +151,41 @@ defmodule Mix.Tasks.Samen.Verify.Migrations do
   end
 
   # ---------------------------------------------------------------------------
+
+  defp stale_build_violations_for(migrations_path, base_repo) do
+    case source_priv_for(migrations_path, base_repo) do
+      nil -> []
+      source_path -> stale_build_violations(migrations_path, source_path)
+    end
+  end
+
+  # Only a path under the app's build priv has a source-priv counterpart. A
+  # caller-supplied path outside it is left alone.
+  defp source_priv_for(migrations_path, base_repo) do
+    app = Application.get_application(base_repo) || Mix.Project.config()[:app]
+    build_priv = app |> :code.priv_dir() |> to_string() |> Path.expand()
+    expanded_path = Path.expand(migrations_path)
+    relative = Path.relative_to(expanded_path, build_priv)
+
+    if relative == expanded_path or String.starts_with?(relative, "..") do
+      nil
+    else
+      source_root = Mix.Project.project_file() |> Path.dirname()
+      source_path = Path.join([source_root, "priv", relative])
+      if File.dir?(source_path), do: source_path
+    end
+  end
+
+  defp migration_names(path) do
+    if File.dir?(path) do
+      path
+      |> File.ls!()
+      |> Enum.filter(&Regex.match?(~r/^\d+_.+\.exs$/, &1))
+      |> MapSet.new()
+    else
+      MapSet.new()
+    end
+  end
 
   defp resolve_repo(opts) do
     case Keyword.get(opts, :repo) do

@@ -182,7 +182,10 @@ defmodule Samen.MigrationExpandContractTest do
           Task.async(fn ->
             :timer.tc(fn ->
               try do
-                Postgrex.query!(a, "ALTER TABLE lock_probe2 ADD COLUMN c text", [], timeout: 30_000)
+                Postgrex.query!(a, "ALTER TABLE lock_probe2 ADD COLUMN c text", [],
+                  timeout: 30_000
+                )
+
                 :ok
               rescue
                 e -> {:error, e}
@@ -277,7 +280,10 @@ defmodule Samen.MigrationExpandContractTest do
       key = seed_expand()
       # Backdate the expand row 10 seconds, use a 5s window → ready.
       backdate_expand(key, 10)
-      assert {:ready, elapsed} = ExpandContract.contract_ready?(Repo, key, bake_window: {5, :second})
+
+      assert {:ready, elapsed} =
+               ExpandContract.contract_ready?(Repo, key, bake_window: {5, :second})
+
       assert elapsed >= 5
     end
 
@@ -388,6 +394,56 @@ defmodule Samen.MigrationExpandContractTest do
       # This is the assertion an over-eager repo-wide fix breaks: absent the flag,
       # a zero-expand app must stay green — today's behaviour, byte-for-byte.
       assert Mix.Tasks.Samen.Verify.Migrations.min_expand_violations(@none_migrations, []) == []
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # stale build-only migrations
+  # ---------------------------------------------------------------------------
+
+  describe "stale build-only migrations" do
+    test "flags a build-only migration and names the mix clean remedy" do
+      root = tmp_migration_tree("stale")
+      source = Path.join(root, "source")
+      build = Path.join(root, "build")
+      File.mkdir_p!(source)
+      File.mkdir_p!(build)
+      File.write!(Path.join(source, "20260101000000_keep.exs"), "")
+      File.write!(Path.join(build, "20260101000000_keep.exs"), "")
+
+      File.write!(
+        Path.join(build, "20261112120000_add_ap_approval_policy.exs"),
+        "# stale build artifact\n"
+      )
+
+      assert [violation] =
+               Mix.Tasks.Samen.Verify.Migrations.stale_build_violations(build, source)
+
+      assert violation =~ "add_ap_approval_policy"
+      assert violation =~ "mix clean"
+    end
+
+    test "does not flag a clean build" do
+      root = tmp_migration_tree("clean")
+      source = Path.join(root, "source")
+      build = Path.join(root, "build")
+      File.mkdir_p!(source)
+      File.mkdir_p!(build)
+      File.write!(Path.join(source, "20260101000000_keep.exs"), "")
+      File.write!(Path.join(build, "20260101000000_keep.exs"), "")
+
+      assert Mix.Tasks.Samen.Verify.Migrations.stale_build_violations(build, source) == []
+    end
+
+    defp tmp_migration_tree(suffix) do
+      root =
+        Path.join(
+          System.tmp_dir!(),
+          "samen_stale_migrations_#{suffix}_#{System.unique_integer([:positive])}"
+        )
+
+      ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(root) end)
+      root
     end
   end
 
