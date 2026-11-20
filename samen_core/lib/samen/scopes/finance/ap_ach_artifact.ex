@@ -1,19 +1,28 @@
 defmodule Samen.Scopes.Finance.ApAchArtifact do
   @moduledoc """
-  The durable NACHA artifact for a paid AP payment run.
+  The durable payment-file artifact for a paid AP payment run, on either rail.
 
-  The payments page renders `Samen.Scopes.Finance.ApAchFile` from the run and
-  the vendor's verified payment profile, then hands the bytes to this service.
-  The service:
+  The payments page renders `Samen.Scopes.Finance.ApAchFile` (USD NACHA) or
+  `Samen.Scopes.Finance.ApEftFile` (CAD CPA-005) from the run and the vendor's
+  verified payment profile, then hands the bytes to this service. The service:
 
     * refuses a run that is not `:paid` and is not in the caller's org;
     * requires a member-or-above actor (the page's operator plane never reaches
       here, because its write guard already refuses);
+    * refuses a rail whose currency does not match the run, so a CAD store can
+      never default to `ach_usd`;
     * digests the file (SHA-256) and stores the bytes through `Samen.Vault` —
-      a NACHA file contains the receiver account/routing numbers, so storing it
-      in a plain column would undo the vendor-profile PII control;
-    * snapshots only display-safe metadata (originator name/id, a last-four
-      fingerprint of the originator routing and the receiver account/routing).
+      both file formats contain receiver account/routing identifiers, so
+      storing one in a plain column would undo the vendor-profile PII control;
+    * snapshots only display-safe metadata: the rail, originator name/id, the
+      allocated FCN and last-four fingerprints.
+
+  The table is one append-only artifact table for both rails
+  (`ach_rail = 'ach_usd' | 'eft_cad'`), not a sibling table: rows stay
+  immutable and undeletable, and `list/3`/`reveal/2` return both rails without a
+  second read path. An ACH row carries no CAD fields; a CAD row carries a
+  4-digit non-`0000` FCN and the originator/receiver branch fingerprints, with
+  no routing last-four.
 
   `reveal/2` is the one path that returns the file bytes again, and it
   re-verifies the digest before returning them. A changed/missing artifact is
@@ -31,17 +40,20 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
 
   @vault :pii_bank
   @max_name_length 120
+  @rails [:ach_usd, :eft_cad]
 
   @type artifact :: Record.t()
 
   @doc """
-  Store one rendered ACH file for `run`.
+  Store one rendered payment file for `run`.
 
-  Options: `:repo`, `:scope`, `:run` (required); `:file`, `:name`,
-  `:originator`, `:receiver` (optional except `:file`).
+  Options: `:repo`, `:scope`, `:run` (required); `:file` (required);
+  `:rail` (`:ach_usd` default); `:name`, `:originator`, `:receiver`,
+  `:file_creation_number` (optional except the CAD FCN).
 
   Returns `{:ok, artifact}` or `{:error, reason}` where reason is
   `:forbidden`, `:run_not_found`, `:run_not_paid`, `:file_required`,
+  `{:rail_currency_mismatch, rail, currency}`, `:file_creation_number_required`,
   `{:vault_failed, reason}`, or `{:insert_failed, changeset}`.
   """
   @spec store(keyword()) :: {:ok, artifact()} | {:error, term()}
@@ -50,16 +62,19 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
     scope = Keyword.fetch!(opts, :scope)
     run = Keyword.fetch!(opts, :run)
     file = Keyword.get(opts, :file)
+    rail = Keyword.get(opts, :rail, :ach_usd)
     originator = Keyword.get(opts, :originator, %{})
     receiver = Keyword.get(opts, :receiver, %{})
-    name = artifact_name(Keyword.get(opts, :name), run)
+    name = artifact_name(Keyword.get(opts, :name), rail, run)
 
     with {:ok, org_id} <- org_id(scope),
          {:ok, actor} <- member_id(scope),
          :ok <- paid_run(repo, org_id, run),
-         :ok <- usd_rail(run),
+         {:ok, rail} <- normalize_rail(rail),
+         :ok <- rail_currency(rail, run),
          :ok <- validate_file(file),
-         {:ok, name} <- validate_name(name) do
+         {:ok, name} <- validate_name(name),
+         {:ok, rail_fields} <- rail_fields(rail, opts, originator, receiver) do
       id = Ecto.UUID.generate()
       now = Record.now()
 
@@ -67,17 +82,22 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
         id: id,
         org_id: org_id,
         run_id: run.id,
+        rail: rail,
         name: name,
         digest: digest(file),
         size_bytes: byte_size(file),
         originator_name: text(fetch(originator, :name)),
         originator_id: text(fetch(originator, :id)),
-        originator_dfi_last4: last4(fetch(originator, :dfi)),
+        originator_dfi_last4: Map.get(rail_fields, :originator_dfi_last4),
+        originator_institution_last4: Map.get(rail_fields, :originator_institution_last4),
+        originator_return_account_last4: Map.get(rail_fields, :originator_return_account_last4),
         receiver_name: text(fetch(receiver, :receiver_name) || fetch(receiver, :account_holder)),
         receiver_account_last4:
           last4(fetch(receiver, :receiver_account) || fetch(receiver, :account_number)),
-        receiver_routing_last4:
-          last4(fetch(receiver, :receiver_dfi) || fetch(receiver, :routing_number)),
+        receiver_routing_last4: Map.get(rail_fields, :receiver_routing_last4),
+        receiver_institution_last4: Map.get(rail_fields, :receiver_institution_last4),
+        receiver_transit_last4: Map.get(rail_fields, :receiver_transit_last4),
+        file_creation_number: Map.get(rail_fields, :file_creation_number),
         generated_by: actor,
         generated_at: now,
         inserted_at: now
@@ -105,7 +125,7 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
     end
   end
 
-  @doc "The org-pinned artifacts for one run, newest first."
+  @doc "The org-pinned artifacts for one run, newest first, whatever their rail."
   @spec list(module(), String.t(), String.t()) :: [artifact()]
   def list(repo, org_id, run_id) when is_binary(org_id) and is_binary(run_id) do
     repo.all(
@@ -136,7 +156,7 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
     end
   end
 
-  @doc "The SHA-256 digest of an ACH file, lowercase hex."
+  @doc "The SHA-256 digest of a payment file, lowercase hex."
   @spec digest(String.t()) :: String.t()
   def digest(file) when is_binary(file) do
     :crypto.hash(:sha256, file) |> Base.encode16(case: :lower)
@@ -165,24 +185,42 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
 
   defp paid_run(_repo, _org_id, _run), do: {:error, :run_not_found}
 
-  # The artifact row is a NACHA file. Refuse a non-USD run even if a caller
-  # bypasses the renderer; the rail and the stored bytes must agree.
-  defp usd_rail(run) do
+  defp normalize_rail(rail) when rail in @rails, do: {:ok, rail}
+  defp normalize_rail("ach_usd"), do: {:ok, :ach_usd}
+  defp normalize_rail("eft_cad"), do: {:ok, :eft_cad}
+  defp normalize_rail(rail), do: {:error, {:invalid_rail, rail}}
+
+  # The stored bytes and the rail must agree. A CAD store can never default to
+  # ACH, and a USD run can never be filed as a CPA-005 artifact.
+  defp rail_currency(:ach_usd, run) do
     case Map.get(run, :currency) || "USD" do
       "USD" -> :ok
-      currency when is_binary(currency) -> {:error, {:unsupported_currency, currency}}
-      _ -> {:error, {:unsupported_currency, "USD"}}
+      currency when is_binary(currency) -> {:error, {:rail_currency_mismatch, :ach_usd, currency}}
+      _ -> {:error, {:rail_currency_mismatch, :ach_usd, "USD"}}
+    end
+  end
+
+  defp rail_currency(:eft_cad, run) do
+    case Map.get(run, :currency) do
+      "CAD" -> :ok
+      currency when is_binary(currency) -> {:error, {:rail_currency_mismatch, :eft_cad, currency}}
+      _ -> {:error, {:rail_currency_mismatch, :eft_cad, "CAD"}}
     end
   end
 
   defp validate_file(file) when is_binary(file) and byte_size(file) > 0, do: :ok
   defp validate_file(_file), do: {:error, :file_required}
 
-  defp artifact_name(nil, %{reference: reference}) when is_binary(reference),
+  defp artifact_name(nil, :eft_cad, %{reference: reference}) when is_binary(reference),
+    do: "eft-#{reference}.txt"
+
+  defp artifact_name(nil, :eft_cad, _run), do: "eft.txt"
+
+  defp artifact_name(nil, :ach_usd, %{reference: reference}) when is_binary(reference),
     do: "ach-#{reference}.ach"
 
-  defp artifact_name(nil, _run), do: "ach.ach"
-  defp artifact_name(name, _run), do: name
+  defp artifact_name(nil, :ach_usd, _run), do: "ach.ach"
+  defp artifact_name(name, _rail, _run), do: name
 
   defp validate_name(name) when is_binary(name) do
     case String.trim(name) do
@@ -193,6 +231,55 @@ defmodule Samen.Scopes.Finance.ApAchArtifact do
   end
 
   defp validate_name(_name), do: {:error, :name_required}
+
+  # The artifact row is rail-shaped. ACH keeps the original originator-D.fi. and
+  # receiver-routing fingerprints; CAD records the allocated FCN and the
+  # institution/transit/return-account fingerprints instead.
+  defp rail_fields(:ach_usd, _opts, originator, receiver) do
+    {:ok,
+     %{
+       originator_dfi_last4: last4(fetch(originator, :dfi)),
+       receiver_routing_last4:
+         last4(fetch(receiver, :receiver_dfi) || fetch(receiver, :routing_number)),
+       originator_institution_last4: nil,
+       originator_return_account_last4: nil,
+       receiver_institution_last4: nil,
+       receiver_transit_last4: nil,
+       file_creation_number: nil
+     }}
+  end
+
+  defp rail_fields(:eft_cad, opts, originator, receiver) do
+    with {:ok, fcn} <- validate_fcn(Keyword.get(opts, :file_creation_number)) do
+      {:ok,
+       %{
+         originator_dfi_last4: nil,
+         receiver_routing_last4: nil,
+         originator_institution_last4:
+           last4(fetch(originator, :institution) || fetch(originator, :return_institution)),
+         originator_return_account_last4: last4(fetch(originator, :return_account)),
+         receiver_institution_last4:
+           last4(fetch(receiver, :receiver_institution) || fetch(receiver, :institution)),
+         receiver_transit_last4:
+           last4(fetch(receiver, :receiver_transit) || fetch(receiver, :transit)),
+         file_creation_number: fcn
+       }}
+    end
+  end
+
+  defp validate_fcn(value) when is_integer(value), do: validate_fcn(Integer.to_string(value))
+
+  defp validate_fcn(value) when is_binary(value) do
+    value = String.trim(value)
+
+    if String.match?(value, ~r/\A(?!0000)[0-9]{4}\z/) do
+      {:ok, value}
+    else
+      {:error, :file_creation_number_invalid}
+    end
+  end
+
+  defp validate_fcn(_value), do: {:error, :file_creation_number_required}
 
   # -- values -----------------------------------------------------------------
 

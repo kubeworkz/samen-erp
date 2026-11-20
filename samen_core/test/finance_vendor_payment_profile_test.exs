@@ -219,4 +219,238 @@ defmodule Samen.FinanceVendorPaymentProfileTest do
                vendor_id: ctx.vendor
              )
   end
+
+  # -- CAD rail ---------------------------------------------------------------
+
+  defp register_cad!(ctx, overrides \\ %{}) do
+    attrs =
+      Map.merge(
+        %{
+          repo: @repo,
+          scope: ctx.member,
+          vendor_id: ctx.vendor,
+          rail: :eft_cad,
+          bank_name: "TD Bank",
+          account_holder: "Acme Supply Co",
+          account_number: "123456789",
+          institution_number: "004",
+          transit_number: "10202",
+          account_type: "checking"
+        },
+        overrides
+      )
+
+    {:ok, profile} = VendorPaymentProfile.register(Map.to_list(attrs))
+    profile
+  end
+
+  test "CAD prevalidation requires a 3-digit institution, 5-digit transit and at most 12 account characters" do
+    base = [
+      rail: :eft_cad,
+      bank_name: "TD Bank",
+      account_holder: "Acme Supply Co",
+      account_number: "123456789",
+      institution_number: "004",
+      transit_number: "10202",
+      account_type: "checking"
+    ]
+
+    assert {:ok, %{rail: :eft_cad, institution_last4: "004", transit_last4: "0202"}} =
+             VendorPaymentProfile.prevalidate(base, :eft_cad)
+
+    assert {:error, :institution_number_invalid} =
+             VendorPaymentProfile.prevalidate(
+               Keyword.put(base, :institution_number, "04"),
+               :eft_cad
+             )
+
+    assert {:error, :transit_number_invalid} =
+             VendorPaymentProfile.prevalidate(
+               Keyword.put(base, :transit_number, "1020"),
+               :eft_cad
+             )
+
+    assert {:error, :account_number_too_long} =
+             VendorPaymentProfile.prevalidate(
+               Keyword.put(base, :account_number, "1234567890123"),
+               :eft_cad
+             )
+
+    # The same 13-character account is legal on the 17-character ACH rail but
+    # not on CAD; the rail, not the call site, decides.
+    assert {:ok, %{rail: :ach_usd}} =
+             VendorPaymentProfile.prevalidate(
+               bank_name: "First Sample Bank",
+               account_holder: "Acme Supply Co",
+               account_number: "1234567890123",
+               routing_number: "011000015",
+               account_type: "checking"
+             )
+  end
+
+  test "CAD identifiers are stored only as vault tokens", ctx do
+    profile = register_cad!(ctx)
+
+    assert profile.rail == :eft_cad
+    assert profile.institution_last4 == "004"
+    assert profile.transit_last4 == "0202"
+    assert profile.account_last4 == "6789"
+
+    %{rows: [[account, institution, transit, routing]]} =
+      @repo.query!(
+        "SELECT pii_fvp_account_number, pii_fvp_institution_number, " <>
+          "pii_fvp_transit_number, pii_fvp_routing_number " <>
+          "FROM fvp_vendor_payment_profile WHERE fvp_id = $1",
+        [Ecto.UUID.dump!(profile.id)]
+      )
+
+    assert String.starts_with?(account, "vt_")
+    assert String.starts_with?(institution, "vt_")
+    assert String.starts_with?(transit, "vt_")
+    assert routing == nil
+    refute institution =~ "004"
+    refute transit =~ "10202"
+  end
+
+  test "a verified CAD profile reveals receiver_institution and receiver_transit, not receiver_dfi",
+       ctx do
+    profile = register_cad!(ctx)
+
+    assert {:ok, verified} =
+             VendorPaymentProfile.verify(
+               repo: @repo,
+               scope: ctx.admin,
+               vendor_id: ctx.vendor,
+               rail: :eft_cad
+             )
+
+    assert verified.status == :verified
+
+    assert {:ok, details} =
+             VendorPaymentProfile.payment_details(verified, @repo)
+
+    assert details.rail == :eft_cad
+    assert details.receiver_name == "Acme Supply Co"
+    assert details.receiver_account == "123456789"
+    assert details.receiver_institution == "004"
+    assert details.receiver_transit == "10202"
+    refute Map.has_key?(details, :receiver_dfi)
+
+    assert profile.id == verified.id
+  end
+
+  test "one vendor can hold an ACH and a CAD profile, and each lookup is rail-pinned", ctx do
+    ach = register!(ctx)
+    cad = register_cad!(ctx)
+
+    refute ach.id == cad.id
+    assert ach.rail == :ach_usd
+    assert cad.rail == :eft_cad
+
+    assert {:ok, %{rail: :ach_usd}} =
+             VendorPaymentProfile.get(@repo, ctx.org, ctx.vendor, :ach_usd)
+
+    assert {:ok, %{rail: :eft_cad}} =
+             VendorPaymentProfile.get(@repo, ctx.org, ctx.vendor, :eft_cad)
+
+    # A vendor with only an ACH profile has no CAD profile, and the wrong-rail
+    # lookup does not fall back to the other rail.
+    other_vendor = Ash.UUID.generate()
+
+    assert {:ok, _profile} =
+             VendorPaymentProfile.register(
+               repo: @repo,
+               scope: ctx.member,
+               vendor_id: other_vendor,
+               bank_name: "First Sample Bank",
+               account_holder: "Acme Supply Co",
+               account_number: "123456789",
+               routing_number: "011000015",
+               account_type: "checking"
+             )
+
+    assert {:ok, nil} = VendorPaymentProfile.get(@repo, ctx.org, other_vendor, :eft_cad)
+  end
+
+  test "changing CAD details resets only the CAD profile and leaves the ACH profile verified",
+       ctx do
+    register!(ctx)
+    register_cad!(ctx)
+
+    assert {:ok, _ach_verified} =
+             VendorPaymentProfile.verify(
+               repo: @repo,
+               scope: ctx.admin,
+               vendor_id: ctx.vendor,
+               rail: :ach_usd
+             )
+
+    assert {:ok, _cad_verified} =
+             VendorPaymentProfile.verify(
+               repo: @repo,
+               scope: ctx.admin,
+               vendor_id: ctx.vendor,
+               rail: :eft_cad
+             )
+
+    assert {:ok, changed} =
+             VendorPaymentProfile.change_bank_details(
+               repo: @repo,
+               scope: ctx.owner,
+               vendor_id: ctx.vendor,
+               rail: :eft_cad,
+               bank_name: "TD Bank",
+               account_holder: "Acme Supply Co",
+               account_number: "987654321",
+               institution_number: "004",
+               transit_number: "20209",
+               account_type: "savings"
+             )
+
+    assert changed.status == :unverified
+    assert changed.account_last4 == "4321"
+    assert changed.transit_last4 == "0209"
+
+    assert {:ok, ach} = VendorPaymentProfile.get(@repo, ctx.org, ctx.vendor, :ach_usd)
+    assert ach.status == :verified
+
+    assert {:ok, cad} = VendorPaymentProfile.get(@repo, ctx.org, ctx.vendor, :eft_cad)
+    assert cad.status == :unverified
+  end
+
+  test "a CAD profile still needs a distinct verifier", ctx do
+    register_cad!(ctx)
+
+    assert {:error, :self_verification} =
+             VendorPaymentProfile.verify(
+               repo: @repo,
+               scope: scope(ctx.member.actor.id, ctx.org, :admin),
+               vendor_id: ctx.vendor,
+               rail: :eft_cad
+             )
+
+    assert {:ok, %{status: :verified}} =
+             VendorPaymentProfile.verify(
+               repo: @repo,
+               scope: ctx.owner,
+               vendor_id: ctx.vendor,
+               rail: :eft_cad
+             )
+  end
+
+  test "a cross-org CAD profile is not found", ctx do
+    register_cad!(ctx)
+
+    other_org = Ash.UUID.generate()
+
+    assert {:ok, nil} = VendorPaymentProfile.get(@repo, other_org, ctx.vendor, :eft_cad)
+
+    assert {:error, :not_found} =
+             VendorPaymentProfile.verify(
+               repo: @repo,
+               scope: scope("admin:foreign", other_org, :admin),
+               vendor_id: ctx.vendor,
+               rail: :eft_cad
+             )
+  end
 end

@@ -35,6 +35,10 @@ config :samen_core, Oban, testing: :manual, plugins: false
 # samen_core/config/test.exs.
 config :samen_core, :fleet_local_credential, Samen.Fleet.LocalCredential.Agent
 
+# B2 — the CAD payment rail's EFT environment. The web suite proves the CAD
+# path against the test sequence; there is no fallback to production.
+config :samen_core, :eft_environment, :test
+
 # A5 (AC-G5-3): the sample-data offer is FAIL-CLOSED by default (env defaults :prod,
 # enabled defaults false). The test host declares its env; the RP-G5-3 red path
 # overrides this at runtime to prove the prod-without-flag refusal.

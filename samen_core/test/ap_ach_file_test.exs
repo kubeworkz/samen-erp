@@ -36,6 +36,10 @@ defmodule SamenCore.ApAchFileTest do
     run |> render(opts) |> String.split("\n", trim: true)
   end
 
+  test "USD ACH bytes are unchanged from the pre-B2 golden" do
+    assert render(@run, @opts) == File.read!("test/fixtures/ap_ach_usd_golden.ach")
+  end
+
   test "every record is 94 characters and the file is a whole number of 10-record blocks" do
     file_lines = lines()
 

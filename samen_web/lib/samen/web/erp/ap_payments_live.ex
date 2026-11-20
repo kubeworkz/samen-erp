@@ -54,6 +54,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   alias Samen.Scopes.Finance.{
     ApAchArtifact,
     ApAchFile,
+    ApEftFile,
+    ApEftOriginatorProfile,
     ApPaymentReversal,
     ApPaymentRun,
     VendorPaymentProfile
@@ -97,12 +99,18 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
        ach_file: nil,
        ach_name: nil,
        ach_error: nil,
+       ach_rail: :ach_usd,
+       originator_environment: nil,
+       originator_profile: nil,
        vendor_profile: nil,
        profile_vendor_id: "",
+       profile_rail: :ach_usd,
        profile_bank_name: "",
        profile_account_holder: "",
        profile_account_number: "",
        profile_routing_number: "",
+       profile_institution_number: "",
+       profile_transit_number: "",
        profile_account_type: "checking",
        profile_error: nil,
        profile_notice: nil,
@@ -136,6 +144,9 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> assign_new(:ach_file, fn -> nil end)
     |> assign_new(:ach_name, fn -> nil end)
     |> assign_new(:ach_error, fn -> nil end)
+    |> assign_new(:ach_rail, fn -> :ach_usd end)
+    |> assign_new(:originator_environment, fn -> nil end)
+    |> assign_new(:originator_profile, fn -> nil end)
     |> assign_new(:duplicates, fn -> [] end)
     |> assign_new(:duplicate_ids, fn -> MapSet.new() end)
     |> assign_new(:allow_duplicates, fn -> false end)
@@ -149,15 +160,19 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     |> assign_new(:return_to, fn -> nil end)
     |> assign_new(:vendor_profile, fn -> nil end)
     |> assign_new(:profile_vendor_id, fn -> "" end)
+    |> assign_new(:profile_rail, fn -> :ach_usd end)
     |> assign_new(:profile_bank_name, fn -> "" end)
     |> assign_new(:profile_account_holder, fn -> "" end)
     |> assign_new(:profile_account_number, fn -> "" end)
     |> assign_new(:profile_routing_number, fn -> "" end)
+    |> assign_new(:profile_institution_number, fn -> "" end)
+    |> assign_new(:profile_transit_number, fn -> "" end)
     |> assign_new(:profile_account_type, fn -> "checking" end)
     |> assign_new(:profile_error, fn -> nil end)
     |> assign_new(:profile_notice, fn -> nil end)
     |> do_load()
     |> load_profile_for_assigns()
+    |> load_originator_for_assigns()
   end
 
   defp do_load(%{assigns: %{org_id: nil}} = socket) do
@@ -251,12 +266,15 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   end
 
   # The profile follows the run's vendor once a run exists; the operator can
-  # also type a vendor id and press "Load" before any run is approved.
+  # also type a vendor id and press "Load" before any run is approved. The
+  # lookup is rail-pinned: a CAD run opens the CAD profile, never the ACH one.
   defp load_profile_for_assigns(%{assigns: %{org_id: org_id, samen_mount: mount}} = socket)
        when not is_nil(org_id) do
+    rail = socket.assigns[:profile_rail] || :ach_usd
+
     case socket.assigns[:profile_vendor_id] do
       vendor_id when is_binary(vendor_id) and vendor_id != "" ->
-        case VendorPaymentProfile.get(mount.repo, org_id, vendor_id) do
+        case VendorPaymentProfile.get(mount.repo, org_id, vendor_id, rail) do
           {:ok, profile} -> assign(socket, vendor_profile: profile)
           {:error, _reason} -> assign(socket, vendor_profile: nil)
         end
@@ -269,6 +287,35 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   end
 
   defp load_profile_for_assigns(socket), do: assign(socket, vendor_profile: nil)
+
+  # The TD originator status card is read-only: the environment is the host's
+  # configuration and the client/return account are bank-assigned facts. There
+  # is deliberately no FCN or return-account input on the form.
+  defp load_originator_for_assigns(%{assigns: %{org_id: org_id, samen_mount: mount}} = socket)
+       when not is_nil(org_id) do
+    if socket.assigns[:ach_rail] == :eft_cad do
+      case ApEftOriginatorProfile.environment() do
+        {:ok, environment} ->
+          profile =
+            case ApEftOriginatorProfile.get(mount.repo, org_id, environment) do
+              {:ok, profile} -> profile
+              {:error, _reason} -> nil
+            end
+
+          assign(socket, originator_environment: environment, originator_profile: profile)
+
+        {:error, _reason} ->
+          assign(socket, originator_environment: nil, originator_profile: nil)
+      end
+    else
+      assign(socket, originator_environment: nil, originator_profile: nil)
+    end
+  rescue
+    _error -> assign(socket, originator_environment: nil, originator_profile: nil)
+  end
+
+  defp load_originator_for_assigns(socket),
+    do: assign(socket, originator_environment: nil, originator_profile: nil)
 
   # -- events -----------------------------------------------------------------
 
@@ -301,57 +348,14 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   end
 
   def handle_event("ach", params, socket) do
-    %{samen_mount: mount, org_id: org_id} = socket.assigns
-
     case socket.assigns.run do
       %{status: :paid} = run ->
-        # The destination is ALWAYS the selected vendor's verified profile —
-        # never the form. `payment_details/2` refuses an unverified profile and
-        # is the only path that reveals the vaulted account/routing plaintext.
-        with {:ok, vendor_id} <- ach_vendor(params, ApPaymentRun.vendor_ids(run)),
-             {:ok, profile} <- vendor_profile(mount, org_id, vendor_id),
-             {:ok, details} <- VendorPaymentProfile.payment_details(profile, mount.repo) do
-          opts =
-            [
-              originator_name: params["originator_name"],
-              originator_id: params["originator_id"],
-              originator_dfi: params["originator_dfi"],
-              effective_date: run.payment_date
-            ] ++ Map.to_list(details)
-
-          # A rendered ACH file contains the receiver account/routing numbers.
-          # Persist it through the vault BEFORE offering the download; a storage
-          # failure withholds the file rather than handing out an unrecorded one.
-          vendor_run = Map.put(run, :payments, ApPaymentRun.payments_for_vendor(run, vendor_id))
-
-          with {:ok, file} <- ApAchFile.render(vendor_run, opts),
-               {:ok, artifact} <-
-                 ApAchArtifact.store(
-                   repo: mount.repo,
-                   scope: TenantRole.identity_scope(mount, org_id),
-                   run: run,
-                   file: file,
-                   name: ach_name(run, vendor_id),
-                   originator: %{
-                     name: params["originator_name"],
-                     id: params["originator_id"],
-                     dfi: params["originator_dfi"]
-                   },
-                   receiver: details
-                 ) do
-            {:noreply,
-             assign(socket,
-               ach: params,
-               ach_file: file,
-               ach_name: artifact.name,
-               ach_error: nil,
-               profile_vendor_id: vendor_id,
-               vendor_profile: profile
-             )}
-          else
-            {:error, reason} -> {:noreply, ach_failure(socket, params, reason)}
-          end
-        else
+        # The run's currency is the rail selector: USD renders NACHA, CAD
+        # renders CPA-005, and any other currency refuses before a profile is
+        # read or a file is rendered. There is no free rail switch on the form.
+        case run_rail(run) do
+          {:ok, :ach_usd} -> {:noreply, build_ach(socket, run, params)}
+          {:ok, :eft_cad} -> {:noreply, build_eft(socket, run, params)}
           {:error, reason} -> {:noreply, ach_failure(socket, params, reason)}
         end
 
@@ -425,6 +429,12 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                run_id: run_id
              ) do
           {:ok, run} ->
+            rail =
+              case run_rail(run) do
+                {:ok, rail} -> rail
+                {:error, _reason} -> :ach_usd
+              end
+
             {:noreply,
              socket
              |> assign(
@@ -434,6 +444,8 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                ach_file: nil,
                ach_name: nil,
                ach_error: nil,
+               ach_rail: rail,
+               profile_rail: rail,
                profile_vendor_id: run.vendor_id || List.first(ApPaymentRun.vendor_ids(run)) || "",
                profile_error: nil,
                profile_notice: nil,
@@ -583,11 +595,13 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   # is its own button because it requires a DIFFERENT admin.
   def handle_event("save_profile", %{"intent" => "load"} = params, socket) do
     vendor_id = blank_to_nil(params["vendor_id"])
+    rail = profile_rail(params["rail"]) || socket.assigns.profile_rail
 
     socket =
       socket
       |> assign(
         profile_vendor_id: vendor_id || "",
+        profile_rail: rail,
         profile_error: nil,
         profile_notice: nil
       )
@@ -608,9 +622,11 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     end
   end
 
-  def handle_event("verify_profile", %{"vendor_id" => vendor_id}, socket) do
+  def handle_event("verify_profile", params, socket) do
     if writable?(socket.assigns.samen_mount) do
-      verify_bank_profile(socket, vendor_id)
+      vendor_id = params["vendor_id"]
+      rail = profile_rail(params["rail"]) || socket.assigns.profile_rail
+      verify_bank_profile(socket, vendor_id, rail)
     else
       {:noreply,
        assign(socket,
@@ -688,18 +704,153 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp reversal_decision_error(reason),
     do: "The reversal decision could not be completed: #{inspect(reason)}"
 
+  # The destination is ALWAYS the selected vendor's verified profile — never the
+  # form. `payment_details/2` refuses an unverified profile and is the only path
+  # that reveals the vaulted account/routing plaintext.
+  defp build_ach(socket, run, params) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
+    with {:ok, vendor_id} <- ach_vendor(params, ApPaymentRun.vendor_ids(run)),
+         {:ok, profile} <- vendor_profile(mount, org_id, vendor_id, :ach_usd),
+         {:ok, details} <- VendorPaymentProfile.payment_details(profile, mount.repo) do
+      opts =
+        [
+          originator_name: params["originator_name"],
+          originator_id: params["originator_id"],
+          originator_dfi: params["originator_dfi"],
+          effective_date: run.payment_date
+        ] ++ Map.to_list(details)
+
+      # A rendered ACH file contains the receiver account/routing numbers.
+      # Persist it through the vault BEFORE offering the download; a storage
+      # failure withholds the file rather than handing out an unrecorded one.
+      vendor_run = Map.put(run, :payments, ApPaymentRun.payments_for_vendor(run, vendor_id))
+
+      with {:ok, file} <- ApAchFile.render(vendor_run, opts),
+           {:ok, artifact} <-
+             ApAchArtifact.store(
+               repo: mount.repo,
+               scope: TenantRole.identity_scope(mount, org_id),
+               run: run,
+               rail: :ach_usd,
+               file: file,
+               name: file_name(:ach_usd, run, vendor_id),
+               originator: %{
+                 name: params["originator_name"],
+                 id: params["originator_id"],
+                 dfi: params["originator_dfi"]
+               },
+               receiver: details
+             ) do
+        assign(socket,
+          ach: params,
+          ach_file: file,
+          ach_name: artifact.name,
+          ach_error: nil,
+          ach_rail: :ach_usd,
+          originator_environment: nil,
+          originator_profile: nil,
+          profile_rail: :ach_usd,
+          profile_vendor_id: vendor_id,
+          vendor_profile: profile
+        )
+      else
+        {:error, reason} -> ach_failure(socket, params, reason)
+      end
+    else
+      {:error, reason} -> ach_failure(socket, params, reason)
+    end
+  end
+
+  # CAD: the TD profile supplies every bank-assigned originator field and the
+  # FCN. The form contributes only the originator's display name; there is no
+  # free FCN, client number or plaintext return-account input.
+  defp build_eft(socket, run, params) do
+    %{samen_mount: mount, org_id: org_id} = socket.assigns
+
+    with :ok <- require_originator_name(params),
+         {:ok, vendor_id} <- ach_vendor(params, ApPaymentRun.vendor_ids(run)),
+         {:ok, profile} <- vendor_profile(mount, org_id, vendor_id, :eft_cad),
+         {:ok, details} <- VendorPaymentProfile.payment_details(profile, mount.repo),
+         {:ok, environment} <- ApEftOriginatorProfile.environment(),
+         {:ok, originator} <- originator_profile(mount, org_id, environment),
+         {:ok, originator_details} <-
+           ApEftOriginatorProfile.render_details(originator, environment, mount.repo),
+         {:ok, fcn} <-
+           ApEftOriginatorProfile.allocate_file_creation_number(
+             mount.repo,
+             originator,
+             environment
+           ) do
+      opts =
+        [
+          originator_name: params["originator_name"],
+          originator_id: originator_details.client_number,
+          destination_data_centre: originator_details.destination_data_centre,
+          originator_return_institution: originator_details.originator_return_institution,
+          originator_return_account: originator_details.originator_return_account,
+          file_creation_number: fcn,
+          encoding: originator_details.encoding,
+          record_separator: originator_details.record_separator,
+          effective_date: run.payment_date
+        ] ++ Map.to_list(details)
+
+      vendor_run = Map.put(run, :payments, ApPaymentRun.payments_for_vendor(run, vendor_id))
+
+      with {:ok, file} <- ApEftFile.render(vendor_run, opts),
+           {:ok, artifact} <-
+             ApAchArtifact.store(
+               repo: mount.repo,
+               scope: TenantRole.identity_scope(mount, org_id),
+               run: run,
+               rail: :eft_cad,
+               file: file,
+               name: file_name(:eft_cad, run, vendor_id),
+               file_creation_number: fcn,
+               originator: %{
+                 name: params["originator_name"],
+                 id: originator_details.client_number,
+                 institution: originator_details.originator_return_institution,
+                 return_account: originator_details.originator_return_account
+               },
+               receiver: details
+             ) do
+        assign(socket,
+          ach: params,
+          ach_file: file,
+          ach_name: artifact.name,
+          ach_error: nil,
+          ach_rail: :eft_cad,
+          originator_environment: environment,
+          originator_profile: originator,
+          profile_rail: :eft_cad,
+          profile_vendor_id: vendor_id,
+          vendor_profile: profile
+        )
+      else
+        {:error, reason} -> ach_failure(socket, params, reason)
+      end
+    else
+      {:error, reason} -> ach_failure(socket, params, reason)
+    end
+  end
+
   defp save_bank_profile(socket, params) do
     %{samen_mount: mount, org_id: org_id} = socket.assigns
     vendor_id = blank_to_nil(params["vendor_id"])
+    rail = profile_rail(params["rail"]) || socket.assigns.profile_rail
 
     base = [
       repo: mount.repo,
       scope: TenantRole.identity_scope(mount, org_id),
       vendor_id: vendor_id,
+      rail: rail,
       bank_name: blank_to_nil(params["bank_name"]),
       account_holder: blank_to_nil(params["account_holder"]),
       account_number: blank_to_nil(params["account_number"]),
       routing_number: blank_to_nil(params["routing_number"]),
+      institution_number: blank_to_nil(params["institution_number"]),
+      transit_number: blank_to_nil(params["transit_number"]),
       account_type: params["account_type"] || "checking"
     ]
 
@@ -709,7 +860,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           {:error, :vendor_id_required}
 
         vendor_id ->
-          case VendorPaymentProfile.get(mount.repo, org_id, vendor_id) do
+          case VendorPaymentProfile.get(mount.repo, org_id, vendor_id, rail) do
             {:ok, nil} -> VendorPaymentProfile.register(base)
             {:ok, _profile} -> VendorPaymentProfile.change_bank_details(base)
             {:error, reason} -> {:error, reason}
@@ -722,24 +873,30 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
          assign(socket,
            vendor_profile: profile,
            profile_vendor_id: profile.vendor_id,
+           profile_rail: profile.rail,
            profile_bank_name: "",
            profile_account_holder: "",
            profile_account_number: "",
            profile_routing_number: "",
+           profile_institution_number: "",
+           profile_transit_number: "",
            profile_account_type: to_string(profile.account_type),
            profile_error: nil,
            profile_notice:
-             "Bank details saved as unverified. A different admin must verify them before an ACH file can be built."
+             "Bank details saved as unverified. A different admin must verify them before a #{rail_label(profile.rail)} file can be built."
          )}
 
       {:error, reason} ->
         {:noreply,
          assign(socket,
            profile_vendor_id: params["vendor_id"] || "",
+           profile_rail: rail,
            profile_bank_name: params["bank_name"] || "",
            profile_account_holder: params["account_holder"] || "",
            profile_account_number: params["account_number"] || "",
            profile_routing_number: params["routing_number"] || "",
+           profile_institution_number: params["institution_number"] || "",
+           profile_transit_number: params["transit_number"] || "",
            profile_account_type: params["account_type"] || "checking",
            profile_notice: nil,
            profile_error: profile_error(reason)
@@ -747,22 +904,24 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     end
   end
 
-  defp verify_bank_profile(socket, vendor_id) do
+  defp verify_bank_profile(socket, vendor_id, rail) do
     %{samen_mount: mount, org_id: org_id} = socket.assigns
 
     case VendorPaymentProfile.verify(
            repo: mount.repo,
            scope: TenantRole.attributed_admin_scope(mount, org_id),
-           vendor_id: vendor_id
+           vendor_id: vendor_id,
+           rail: rail
          ) do
       {:ok, profile} ->
         {:noreply,
          assign(socket,
            vendor_profile: profile,
            profile_vendor_id: profile.vendor_id,
+           profile_rail: profile.rail,
            profile_error: nil,
            profile_notice:
-             "Bank details verified by #{profile.verified_by}. ACH files now use this account."
+             "Bank details verified by #{profile.verified_by}. #{rail_label(profile.rail)} files now use this account."
          )}
 
       {:error, reason} ->
@@ -770,8 +929,43 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     end
   end
 
-  defp vendor_profile(mount, org_id, vendor_id) do
-    case VendorPaymentProfile.get(mount.repo, org_id, vendor_id) do
+  defp require_originator_name(params) do
+    if blank_to_nil(params["originator_name"]) do
+      :ok
+    else
+      {:error, :originator_name_required}
+    end
+  end
+
+  defp originator_profile(mount, org_id, environment) do
+    case ApEftOriginatorProfile.get(mount.repo, org_id, environment) do
+      {:ok, nil} -> {:error, :originator_not_configured}
+      {:ok, profile} -> {:ok, profile}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp run_rail(%{currency: "CAD"}), do: {:ok, :eft_cad}
+  defp run_rail(%{currency: "USD"}), do: {:ok, :ach_usd}
+
+  defp run_rail(%{currency: currency}) when is_binary(currency),
+    do: {:error, {:unsupported_currency, currency}}
+
+  defp run_rail(_run), do: {:error, {:unsupported_currency, "USD"}}
+
+  defp profile_rail("eft_cad"), do: :eft_cad
+  defp profile_rail("ach_usd"), do: :ach_usd
+  defp profile_rail(_value), do: nil
+
+  defp rail_label(:eft_cad), do: "CAD EFT"
+  defp rail_label(_rail), do: "ACH"
+
+  defp originator_environment_label(:test), do: "Test"
+  defp originator_environment_label(:production), do: "Production"
+  defp originator_environment_label(_environment), do: "not configured"
+
+  defp vendor_profile(mount, org_id, vendor_id, rail) do
+    case VendorPaymentProfile.get(mount.repo, org_id, vendor_id, rail) do
       {:ok, nil} -> {:error, :missing_profile}
       {:ok, profile} -> {:ok, profile}
       {:error, reason} -> {:error, reason}
@@ -932,7 +1126,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     do: "The account number must be letters or digits only."
 
   defp ach_error(:receiver_account_too_long),
-    do: "The account number is longer than the 17 characters an ACH entry can carry."
+    do: "The account number is longer than this rail's account field can carry."
 
   defp ach_error({:missing_routing, :receiver_dfi}),
     do: "Enter the vendor's 9-digit routing number."
@@ -945,9 +1139,63 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
   defp ach_error(:effective_date_required), do: "The run has no effective date."
 
   defp ach_error({:unsupported_currency, currency}),
-    do: "NACHA is USD-only. This run is #{currency}; use a #{currency} payment rail."
+    do:
+      "This run is #{currency}; no payment-file rail is wired for it. A USD run uses NACHA, a CAD run uses CPA-005."
 
-  defp ach_error(:ach_vendor_required), do: "Choose which vendor's ACH file to build."
+  defp ach_error(:environment_not_configured),
+    do:
+      "The EFT environment is not configured on this host. Set :samen_core, :eft_environment to :test or :production before building a CAD file."
+
+  defp ach_error(:invalid_environment),
+    do:
+      "The EFT environment is not :test or :production. Fix the host configuration before building a CAD file."
+
+  defp ach_error(:environment_mismatch),
+    do:
+      "The TD originator profile belongs to a different environment. A test file cannot use the production sequence, and vice versa."
+
+  defp ach_error(:originator_not_configured),
+    do:
+      "No TD Business Central originator profile is configured for this environment. Configure the client number, return institution and return account first."
+
+  defp ach_error(:destination_data_centre_invalid),
+    do: "The TD originator profile's destination data centre is not 00420."
+
+  defp ach_error(:originator_return_institution_invalid),
+    do: "The TD originator profile's return institution is not 0004 plus a 5-digit transit."
+
+  defp ach_error(:originator_return_account_invalid),
+    do: "The TD originator profile's return account is not an 11-digit account."
+
+  defp ach_error(:file_creation_number_required),
+    do: "The TD originator profile has no file creation number to allocate."
+
+  defp ach_error(:file_creation_number_invalid),
+    do: "The allocated file creation number is not 0001–9999."
+
+  defp ach_error(:encoding_required), do: "The TD originator profile has no file encoding."
+  defp ach_error(:encoding_unsupported), do: "The TD originator profile's encoding is not ASCII."
+
+  defp ach_error(:record_separator_required),
+    do: "The TD originator profile has no record separator."
+
+  defp ach_error(:record_separator_invalid),
+    do: "The TD originator profile's record separator is not CRLF or CR."
+
+  defp ach_error(:receiver_institution_invalid),
+    do: "The vendor's CAD profile has no 3-digit institution number."
+
+  defp ach_error(:receiver_transit_invalid),
+    do: "The vendor's CAD profile has no 5-digit transit number."
+
+  defp ach_error({:invalid_profile, _changeset}),
+    do:
+      "The TD originator profile is invalid; correct its bank-assigned fields before building a file."
+
+  defp ach_error({:rail_currency_mismatch, rail, currency}),
+    do: "A #{rail} artifact cannot store a #{currency} run."
+
+  defp ach_error(:ach_vendor_required), do: "Choose which vendor's payment file to build."
   defp ach_error(:ach_vendor_unknown), do: "Choose a vendor from this payment run."
 
   defp ach_error(:missing_profile),
@@ -993,12 +1241,20 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     do: "The account number must be letters or digits only."
 
   defp profile_error(:account_number_too_long),
-    do: "The account number is longer than the 17 characters an ACH entry can carry."
+    do: "The account number is longer than this rail's account field can carry."
 
   defp profile_error(:routing_number_required), do: "Enter the vendor's 9-digit routing number."
 
   defp profile_error(:routing_number_invalid),
     do: "The vendor's routing number is not a valid ABA number."
+
+  defp profile_error(:institution_number_invalid),
+    do: "Enter the vendor's 3-digit Canadian institution number."
+
+  defp profile_error(:transit_number_invalid),
+    do: "Enter the vendor's 5-digit Canadian transit number."
+
+  defp profile_error(:invalid_rail), do: "Choose USD ACH or CAD EFT."
 
   defp profile_error(:account_type_invalid), do: "Choose checking or savings."
   defp profile_error(:bank_name_required), do: "Enter the bank's name."
@@ -1062,6 +1318,19 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
     end
   end
 
+  defp file_name(:eft_cad, run, vendor_id) do
+    suffix =
+      if length(ApPaymentRun.vendor_ids(run)) > 1 do
+        "-" <> String.slice(vendor_id, 0, 8)
+      else
+        ""
+      end
+
+    "eft-#{run.reference}#{suffix}.txt"
+  end
+
+  defp file_name(_rail, run, vendor_id), do: ach_name(run, vendor_id)
+
   defp ach_name(run, vendor_id) do
     if length(ApPaymentRun.vendor_ids(run)) > 1 do
       "ach-#{run.reference}-#{String.slice(vendor_id, 0, 8)}.ach"
@@ -1080,6 +1349,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
       profile_vendor_id: blank_to_nil(params["ach_vendor_id"]) || socket.assigns.profile_vendor_id
     )
     |> load_profile_for_assigns()
+    |> load_originator_for_assigns()
   end
 
   defp selected_total(bills, ids) do
@@ -1514,7 +1784,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
           <div id="vendor-payment-profile" class="card" style="padding:14px 16px;margin-bottom:10px">
             <div style="font-size:13px;font-weight:700;margin-bottom:2px">Vendor bank profile</div>
             <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
-              Bank details are stored vaulted and must be verified by a DIFFERENT admin before an ACH file can use them. Changing a detail resets verification.
+              Bank details are stored vaulted and must be verified by a DIFFERENT admin before a payment file can use them. One vendor may hold a USD ACH profile and a CAD EFT profile; changing a detail resets that rail only.
             </p>
 
             <%= if writable?(@samen_mount) do %>
@@ -1531,6 +1801,17 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                     placeholder="Vendor UUID"
                     style="font-size:12px;padding:6px 8px;font-weight:400"
                   />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Rail
+                  <select name="rail" style="font-size:12px;padding:6px 8px;font-weight:400">
+                    <option value="ach_usd" selected={@profile_rail == :ach_usd}>
+                      USD ACH (NACHA)
+                    </option>
+                    <option value="eft_cad" selected={@profile_rail == :eft_cad}>
+                      CAD EFT (CPA-005)
+                    </option>
+                  </select>
                 </label>
                 <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
                   Bank name
@@ -1558,17 +1839,48 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                     type="text"
                     name="account_number"
                     value={@profile_account_number}
-                    placeholder="Re-enter to change"
+                    placeholder={if @profile_rail == :eft_cad,
+                      do: "Up to 12 characters",
+                      else: "Re-enter to change"}
                     style="font-size:12px;padding:6px 8px;font-weight:400"
                   />
                 </label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                <label
+                  :if={@profile_rail == :ach_usd}
+                  style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600"
+                >
                   Routing number
                   <input
                     type="text"
                     name="routing_number"
                     value={@profile_routing_number}
                     placeholder="9 digits"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label
+                  :if={@profile_rail == :eft_cad}
+                  style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600"
+                >
+                  Institution number
+                  <input
+                    type="text"
+                    name="institution_number"
+                    value={@profile_institution_number}
+                    placeholder="3 digits"
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+                <label
+                  :if={@profile_rail == :eft_cad}
+                  style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600"
+                >
+                  Transit number
+                  <input
+                    type="text"
+                    name="transit_number"
+                    value={@profile_transit_number}
+                    placeholder="5 digits"
                     style="font-size:12px;padding:6px 8px;font-weight:400"
                   />
                 </label>
@@ -1628,8 +1940,13 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                 <strong>{if @vendor_profile.status == :verified,
                   do: "Verified",
                   else: "Unverified"}</strong>
+                · {rail_label(@vendor_profile.rail)}
                 · {@vendor_profile.account_holder} · {@vendor_profile.bank_name || "bank on file"}
                 · ••••{@vendor_profile.account_last4}
+                <%= if @vendor_profile.rail == :eft_cad do %>
+                  · institution ••••{@vendor_profile.institution_last4 || "—"}
+                  · transit ••••{@vendor_profile.transit_last4 || "—"}
+                <% end %>
               </div>
               <div style="color:var(--muted)">
                 Changed by <code>{@vendor_profile.changed_by}</code>
@@ -1645,6 +1962,7 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                 type="button"
                 phx-click="verify_profile"
                 phx-value-vendor_id={@vendor_profile.vendor_id}
+                phx-value-rail={@vendor_profile.rail}
                 id="verify-vendor-profile"
                 style="font-size:11px;padding:3px 8px;margin-top:6px"
               >
@@ -1663,7 +1981,11 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
               ACH / EFT payment file
             </div>
             <p style="margin:0 0 10px;font-size:12px;color:var(--muted)">
-              A NACHA CCD credit file for one vendor in this run. The destination comes from that vendor's verified bank profile, never from this form. A multi-vendor run produces one file per vendor.
+              <%= if @ach_rail == :eft_cad do %>
+                A CPA-005 (TD 1464-byte) credit file for one vendor in this run. The TD client number, return account, encoding and file creation number come from the configured originator profile, never from this form. A multi-vendor run produces one file per vendor.
+              <% else %>
+                A NACHA CCD credit file for one vendor in this run. The destination comes from that vendor's verified bank profile, never from this form. A multi-vendor run produces one file per vendor.
+              <% end %>
             </p>
 
             <%= if @vendor_profile && @vendor_profile.status == :verified do %>
@@ -1671,21 +1993,25 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                 Paying <strong>{@vendor_profile.account_holder}</strong>
                 · {@vendor_profile.bank_name || "bank on file"}
                 · ••••{@vendor_profile.account_last4}
+                <%= if @vendor_profile.rail == :eft_cad do %>
+                  · institution ••••{@vendor_profile.institution_last4 || "—"}
+                  · transit ••••{@vendor_profile.transit_last4 || "—"}
+                <% end %>
                 · verified by <code>{@vendor_profile.verified_by}</code>
               </div>
             <% else %>
               <p id="ach-profile-blocked" style="margin:0 0 10px;font-size:12px;color:var(--muted)">
-                Register and verify the selected vendor's bank details first. ACH files use ONLY a verified profile.
+                Register and verify the selected vendor's {rail_label(@ach_rail)} details first. Payment files use ONLY a verified profile.
               </p>
             <% end %>
 
             <p
-              :if={ach_currency(@run) != "USD"}
+              :if={ach_currency(@run) not in ["USD", "CAD"]}
               id="ach-currency-blocked"
               style="margin:0 0 10px;padding:8px 10px;border:1px solid #f59e0b;border-radius:6px;font-size:12px;color:#92400e"
             >
-              NACHA is a USD-only rail. This run is {ach_currency(@run)}; build a
-              {ach_currency(@run)} payment file instead of a NACHA file.
+              No payment-file rail is wired for {ach_currency(@run)}. A USD run uses
+              NACHA; a CAD run uses CPA-005.
             </p>
 
             <form :if={ach_currency(@run) == "USD"} id="ach-file-form" phx-submit="ach">
@@ -1761,6 +2087,86 @@ defmodule Samen.Web.Erp.ApPaymentsLive do
                   Download ACH file
                 </a>
                 <.button type="submit" id="build-ach">Build ACH file</.button>
+              </div>
+            </form>
+
+            <form :if={ach_currency(@run) == "CAD"} id="eft-file-form" phx-submit="ach">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
+                <label
+                  :if={length(run_vendor_ids(@run)) > 1}
+                  style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600"
+                >
+                  Vendor
+                  <select name="ach_vendor_id" style="font-size:12px;padding:6px 8px;font-weight:400">
+                    <option
+                      :for={vendor_id <- run_vendor_ids(@run)}
+                      value={vendor_id}
+                      selected={vendor_id == @profile_vendor_id}
+                    >
+                      {short(vendor_id)}
+                    </option>
+                  </select>
+                </label>
+                <input
+                  :if={length(run_vendor_ids(@run)) == 1}
+                  type="hidden"
+                  name="ach_vendor_id"
+                  value={List.first(run_vendor_ids(@run))}
+                />
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600">
+                  Originator name
+                  <input
+                    type="text"
+                    name="originator_name"
+                    value={@ach["originator_name"]}
+                    style="font-size:12px;padding:6px 8px;font-weight:400"
+                  />
+                </label>
+              </div>
+
+              <div
+                :if={@ach_error}
+                id="ach-file-error"
+                style="color:var(--bad, #b91c1c);font-size:12px;margin-bottom:8px"
+              >
+                {@ach_error}
+              </div>
+
+              <div
+                id="td-originator-status"
+                style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--border, #e5e7eb);border-radius:6px;font-size:12px"
+              >
+                <div style="font-weight:700;margin-bottom:2px">TD Business Central originator</div>
+                <div style="color:var(--muted)">
+                  Environment: <strong>{originator_environment_label(@originator_environment)}</strong>
+                  <%= if @originator_profile do %>
+                    · client <code>{@originator_profile.client_number}</code>
+                    · return institution <code>{@originator_profile.return_institution}</code>
+                    · return account vaulted
+                    · FCN allocated at build
+                  <% end %>
+                </div>
+              </div>
+
+              <p
+                :if={is_nil(@originator_profile)}
+                id="td-originator-missing"
+                style="margin:0 0 10px;font-size:12px;color:var(--muted)"
+              >
+                No TD originator profile is configured for this environment. An admin must configure the client number, return institution and return account before a CPA-005 file can be built.
+              </p>
+
+              <div style="display:flex;gap:12px;align-items:center;justify-content:flex-end">
+                <a
+                  :if={@ach_file}
+                  id="download-eft"
+                  download={@ach_name}
+                  href={"data:text/plain;base64," <> Base.encode64(@ach_file)}
+                  style="font-size:13px"
+                >
+                  Download EFT file
+                </a>
+                <.button type="submit" id="build-eft">Build CPA-005 file</.button>
               </div>
             </form>
           </div>

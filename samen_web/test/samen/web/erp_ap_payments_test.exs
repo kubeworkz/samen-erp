@@ -26,6 +26,7 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
   alias Samen.Scopes.Finance.{
     ApAchArtifact,
+    ApEftOriginatorProfile,
     ApPaymentReversal,
     ApPaymentRun,
     ApPaymentRunRecord,
@@ -801,10 +802,11 @@ defmodule Samen.Web.ErpApPaymentsTest do
     refute html =~ ~s(id="ach-file-error")
   end
 
-  test "a CAD run renders the rail mismatch and hides the NACHA form" do
+  test "a CAD run builds a CPA-005 file from the TD originator and an allocated FCN" do
     seed_posting_accounts()
     seed_cad_settings!()
-    bill = bill!(%{number: "BILL-CAD-1"})
+    vendor = Ash.UUID.generate()
+    bill = bill!(%{number: "BILL-CAD-1", vendor_id: vendor})
 
     assert bill.currency == "CAD"
 
@@ -813,11 +815,99 @@ defmodule Samen.Web.ErpApPaymentsTest do
 
     assert approved.assigns.run.status == :paid
     assert approved.assigns.run.currency == "CAD"
+    assert approved.assigns.ach_rail == :eft_cad
+    assert approved.assigns.originator_environment == :test
+    assert approved.assigns.originator_profile == nil
 
     html = render(approved)
-    assert html =~ ~s(id="ach-currency-blocked")
-    assert html =~ "NACHA is a USD-only rail"
+    assert html =~ ~s(id="eft-file-form")
+    assert html =~ ~s(id="td-originator-missing")
     refute html =~ ~s(id="ach-file-form")
+    refute html =~ ~s(id="ach-currency-blocked")
+
+    # The destination still comes from a verified, rail-pinned CAD profile,
+    # never from the form.
+    assert {:ok, cad_profile} =
+             VendorPaymentProfile.register(
+               repo: Samen.WebTest.Repo,
+               scope: requester_scope(@org),
+               vendor_id: vendor,
+               rail: :eft_cad,
+               bank_name: "TD Bank",
+               account_holder: "Vendor One",
+               account_number: "123456789",
+               institution_number: "004",
+               transit_number: "10202",
+               account_type: "checking"
+             )
+
+    assert cad_profile.rail == :eft_cad
+
+    verified = event(approved, "verify_profile", %{"vendor_id" => vendor, "rail" => "eft_cad"})
+    assert verified.assigns.vendor_profile.status == :verified
+    assert render(verified) =~ ~s(id="ach-profile-verified")
+
+    form = %{"originator_name" => "Sample Co"}
+
+    # No TD originator row yet: refuse before allocating an FCN.
+    missing = event(verified, "ach", form)
+    assert missing.assigns.ach_error =~ "No TD Business Central originator profile"
+
+    assert {:ok, _originator} =
+             ApEftOriginatorProfile.configure(
+               repo: Samen.WebTest.Repo,
+               scope: admin_scope("eft-admin:other"),
+               environment: :test,
+               client_number: "1123456789",
+               destination_data_centre: "00420",
+               return_institution: "000410202",
+               return_account: "12345678901"
+             )
+
+    built = event(verified, "ach", form)
+
+    assert built.assigns.ach_name == "eft-CAD-RUN-1.txt",
+           "EFT refused: #{inspect(built.assigns.ach_error)}"
+
+    assert built.assigns.ach_error == nil
+
+    file = built.assigns.ach_file
+    records = String.split(file, "\r\n", trim: true)
+
+    # One A, one C for the single payment, one Z — every record 1464 bytes.
+    assert length(records) == 3
+    assert Enum.all?(records, &(String.length(&1) == 1464))
+    assert String.starts_with?(file, "A")
+    assert String.ends_with?(file, "\r\n")
+    assert Enum.all?(records, &(String.slice(&1, 20, 4) == "0001"))
+
+    [artifact] = ApAchArtifact.list(Samen.WebTest.Repo, @org, built.assigns.run.id)
+    assert artifact.rail == :eft_cad
+    assert artifact.file_creation_number == "0001"
+    assert artifact.originator_institution_last4 == "0202"
+    assert artifact.receiver_institution_last4 == "004"
+    assert artifact.receiver_transit_last4 == "0202"
+    assert {:ok, ^file} = ApAchArtifact.reveal(artifact, Samen.WebTest.Repo)
+
+    page = render(built)
+    assert page =~ ~s(id="download-eft")
+    assert page =~ "eft-CAD-RUN-1.txt"
+    assert page =~ ~s(id="td-originator-status")
+    assert page =~ "TD Business Central originator"
+    assert page =~ "1123456789"
+    refute page =~ ~s(id="ach-file-error")
+
+    # A second build allocates the next FCN; the sequence is durable.
+    again = event(built, "ach", form)
+    assert again.assigns.ach_error == nil
+    assert String.slice(again.assigns.ach_file, 20, 4) == "0002"
+
+    assert Enum.sort(
+             Enum.map(
+               ApAchArtifact.list(Samen.WebTest.Repo, @org, built.assigns.run.id),
+               & &1.file_creation_number
+             )
+           ) == ["0001", "0002"]
   end
 
   test "a multi-vendor run builds one ACH file per vendor from its own profile" do

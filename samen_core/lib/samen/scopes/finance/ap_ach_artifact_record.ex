@@ -20,10 +20,13 @@ defmodule Samen.Scopes.Finance.ApAchArtifactRecord do
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true, source: :ach_id}
+  @rails [:ach_usd, :eft_cad]
 
   schema "ach_ap_payment_ach_file" do
     field(:org_id, :binary_id, source: :ach_org_id)
     field(:run_id, :binary_id, source: :ach_run_id)
+    field(:rail, Ecto.Enum, values: @rails, default: :ach_usd, source: :ach_rail)
+    field(:file_creation_number, :string, source: :ach_file_creation_number)
     field(:name, :string, source: :ach_name)
     field(:digest, :string, source: :ach_digest)
     field(:file_token, :string, source: :ach_file_token)
@@ -31,9 +34,14 @@ defmodule Samen.Scopes.Finance.ApAchArtifactRecord do
     field(:originator_name, :string, source: :ach_originator_name)
     field(:originator_id, :string, source: :ach_originator_id)
     field(:originator_dfi_last4, :string, source: :ach_originator_dfi_last4)
+    field(:originator_institution_last4, :string, source: :ach_originator_institution_last4)
+    field(:originator_return_account_last4, :string, source: :ach_originator_return_account_last4)
+
     field(:receiver_name, :string, source: :ach_receiver_name)
     field(:receiver_account_last4, :string, source: :ach_receiver_account_last4)
     field(:receiver_routing_last4, :string, source: :ach_receiver_routing_last4)
+    field(:receiver_institution_last4, :string, source: :ach_receiver_institution_last4)
+    field(:receiver_transit_last4, :string, source: :ach_receiver_transit_last4)
     field(:generated_by, :string, source: :ach_generated_by)
     field(:generated_at, :utc_datetime_usec, source: :ach_generated_at)
 
@@ -56,6 +64,8 @@ defmodule Samen.Scopes.Finance.ApAchArtifactRecord do
       :id,
       :org_id,
       :run_id,
+      :rail,
+      :file_creation_number,
       :name,
       :digest,
       :file_token,
@@ -63,9 +73,13 @@ defmodule Samen.Scopes.Finance.ApAchArtifactRecord do
       :originator_name,
       :originator_id,
       :originator_dfi_last4,
+      :originator_institution_last4,
+      :originator_return_account_last4,
       :receiver_name,
       :receiver_account_last4,
       :receiver_routing_last4,
+      :receiver_institution_last4,
+      :receiver_transit_last4,
       :generated_by,
       :generated_at,
       :inserted_at
@@ -74,6 +88,7 @@ defmodule Samen.Scopes.Finance.ApAchArtifactRecord do
       :id,
       :org_id,
       :run_id,
+      :rail,
       :name,
       :digest,
       :file_token,
@@ -82,8 +97,45 @@ defmodule Samen.Scopes.Finance.ApAchArtifactRecord do
       :generated_at,
       :inserted_at
     ])
+    |> validate_inclusion(:rail, @rails)
     |> validate_format(:digest, ~r/\A[0-9a-f]{64}\z/)
     |> validate_format(:file_token, ~r/\Avt_/)
     |> validate_number(:size_bytes, greater_than: 0)
+    |> validate_rail_fingerprints()
+  end
+
+  defp validate_rail_fingerprints(changeset) do
+    case get_field(changeset, :rail) || :ach_usd do
+      :ach_usd ->
+        changeset
+        |> validate_format(:file_creation_number, ~r/\A\z/)
+        |> reject_present([
+          :originator_institution_last4,
+          :originator_return_account_last4,
+          :receiver_institution_last4,
+          :receiver_transit_last4
+        ])
+
+      :eft_cad ->
+        changeset
+        |> validate_required([
+          :file_creation_number,
+          :originator_institution_last4,
+          :originator_return_account_last4,
+          :receiver_institution_last4,
+          :receiver_transit_last4
+        ])
+        |> validate_format(:file_creation_number, ~r/\A(?!0000)[0-9]{4}\z/)
+        |> reject_present([:originator_dfi_last4, :receiver_routing_last4])
+    end
+  end
+
+  defp reject_present(changeset, fields) do
+    Enum.reduce(fields, changeset, fn field, acc ->
+      case get_change(acc, field) do
+        nil -> acc
+        _value -> add_error(acc, field, "must be empty on this rail")
+      end
+    end)
   end
 end

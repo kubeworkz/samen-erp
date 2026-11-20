@@ -15,3 +15,8 @@ samen_core/priv/abbrev_registry.json text eol=lf
 # The per-app schema dicts are BYTE-GOLDEN too (each gate diffs the committed
 # file byte-exactly against a fresh LF dump) — keep them LF on every host.
 schema.dict.json text eol=lf
+
+# B2 payment-file goldens: the USD NACHA byte-golden is LF-exact; the CPA-005
+# golden is CRLF-exact and must not be smudged by core.autocrlf.
+*.ach text eol=lf
+*.cpa005 -text

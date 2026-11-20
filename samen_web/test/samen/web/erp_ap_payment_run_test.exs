@@ -167,6 +167,48 @@ defmodule Samen.Web.ErpApPaymentRunTest do
     run
   end
 
+  defp paid_cad_run!(reference) do
+    vendor_id = Ash.UUID.generate()
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    {:ok, pending} =
+      %ApPaymentRunRecord{}
+      |> ApPaymentRunRecord.changeset(%{
+        org_id: @org,
+        reference: reference,
+        vendor_id: vendor_id,
+        payment_date: ~D[2026-11-08],
+        status: :pending_approval,
+        currency: "CAD",
+        total_cents: 4_000,
+        bill_count: 1,
+        payments: [
+          %{
+            "bill_id" => Ash.UUID.generate(),
+            "vendor_id" => vendor_id,
+            "number" => "INV-CAD-1",
+            "amount_cents" => 4_000
+          }
+        ],
+        requested_by: "requester:other",
+        requested_at: now
+      })
+      |> Samen.WebTest.Repo.insert()
+
+    Samen.WebTest.Repo.query!(
+      """
+      UPDATE prn_ap_payment_run
+      SET prn_status = 'paid', prn_approved_by = 'approver:other',
+          prn_approved_at = now(), prn_executed_at = now(),
+          prn_remittance_csv = 'reference,amount_cents\nRUN,4000\n'
+      WHERE prn_id = $1
+      """,
+      [Ecto.UUID.dump!(pending.id)]
+    )
+
+    Samen.WebTest.Repo.get!(ApPaymentRunRecord, pending.id)
+  end
+
   # Pre-per-payment-vendor snapshots keep the header vendor only. Build one
   # through the schema so the print/audit fallbacks are exercised against a real
   # persisted run, including the table's immutable-run trigger.
@@ -374,6 +416,44 @@ defmodule Samen.Web.ErpApPaymentRunTest do
     assert html =~ "Reversed by <code>broker:#{@org}</code>"
     assert html =~ "The payment entries are void and the bills are approved again"
     refute html =~ ~s(id="ap-run-reversal-form")
+  end
+
+  test "a CAD artifact renders its rail, allocated FCN and CAD fingerprints" do
+    seed_posting_accounts()
+    paid = paid_cad_run!("NOV-CAD-ART")
+
+    assert {:ok, artifact} =
+             ApAchArtifact.store(
+               repo: Samen.WebTest.Repo,
+               scope: scope("requester:other", :member),
+               run: paid,
+               rail: :eft_cad,
+               file: "CPARECORD\r\n",
+               name: "eft-NOV-CAD-ART.txt",
+               file_creation_number: "0042",
+               originator: %{
+                 name: "Sample Co",
+                 id: "1123456789",
+                 institution: "000410202",
+                 return_account: "12345678901"
+               },
+               receiver: %{
+                 receiver_name: "Vendor One",
+                 receiver_account: "123456789",
+                 receiver_institution: "004",
+                 receiver_transit: "10202"
+               }
+             )
+
+    html = render(open(paid.id))
+
+    assert html =~ "Stored payment files"
+    assert html =~ "CAD EFT"
+    assert html =~ "FCN 0042"
+    assert html =~ "institution ••••004"
+    assert html =~ "transit ••••0202"
+    assert html =~ "Download eft-NOV-CAD-ART.txt"
+    refute html =~ "No payment file has been generated for this run."
   end
 
   test "a paid run across vendors groups the snapshot and printed advice by vendor" do

@@ -238,6 +238,11 @@ config :opentelemetry,
 # is explicitly wired rather than silently defaulted to.
 config :samen_core, :fleet_local_credential, Samen.Fleet.LocalCredential.Agent
 
+# B2 — the EFT environment is host configuration, never a library default. The
+# kernel suite exercises the TD profile and FCN allocator against the test
+# sequence; a missing value refuses `:environment_not_configured`.
+config :samen_core, :eft_environment, :test
+
 # Gap #9 — the AP approval-time three-way match. The kernel names the fixture
 # procurement resources here; a host wires its own (see samenerp/config.exs).
 config :samen_core, Samen.Scopes.Finance.ApInvoiceMatch,

@@ -152,6 +152,11 @@ config :samen_core, Samen.Scopes.Finance.ApInvoiceMatch,
   po_line: Samenerp.Erp.PoLine,
   receipt_line: Samenerp.Erp.ReceiptLine
 
+# B2 — the CAD EFT rail's default environment. `runtime.exs` may override it
+# from TD_EFT_ENVIRONMENT, but an unknown value fails boot rather than
+# silently falling back to production.
+config :samen_core, :eft_environment, :production
+
 config :ash, disable_async?: true
 config :ash, :missed_notifications, :ignore
 

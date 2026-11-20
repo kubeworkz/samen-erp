@@ -202,6 +202,22 @@ if config_env() == :prod do
   end
 
   # ---------------------------------------------------------------------------
+  # CAD EFT environment (B2)
+  # ---------------------------------------------------------------------------
+  # TD keeps a separate file-creation-number sequence per environment. An
+  # explicit value is required; an unknown one fails boot instead of silently
+  # paying from the production sequence.
+  eft_environment =
+    case System.get_env("TD_EFT_ENVIRONMENT") do
+      "test" -> :test
+      "production" -> :production
+      nil -> :production
+      other -> raise "Unknown TD_EFT_ENVIRONMENT: #{other}. Use 'test' or 'production'."
+    end
+
+  config :samen_core, :eft_environment, eft_environment
+
+  # ---------------------------------------------------------------------------
   # Operator Authority (prod)
   # ---------------------------------------------------------------------------
   # Replace the dev-only bypass with a real resolver that checks operator membership.

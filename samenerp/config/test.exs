@@ -29,5 +29,9 @@ config :samen_core, Samen.Hr.Payroll.JournalProvider,
 
 config :samenerp, start_repo?: false
 
+# B2 — the host proof allocates CPA-005 file creation numbers from the TEST
+# sequence; a test upload must never advance the production counter.
+config :samen_core, :eft_environment, :test
+
 # In test: manual Oban (job rows visible but not auto-executed) + no plugins.
 config :samen_core, Oban, testing: :manual, plugins: false

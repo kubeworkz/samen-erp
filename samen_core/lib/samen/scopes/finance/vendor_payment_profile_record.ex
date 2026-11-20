@@ -33,12 +33,15 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
 
   @statuses [:unverified, :verified]
   @account_types [:checking, :savings]
+  @rails [:ach_usd, :eft_cad]
 
   schema "fvp_vendor_payment_profile" do
     field(:org_id, :binary_id, source: :fvp_org_id)
     field(:vendor_id, :binary_id, source: :fvp_vendor_id)
     field(:bank_name, :string, source: :fvp_bank_name)
     field(:account_holder, :string, source: :fvp_account_holder)
+
+    field(:rail, Ecto.Enum, values: @rails, default: :ach_usd, source: :fvp_rail)
 
     field(:account_type, Ecto.Enum,
       values: @account_types,
@@ -49,8 +52,15 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
     # 🔒 Vault tokens, never plaintext.
     field(:account_number, :string, source: :pii_fvp_account_number)
     field(:routing_number, :string, source: :pii_fvp_routing_number)
-    # The only plaintext fragment of the account, for the UI's recognition cue.
+    field(:institution_number, :string, source: :pii_fvp_institution_number)
+    field(:transit_number, :string, source: :pii_fvp_transit_number)
+
+    # The only plaintext fragments, for the UI's recognition cue. The CAD
+    # institution fingerprint is the three significant digits; the transit
+    # fingerprint is its last four.
     field(:account_last4, :string, source: :fvp_account_last4)
+    field(:institution_last4, :string, source: :fvp_institution_last4)
+    field(:transit_last4, :string, source: :fvp_transit_last4)
 
     field(:status, Ecto.Enum, values: @statuses, default: :unverified, source: :fvp_status)
 
@@ -79,6 +89,9 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
   @doc false
   def account_types, do: @account_types
 
+  @doc false
+  def rails, do: @rails
+
   @doc "The first write: born unverified, with WHO registered the details."
   @spec register_changeset(map()) :: Ecto.Changeset.t()
   def register_changeset(attrs) do
@@ -87,12 +100,17 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
       :id,
       :org_id,
       :vendor_id,
+      :rail,
       :bank_name,
       :account_holder,
       :account_type,
       :account_number,
       :routing_number,
+      :institution_number,
+      :transit_number,
       :account_last4,
+      :institution_last4,
+      :transit_last4,
       :status,
       :changed_by,
       :changed_at,
@@ -102,21 +120,19 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
       :id,
       :org_id,
       :vendor_id,
+      :rail,
       :account_holder,
       :account_type,
-      :account_number,
-      :routing_number,
-      :account_last4,
       :status,
       :changed_by,
       :changed_at
     ])
     |> validate_inclusion(:status, [:unverified])
     |> validate_inclusion(:account_type, @account_types)
-    |> validate_vault_token(:account_number)
-    |> validate_vault_token(:routing_number)
-    |> unique_constraint([:org_id, :vendor_id],
-      name: :fvp_vendor_payment_profile_org_vendor_index
+    |> validate_inclusion(:rail, @rails)
+    |> validate_rail_details()
+    |> unique_constraint([:org_id, :vendor_id, :rail],
+      name: :fvp_vendor_payment_profile_org_vendor_rail_index
     )
   end
 
@@ -135,7 +151,11 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
       :account_type,
       :account_number,
       :routing_number,
+      :institution_number,
+      :transit_number,
       :account_last4,
+      :institution_last4,
+      :transit_last4,
       :changed_by,
       :changed_at,
       :updated_at
@@ -144,14 +164,12 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
       :account_holder,
       :account_type,
       :account_number,
-      :routing_number,
       :account_last4,
       :changed_by,
       :changed_at
     ])
     |> validate_inclusion(:account_type, @account_types)
-    |> validate_vault_token(:account_number)
-    |> validate_vault_token(:routing_number)
+    |> validate_rail_details()
     |> put_change(:status, :unverified)
     |> put_change(:verified_by, nil)
     |> put_change(:verified_at, nil)
@@ -164,6 +182,50 @@ defmodule Samen.Scopes.Finance.VendorPaymentProfileRecord do
     |> cast(attrs, [:status, :verified_by, :verified_at, :updated_at])
     |> validate_required([:status, :verified_by, :verified_at])
     |> validate_inclusion(:status, [:verified])
+  end
+
+  # The rail decides which bank identifiers exist. ACH rows carry a vaulted
+  # routing number and no CAD branch fields; CAD rows carry vaulted institution
+  # and transit numbers and no routing number. The database check is the second
+  # belt; this keeps a bad changeset from ever reaching it.
+  defp validate_rail_details(changeset) do
+    case get_field(changeset, :rail) || :ach_usd do
+      :ach_usd ->
+        changeset
+        |> validate_required([:account_number, :routing_number, :account_last4])
+        |> validate_vault_token(:account_number)
+        |> validate_vault_token(:routing_number)
+        |> reject_unless_empty([
+          :institution_number,
+          :transit_number,
+          :institution_last4,
+          :transit_last4
+        ])
+
+      :eft_cad ->
+        changeset
+        |> validate_required([
+          :account_number,
+          :institution_number,
+          :transit_number,
+          :account_last4,
+          :institution_last4,
+          :transit_last4
+        ])
+        |> validate_vault_token(:account_number)
+        |> validate_vault_token(:institution_number)
+        |> validate_vault_token(:transit_number)
+        |> reject_unless_empty([:routing_number])
+    end
+  end
+
+  defp reject_unless_empty(changeset, fields) do
+    Enum.reduce(fields, changeset, fn field, acc ->
+      case get_change(acc, field) do
+        nil -> acc
+        _value -> add_error(acc, field, "must be empty on this rail")
+      end
+    end)
   end
 
   defp validate_vault_token(changeset, field) do
