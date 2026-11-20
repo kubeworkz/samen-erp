@@ -16,7 +16,7 @@ defmodule Samen.Web.CloseDashboardTest do
 
   use Samen.WebTest.DataCase, async: false
 
-  alias Samen.Scopes.Finance.{ArReceiptApplication, CloseChecklist, ClosePhases}
+  alias Samen.Scopes.Finance.{CloseChecklist, ClosePhases}
   alias Samen.Web.Finance.CloseDashboard
   alias Samen.Web.Finance.CloseDashboard.Live
   alias Samen.Web.Mount
@@ -30,7 +30,6 @@ defmodule Samen.Web.CloseDashboardTest do
     CloseRun,
     FiscalPeriod,
     JournalEntry,
-    PaymentReceipt,
     PayrollImport,
     PayrollSettlement,
     PostingAccount
@@ -824,18 +823,25 @@ defmodule Samen.Web.CloseDashboardTest do
           amount_due_cents: 5_000
         })
 
-      assert {:ok, _posted} =
-               ArReceiptApplication.apply(
-                 invoice: Invoice,
-                 receipt: PaymentReceipt,
-                 repo: Repo,
-                 scope: Plane.scope(Plane.tenant(), org_id),
-                 org_id: org_id,
-                 customer_id: customer.id,
-                 paid_at: ~D[2026-10-31],
-                 reference: "R12-CONTAM",
-                 allocations: [%{invoice_id: provider_invoice.id, amount_cents: 5_000}]
-               )
+      # B0 refuses this through the sanctioned path. Model the legacy
+      # contamination the board must still detect: a posted receipt linked to a
+      # provider-mirror invoice, seeded below the guard as it exists in
+      # production data.
+      Repo.query!(
+        """
+        INSERT INTO frr_payment_receipt
+          (frr_org_id, frr_customer_id, frr_invoice_key, frr_invoice_id,
+           frr_amount_cents, frr_currency, frr_paid_at, frr_status,
+           frr_inserted_at, frr_updated_at)
+        VALUES ($1, $2, 'billing_invoice', $3, 5000, 'USD', $4, 'posted', $4, $4)
+        """,
+        [
+          Ecto.UUID.dump!(org_id),
+          Ecto.UUID.dump!(customer.id),
+          Ecto.UUID.dump!(provider_invoice.id),
+          DateTime.utc_now() |> DateTime.truncate(:second)
+        ]
+      )
 
       assert {:ok, state} = CloseDashboard.load(mount(org_id), org_id)
       reconciliation = state.report.ar_reconciliation

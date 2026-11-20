@@ -55,21 +55,32 @@ defmodule Samenerp.KubeworkzArAgingTest do
     |> Ash.create!(scope: scope)
   end
 
-  defp post_receipt!(org_id, invoice, amount, scope) do
-    Erp.PaymentReceipt
-    |> Ash.Changeset.for_create(
-      :create,
-      %{
-        org_id: org_id,
-        invoice_key: "billing_invoice",
-        invoice_id: invoice.id,
-        amount_cents: amount,
-        paid_at: ~U[2026-09-15 12:00:00Z]
-      },
-      scope: scope
-    )
-    |> Ash.create!(scope: scope)
-    |> then(&(Ash.Changeset.for_update(&1, :post_receipt, %{}, scope: scope) |> Ash.update!()))
+  # Legacy posted cash on a provider-mirror invoice: the B0 guard refuses this
+  # through the sanctioned path, so seed the pre-guard fact as it exists in
+  # production data. ArAging still reads it (R12 would flag it as contamination).
+  defp post_receipt!(org_id, invoice, amount, _scope) do
+    Samenerp.Repo.query!("SELECT set_config('samen.finance_posting', 'on', true)")
+
+    %{rows: [[id]]} =
+      Samenerp.Repo.query!(
+        """
+        INSERT INTO ecr_payment_receipt
+          (ecr_org_id, ecr_customer_id, ecr_invoice_key, ecr_invoice_id,
+           ecr_amount_cents, ecr_currency, ecr_paid_at, ecr_status,
+           ecr_inserted_at, ecr_updated_at)
+        VALUES ($1, $2, 'billing_invoice', $3, $4, 'CAD', $5, 'posted', $5, $5)
+        RETURNING ecr_id
+        """,
+        [
+          Ecto.UUID.dump!(org_id),
+          Ecto.UUID.dump!(invoice.customer_id),
+          Ecto.UUID.dump!(invoice.id),
+          amount,
+          ~U[2026-09-15 12:00:00Z]
+        ]
+      )
+
+    %{id: Ecto.UUID.load!(id)}
   end
 
   test "ages the host's AR documents and emits a customer statement" do

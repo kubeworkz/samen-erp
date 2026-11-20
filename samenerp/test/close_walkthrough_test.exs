@@ -160,7 +160,9 @@ defmodule Samenerp.CloseWalkthroughTest do
 
     # AR: a real PDB shipment through the sales bridge — stock consumed and the
     # host's Billing invoice emitted in one transaction.
-    board_item = create_item!(org_id, "PDB-CLOSE", "PDB development board")
+    board_item =
+      create_item!(org_id, "PDB-CLOSE", "PDB development board", account_id!(org_id, "1430"))
+
     warehouse = create_warehouse!(org_id, "FG-MAIN", "Finished goods", :owned)
 
     receive_stock!(org_id, board_item, warehouse, 50, 20_000, "goods_receipt")
@@ -192,26 +194,9 @@ defmodule Samenerp.CloseWalkthroughTest do
     emitted = Ash.get!(Samenerp.Billing.Invoice, so.invoice_id, scope: admin)
     assert emitted.amount_due_cents == 200_000
 
-    # The manual's shipment entries (JE-050/051): AR ↔ revenue, COGS ↔ FG.
-    post_entry!(
-      org_id,
-      ~D[2026-10-20],
-      [
-        %{account_id: account_id!(org_id, "1100"), debit_cents: 200_000},
-        %{account_id: account_id!(org_id, "4000"), credit_cents: 200_000}
-      ],
-      "JE-050 board sale"
-    )
-
-    post_entry!(
-      org_id,
-      ~D[2026-10-20],
-      [
-        %{account_id: account_id!(org_id, "5000"), debit_cents: 100_000},
-        %{account_id: account_id!(org_id, "1430"), credit_cents: 100_000}
-      ],
-      "JE-051 board COGS"
-    )
+    # B0 posts the shipped order's AR/revenue and COGS/FG entries automatically
+    # at fulfillment (JE-050/051 in the manual). Writing them by hand here too
+    # would double-count the sale.
 
     run = finish_phase!(run, admin, "transaction_processing")
 
@@ -715,13 +700,18 @@ defmodule Samenerp.CloseWalkthroughTest do
     |> Ash.read_one!(authorize?: false)
   end
 
-  defp create_item!(org_id, sku, name) do
+  defp create_item!(org_id, sku, name, inventory_account_id \\ nil) do
+    attrs = %{org_id: org_id, sku: sku, name: name, kind: :stocked, uom: :unit}
+
+    attrs =
+      if inventory_account_id do
+        Map.put(attrs, :default_inventory_account_id, inventory_account_id)
+      else
+        attrs
+      end
+
     Erp.Item
-    |> Ash.Changeset.for_create(
-      :create,
-      %{org_id: org_id, sku: sku, name: name, kind: :stocked, uom: :unit},
-      authorize?: false
-    )
+    |> Ash.Changeset.for_create(:create, attrs, authorize?: false)
     |> Ash.create!(authorize?: false)
   end
 
