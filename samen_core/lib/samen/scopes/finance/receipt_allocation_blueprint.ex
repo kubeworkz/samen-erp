@@ -10,7 +10,7 @@ defmodule Samen.Scopes.Finance.ReceiptAllocationBlueprint do
   `{org, receipt, invoice}`.
   """
 
-  defmacro define_receipt_allocation(module, otp_app, domain, repo, abbrev) do
+  defmacro define_receipt_allocation(module, otp_app, domain, repo, abbrev, invoice_mod) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -65,6 +65,8 @@ defmodule Samen.Scopes.Finance.ReceiptAllocationBlueprint do
             ])
 
             validate(numericality(:amount_cents, greater_than: 0))
+
+            change({Samen.Scopes.Finance.ReceiptAllocationGuard, invoice: unquote(invoice_mod)})
           end
         end
 

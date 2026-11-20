@@ -162,6 +162,7 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
                       applied_at
                     ),
                   {:ok, invoice_row} <- fetch_invoice(statement, invoice_id),
+                  :ok <- refuse_provider_invoice(invoice_row),
                   :ok <- validate_credit_currency(receipt, invoice_row),
                   remaining = remaining_credit(statement, receipt),
                   :ok <- validate_credit_amount(amount, remaining, invoice_row) do
@@ -318,6 +319,14 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
 
     missing = Enum.find(allocations, &(not Map.has_key?(by_invoice, &1.invoice_id)))
 
+    provider =
+      Enum.find(allocations, fn allocation ->
+        case Map.fetch(by_invoice, allocation.invoice_id) do
+          {:ok, row} -> provider_ref?(Map.get(row, :provider_invoice_ref))
+          :error -> false
+        end
+      end)
+
     settled =
       Enum.find(allocations, fn allocation ->
         case Map.fetch(by_invoice, allocation.invoice_id) do
@@ -329,6 +338,9 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
     cond do
       missing ->
         {:error, {:invoice_not_found, missing.invoice_id}}
+
+      provider ->
+        {:error, {:provider_invoice_not_local, provider.invoice_id}}
 
       settled ->
         {:error, {:invoice_already_paid, settled.invoice_id}}
@@ -448,6 +460,17 @@ defmodule Samen.Scopes.Finance.ArReceiptApplication do
       row -> {:ok, row}
     end
   end
+
+  defp refuse_provider_invoice(invoice_row) do
+    if provider_ref?(Map.get(invoice_row, :provider_invoice_ref)) do
+      {:error, {:provider_invoice_not_local, Map.get(invoice_row, :invoice_id)}}
+    else
+      :ok
+    end
+  end
+
+  defp provider_ref?(ref) when is_binary(ref), do: String.trim(ref) != ""
+  defp provider_ref?(_ref), do: false
 
   defp validate_credit_currency(receipt, invoice_row) do
     if receipt.currency == invoice_row.currency,

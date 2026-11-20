@@ -108,6 +108,13 @@ defmodule Samen.Scopes.Finance.ArReceiptGuard do
         invoice_currency = normalize_currency(Map.get(invoice, :currency)) || "USD"
 
         cond do
+          provider_ref?(invoice) ->
+            error(
+              changeset,
+              :invoice_id,
+              "provider_invoice_not_local: this is a provider-mirror invoice and cannot receive a local receipt"
+            )
+
           invoice_status not in [:open, :paid] ->
             error(
               changeset,
@@ -157,6 +164,25 @@ defmodule Samen.Scopes.Finance.ArReceiptGuard do
   end
 
   defp normalize_currency(value), do: value |> to_string() |> normalize_currency()
+
+  defp provider_ref?(invoice) do
+    case provider_invoice_ref(invoice) do
+      ref when is_binary(ref) -> String.trim(ref) != ""
+      _ -> false
+    end
+  end
+
+  defp provider_invoice_ref(invoice) do
+    if Ash.Resource.Info.attribute(invoice.__struct__, :provider_invoice_ref) do
+      case Map.get(invoice, :provider_invoice_ref) do
+        %Ash.NotLoaded{} ->
+          Ash.load!(invoice, [:provider_invoice_ref], authorize?: false).provider_invoice_ref
+
+        value ->
+          value
+      end
+    end
+  end
 
   defp present?(value), do: is_binary(value) and String.trim(value) != ""
 

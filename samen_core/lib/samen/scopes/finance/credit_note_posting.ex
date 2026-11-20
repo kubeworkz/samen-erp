@@ -23,17 +23,19 @@ defmodule Samen.Scopes.Finance.CreditNotePosting do
   def change(changeset, opts, _context) do
     entry_resource = Keyword.fetch!(opts, :entry)
     pa_resource = Keyword.fetch!(opts, :posting_account)
+    invoice_resource = Keyword.get(opts, :invoice)
 
     Ash.Changeset.before_action(changeset, fn changeset ->
-      post(changeset, entry_resource, pa_resource)
+      post(changeset, entry_resource, pa_resource, invoice_resource)
     end)
   end
 
-  defp post(changeset, entry_resource, pa_resource) do
+  defp post(changeset, entry_resource, pa_resource, invoice_resource) do
     note = changeset.data
     org_id = org_id(changeset)
 
     with :ok <- require_draft(changeset),
+         :ok <- refuse_provider_invoice(note, org_id, invoice_resource),
          {:ok, amount} <- amount_of(note),
          {:ok, debit} <- posting_account(pa_resource, org_id, debit_key(note)),
          {:ok, ar} <- posting_account(pa_resource, org_id, :ar_clearing),
@@ -67,6 +69,60 @@ defmodule Samen.Scopes.Finance.CreditNotePosting do
     entry_resource
     |> Ash.Changeset.for_create(:create_reversal, attrs, authorize?: false)
     |> Ash.create(authorize?: false)
+  end
+
+  defp refuse_provider_invoice(note, org_id, invoice_resource) do
+    case invoice_id_of(note) do
+      nil -> :ok
+      invoice_id -> do_refuse_provider_invoice(invoice_resource, org_id, invoice_id)
+    end
+  end
+
+  defp do_refuse_provider_invoice(nil, _org_id, invoice_id),
+    do: {:error, {:invoice_module_missing, invoice_id}}
+
+  defp do_refuse_provider_invoice(invoice_resource, org_id, invoice_id) do
+    require Ash.Query
+
+    case invoice_resource
+         |> Ash.Query.filter(id == ^invoice_id and org_id == ^org_id)
+         |> Ash.read_one(authorize?: false) do
+      {:ok, nil} ->
+        {:error, {:invoice_not_found, invoice_id}}
+
+      {:ok, invoice} ->
+        case provider_invoice_ref(invoice) do
+          ref when is_binary(ref) ->
+            if String.trim(ref) == "",
+              do: :ok,
+              else: {:error, {:provider_invoice_not_local, ref}}
+
+          _ ->
+            :ok
+        end
+
+      {:error, reason} ->
+        {:error, {:invoice_read_failed, reason}}
+    end
+  end
+
+  defp invoice_id_of(note) do
+    case Map.get(note, :invoice_id) do
+      %Ash.NotLoaded{} -> Ash.load!(note, [:invoice_id], authorize?: false).invoice_id
+      value -> value
+    end
+  end
+
+  defp provider_invoice_ref(invoice) do
+    if Ash.Resource.Info.attribute(invoice.__struct__, :provider_invoice_ref) do
+      case Map.get(invoice, :provider_invoice_ref) do
+        %Ash.NotLoaded{} ->
+          Ash.load!(invoice, [:provider_invoice_ref], authorize?: false).provider_invoice_ref
+
+        value ->
+          value
+      end
+    end
   end
 
   defp debit_key(%{kind: :write_off}), do: :bad_debt_expense
@@ -104,6 +160,22 @@ defmodule Samen.Scopes.Finance.CreditNotePosting do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp format({:provider_invoice_not_local, ref}),
+    do:
+      "provider_invoice_not_local: this is a provider-mirror invoice (#{inspect(ref)}) and " <>
+        "cannot open a local credit note"
+
+  defp format({:invoice_not_found, invoice_id}),
+    do: "the credit note's invoice #{inspect(invoice_id)} could not be found in this org"
+
+  defp format({:invoice_module_missing, invoice_id}),
+    do:
+      "this workspace has not mounted Billing invoices (invoice #{inspect(invoice_id)}); " <>
+        "the credit note cannot be opened fail-honest"
+
+  defp format({:invoice_read_failed, reason}),
+    do: "the credit note's invoice could not be read: #{inspect(reason)}"
 
   defp format({:not_draft, status}),
     do: "the note is #{inspect(status)} — only a draft credit note can be opened"

@@ -1,0 +1,87 @@
+# SABOTAGE: B0 gap 5 — provider-invoice containment dropped. The guards still
+# read an invoice and still look wired, but the provider discriminator is
+# always nil/false, so ArReceiptGuard accepts a provider-mirror receipt,
+# ArReceiptApplication applies cash to it before/after posting, the direct
+# ReceiptAllocation create bypass is open, and CreditNotePosting opens a local
+# credit note against a mirror. The named refusal tests MUST flip.
+#
+# APP: samenerp
+# TEST_FILES: test/kubeworkz_reconcile_ar_test.exs
+# MUST_FAIL: a provider-mirror invoice refuses local receipts
+# MUST_FAIL: a provider-mirror invoice refuses a customer cash application
+# MUST_FAIL: applying on-account cash to a provider-mirror invoice is refused
+# MUST_FAIL: a direct allocation to a provider-mirror invoice is refused
+# MUST_FAIL: a credit note against a provider-mirror invoice refuses before posting
+--- a/samen_core/lib/samen/scopes/finance/ar_receipt_guard.ex
++++ b/samen_core/lib/samen/scopes/finance/ar_receipt_guard.ex
+@@ -172,17 +172,7 @@
+     end
+   end
+ 
+-  defp provider_invoice_ref(invoice) do
+-    if Ash.Resource.Info.attribute(invoice.__struct__, :provider_invoice_ref) do
+-      case Map.get(invoice, :provider_invoice_ref) do
+-        %Ash.NotLoaded{} ->
+-          Ash.load!(invoice, [:provider_invoice_ref], authorize?: false).provider_invoice_ref
+-
+-        value ->
+-          value
+-      end
+-    end
+-  end
++  defp provider_invoice_ref(_invoice), do: nil
+ 
+   defp present?(value), do: is_binary(value) and String.trim(value) != ""
+ 
+--- a/samen_core/lib/samen/scopes/finance/ar_receipt_application.ex
++++ b/samen_core/lib/samen/scopes/finance/ar_receipt_application.ex
+@@ -469,7 +469,6 @@
+     end
+   end
+ 
+-  defp provider_ref?(ref) when is_binary(ref), do: String.trim(ref) != ""
+   defp provider_ref?(_ref), do: false
+ 
+   defp validate_credit_currency(receipt, invoice_row) do
+--- a/samen_core/lib/samen/scopes/finance/receipt_allocation_guard.ex
++++ b/samen_core/lib/samen/scopes/finance/receipt_allocation_guard.ex
+@@ -76,17 +76,7 @@
+     end
+   end
+ 
+-  defp provider_invoice_ref(invoice) do
+-    if Ash.Resource.Info.attribute(invoice.__struct__, :provider_invoice_ref) do
+-      case Map.get(invoice, :provider_invoice_ref) do
+-        %Ash.NotLoaded{} ->
+-          Ash.load!(invoice, [:provider_invoice_ref], authorize?: false).provider_invoice_ref
+-
+-        value ->
+-          value
+-      end
+-    end
+-  end
++  defp provider_invoice_ref(_invoice), do: nil
+ 
+   defp org_id(changeset) do
+     case Map.get(changeset.attributes, :org_id) do
+--- a/samen_core/lib/samen/scopes/finance/credit_note_posting.ex
++++ b/samen_core/lib/samen/scopes/finance/credit_note_posting.ex
+@@ -113,17 +113,7 @@
+     end
+   end
+ 
+-  defp provider_invoice_ref(invoice) do
+-    if Ash.Resource.Info.attribute(invoice.__struct__, :provider_invoice_ref) do
+-      case Map.get(invoice, :provider_invoice_ref) do
+-        %Ash.NotLoaded{} ->
+-          Ash.load!(invoice, [:provider_invoice_ref], authorize?: false).provider_invoice_ref
+-
+-        value ->
+-          value
+-      end
+-    end
+-  end
++  defp provider_invoice_ref(_invoice), do: nil
+ 
+   defp debit_key(%{kind: :write_off}), do: :bad_debt_expense
+   defp debit_key(_note), do: :credit_note_clearing

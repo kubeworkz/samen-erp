@@ -4,7 +4,7 @@ defmodule Samen.Billing.AshInvoiceMirror do
   the EXISTING billing Ash `Invoice` resource materialized by
   `Samen.Scopes.Billing` — no new columns beyond the blueprint's own tax/hosted-link
   attributes (`samen_core/lib/samen/scopes/billing/blueprint.ex`'s
-  `define_invoice/7`), which this task ships alongside.
+  `define_invoice/8`), which this task ships alongside.
 
   Resource-module-agnostic AND vendor-field-agnostic (INV-4: this file names no
   vendor — the concrete resource modules AND the provider's external-reference

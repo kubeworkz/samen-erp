@@ -166,7 +166,9 @@ defmodule Samen.Scopes.Finance.CreditNoteBlueprint do
 
             change(
               {Samen.Scopes.Finance.CreditNotePosting,
-               entry: unquote(entry_mod), posting_account: unquote(posting_account_mod)}
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               invoice: unquote(invoice_mod)}
             )
           end
 

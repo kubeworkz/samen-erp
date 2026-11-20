@@ -78,7 +78,9 @@ defmodule Samen.Scopes.Finance.PostingMarker do
 
   def current(repo) do
     case repo.query!("SELECT current_setting('#{@guc}', true)", []).rows do
-      [[value]] when is_binary(value) -> value
+      # PostgreSQL can report an unset custom GUC as an empty string in some
+      # connection/transaction states; it is the same unset state as NULL.
+      [[value]] when is_binary(value) and value != "" -> value
       _ -> "off"
     end
   end

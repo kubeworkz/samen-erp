@@ -426,7 +426,61 @@ defmodule Samen.Scopes.Billing.Blueprint do
   # ---------------------------------------------------------------------------
   # Invoice — a billing invoice. Org-scoped. No PII. Belongs to customer + subscription.
   # ---------------------------------------------------------------------------
-  defmacro define_invoice(module, otp_app, domain, repo, abbrev, customer_mod, subscription_mod) do
+  defmacro define_invoice(
+             module,
+             otp_app,
+             domain,
+             repo,
+             abbrev,
+             customer_mod,
+             subscription_mod,
+             finance
+           ) do
+    finance = resolve_finance_arg(finance, __CALLER__)
+    finance_present? = is_map(finance) and map_size(finance) > 0
+
+    issue_action =
+      if finance_present? do
+        entry_mod = Map.fetch!(finance, :entry)
+        posting_account_mod = Map.fetch!(finance, :posting_account)
+        revenue_schedule_mod = Map.fetch!(finance, :revenue_schedule)
+        org_fx_settings_mod = Map.fetch!(finance, :org_fx_settings)
+
+        quote do
+          # B0: the ONLY local draft → issued transition. PostingMarker is
+          # deliberately before ArInvoicePosting; the marker must be armed
+          # while the entry is built and created.
+          update :issue do
+            accept([])
+            require_atomic?(false)
+
+            change(set_attribute(:status, :open))
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change(
+              {Samen.Scopes.Finance.ArInvoicePosting,
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               revenue_schedule: unquote(revenue_schedule_mod),
+               org_fx_settings: unquote(org_fx_settings_mod)}
+            )
+          end
+        end
+      else
+        quote do
+        end
+      end
+
+    issue_guard =
+      if finance_present? do
+        quote do
+          change(Samen.Scopes.Billing.IssueGuard)
+        end
+      else
+        quote do
+        end
+      end
+
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -507,6 +561,8 @@ defmodule Samen.Scopes.Billing.Blueprint do
 
         actions do
           defaults([:read, :destroy, create: :*, update: :*])
+
+          unquote(issue_action)
         end
 
         # F3.2 same-org FK: an invoice may only reference a same-org customer/subscription.
@@ -525,6 +581,8 @@ defmodule Samen.Scopes.Billing.Blueprint do
              ref_key: "billing.invoice",
              statuses: [:open, :paid, :void, :uncollectible]}
           )
+
+          unquote(issue_guard)
         end
 
         policies do
@@ -540,6 +598,24 @@ defmodule Samen.Scopes.Billing.Blueprint do
         end
       end
     end
+  end
+
+  # The `finance:` map arrives as escaped AST from the `use` macro (a macro
+  # argument is not evaluated), so expand it here before deciding whether the
+  # host really wired the posting seam.
+  defp resolve_finance_arg(nil, _caller), do: nil
+
+  defp resolve_finance_arg({:%{}, _, pairs}, caller) do
+    Map.new(pairs, fn {key, value} -> {key, Macro.expand(value, caller)} end)
+  end
+
+  defp resolve_finance_arg(map, _caller) when is_map(map), do: map
+
+  defp resolve_finance_arg(other, _caller) do
+    raise ArgumentError,
+          "Billing define_invoice finance: must be a compile-time map " <>
+            "(%{entry: ..., posting_account: ..., revenue_schedule: ..., org_fx_settings: ...}). " <>
+            "Got: #{Macro.to_string(other)}"
   end
 
   # ---------------------------------------------------------------------------

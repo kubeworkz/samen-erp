@@ -1179,7 +1179,8 @@ defmodule Samen.Scopes.Finance do
         unquote(otp_app),
         unquote(domain),
         unquote(repo),
-        unquote(abbrevs.receipt_allocation)
+        unquote(abbrevs.receipt_allocation),
+        unquote(billing[:invoice])
       )
 
       # AR statement delivery + collections (#8): the immutable send audit and

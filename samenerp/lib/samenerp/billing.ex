@@ -27,5 +27,11 @@ defmodule Samenerp.Billing do
       usage: "eru",
       entitlement: "ere",
       subscription_event: "erv"
-    }
+    },
+    finance: [
+      entry: Samenerp.Erp.JournalEntry,
+      posting_account: Samenerp.Erp.PostingAccount,
+      revenue_schedule: Samenerp.Erp.RevenueSchedule,
+      org_fx_settings: Samenerp.Erp.OrgFxSettings
+    ]
 end

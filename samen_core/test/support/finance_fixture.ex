@@ -177,7 +177,7 @@ defmodule SamenCore.Support.FinanceFixture.PaymentMirror do
       authorize_if(Samen.Policy.OrgScope)
     end
 
-    policy action_type(:create) do
+    policy action_type([:create, :update]) do
       forbid_unless(Samen.Policy.OrgScope)
       forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
       authorize_if(always())
@@ -246,6 +246,25 @@ defmodule SamenCore.Support.FinanceFixture.InvoiceMirror do
         :line_items
       ])
     end
+
+    # B0: the fixture's Billing-shaped issue path. The marker is armed before
+    # ArInvoicePosting so its posted-born entry is built inside the armed
+    # transaction; the fixture has no provider column and no schedule module.
+    update :issue do
+      accept([])
+      require_atomic?(false)
+
+      change(set_attribute(:status, :open))
+      change(Samen.Scopes.Finance.PostingMarker)
+
+      change(
+        {Samen.Scopes.Finance.ArInvoicePosting,
+         entry: SamenCore.Support.FinanceFixture.JournalEntry,
+         posting_account: SamenCore.Support.FinanceFixture.PostingAccount,
+         revenue_schedule: nil,
+         org_fx_settings: nil}
+      )
+    end
   end
 
   policies do
@@ -253,7 +272,7 @@ defmodule SamenCore.Support.FinanceFixture.InvoiceMirror do
       authorize_if(Samen.Policy.OrgScope)
     end
 
-    policy action_type(:create) do
+    policy action_type([:create, :update]) do
       forbid_unless(Samen.Policy.OrgScope)
       forbid_unless({Samen.Policy.RoleAtLeast, role: :admin})
       authorize_if(always())

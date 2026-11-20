@@ -108,6 +108,11 @@ defmodule Samen.Scopes.Billing do
     # expression into the blueprint).
     abbrevs = resolve_abbrevs(Keyword.get(opts, :abbrevs), __CALLER__)
 
+    # B0: the optional Finance seam. Resolve the host's journal/posting modules
+    # at expansion time so the invoice blueprint can install the :issue action
+    # and IssueGuard only on a mount that can actually post.
+    finance = resolve_finance(Keyword.get(opts, :finance), __CALLER__)
+
     customer_mod = Module.concat(namespace, Customer)
     subscription_mod = Module.concat(namespace, Subscription)
     plan_mod = Module.concat(namespace, Plan)
@@ -190,7 +195,8 @@ defmodule Samen.Scopes.Billing do
         unquote(repo),
         unquote(abbrevs.invoice),
         unquote(customer_mod),
-        unquote(subscription_mod)
+        unquote(subscription_mod),
+        unquote(Macro.escape(finance))
       )
 
       Samen.Scopes.Billing.Blueprint.define_payment(
@@ -242,5 +248,25 @@ defmodule Samen.Scopes.Billing do
     raise ArgumentError,
           "use Samen.Scopes.Billing, abbrevs: must be a compile-time map literal " <>
             "(%{customer: \"abc\", ...}). Got: #{Macro.to_string(other)}"
+  end
+
+  # B0: `finance:` is a compile-time keyword list/map of the host's modules:
+  # entry, posting_account, revenue_schedule and org_fx_settings. Expand every
+  # alias now; the blueprint receives a literal module map, never caller AST.
+  defp resolve_finance(nil, _caller), do: nil
+
+  defp resolve_finance(opts, caller) when is_list(opts) do
+    Map.new(opts, fn {key, value} -> {key, Macro.expand(value, caller)} end)
+  end
+
+  defp resolve_finance({:%{}, _, pairs}, caller) do
+    Map.new(pairs, fn {key, value} -> {key, Macro.expand(value, caller)} end)
+  end
+
+  defp resolve_finance(other, _caller) do
+    raise ArgumentError,
+          "use Samen.Scopes.Billing, finance: must be a compile-time keyword list " <>
+            "([entry: ..., posting_account: ..., revenue_schedule: ..., org_fx_settings: ...]). " <>
+            "Got: #{Macro.to_string(other)}"
   end
 end
