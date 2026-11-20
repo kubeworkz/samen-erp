@@ -40,6 +40,7 @@ defmodule Samen.InventorySalesOrderTest do
 
   require Ash.Query
 
+  alias Samen.Scopes.Finance.PostingMarker
   alias Samen.Scopes.Finance.ReconcilePayments
   alias Samen.Scopes.Inventory.ReconcileFulfillment
   alias Samen.Scopes.Inventory.ReconcileStock
@@ -68,7 +69,13 @@ defmodule Samen.InventorySalesOrderTest do
     on_exit(fn -> Samen.Kms.FileBacked.simulate_outage(false) end)
 
     org = Ash.UUID.generate()
-    {:ok, org: org, scope: tenant_scope(org)}
+    scope = tenant_scope(org)
+
+    # B0: the emitted invoice now posts DR AR / CR income through `:issue`.
+    # Every fulfillment test needs the Tier-0 map before the bridge runs.
+    :ok = seed_posting_accounts(org)
+
+    {:ok, org: org, scope: scope}
   end
 
   # ── f1: the SO draft lifecycle ───────────────────────────────────────────────
@@ -228,6 +235,118 @@ defmodule Samen.InventorySalesOrderTest do
       refute is_nil(fulfilled.fulfilled_at)
     end
 
+    test "fulfill posts revenue and COGS in the same transaction", %{org: org, scope: scope} do
+      {item, _warehouse, so, invoice} = seed_fulfilled(scope, org, qty: 4, price: 900)
+
+      assert invoice.status == :open
+
+      assert [cogs_entry] = entries_for(so.id, "sales_order")
+      assert cogs_entry.status == :posted
+      assert cogs_entry.source_key == "sales_order"
+      assert cogs_entry.source_id == so.id
+
+      lines = lines_for(cogs_entry.id)
+      [debit] = Enum.filter(lines, &(&1.debit_cents > 0))
+      [credit] = Enum.filter(lines, &(&1.credit_cents > 0))
+
+      assert debit.account_id == posting_account_id(org, :cogs)
+      assert debit.debit_cents == 2_000
+      assert credit.account_id == item.default_inventory_account_id
+      assert credit.credit_cents == 2_000
+    end
+
+    test "a zero-cost sale fulfills without a zero-value COGS entry", %{
+      org: org,
+      scope: scope
+    } do
+      {_item, _warehouse, so, invoice} =
+        seed_fulfilled(scope, org, qty: 2, price: 900, unit_cost: 0)
+
+      # The sale is real: stock leaves at zero cost and revenue still posts.
+      assert [event] = sale_events(so.id)
+      assert event.qty == -2
+      assert event.unit_cost_cents == 0
+      assert invoice.status == :open
+      assert [_ar] = entries_for(invoice.id, "billing_invoice")
+
+      # No zero-zero COGS lines: the P&L leg is skipped, not refused.
+      assert entries_for(so.id, "sales_order") == []
+      assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :fulfilled
+    end
+
+    test "an item without an inventory account refuses the whole fulfillment", %{
+      org: org,
+      scope: scope
+    } do
+      item = new_item(scope, org, %{default_inventory_account_id: nil})
+      warehouse = new_warehouse(scope, org)
+      stock_pair(scope, org, item, warehouse, 10, 500)
+
+      so =
+        new_so(scope, org, warehouse.id, [%{item_id: item.id, qty: 1, unit_price_cents: 900}])
+        |> confirm(scope)
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               Ash.Changeset.for_update(so, :fulfill, %{}, scope: scope)
+               |> Ash.update()
+
+      assert inspect(error) =~ "default_inventory_account_id"
+
+      # The refusal happens before any invoice, stock event or GL fact.
+      assert sale_events(so.id) == []
+      assert invoices_for_org(org) == []
+      assert entries_for(so.id, "sales_order") == []
+      assert entries_for(so.id, "billing_invoice") == []
+      assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :confirmed
+    end
+
+    test "a COGS entry failure rolls back the invoice and stock events", %{
+      org: org,
+      scope: scope
+    } do
+      # A foreign-org account passes the item's plain-uuid seam but fails the
+      # JournalLine SameOrgFk only AFTER the invoice and stock writes have
+      # landed — proving the whole fulfillment transaction unwinds.
+      foreign_org = Ash.UUID.generate()
+      foreign_account = default_inventory_account(foreign_org)
+
+      item =
+        new_item(scope, org, %{default_inventory_account_id: foreign_account.id})
+
+      warehouse = new_warehouse(scope, org)
+      stock_pair(scope, org, item, warehouse, 10, 500)
+
+      so =
+        new_so(scope, org, warehouse.id, [%{item_id: item.id, qty: 1, unit_price_cents: 900}])
+        |> confirm(scope)
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               Ash.Changeset.for_update(so, :fulfill, %{}, scope: scope)
+               |> Ash.update()
+
+      assert inspect(error) =~ "cross-org FK"
+
+      # Invoice, stock event and the invoice's AR entry all rolled back.
+      assert sale_events(so.id) == []
+      assert invoices_for_org(org) == []
+      assert entries_for(so.id, "billing_invoice") == []
+      assert entries_for(so.id, "sales_order") == []
+      assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :confirmed
+    end
+
+    test "a nested :issue keeps the marker armed and restores it after :fulfill", %{
+      org: org,
+      scope: scope
+    } do
+      {_item, _warehouse, so, invoice} = seed_fulfilled(scope, org, qty: 1, price: 900)
+
+      # Both entries exist, and the nested :issue's marker did not clobber the
+      # outer :fulfill arm or leave the transaction-local marker on.
+      assert [_ar] = entries_for(invoice.id, "billing_invoice")
+      assert [_cogs] = entries_for(so.id, "sales_order")
+      assert PostingMarker.current(@repo) == "off"
+    end
+
     test "a :draft SO cannot fulfill (RED) — nothing lands", %{org: org, scope: scope} do
       {item, warehouse} = seed_pair(scope, org)
       stock_pair(scope, org, item, warehouse, 10, 500)
@@ -347,7 +466,7 @@ defmodule Samen.InventorySalesOrderTest do
 
       # so1: stock leg = Σ -3 events, value = -(2×500 + 1×1000) = -2000
       #      (signed: value LEFT inventory); billing = 2×900 + 1×1500 = 3300.
-      assert {:ok, %{stock: stock1, billing: billing1}} =
+      assert {:ok, %{stock: stock1, billing: billing1, gl: gl1}} =
                fulfillment_order(org, so1.id)
 
       assert stock1.qty == -3
@@ -355,10 +474,21 @@ defmodule Samen.InventorySalesOrderTest do
       assert billing1.amount_due_cents == 3_300
       assert billing1.status == :open
 
-      assert {:ok, %{stock: stock2, billing: billing2}} =
+      # The GL sides: the invoice's AR entry debits the document total; the
+      # fulfillment's COGS entry debits the SAME qty×cost snapshot.
+      assert gl1.ar.status == :ok
+      assert gl1.ar.entries == 1
+      assert gl1.ar.debit_cents == 3_300
+      assert gl1.cogs.status == :ok
+      assert gl1.cogs.entries == 1
+      assert gl1.cogs.debit_cents == 2_000
+
+      assert {:ok, %{stock: stock2, billing: billing2, gl: gl2}} =
                fulfillment_order(org, so2.id)
 
       assert stock2.qty == -1
+      assert gl2.ar.debit_cents == 950
+      assert gl2.cogs.debit_cents == 333
 
       # so2's snapshot is the rollup's moving average AFTER so1's sale:
       # Σ(qty×cost)/Σ|qty| = (10×500 − 2×500)/(10+2) = 333 (the E3 formula).
@@ -367,6 +497,105 @@ defmodule Samen.InventorySalesOrderTest do
 
       # The standing read: empty over the whole org.
       assert {:ok, []} = divergences(org)
+    end
+
+    test "ReconcileFulfillment reports a missing, foreign, or misvalued GL side", %{
+      org: org,
+      scope: scope
+    } do
+      {item, warehouse, so, invoice} = seed_fulfilled(scope, org, qty: 2, price: 900)
+
+      # Green first: both anchors are present and valued as documented.
+      assert {:ok, []} = divergences(org)
+
+      # ── MISSING: void the invoice's AR entry; the anchor has no POSTED entry ──
+      [ar_entry] = entries_for(invoice.id, "billing_invoice")
+
+      _voided =
+        ar_entry
+        |> Ash.Changeset.for_update(:void, %{}, authorize?: false)
+        |> Ash.update!()
+
+      assert {:ok, [flag]} = divergences(org)
+      assert flag.sales_order_id == so.id
+      assert flag.ar_gl.status == :missing
+      assert flag.ar_gl.entries == 0
+      assert :missing_ar_gl in flag.gl_divergences
+
+      # ── FOREIGN: another org's entry claims the SAME invoice anchor ──
+      foreign_org = Ash.UUID.generate()
+
+      foreign_account =
+        Account
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            org_id: foreign_org,
+            code: "1200",
+            name: "Foreign AR",
+            kind: :asset,
+            normal_side: :debit
+          },
+          authorize?: false
+        )
+        |> Ash.create!()
+
+      # A standalone posted-born create is not an outer resource action, so
+      # the line-insert belt needs the marker armed around it.
+      prior_marker = PostingMarker.arm_now(@repo)
+
+      try do
+        _foreign_entry =
+          JournalEntry
+          |> Ash.Changeset.for_create(
+            :create_reversal,
+            %{
+              org_id: foreign_org,
+              entry_date: Date.utc_today(),
+              memo: "foreign anchor",
+              source_key: "billing_invoice",
+              source_id: invoice.id,
+              lines: [
+                %{account_id: foreign_account.id, debit_cents: 1_800, credit_cents: 0},
+                %{account_id: foreign_account.id, debit_cents: 0, credit_cents: 1_800}
+              ]
+            },
+            authorize?: false
+          )
+          |> Ash.create!(authorize?: false)
+      after
+        PostingMarker.restore(@repo, prior_marker)
+      end
+
+      assert {:ok, [flag]} = divergences(org)
+      assert flag.ar_gl.status == :foreign
+      assert flag.ar_gl.foreign_entries == 1
+      assert :foreign_ar_gl in flag.gl_divergences
+
+      # ── MISVALUED: an extra sale event moves the stock leg, COGS stays ──
+      :ok =
+        raw_sql!(
+          """
+          INSERT INTO skl_stock_ledger
+            (skl_id, skl_org_id, skl_item_id, skl_warehouse_id, skl_kind, skl_qty,
+             skl_unit_cost_cents, skl_source_key, skl_source_id, skl_inserted_at, skl_updated_at)
+          VALUES ($1, $2, $3, $4, 'sale', -1, 500, 'sales_order', $5, now(), now())
+          """,
+          [
+            Ecto.UUID.bingenerate(),
+            Ecto.UUID.dump!(org),
+            Ecto.UUID.dump!(item.id),
+            Ecto.UUID.dump!(warehouse.id),
+            Ecto.UUID.dump!(so.id)
+          ]
+        )
+
+      assert {:ok, [flag]} = divergences(org)
+      assert flag.cogs_gl.status == :misvalued
+      assert flag.cogs_gl.debit_cents == 1_000
+      assert flag.cogs_gl.expected_cents == 1_500
+      assert :misvalued_cogs_gl in flag.gl_divergences
+      assert :foreign_ar_gl in flag.gl_divergences
     end
 
     test "the org-zero twin: a foreign org's chain is invisible to our reads", %{
@@ -394,10 +623,11 @@ defmodule Samen.InventorySalesOrderTest do
   # ── f5: anti-tautology (the bypass is visible BY CONSTRUCTION) ───────────────
 
   describe "f5 — anti-tautology: the standing read catches a bypass and heals" do
-    test "a FORGED raw-SQL :sale event on a confirmed SO flags; the sanctioned fulfill heals", %{
-      org: org,
-      scope: scope
-    } do
+    test "a FORGED raw-SQL :sale event flags; the sanctioned fulfill heals the structure but the GL leg stays misvalued",
+         %{
+           org: org,
+           scope: scope
+         } do
       {item, warehouse} = seed_pair(scope, org)
       stock_pair(scope, org, item, warehouse, 10, 500)
 
@@ -430,13 +660,16 @@ defmodule Samen.InventorySalesOrderTest do
       assert flag.stock_qty == -2
       assert flag.invoice_id == nil
 
-      # The heal: the sanctioned fulfill lands the real bridge; the order is
-      # then fulfilled WITH its anchor — the forged event no longer diverges.
-      # (The forged event never moved the rollup, so the sanctioned fulfill
-      # still snapshots the moving average 500 — E3's heal discipline.)
+      # The heal: the sanctioned fulfill lands the real bridge, so the
+      # structural stock↔invoice read is green. The forged event remains in
+      # the stock leg and was never covered by the COGS entry, so the GL read
+      # correctly names the COGS side as misvalued.
       assert {:ok, _} = Ash.Changeset.for_update(so, :fulfill, %{}, scope: scope) |> Ash.update()
 
-      assert {:ok, []} = divergences(org)
+      assert {:ok, [flag]} = divergences(org)
+      assert flag.gl_divergences == [:misvalued_cogs_gl]
+      assert flag.cogs_gl.expected_cents == 2_000
+      assert flag.cogs_gl.debit_cents == 1_000
       assert length(sale_events(so.id)) == 2
     end
 
@@ -664,7 +897,8 @@ defmodule Samen.InventorySalesOrderTest do
       debit = lines |> Enum.map(& &1.debit_cents) |> Enum.sum()
       credit = lines |> Enum.map(& &1.credit_cents) |> Enum.sum()
       assert debit == credit
-      assert debit == 5_000
+      # 5,000 invoice AR/revenue + 2,500 fulfillment COGS + 5,000 receipt.
+      assert debit == 12_500
 
       # ── 7. the standing fulfillment read: EMPTY over the whole chain ─────
       assert {:ok, []} = divergences(org)
@@ -690,7 +924,9 @@ defmodule Samen.InventorySalesOrderTest do
       sales_order_id: so_id,
       ledger_resource: StockLedger,
       so_resource: SalesOrder,
-      invoice_resource: InvoiceMirror
+      invoice_resource: InvoiceMirror,
+      entry_resource: JournalEntry,
+      line_resource: JournalLine
     )
   end
 
@@ -698,21 +934,55 @@ defmodule Samen.InventorySalesOrderTest do
     ReconcileFulfillment.divergences(@repo, org,
       so_resource: SalesOrder,
       ledger_resource: StockLedger,
-      invoice_resource: InvoiceMirror
+      invoice_resource: InvoiceMirror,
+      entry_resource: JournalEntry,
+      line_resource: JournalLine
     )
   end
 
   defp new_item(scope, org, attrs \\ %{}) do
+    attrs = Map.new(attrs)
+
+    # The COGS leg needs each item's inventory-asset account. Tests that want
+    # an unlinked item pass `default_inventory_account_id: nil` explicitly.
+    attrs =
+      if Map.has_key?(attrs, :default_inventory_account_id) do
+        attrs
+      else
+        Map.put(attrs, :default_inventory_account_id, default_inventory_account(org).id)
+      end
+
     Item
     |> Ash.Changeset.for_create(
       :create,
       Map.merge(
         %{org_id: org, sku: "SKU-" <> binary_part(Ash.UUID.generate(), 0, 8), name: "A stocked item"},
-        Map.new(attrs)
+        attrs
       ),
       scope: scope
     )
     |> Ash.create!()
+  end
+
+  defp default_inventory_account(org) do
+    case Account
+         |> Ash.Query.filter(org_id == ^org and code == "1300")
+         |> Ash.read_one(authorize?: false) do
+      {:ok, nil} ->
+        Account
+        |> Ash.Changeset.for_create(
+          :create,
+          %{org_id: org, code: "1300", name: "Inventory", kind: :asset, normal_side: :debit},
+          scope: tenant_scope(org)
+        )
+        |> Ash.create!()
+
+      {:ok, account} ->
+        account
+
+      {:error, reason} ->
+        flunk("inventory account lookup failed: #{inspect(reason)}")
+    end
   end
 
   defp new_warehouse(scope, org, attrs \\ %{}) do
@@ -786,33 +1056,62 @@ defmodule Samen.InventorySalesOrderTest do
   end
 
   defp seed_posting_accounts(org) do
-    for {key, code} <- [ar_clearing: "1200", cash: "1000"] do
-      account =
-        Account
-        |> Ash.Changeset.for_create(
-          :create,
-          %{org_id: org, code: code, name: "Account #{code}", kind: :asset, normal_side: :debit},
-          scope: tenant_scope(org)
-        )
-        |> Ash.create!()
+    _inventory = default_inventory_account(org)
 
-      PostingAccount
-      |> Ash.Changeset.for_create(:create, %{org_id: org, key: key, account_id: account.id},
-        scope: admin_scope(org)
-      )
-      |> Ash.create!()
+    case PostingAccount
+         |> Ash.Query.filter(org_id == ^org and key == :ar_clearing)
+         |> Ash.read_one(authorize?: false) do
+      {:ok, nil} ->
+        for {key, code, kind, side} <- [
+              {:ar_clearing, "1200", :asset, :debit},
+              {:cash, "1000", :asset, :debit},
+              {:income, "4000", :income, :credit},
+              {:cogs, "5000", :expense, :debit}
+            ] do
+          account =
+            Account
+            |> Ash.Changeset.for_create(
+              :create,
+              %{
+                org_id: org,
+                code: code,
+                name: "Account #{code}",
+                kind: kind,
+                normal_side: side
+              },
+              scope: tenant_scope(org)
+            )
+            |> Ash.create!()
+
+          PostingAccount
+          |> Ash.Changeset.for_create(:create, %{org_id: org, key: key, account_id: account.id},
+            scope: admin_scope(org)
+          )
+          |> Ash.create!()
+        end
+
+        :ok
+
+      {:ok, _row} ->
+        :ok
+
+      {:error, reason} ->
+        flunk("PostingAccount seed lookup failed: #{inspect(reason)}")
     end
-
-    :ok
   end
 
   # A confirmed+fulfilled SO over a stocked pair, fully through the sanctioned path.
   defp seed_fulfilled(scope, org, opts) do
     qty = Keyword.fetch!(opts, :qty)
     price = Keyword.fetch!(opts, :price)
+    unit_cost = Keyword.get(opts, :unit_cost, 500)
+
+    # The foreign-org leg needs its own Tier-0 map too (the setup seeds only
+    # the test's primary org).
+    :ok = seed_posting_accounts(org)
 
     {item, warehouse} = seed_pair(scope, org)
-    stock_pair(scope, org, item, warehouse, 10, 500)
+    stock_pair(scope, org, item, warehouse, 10, unit_cost)
 
     so =
       new_so(scope, org, warehouse.id, [%{item_id: item.id, qty: qty, unit_price_cents: price}])
@@ -821,6 +1120,25 @@ defmodule Samen.InventorySalesOrderTest do
 
     [invoice] = invoices_for_org(org)
     {item, warehouse, so, invoice}
+  end
+
+  defp entries_for(so_id, source_key) do
+    JournalEntry
+    |> Ash.Query.filter(source_key == ^source_key and source_id == ^so_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp lines_for(entry_id) do
+    JournalLine
+    |> Ash.Query.filter(entry_id == ^entry_id)
+    |> Ash.read!(authorize?: false)
+  end
+
+  defp posting_account_id(org, key) do
+    PostingAccount
+    |> Ash.Query.filter(org_id == ^org and key == ^key)
+    |> Ash.read_one!(authorize?: false)
+    |> Map.fetch!(:account_id)
   end
 
   defp raw_sql!(sql, params) do

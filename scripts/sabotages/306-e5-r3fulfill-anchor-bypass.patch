@@ -15,12 +15,12 @@
 # MUST_FAIL: every link already has a home: the chain closes with the standing reads empty
 --- a/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
 +++ b/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
-@@ -76,8 +76,6 @@
-           # before_action hooks return the BARE changeset (Ash re-wraps it).
-           changeset
-           |> Ash.Changeset.force_change_attribute(:status, :fulfilled)
--          |> Ash.Changeset.force_change_attribute(:invoice_key, @invoice_key)
--          |> Ash.Changeset.force_change_attribute(:invoice_id, invoice.id)
-           |> Ash.Changeset.force_change_attribute(
-             :fulfilled_at,
-             DateTime.utc_now() |> DateTime.truncate(:second)
+@@ -107,8 +107,6 @@
+         # before_action hooks return the BARE changeset (Ash re-wraps it).
+         changeset
+         |> Ash.Changeset.force_change_attribute(:status, :fulfilled)
+-        |> Ash.Changeset.force_change_attribute(:invoice_key, @invoice_key)
+-        |> Ash.Changeset.force_change_attribute(:invoice_id, invoice.id)
+         |> Ash.Changeset.force_change_attribute(
+           :fulfilled_at,
+           DateTime.utc_now() |> DateTime.truncate(:second)

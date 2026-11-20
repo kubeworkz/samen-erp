@@ -1112,7 +1112,11 @@ defmodule Samen.Scopes.Inventory.Blueprint do
              warehouse_mod,
              ledger_mod,
              level_mod,
-             billing_invoice_mod
+             billing_invoice_mod,
+             entry_mod,
+             posting_account_mod,
+             item_mod,
+             org_fx_settings_mod
            ) do
     quote do
       defmodule unquote(module) do
@@ -1280,7 +1284,11 @@ defmodule Samen.Scopes.Inventory.Blueprint do
                so_line: unquote(so_line_mod),
                ledger: unquote(ledger_mod),
                level: unquote(level_mod),
-               invoice: unquote(billing_invoice_mod)}
+               invoice: unquote(billing_invoice_mod),
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               item: unquote(item_mod),
+               org_fx_settings: unquote(org_fx_settings_mod)}
             )
           end
 

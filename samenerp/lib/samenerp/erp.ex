@@ -131,6 +131,8 @@ defmodule Samenerp.Erp do
     finance: [
       entry: Samenerp.Erp.JournalEntry,
       posting_account: Samenerp.Erp.PostingAccount,
+      # B0: the sales bridge crosses currency through the host's functional books.
+      org_fx_settings: Samenerp.Erp.OrgFxSettings,
       # WS-ACCT Phase 4 (ADR-054 D3): the lot's GL side names a cost object.
       cost_object: Samenerp.Erp.CostObject
     ],

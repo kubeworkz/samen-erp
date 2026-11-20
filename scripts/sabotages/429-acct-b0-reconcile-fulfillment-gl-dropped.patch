@@ -1,0 +1,27 @@
+# SABOTAGE: B0 gap 4 — ReconcileFulfillment still computes the billing_invoice
+# AR leg and the sales_order COGS leg, and the SQL still returns a row when
+# their posted sums disagree with the documents. But the classification is
+# collapsed to the structural :ok, so the returned row never NAMES a
+# missing/foreign/misvalued GL side. That is the plausible half-implementation:
+# the GL columns look wired, the green paths pass, and only a caller that
+# asserts the named divergence atoms notices the read is blind.
+#
+# The named test asserts :missing_ar_gl, :foreign_ar_gl and :misvalued_cogs_gl,
+# so it MUST fail while the structural stock↔invoice assertions still pass.
+#
+# APP: samen_core
+# TEST_FILES: test/inventory_sales_order_test.exs
+# MUST_FAIL: ReconcileFulfillment reports a missing, foreign, or misvalued GL side
+--- a/samen_core/lib/samen/scopes/inventory/reconcile_fulfillment.ex
++++ b/samen_core/lib/samen/scopes/inventory/reconcile_fulfillment.ex
+@@ -425,9 +425,9 @@
+       expected_cents: expected_cents
+     }
+   end
+ 
+   defp gl_divergences(_anchor, %{status: :ok}), do: []
+-  defp gl_divergences(anchor, %{status: status}), do: [:"#{status}_#{anchor}_gl"]
++  defp gl_divergences(_anchor, _gl), do: []
+ 
+   # ── helpers ─────────────────────────────────────────────────────────────────
+ 

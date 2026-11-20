@@ -302,6 +302,14 @@ defmodule Samen.Scopes.Inventory do
 
         billing_invoice = Keyword.fetch!(billing_opts, :invoice)
 
+        # B0: the sales bridge threads the host's Finance entry/posting-account
+        # wiring (for the COGS leg) and optional OrgFxSettings for the
+        # invoice's functional currency (nil = USD default), so existing
+        # Inventory mounts remain source-compatible.
+        finance_entry = Keyword.fetch!(finance_opts, :entry)
+        finance_posting_account = Keyword.fetch!(finance_opts, :posting_account)
+        finance_org_fx_settings = Keyword.get(finance_opts, :org_fx_settings)
+
         quote do
           resources do
             resource(unquote(sales_order_mod))
@@ -318,7 +326,11 @@ defmodule Samen.Scopes.Inventory do
             unquote(warehouse_mod),
             unquote(ledger_mod),
             unquote(level_mod),
-            unquote(billing_invoice)
+            unquote(billing_invoice),
+            unquote(finance_entry),
+            unquote(finance_posting_account),
+            unquote(item_mod),
+            unquote(finance_org_fx_settings)
           )
 
           Samen.Scopes.Inventory.Blueprint.define_so_line(

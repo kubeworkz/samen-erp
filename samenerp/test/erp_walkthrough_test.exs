@@ -220,11 +220,36 @@ defmodule Samenerp.ErpWalkthroughTest do
 
   test "the E5 bridge: fulfill consumes stock and emits the REAL Billing invoice", %{
     org: org,
-    scope: scope
+    scope: scope,
+    admin: admin
   } do
+    # B0: the real invoice's `:issue` posts DR AR / CR income, and the sale
+    # posts DR COGS / CR the item's inventory account. Seed both maps before
+    # the bridge runs.
+    for {key, code, kind, side} <- [
+          {:ar_clearing, "1200", :asset, :debit},
+          {:income, "4000", :income, :credit},
+          {:cogs, "5000", :expense, :debit}
+        ] do
+      account = seed_account(admin, org, code, kind, side)
+
+      PostingAccount
+      |> Ash.Changeset.for_create(:create, %{org_id: org, key: key, account_id: account.id})
+      |> Ash.create(scope: admin, authorize?: true)
+    end
+
+    inventory_account = seed_account(admin, org, "1300", :asset, :debit)
+
     item =
       Item
-      |> Ash.Changeset.for_create(:create, %{org_id: org, sku: "SO-1", name: "SO Item", kind: :stocked, uom: :unit})
+      |> Ash.Changeset.for_create(:create, %{
+        org_id: org,
+        sku: "SO-1",
+        name: "SO Item",
+        kind: :stocked,
+        uom: :unit,
+        default_inventory_account_id: inventory_account.id
+      })
       |> Ash.create!(scope: scope, authorize?: true)
 
     wh =
@@ -275,6 +300,23 @@ defmodule Samenerp.ErpWalkthroughTest do
     invoice = Ash.get!(Invoice, so.invoice_id, scope: scope, authorize?: true)
     assert invoice.status == :open
     assert invoice.amount_due_cents == 20_000
+
+    # The COGS leg posts through the host's Finance mount: Dr :cogs / Cr the
+    # item's inventory account for qty × moving-average (5 × 1,000).
+    cogs_entry =
+      JournalEntry
+      |> Ash.Query.filter(source_key == "sales_order" and source_id == ^so.id)
+      |> Ash.read_one!(scope: scope, authorize?: true)
+
+    assert cogs_entry.status == :posted
+
+    cogs_lines = Ash.load!(cogs_entry, :lines, scope: scope, authorize?: true).lines
+    assert Enum.sum(Enum.map(cogs_lines, & &1.debit_cents)) == 5_000
+
+    assert Enum.any?(
+             cogs_lines,
+             &(&1.account_id == inventory_account.id and &1.credit_cents == 5_000)
+           )
 
     # The stock is consumed on the host ledger.
     level =
