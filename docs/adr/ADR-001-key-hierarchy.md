@@ -289,3 +289,16 @@ A guarantee is only real if its must-fail test fails when the guarantee is broke
 | **Per-subject DEK derived from a single master via HKDF(master, subject_id)** | Deterministic derivation means **shred is impossible without destroying the master** (you can always re-derive the DEK from the master + subject_id). No per-subject destruction lever. Fails RQ2. |
 | **Local plaintext-key cache "for availability"** | Survives a shred / leaks on node compromise / lands in a node backup. Fails RQ4. Only a TTL-bounded *in-memory unwrapped-DEK* cache (never persisted, evicted on shred) is permitted. |
 | **HashiCorp Vault transit named keys (Candidate B)** | Strong and architecturally pure, but **strains RQ1** (Vault DR snapshots resurrect deleted keys unless deliberately excluded) and **RQ3** (10⁷ named keys outside transit's envelope; operating Vault HA is heavy for this team). Kept as the **approved fallback**, not the default. |
+
+---
+
+## Implementation note (2026-11-21)
+
+The production adapter named in §8.1 is not yet implemented. `samenerp` currently
+runs `Samen.Kms.FileBacked` with `SAMEN_KMS_KEY_DIR` on a persistent volume
+(`SAMEN_KMS_ADAPTER=file_backed`, the default). The AWS KMS + DynamoDB adapter
+(`Samen.Kms.AwsKmsDynamo`) is a boot-refusing skeleton:
+`Samen.Kms.assert_prod_adapter_ready!/0` refuses production until its §8.2
+obligations are implemented and its `__kms_skeleton__?/0` marker is removed. This
+note records the current host implementation; the key hierarchy and the decision
+above are unchanged.

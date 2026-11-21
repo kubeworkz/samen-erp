@@ -118,3 +118,16 @@ some prospects, named rather than hidden.
   that §4 step 5 would extend.
 - `docs/runbooks/pitr-gameday.md` — the backup/restore surface whose regionality is unexamined
   outside this ADR.
+
+---
+
+## Implementation note (2026-11-21)
+
+`samenerp` currently runs the file-backed keystore (`Samen.Kms.FileBacked`) with
+`SAMEN_KMS_KEY_DIR` on a persistent volume (`SAMEN_KMS_ADAPTER=file_backed`, the
+default). The AWS KMS + DynamoDB store described in §2 is the target design, not
+the deployed implementation: the AWS KMS adapter (`Samen.Kms.AwsKmsDynamo`) is a
+boot-refusing skeleton — `Samen.Kms.assert_prod_adapter_ready!/0` refuses it in
+production until its ADR-001 §8.2 obligations are implemented and its
+`__kms_skeleton__?/0` marker is removed. This note does not change the US-only,
+no-per-tenant-selection decision.
