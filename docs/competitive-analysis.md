@@ -16,8 +16,8 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 | Competitor | Revenue | Employees | Target |
 |---|---|---|---|
 | NetSuite (Oracle) | $3B+ | 10,000+ | Mid-market to enterprise |
-| SAP Business One | $5B+ | 100,000+ | Mid-market |
-| Microsoft Dynamics | $10B+ | 200,000+ | Enterprise |
+| SAP Business One | $5B+ | 100,000+ (SAP group total) | Mid-market |
+| Microsoft Dynamics | $10B+ | 200,000+ (Microsoft group total) | Enterprise |
 
 ### Tier 2: Mid-Market ERP (Our Competition)
 | Competitor | Revenue | Employees | Target |
