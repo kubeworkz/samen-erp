@@ -112,5 +112,17 @@ defmodule Samenerp.MixProject do
     ]
   end
 
-  defp aliases, do: []
+  # Dev boot parity with the release entrypoint (`entrypoint.sh` runs
+  # `Samenerp.Seeds.seed!/0` from an eval before the release starts). `mix phx.server`
+  # otherwise boots with NO repair step, so a dev restart skipped the operator-book
+  # tenant mirror, the Bridge-B back-references, the policy defaults and the Pages
+  # search registration. `samenerp.boot` runs exactly those repairs — see its moduledoc.
+  # It is NOT `mix samenerp.seed`: that task additionally seeds the Pages demo content
+  # in dev, which must stay a dev-data side effect instead of being re-seeded on every
+  # restart (the entrypoint never seeds it either).
+  defp aliases do
+    [
+      "phx.server": ["samenerp.boot", "phx.server"]
+    ]
+  end
 end
