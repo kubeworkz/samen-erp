@@ -5,6 +5,15 @@
 **Source ref:** https://github.com/lotsoftick/openclaw_client (React19/Vite/Express/SQLite multi-agent streaming chat)
 **Host:** `samenerp` adopts; kernel lives in `samen_core` + `samen_web` (framework-first, ≈0 LOC per vertical)
 
+> **Current HF state (2026-11-21 audit).** The kernel BYOK core is shipped and
+> tested (`samen_core/lib/samen/scopes/ai/*`, `Samen.AI.Provider.HuggingFace`),
+> but the host key flow is not: `/settings/huggingface` only shows success
+> messages (no validate/encrypt/persist/load, zeroed usage), the daily
+> `VerifyCredentialsWorker` is a scheduled no-op (`get_tenants_with_hf_keys/0`
+> returns `[]`), and nothing writes `PromptLog` rows. This plan treats wiring
+> those seams as P1 prerequisites, not existing leverage. See `README.md` and
+> `docs/ai-integration.md`.
+
 ## 1. Goal
 
 Build a **lean, governed AI assistant** inside Samen — streaming chat + file-grounded answers + conversation history + optional tool turns — **reusing the shipped AI plane** (ADR-043 chokepoint, kernel, embeddings, agent loop, HF BYOK) and the existing router/mount seams. Explicitly **not** a full OpenClaw clone: no CLI gateway, no desktop auto-start, no 14 themes/PWA, no per-agent OS workspace.
@@ -37,7 +46,7 @@ Build a **lean, governed AI assistant** inside Samen — streaming chat + file-g
 - **Embeddings** pgvector REQUIRED (M3), `Samen.AI.Embeddings` org-scoped HNSW, `Embedder.Deterministic` for CI, `ai_prompt_masking` verifier cross-check.
 - **Verbs** `Samen.AI.Verbs` (6) + `Samen.AI.Prompt` versioned resource — `Server.run_verb` already behind `Samen.Web.AI.Server`.
 - **Agent loop** `Samen.AI.Agent` (checkpoint-per-turn, batch-per-job via `TurnWorker` + `agent_turn_due` watchdog, `next_turn_at` never-nil, transcript vault-routed under run DEK, budgets fail-honest, breaker/kill-switch, write via `Approvals.Gate` requester≠approver).
-- **HF BYOK** `samen_core/lib/samen/scopes/ai/{api_key,crypto,client,streamer,token_validator,verify_credentials_worker}` + `/settings/huggingface` LiveView + daily Oban sweep — AES-256-GCM, SSE, usage via `prompt_log`/`analytics`.
+- **HF BYOK core (shipped, tested)** `samen_core/lib/samen/scopes/ai/{api_key,crypto,client,streamer,token_validator,verify_credentials_worker}` — AES-256-GCM, SSE and `TokenValidator` validation; `analytics` aggregates supplied logs. **Not wired:** the `/settings/huggingface` LiveView is a success-message shell, the daily sweep's `get_tenants_with_hf_keys/0` returns `[]`, and nothing writes `PromptLog` rows (P1 prerequisites; §10).
 - **Mount/router** `Samen.Web.Mount` + `Samen.Web.Router.samen_ai_routes/3` (currently mounts 6 AI surfaces: verbs/search/crm/analytics/support/agent) — existing `Samen.Web.AI.AgentLive` (`/ai/agents`) proves the `samen_ai_routes` adoption pattern (`driftwood` ≈0 LOC, `gate_a6_agent_slice_test.exs`).
 - **Files/Search** primitives + `Samen.UI`.
 
@@ -90,28 +99,44 @@ live "/assistant/:id/:conv_id" → Samen.Web.AI.AssistantLive (conversation)
 
 Inside `samen_web/lib/samen/web/router.ex` `samen_ai_routes` macro's `__routes__(:ai, path)` table (same place `AgentLive` lives). Vertical keeps **one line**: `samen_ai_routes(:ai, Driftwood.Crm, repo: Driftwood.Repo, labels: %{ai_crm_resource: ..., ai_aggregate_resource: ...})` — already present in `driftwood/lib/driftwood_web/router.ex:335`. Zero new macro.
 
-Auth: inherits `on_mount [{TenantAuthz, :require_tenant}]` (tenant) / operator variant inherits `require_operator`. HF key gate: if tenant has no valid `ApiKey`, render honest empty state linking to `/settings/huggingface` (same honesty as `Server.configuration_hint()` for `:not_configured`).
+Auth: inherits `on_mount [{TenantAuthz, :require_tenant}]` (tenant) / operator variant inherits `require_operator`. HF key gate: if the tenant has no valid `ApiKey`, render an honest empty state (same honesty as `Server.configuration_hint()` for `:not_configured`); until the settings flow is wired (§10), that state cannot link to `/settings/huggingface` as a working setup path.
 
 ## 9. UI (LiveView, not React)
 
 - **Left rail:** assistant picker (General + custom, create ≤3) + conversation list (search input = `Embeddings.search` + tsvector, editable title via `:rename`, archive/delete).
 - **Center:** streaming chat. Message list: user bubble, assistant bubble (thinking collapsible, output markdown), tool cards (read inline, write proposal → “Request approval” → approvals UI). Composer: textarea + file drop zone (→ `Samen.Files` upload → grounding chip) + model picker (disabled if no key) + send. Streaming via `handle_info({:hf_stream_chunk, text})` + `push_event`.
-- **Header:** model badge, token/price hint from `PromptLog`, `grant_plaintext_egress` badge (`••••` masked-by-default per §6.1; explicit opt-in surfaces the grant notice).
+- **Header:** model badge, token/price hint from `PromptLog` (once P1 wires prompt-log writes), `grant_plaintext_egress` badge (`••••` masked-by-default per §6.1; explicit opt-in surfaces the grant notice).
 - **Honesty:** `SIMULATED` pill when `%Completion{simulated:true}` (Fake), `not_configured` hint verbatim from `Server.configuration_hint/0`, never fabricated answer.
 
 Reuse `Samen.UI` (`app_shell`, `sidebar`, `topbar`, `pill`, `data_table`, `empty_state`, `ai_sidebar_nav`/`ai_tabs` from `samen_web/lib/samen/web/ai/components.ex`).
 
 ## 10. HuggingFace wiring (BYOK, no new vendor)
 
-Do not add HF HTTP client to `samen_core` vendor-free core. Implement **`Samen.HuggingFace.Provider`** as a `Samen.AI.Provider` adapter **inside `samen_core`** behind the existing `Samen.Scopes.Ai.HttpAdapter` abstraction (INV-4: `samen_core` stays vendor-free of Anthropic SDK; same for HF). Resolution like `Server` → kernel:
+Do not add an HF HTTP client to the vendor-free core. The shipped
+**`Samen.AI.Provider.HuggingFace`** adapter already sits behind the existing
+`Samen.Scopes.Ai.HttpAdapter` abstraction (INV-4) and resolves the tenant key
+from its `ApiKey` row via `config[:org_id]`, decrypting in memory per request.
+Extend it (e.g. the tool-call shim) rather than adding a second vendor client.
+Resolution like `Server` → kernel:
 
 ```
 AssistantLive → Server.assistant_run(scope, assistant, history, input, files)
   → Samen.AI.complete(scope, [assistant.system_prompt, Catalog grounding], bindings, provider: hf_provider)
-  → Chokepoint → MaskedPayload → HuggingFace.Provider.complete (decrypts tenant ApiKey in-mem via KMS, calls Inference API, streams)
+  → Chokepoint → MaskedPayload → Samen.AI.Provider.HuggingFace.complete/2 (resolves + decrypts the tenant ApiKey in memory, calls Inference API, streams)
 ```
 
-Key lifecycle: `/settings/huggingface` `ApiKey` (AES-256-GCM) → `TokenValidator.verify_key/1` at connect → `VerifyCredentialsWorker` daily sweep (02:00) → `Client`/`Streamer` decrypt-per-request + GC. 401 → flag `Setup Required` + honest UI; 429/5xx → fail-honest `{:error,:tenant_quota_exhausted/:upstream_error}`.
+Key lifecycle (target): `/settings/huggingface` → `ApiKey` (AES-256-GCM) →
+`TokenValidator.link_key/2` at connect → `VerifyCredentialsWorker` daily sweep
+(02:00) → `Client`/`Streamer` decrypt-per-request + GC. 401 → flag `Setup
+Required` + honest UI; 429/5xx → fail-honest
+`{:error,:tenant_quota_exhausted/:upstream_error}`.
+
+Today only the kernel half exists: `link_key/2` validates and encrypts into an
+updated map but nothing persists it, the `/settings` LiveView never calls it,
+and the sweep finds no tenants. P1 must wire persistence and the settings
+handlers, or the assistant has no tenant key to decrypt — `Crypto` also falls
+back to a key derived from a constant because no host config sets
+`:kms_master_key`.
 
 Model IDs: HF text-generation `meta-llama/Llama-3.1-8B-Instruct`, `mistralai/Mistral-7B-Instruct-v0.3`, `gpt2` (CI smoke). Registry in `Samen.Scopes.Ai.Model`.
 
@@ -127,7 +152,8 @@ Model IDs: HF text-generation `meta-llama/Llama-3.1-8B-Instruct`, `mistralai/Mis
 
 **P1 — MVP chat (no agent loop) — target: samenerp can chat streaming**
 - Tasks: `Assistant` resource + seed General + `AssistantConversation/Message` + `AssistantLive` (list/chat, streaming, history, title auto) + HF provider adapter + file-drop grounding + model picker + honest empty states.
-- Accept: `mix compile --warnings-as-errors` (3 apps) + `mix samen.verify.ai_prompt_masking` green + `MaskingCase` 3-proof on transcript (tenant clear→masked, `vt_*` refusal) + streaming integration test (Fake recording, no live key) + `templates_parity` still green (no new macro drift).
+- Prerequisite: the host key flow is **not** live today (§4/§10). P1 also wires `/settings/huggingface` connect/validate/revoke to `TokenValidator` + `ApiKey` persistence, makes the sweep query tenants, and writes `PromptLog` rows; otherwise the assistant can only be exercised with a core-API key.
+- Accept: `mix compile --warnings-as-errors` (3 apps) + `mix samen.verify.ai_prompt_masking` green + `MaskingCase` 3-proof on transcript (tenant clear→masked, `vt_*` refusal) + streaming integration test (Fake recording, no live key) + settings key-flow test (validate → persist → revoke) + `templates_parity` still green (no new macro drift).
 - Loc: ~400-500 LOC (2 resources, 1 LiveView, 1 Server func, 1 provider adapter, 1 migration).
 
 **P2 — Tool-aware (activate loop) — assistant can read + propose writes**
@@ -136,7 +162,7 @@ Model IDs: HF text-generation `meta-llama/Llama-3.1-8B-Instruct`, `mistralai/Mis
 - Loc: ~300 LOC (tools opt-in, result render, LiveView tool cards).
 
 **P3 — Memory & polish — assistant recalls like OpenClaw**
-- Tasks: embedding-backed recall (allowlisted fields, org-scoped HNSW, deterministic in CI) + `PromptLog` analytics per assistant (tokens/cost) + conversation search ranking badge (simulated vs live) + budgeting/Cancel parity with `Agent` loop.
+- Tasks: embedding-backed recall (allowlisted fields, org-scoped HNSW, deterministic in CI) + `PromptLog` analytics per assistant (tokens/cost, once the P1 prompt-log writes exist) + conversation search ranking badge (simulated vs live) + budgeting/Cancel parity with `Agent` loop.
 - Accept: `no-PII-in-vector` verifier still green + org-isolation vector test + analytics red (zero fabricated cost) + budget exhaustion `budget_exhausted` terminal never promotes partial answer.
 - Loc: ~200 LOC.
 

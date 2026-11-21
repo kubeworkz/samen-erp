@@ -2,12 +2,21 @@
 
 This guide covers deploying Samenerp as an enterprise SaaS service.
 
+> **What ships.** Deployment files, the served `/api/openapi.json`, the health
+> probes and the Support-scope mount are real. Monitoring, plan-based rate
+> limiting, SSO/SAML, customer audit-log export, data residency, white-label
+> branding and security-header middleware are unwired host shells, and
+> `/metrics` is egress-off by default. Steps that depend on them are called out
+> below.
+
 ## Prerequisites
 
 - Docker and Docker Compose installed
 - A domain name (for production)
-- Stripe account (for billing)
-- HuggingFace account (for AI features)
+- A Stripe account **only if** you wire live billing (optional — the host boots
+  fail-honest with billing unconfigured)
+- No HuggingFace account is needed server-side: AI keys are tenant-supplied
+  (BYOK) and the core runs keyless
 
 ## Quick Start (Local Development)
 
@@ -20,9 +29,11 @@ cd samen-erp/samenerp
 
 ### 2. Create Environment File
 
+No `.env.example` is checked in. Create `.env` with at least a secret key base;
+Compose defaults the rest for local development:
+
 ```bash
-cp .env.example .env
-# Edit .env with your settings
+printf 'SECRET_KEY_BASE=%s\n' "$(mix phx.gen.secret)" > .env
 ```
 
 ### 3. Start Services
@@ -34,14 +45,14 @@ docker-compose up -d
 ### 4. Run Migrations
 
 ```bash
-docker-compose exec app bin/samenerp eval "Samenerp.Release.migrate()"
+docker-compose exec app /app/samenerp/bin/samenerp eval "Samenerp.Release.migrate()"
 ```
 
 ### 5. Seed Database
 
-```bash
-docker-compose exec app bin/samenerp eval "Samenerp.Release.seed()"
-```
+The container entrypoint already runs `Samenerp.Seeds.seed!/0` before the app
+starts. There is no `priv/repo/seeds.exs`, so `Samenerp.Release.seed()` only
+prints "No seed file found" — it is not the seed step.
 
 ### 6. Access the Application
 
@@ -67,25 +78,93 @@ fly auth login
 
 ```bash
 cd samenerp
-fly launch
+fly launch --no-deploy
 ```
 
-#### 3. Set Secrets
+`--no-deploy` stops `fly launch` from starting a Machine before the volume and
+mount exist; the first deploy is step 7.
+
+#### 3. Create the KMS Volume
+
+The file-backed keystore needs a Fly volume; without one, every deploy that
+replaces the machine mints a new master key and invalidates every stored blind
+index, so all logins break. A volume is per-machine, so create one per machine
+(`--count N`), in the app's primary region (`primary_region` in `fly.toml`;
+`ord` below). `--size` is in GB and defaults to 1; `--yes` skips the
+confirmation prompt. The `initial_size` in step 4 makes `fly deploy` create any
+extra volumes a multi-machine app needs, so one is enough here:
+
+```bash
+fly volumes create samenerp_kms --region ord --size 1 --yes
+```
+
+#### 4. Mount It in `fly.toml`
+
+`fly launch` generated `fly.toml`; add (or extend) its `[mounts]` block so the
+keystore path is the volume rather than the container filesystem:
+
+```toml
+[mounts]
+  source = "samenerp_kms"
+  destination = "/app/data/kms_keys"
+  initial_size = "1gb"
+```
+
+`initial_size` is used only when `fly deploy` has to create a missing volume
+(it ignores the flag when one already exists, and `fly volumes create` ignores
+it entirely).
+
+This must match `SAMEN_KMS_KEY_DIR` in the next step. If you already mount a
+volume at `/app/data` for other durable data, mount that one instead, chown
+`/app/data` (not its `kms_keys` child) in step 5, and leave
+`SAMEN_KMS_KEY_DIR` pointing at the child.
+
+#### 5. Set the Mount's Owner Before the First Deploy
+
+The image runs as the non-root `app` user (uid 1000), so the keystore directory
+must be writable by that uid — a fresh Fly volume is not guaranteed to be. Do it
+from a throwaway Machine with the volume mounted: `fly ssh console` only reaches
+a *running* app Machine, so it cannot be relied on after a deploy whose first
+boot failed.
+
+```bash
+fly machine run --app samenerp --region ord --rm \
+  --volume samenerp_kms:/app/data/kms_keys \
+  alpine:3 chown 1000:1000 /app/data/kms_keys
+```
+
+`--rm` destroys the throwaway Machine on exit and releases the volume, and
+`fly deploy` ignores Machines it did not create.
+
+#### 6. Set Secrets
 
 ```bash
 fly secrets set \
   DATABASE_URL="ecto://postgres:PASSWORD@HOST/samenerp" \
   SECRET_KEY_BASE="$(mix phx.gen.secret)" \
   PHX_HOST="your-domain.com" \
-  STRIPE_SECRET_KEY="sk_live_..." \
-  STRIPE_WEBHOOK_SECRET="whsec_..." \
-  SAMEN_KMS_ADAPTER="aws_kms_dynamo" \
-  SAMEN_KMS_AWS_REGION="us-east-1" \
-  SAMEN_KMS_AWS_ACCESS_KEY_ID="..." \
-  SAMEN_KMS_AWS_SECRET_ACCESS_KEY="..."
+  SAMEN_KMS_ADAPTER="file_backed" \
+  SAMEN_KMS_KEY_DIR="/app/data/kms_keys"
 ```
 
-#### 4. Deploy
+`SAMEN_KMS_KEY_DIR` MUST be on a persistent volume. The file-backed adapter
+mints a master key on first keystore use; a fresh container with an ephemeral
+dir mints a new one and silently invalidates every stored blind index, so every
+login fails while the gates still pass. `aws_kms_dynamo` is a boot-refusing
+skeleton today (`Samen.Kms.assert_prod_adapter_ready!/0` refuses it), and no
+code reads `SAMEN_KMS_AWS_ACCESS_KEY_ID` / `SAMEN_KMS_AWS_SECRET_ACCESS_KEY`.
+
+Billing is optional: the host boots fail-honest with the provider unconfigured,
+and nothing wires a live Stripe provider by default. Only if you have wired a
+live billing adapter, add:
+
+```bash
+fly secrets set \
+  STRIPE_SECRET_KEY="sk_live_..." \
+  STRIPE_WEBHOOK_SECRET="whsec_..."
+```
+
+#### 7. Deploy
 
 ```bash
 fly deploy
@@ -166,9 +245,9 @@ kubectl create secret generic samenerp-secrets \
 
 #### 3. Deploy
 
-```bash
-kubectl apply -f k8s/
-```
+No Kubernetes manifests are checked in, so there is no `k8s/` directory to
+apply. Write a Deployment/Service/Ingress for the `samenerp` image, using the
+environment and secret shape from the Fly.io and ECS sections above.
 
 ## Environment Variables Reference
 
@@ -184,11 +263,11 @@ kubectl apply -f k8s/
 
 | Variable | Description | Default |
 |---|---|---|
-| `SAMEN_KMS_ADAPTER` | KMS adapter | `file_backed` |
-| `SAMEN_KMS_FILE_PATH` | File path for file-backed KMS | `/app/data/kms_store.json` |
-| `SAMEN_KMS_AWS_REGION` | AWS region for KMS | `us-east-1` |
-| `SAMEN_KMS_AWS_ACCESS_KEY_ID` | AWS access key ID | - |
-| `SAMEN_KMS_AWS_SECRET_ACCESS_KEY` | AWS secret access key | - |
+| `SAMEN_KMS_ADAPTER` | KMS adapter; `file_backed` is the only production-usable one today (`aws_kms_dynamo` refuses prod boot) | `file_backed` |
+| `SAMEN_KMS_KEY_DIR` | Per-subject DEK + master key directory; must be a persistent volume or all logins break | `/app/data/kms_keys` |
+| `SAMEN_KMS_FILE_PATH` | Vestigial; the file-backed adapter ignores it | `/app/data/kms_store.json` |
+| `SAMEN_KMS_AWS_REGION` | Region for the `aws_kms_dynamo` skeleton | `us-east-1` |
+| `SAMEN_KMS_DYNAMO_TABLE` | DynamoDB table for the `aws_kms_dynamo` skeleton | `samenerp-kms-keys` |
 
 ### Optional - Billing
 
@@ -196,6 +275,9 @@ kubectl apply -f k8s/
 |---|---|
 | `STRIPE_SECRET_KEY` | Stripe secret API key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+
+Only needed if you have wired a live billing adapter; the host boots
+fail-honest with the provider unconfigured.
 
 ### Optional - Email
 
@@ -210,8 +292,12 @@ kubectl apply -f k8s/
 
 | Variable | Description |
 |---|---|
-| `SENTRY_DSN` | Sentry error tracking DSN |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector endpoint |
+| `SENTRY_DSN` | Sentry error tracking DSN (config only — not wired) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector endpoint (config only — not wired) |
+
+Neither is wired: `Samenerp.Monitoring` is never started and the release ships
+no `:sentry` or OpenTelemetry exporter dependency, so these variables only set
+unused config. Treat observability as operator-supplied.
 
 ## Health Checks
 
@@ -234,13 +320,13 @@ curl http://localhost:4050/readyz
 ### Run Migrations
 
 ```bash
-docker-compose exec app bin/samenerp eval "Samenerp.Release.migrate()"
+docker-compose exec app /app/samenerp/bin/samenerp eval "Samenerp.Release.migrate()"
 ```
 
 ### Rollback
 
 ```bash
-docker-compose exec app bin/samenerp eval "Samenerp.Release.rollback()"
+docker-compose exec app /app/samenerp/bin/samenerp eval "Samenerp.Release.rollback()"
 ```
 
 ## Monitoring
@@ -260,12 +346,11 @@ kubectl logs -f deployment/samenerp -n samenerp
 
 ### Metrics
 
-If you've configured OpenTelemetry:
-
-```bash
-# Prometheus scrape endpoint
-curl http://localhost:4050/metrics
-```
+`GET /metrics` is mounted by `samen_metrics_route/1`, but it self-gates to 404
+until the host enables the Prometheus reporter (`metrics_egress?: true` plus a
+`telemetry_metrics_prometheus` dependency). Samenerp does not set that flag and
+ships no exporter, so the endpoint is **not live**; `OTEL_EXPORTER_OTLP_ENDPOINT`
+does not change that.
 
 ## Troubleshooting
 
@@ -302,17 +387,21 @@ curl http://localhost:4050/metrics
 
 1. Check migration status:
    ```bash
-   docker-compose exec app bin/samenerp eval "Ecto.Migrator.with_repo(Samenerp.Repo, &Ecto.Migrator.migrations_status/1)"
+   docker-compose exec app /app/samenerp/bin/samenerp eval "Ecto.Migrator.with_repo(Samenerp.Repo, fn repo -> Enum.each(Ecto.Migrator.migrations(repo), &IO.inspect/1) end)"
    ```
 
 2. Run pending migrations:
    ```bash
-   docker-compose exec app bin/samenerp eval "Samenerp.Release.migrate()"
+   docker-compose exec app /app/samenerp/bin/samenerp eval "Samenerp.Release.migrate()"
    ```
 
 ## Security Considerations
 
 ### Production Checklist
+
+These are operator obligations, not shipped features. Audit-on-write is live in
+the kernel, but customer audit-log export, CSP/security-header middleware and
+plan-based rate limiting are unwired shells today (see the README's claim set).
 
 - [ ] Use strong, unique passwords for all services
 - [ ] Enable SSL/TLS for all connections
@@ -333,6 +422,10 @@ curl http://localhost:4050/metrics
 - Use different secrets for development/staging/production
 
 ## Backup and Recovery
+
+`Samenerp.Backup` is manual helpers only — no scheduler, WAL archiving or
+point-in-time recovery is wired. The commands below are the operator's own
+procedure; run them on a schedule and store the dumps off the database host.
 
 ### Database Backup
 
@@ -360,11 +453,15 @@ psql -U postgres samenerp < backup.sql
 
 ### Horizontal Scaling
 
-Samenerp supports horizontal scaling through:
+The shipped release is single-node. There is no `libcluster`/`dns_cluster`
+dependency or discovery strategy, even though `RELEASE_NODE` is set, so adding a
+second BEAM node will not form a cluster or fan PubSub out across nodes. What you
+can scale today:
 
-1. **Multiple Elixir nodes** - Use libcluster for node discovery
-2. **Database connection pooling** - Configure pool size in runtime.exs
-3. **Oban workers** - Scale background job processing
+1. **Database connection pooling** - Configure `POOL_SIZE` (default 10) in
+   `runtime.exs`
+2. **Oban workers** - Scale background job processing against the shared
+   Postgres-backed queue
 
 ### Vertical Scaling
 
@@ -376,6 +473,5 @@ Samenerp supports horizontal scaling through:
 
 For deployment issues, check:
 
-1. [Deployment Guide](docs/deployment-guide.md)
-2. [Troubleshooting Guide](docs/troubleshooting.md)
-3. GitHub Issues: https://github.com/kubeworkz/samen-erp/issues
+1. The repository README and its claim set (what is live vs. a shell)
+2. GitHub Issues: https://github.com/kubeworkz/samen-erp/issues

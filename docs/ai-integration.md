@@ -1,3 +1,20 @@
+> **Implementation status (2026-11-21 audit).** This is the design blueprint the
+> kernel's HuggingFace BYOK core was built from, not a shipped host integration.
+> **Shipped and tested** (`samen_core/test/ai_test.exs` +
+> `ai_streaming_integration_test.exs`): AES-256-GCM key crypto
+> (`Samen.Scopes.Ai.Crypto`), token validation
+> (`Samen.Scopes.Ai.TokenValidator`), text generation
+> (`Samen.Scopes.Ai.Client`), SSE streaming (`Samen.Scopes.Ai.Streamer`), the
+> `ApiKey`/`PromptLog` resources, usage analytics (`Samen.Scopes.Ai.Analytics`),
+> and the `Samen.AI.Provider.HuggingFace` adapter (`complete/2` only; `embed/2`
+> returns `{:error, :not_implemented}`). **Not wired:** the
+> `/settings/huggingface` LiveView (connect/validate/revoke only show success
+> messages; no key is validated, encrypted, persisted or loaded, and usage is
+> hard-coded zero) and the daily `VerifyCredentialsWorker` sweep
+> (`get_tenants_with_hf_keys/0` returns `[]`). Every `MyApp.*` snippet below is
+> illustrative: the shipped modules use `Samen.Scopes.Ai.HttpAdapter` and Ash
+> resources, not Req/Finch/Ecto.
+
 Tenants are **bringing their own Hugging Face API keys**, your application acts as an agent executing AI tasks on their behalf using their infrastructure and quota. This drastically reduces your operational costs and shifts liability, but it requires highly secure credential management and robust validation.
 
 Here is the architectural blueprint for an "OAuth/BYO-Key" integration:
@@ -7,7 +24,18 @@ Here is the architectural blueprint for an "OAuth/BYO-Key" integration:
 Never expose tenant API keys to the frontend, and encrypt them heavily at rest.
 
 - **Encryption:** Store keys in your database using **AES-256-GCM** encryption. Use a unique data encryption key (DEK) per tenant, backed by a master key from a Key Management Service (KMS) like AWS KMS or HashiCorp Vault.
+
+> **Shipped:** `Samen.Scopes.Ai.Crypto` uses one AES-256-GCM master key
+> (`:samen_core, :kms_master_key`, 32 bytes) with a fresh 12-byte IV per
+> encryption — not a per-tenant DEK wrapped by KMS. No host config sets that key
+> today, so `Crypto` falls back to a key derived from a constant; wire a real
+> 32-byte key before relying on this path.
+
 - **Key Validation:** When a tenant inputs their **User Access Token**, immediately validate it via a lightweight API call before saving it.
+
+> **Shipped:** `Samen.Scopes.Ai.TokenValidator.link_key/2` validates and then
+> encrypts, returning an updated tenant map — but nothing persists that map and
+> the settings LiveView never calls it. No key is saved today.
 
 ---
 
@@ -244,6 +272,11 @@ end
 Hugging Face Inference endpoints support streaming via Server-Sent Events (SSE) when you pass `stream: true` in the request parameters.
 
 Because you are using Elixir, you can stream these chunks over an established connection directly to a calling process (like a **Phoenix Channel**, a **LiveView**, or an API client gateway) using `Req`. `Req` abstracts away complex network buffers elegantly while isolating network resources per process.
+
+> **Shipped:** `Samen.Scopes.Ai.Streamer` forwards chunks over
+> `Samen.Scopes.Ai.HttpAdapter.stream_post/6` — the INV-4 seam noted above, not
+> `Req` — and sends `{:hf_stream_chunk, text}`, `{:hf_stream_done, :complete}` or
+> `{:hf_stream_error, reason}` to the target process.
 
 ```plaintext
 defmodule MyApp.HuggingFace.Streamer do
@@ -488,7 +521,7 @@ end
 
 Using **Oban** is the gold standard for this on the BEAM. Unlike cron-like tools (like Quantum), Oban persists jobs to your database (PostgreSQL). If your server crashes or restarts mid-sweep, Oban ensures jobs resume exactly where they left off and provides native rate-limiting so you don't accidentally DOS Hugging Face with concurrent validation checks.
 
-Here is the complete implementation for an automated Oban sweeping pipeline.
+Below is the blueprint for an automated Oban sweeping pipeline — the shipped worker stops short of it (see the note under Part 2).
 
 ---
 
@@ -563,6 +596,11 @@ end
 ### Part 2: Build the Periodic Sweeper (Cron Job)
 
 Next, create a coordinator worker that fires periodically (e.g., every night at midnight). It queries your database for all tenants who have an active Hugging Face key and queues an individual Oban worker for each one.
+
+> **Shipped:** `Samen.Scopes.Ai.VerifyCredentialsWorker` is scheduled daily at
+> 02:00 on the `:maintenance` queue and `perform/1` runs, but
+> `get_tenants_with_hf_keys/0` returns `[]`. No tenant is queried, validated or
+> revoked — the coordinator below is the unwired half.
 
 ---
 
@@ -696,6 +734,11 @@ end
 ### Part 2: Frontend UI Feedback States (Phoenix LiveView)
 
 When an Oban job flags a tenant's key as `"revoked"`, you need to instantly inform any users logged into that tenant's dashboard. We do this by broadcasting an event over **Phoenix PubSub** from the worker and catching it live in the interface.
+
+> **Shipped:** `/settings/huggingface` renders, but connect/validate/revoke only
+> display success messages; it does not validate, encrypt, persist or load keys,
+> and its usage stats are hard-coded zeros. No revocation event reaches it: the
+> LiveView does not subscribe to revocation broadcasts.
 
 **1. Broadcast the Event from the Worker**
 
@@ -838,6 +881,12 @@ end
 ### Part 2: Tracking Usage Statistics & Token Metadata
 
 Even though tenants pay Hugging Face directly for raw compute through their keys, your system should track their usage profiles. This lets you spot failing tenant loops, calculate total throughput, and display usage telemetry graphs.
+
+> **Shipped:** the `PromptLog` resource and `Samen.Scopes.Ai.Analytics`
+> aggregations exist and are unit-tested, but nothing writes prompt-log rows:
+> `Client.generate_text/4` and `Streamer.stream_with_metrics/5` return metrics
+> without persisting them, and the settings LiveView does not query logs. The
+> telemetry below is blueprint.
 
 **1. The Metrics Table Schema**
 
