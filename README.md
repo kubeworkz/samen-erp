@@ -40,7 +40,7 @@ This is deliberately *not* the stronger-sounding "run support without ever seein
 claim was retired as false-by-construction. Support **can** see PII, but only through a
 grant that a second party approved and the tenant can audit.
 
-## The claim set (each backed by a test, verifier, or probe in CI)
+## The claim set (each backed by a test, verifier, probe, or checked-in deployment artifact)
 
 | Claim | Where it is proven |
 |---|---|
@@ -57,64 +57,43 @@ grant that a second party approved and the tenant can audit.
 | **Lifecycle substrate** — a generalized approve/reject engine (requester≠approver DB CHECK; reveal grants are a client), blueprint-wide **soft-delete/archival** on `ash_archival` with composition-cascade + microsecond `archived_at`, and **audit-on-write** where impersonation-context writes are the mandatory first client (an impersonated write with no audit row is impossible) plus a `versioned` opt-in on `ash_paper_trail` with token-only vaulted diffs | `samen_core/test/{approvals,lifecycle,audit}/*`; sabotages 32–34 (ADR-040) |
 | **Canonical work objects** — a canonical Work Task/Project/Subtask (the CRM `Activity` table was **destructively migrated** into it and removed), Calendar (recurrence + masked ICS), Docs, polymorphic Tags, Location, Vendor, and Sales Lead — all archival + vault-aware from birth | `samen_core/lib/samen/scopes/work/*`; `samen_core/test/scopes/*` (ADR-041) |
 | **LiveView client with progressive enhancement** — a real LiveSocket bundle in the shared root layout (inherited by every host + gen.app) makes `phx-click` writes browser-real, proven in headless Chromium; the auth arc still completes **JS-off** (Class-A floor), and the socket carries no `vt_`/plaintext to a no-grant operator | `T113` headless-browser regression; sabotage 32 (ADR-042) |
-| **ERP base system** — the seven-component core as reusable scopes: the double-entry GL (R1: an unbalanced entry is refused by construction), AP/AR documents posting via source anchors, the append-only stock ledger + derived rollup (R3: negative stock fail-closed), Procurement's one-transaction chokepoint (R5: a GoodsReceipt receive posts stock AND GL together, the three-way match enforced), the SalesOrder bridge (Lead → SO → stock + REAL Billing invoice), Manufacturing (R4: BOM cycle refusal, consume/produce/log agree exactly-once), and HR (the first scope with a non-empty PII map — INV-1 masking, reveal-gated fields) — every ledger guarded by its reconciliation red-path suite + committed sabotage | `samen_core/test/{finance,inventory,hr}*_test.exs` + `e8_reports_test.exs` (Budget/BudgetLine + budget-vs-actual + the TB/WIP/headcount Rollup specs + the k-anon operator aggregate); `samen_web/lib/samen/web/erp/` (the six-surface closed allowlist + ONE generic read-only LiveView mounted by one router line); the `samenerp/` host mounts ALL scopes at ≈0 authored LOC and passes the full 19-step verifier gate; sabotages **302–308** (docs/ws-erp/ — ADR-049) |
+| **ERP base system** — the seven-component core as reusable scopes: the double-entry GL (R1: an unbalanced entry is refused by construction), AP/AR documents posting via source anchors, the append-only stock ledger + derived rollup (R3: negative stock fail-closed), Procurement's one-transaction chokepoint (R5: a GoodsReceipt receive posts stock AND GL together, the three-way match enforced), the SalesOrder bridge (Lead → SO → stock + REAL Billing invoice), Manufacturing (R4: BOM cycle refusal, consume/produce/log agree exactly-once), and HR (the first scope with a non-empty PII map — INV-1 masking, reveal-gated fields) — every ledger guarded by its reconciliation red-path suite + committed sabotage | `samen_core/test/{finance,inventory,hr}*_test.exs` + `e8_reports_test.exs` (Budget/BudgetLine + budget-vs-actual + the TB/WIP/headcount Rollup specs + the k-anon operator aggregate); `samen_web/lib/samen/web/erp/` (the **13-surface** closed allowlist with governed create/edit/transition forms, mounted by one router line); the `samenerp/` host mounts ALL scopes at ≈0 authored LOC and passes the full 19-step verifier gate; sabotages **302–308** (docs/ws-erp/ — ADR-049) |
 | **Bank reconciliation (E9)** — import bank statement lines with SHA-256 dedup, amount-strict matching (±0.01¢) against posted GL entries, auto-categorization rules (pattern → GL account), period-based reconciliation with balanced assertion; guards against double-match and match to voided entries | `samen_core/lib/samen/scopes/banking/*`; `samen_core/test/banking_scope_test.exs` (15 tests) |
 | **Multi-currency (E10)** — exchange rate storage per currency pair with timestamps, per-org base currency (default USD), `FxConvert` for batch conversion, `FxConversionGuard` refuses posting in non-base currency without a stored rate; AP approval stamps the functional carrying amount, payment books realized FX, and the close's AP-only period-end revaluation books unrealized FX and moves each bill's carrying amount; voiding a revalued bill posts a bill-specific clearing entry that clears AP and unrealized P&L; direct voids of AP bill entries are refused, and open/applied vendor credits bound to the bill block the void; fail-closed | `samen_core/lib/samen/scopes/finance/{exchange_rate,org_fx_settings,fx_convert,fx_conversion_guard,ap_fx,ap_payment_posting,fx_revaluation,void_ap_invoice,ap_bill_entry_void_guard}.ex`; `samen_core/test/{multi_currency,finance_fx_revaluation}_test.exs` (10 + 12 tests) |
-| **Financial statements (E11)** — Trial Balance (all accounts + balances, R1 invariant check), Balance Sheet (assets = liabilities + equity at point in time), Profit & Loss (revenue − expenses for a period, feeds into equity); pure SQL reads over existing GL data | `samen_core/lib/samen/scopes/finance/{trial_balance,balance_sheet,profit_loss}.ex`; `samen_core/test/financial_statements_test.exs` (8 tests) |
+| **Financial statements (E11) — the live Balance Sheet + P&L** — Balance Sheet (assets = liabilities + equity at a point in time) and Profit & Loss (revenue − expenses for a period, feeding equity), both pure SQL reads over posted GL data and surfaced in the board pack; `TrialBalance` is not a live claim (ADR-055 deleted it) | `samen_core/lib/samen/scopes/finance/{balance_sheet,profit_loss}.ex`; `samen_web/lib/samen/web/finance/board_pack.ex`; `samen_web/test/samen/web/board_pack_test.exs` (every figure ties to `BalanceSheet.generate/3` and `ProfitLoss.generate/4`) |
 | **Credit notes + dormant tax blueprint (E12)** — CreditNote/VendorCredit with draft → open → applied → void state machine, CreditNoteGuard enforcing valid transitions; the tax blueprint/calculator are dormant and not a live tax path | `samen_core/lib/samen/scopes/finance/{credit_note_blueprint,credit_note_guard,tax_calculator}.ex`; `samen_core/test/credit_notes_tax_test.exs` (16 tests) |
-| **Warehouse transfers (E13)** — TransferOrder coordinating transfer_out + transfer_in in one transaction (same cross-row-cascade discipline as GoodsReceipt), TransferGuard validates positive qty, source ≠ destination, stock check, same-item constraint | `samen_core/lib/samen/scopes/inventory/{transfer_order,transfer_guard}.ex`; `samen_core/test/warehouse_transfers_test.exs` (14 tests) |
-| **Landed costs (E14)** — additional costs (freight, duties, insurance) allocated to inventory items on import; value-proportional or quantity-proportional allocation; balance guard ensures allocations sum exactly to landed cost; increases effective unit cost | `samen_core/lib/samen/scopes/inventory/{landed_cost,landed_cost_allocator}.ex`; `samen_core/test/landed_costs_test.exs` (9 tests) |
-| **Timesheets (E15)** — time tracking entries with project/task association, duration calculation, approval workflow | `samen_core/lib/samen/scopes/work/timesheet_entry.ex`; `samen_core/test/timesheets_test.exs` |
-| **Helpdesk (E16)** — ticket management with SLAs, escalation, CSAT surveys, canned responses | `samen_core/lib/samen/scopes/support/`; `samen_core/test/helpdesk_test.exs` |
-| **POS (E17)** — point-of-sale terminals, orders, payments, receipt generation | `samen_core/lib/samen/scopes/pos/`; `samen_core/test/pos_test.exs` |
-| **eCommerce (E18)** — storefronts, product catalogs, shopping carts, checkout flow | `samen_core/lib/samen/scopes/ecommerce/`; `samen_core/test/ecommerce_test.exs` |
-| **Quality Control (E19)** — inspection points, quality checks, non-conformance tracking | `samen_core/lib/samen/scopes/quality/`; `samen_core/test/quality_test.exs` |
-| **Survey/eLearning (E20)** — surveys with questions/answers, courses with lessons/quizzes, enrollment/progress tracking | `samen_core/lib/samen/scopes/{survey,elearning}/`; `samen_core/test/{survey,elearning}_test.exs` |
-| **Payroll/Leave (E21)** — payslips, leave types/balances/requests, salary structures | `samen_core/lib/samen/scopes/hr/`; `samen_core/test/payroll_leave_test.exs` |
-| **Livechat/Social (E22)** — live chat sessions/channels, social media conversations | `samen_core/lib/samen/scopes/{livechat,social}/`; `samen_core/test/livechat_social_test.exs` |
-| **Fleet/Dataclean (E23)** — vehicle management, maintenance, fuel tracking; data deduplication rules/merges | `samen_core/lib/samen/scopes/{fleet,dataclean}/`; `samen_core/test/fleet_dataclean_test.exs` |
-| **Consolidation (E24)** — multi-entity rollups, intercompany transactions, company group mappings | `samen_core/lib/samen/scopes/consolidation/`; `samen_core/test/consolidation_test.exs` |
-| **Forum/Blog (E25)** — community forums with posts/comments, blog with articles/comments | `samen_core/lib/samen/scopes/community/`; `samen_core/test/forum_blog_test.exs` |
-| **E-Signatures (E26)** — document signing templates, signature requests, recipient management, audit trail | `samen_core/lib/samen/scopes/esign/`; `samen_core/test/esign_test.exs` |
-| **Appointments (E27)** — meeting types, available slots, booking lifecycle, participant RSVP | `samen_core/lib/samen/scopes/appointments/`; `samen_core/test/appointments_test.exs` |
-| **Marketing Automation (E28)** — campaign workflows, triggers, actions (email/SMS/wait/condition), lead nurturing | `samen_core/lib/samen/scopes/marketing_automation/`; `samen_core/test/marketing_automation_test.exs` |
-| **SMS Marketing (E29)** — SMS campaigns, templates with variables, message delivery tracking, subscriber consent | `samen_core/lib/samen/scopes/sms_marketing/`; `samen_core/test/sms_marketing_test.exs` |
-| **Social Marketing UI (E30)** — connected social accounts, post scheduling, campaign management, engagement metrics | `samen_core/lib/samen/scopes/social_marketing/`; `samen_core/test/social_marketing_ui_test.exs` |
+| **Warehouse transfers (E13) — skeleton, not a shipped workflow** — `TransferOrder` + `etn_transfer_order` exist, but `:post` posts no stock; `TransferGuard` is unwired and references an absent `Samen.Scopes.Inventory.StockLevel`; there is no transfer test (ADR-055 removed the vacuous one) | `samen_core/lib/samen/scopes/inventory/{blueprint.ex,transfer_guard.ex}`; **no test** — repair is WS-LOG L5 |
+| **Landed costs (E14) — allocation math only, not a posting workflow** — pure value/quantity allocation with exact balancing; `LandedCost :allocate` has no change, no `LandedCostAllocation` rows and no stock-value/GL posting | `samen_core/lib/samen/scopes/inventory/{blueprint.ex,landed_cost_allocator.ex}`; `samen_core/test/landed_costs_test.exs` (7 allocation-math tests; 2 literal-only) — repair is WS-LOG L4 |
+| **Timesheets (E15) — Work-scope capture, re-authored after ADR-055** — employee timesheets with a draft → submitted → approved lifecycle; entries record minutes against a Finance cost object; only approved sheets feed labour cost | `samen_core/lib/samen/scopes/work/{timesheet_blueprint,timesheet_entry_guard,timesheet_shape,timesheet_transition}.ex`; `samen_core/test/work_timesheet_test.exs` |
+| **Helpdesk (E16) — Support scope** — tickets and conversations, SLA policies + breach worker, canned-response macros, and CSAT surveys; message bodies are vault-routed | `samen_core/lib/samen/scopes/support/{blueprint,sla_breach_worker,csat_survey}.ex`; `samen_core/test/{support_inbound,support_chat_escalation}_test.exs`; `samen_web/test/samen/web/support_{csat,macro_composer,tickets_crud}_test.exs` |
+| **HR / Leave (E21) — employee records and leave, not payroll** — employee 🔒, append-only employment events, and leave requests with the ADR-040 approval gate; payslips, salary structures and payroll computation are not in this scope (Finance imports payroll settlement) | `samen_core/lib/samen/scopes/hr/{blueprint.ex,leave_state.ex}`; `samen_core/test/hr_scope_test.exs` |
 | **Expenses and corporate cards (E31)** — Finance-mounted `ExpenseCategory`/`CorporateCard`/`ExpenseReport`; receipt and per-line cap guards, embedded report lines, approver gate, GL posting on approval, and cash settlement on reimbursement; card data is last-four + opaque cardholder id only | `samen_core/lib/samen/scopes/finance/{expense_blueprint,expense_lines,expense_report_guard,expense_transition,expense_posting,expense_settlement}.ex`; `samen_core/test/expenses_test.exs`; `samen_web/lib/samen/web/erp.ex` (`expense_reports`, `expense_categories`, `corporate_cards`) |
-| **Document Management (E32)** — folder hierarchy, document lifecycle (draft→review→approved), version control, access permissions | `samen_core/lib/samen/scopes/documents/`; `samen_core/test/documents_test.exs` |
-| **Email Marketing (E33)** — email campaigns with A/B testing, templates, subscriber engagement, delivery logs | `samen_core/lib/samen/scopes/email_marketing/`; `samen_core/test/email_marketing_test.exs` |
-| **Planning/Scheduling (E34)** — resources (employees/equipment), shifts with recurrence, time slot availability, schedule templates | `samen_core/lib/samen/scopes/planning/`; `samen_core/test/planning_test.exs` |
-| **Approvals (E35)** — approval rules with thresholds, request lifecycle, multi-step chains (sequential/parallel) | `samen_core/lib/samen/scopes/approvals/`; `samen_core/test/approvals_test.exs` |
-| **IoT (E36)** — device registry, communication channels, sensor data points with quality levels | `samen_core/lib/samen/scopes/iot/`; `samen_core/test/iot_test.exs` |
-| **CMS-light (E37)** — content pages with SEO, page templates, visual themes | `samen_core/lib/samen/scopes/cms/`; `samen_core/test/cms_test.exs` |
-| **Custom Fields (E38)** — dynamic key-value fields on any resource (string/integer/float/boolean/date/JSON types) | `samen_core/lib/samen/scopes/custom_fields/`; `samen_core/test/custom_fields_test.exs` |
-| **HuggingFace AI Integration** — BYOK (Bring Your Own Key) architecture with AES-256-GCM encryption, SSE streaming, token validation, usage analytics, and background key validation sweeps | `samen_core/lib/samen/scopes/ai/`; `samen_core/test/ai_test.exs` (59 tests) + `ai_streaming_integration_test.exs` (50 tests) |
-| **HuggingFace Key Management UI** — Phoenix LiveView for connecting, validating, revoking API keys with usage dashboard | `samen_web/lib/samen/web/settings/huggingface_live.ex` |
-| **HuggingFace Key Validation Worker** — Oban background worker for daily key validation sweeps with revocation detection | `samen_core/lib/samen/scopes/ai/verify_credentials_worker.ex` |
-| **Production Deployment** — Dockerfile, docker-compose, runtime.exs, deployment guide for Fly.io/AWS/Kubernetes | `samenerp/Dockerfile`, `samenerp/docker-compose.yml`, `samenerp/config/runtime.exs` |
-| **API Rate Limiting** — Plan-based rate limits (Free/Pro/Enterprise), per-user/org/IP limits, AI-specific limits | `samen_web/lib/samen/web/rate_limit.ex`, `samen_web/lib/samen/web/plans/` |
-| **Monitoring & Alerting** — Sentry + OpenTelemetry integration, error tracking, distributed tracing | `samenerp/lib/samenerp/monitoring.ex` |
-| **Backup & Recovery** — Automated backups, point-in-time recovery, retention policy | `samenerp/lib/samenerp/backup.ex` |
-| **API Documentation** — OpenAPI 3.0 spec, complete API reference | `samenerp/lib/samenerp/api_docs.ex` |
-| **Customer Support** — Ticketing system, priority levels, assignment workflow | `samenerp/lib/samenerp/support.ex` |
-| **Security Hardening** — CSP headers, HSTS, XSS protection, security middleware | `samenerp/lib/samenerp/security.ex` |
-| **SSO/SAML** — Enterprise SAML 2.0 integration, JIT provisioning, attribute mapping | `samenerp/lib/samenerp/sso.ex` |
-| **Customer Audit Log** — Compliance audit trail, CSV/JSON export, retention policy | `samenerp/lib/samenerp/audit_log.ex` |
-| **Data Residency** — Regional data storage (US, EU, APAC), compliance certifications | `samenerp/lib/samenerp/data_residency.ex` |
-| **White-Label Support** — Custom branding, domains, logos, email templates | `samenerp/lib/samenerp/white_label.ex` |
+| **CMS (E37) — live CMS scope, no template/theme stubs** — pages, posts, blocks, media, navigation and SEO metadata; the deleted `Template`/`Theme` modules are gone, so page templates and visual themes are not claimed | `samen_core/lib/samen/scopes/{cms.ex,cms/blueprint.ex}`; `samen_web/test/samen/scopes/cms_kb_scope_test.exs`; `demo/test/cms_scope_*_test.exs` |
+| **Custom Fields (E38) — live Tier-1 jsonb bag, not the deleted scope** — runtime field definitions in `tnt_field`, validated-at-write in a resource’s `custom` bag; bounded types include string/integer/number/boolean/date/enum/money/url/phone/email/address | `samen_core/lib/samen/custom_fields.ex`; `samen_core/test/custom_fields_{rich_types,masking,erasure}_test.exs` |
+| **HuggingFace AI core** — BYOK provider with AES-256-GCM key encryption, token validation, text generation, SSE streaming and usage analytics; the settings flow and daily sweep are not wired (below) | `samen_core/lib/samen/scopes/ai/`; `samen_core/lib/samen/ai/provider/hugging_face.ex`; `samen_core/test/ai_test.exs` (59 tests) + `ai_streaming_integration_test.exs` (50 tests) |
+| **HuggingFace settings UI — shell only, not a key flow** — `/settings/huggingface` renders, but connect/validate/revoke only display success messages; it does not validate, encrypt, persist or load keys, and usage stats are hard-coded zeros | `samen_web/lib/samen/web/settings/huggingface_live.ex` |
+| **HuggingFace key-validation worker — scheduled no-op** — Oban runs it daily, but `get_tenants_with_hf_keys/0` returns `[]`; no key is queried, validated, revoked or cleared | `samen_core/lib/samen/scopes/ai/verify_credentials_worker.ex`; `samen_core/lib/samen/jobs.ex` |
+| **Production Deployment** — Dockerfile, Compose stack, runtime config and a guide covering Fly.io/AWS ECS/Kubernetes | `samenerp/Dockerfile`, `samenerp/docker-compose.yml`, `samenerp/config/runtime.exs`, `docs/deployment-guide.md` |
+| **API Documentation** — OpenAPI 3.0 JSON served at `/api/openapi.json`; it documents the auth-login and AI-generate paths only, not a complete API reference | `samenerp/lib/samenerp/api_docs.ex`; `samenerp/test/phase1_surface_test.exs` |
+| **Customer Support** — host mount of the live Support scope (tickets, conversations, SLA policies, macros, CSAT); no ticket-assignment workflow | `samenerp/lib/samenerp/support.ex`; E16 above |
+
+**Not claimed as live:** plan-based API/AI rate limits (`PlanRateLimit`/`ApiRateLimit` are unmounted and the plan's own limit is ignored), monitoring (Sentry/OTel calls are shells), backup/PITR (manual helpers only; no scheduler or WAL), SSO/SAML (mock assertion validation), customer audit-log export (Logger only), data residency, white-label branding, and security-header middleware (never applied). Their host modules are compile-listed but unwired; the live auth-surface rate limits, audit-on-write, Support scope, deployment files and served OpenAPI are covered elsewhere in this README.
 
 Full mapping: [docs/claim-evidence.md](docs/claim-evidence.md) (Phase-1 identity spine + rich
 types are section J; Phase-2 billing + ESP + rate-limiting are section K; Phase-3 automation +
-lifecycle substrate + work objects + the LiveView client are **section L**). **47 modules**
-covered (E9–E38), plus HuggingFace AI integration, enterprise SaaS features, and
-production deployment infrastructure. **Honest scope:**
-the identity spine, its auth-surface rate-limiting, and the Stripe/ESP adapters are complete and
-verified — **but everything runs on the keyless lane.** Billing/ESP dispatch is proven against
-hermetic fakes + injected-transport cassettes; **no host wires a live provider** (every generated
-app boots with billing/ESP unconfigured and honestly says so), production persistence is
-fake-backed with the Ash-backed mirrors' host-wiring **deferred to T108**, and the live lanes
-(`STRIPE_TEST_KEY`, `SAMEN_POSTMARK_SMOKE`, `SAMEN_ESP_LIVE`) are documented-but-not-CI. AI is a
-later phase.
+lifecycle substrate + work objects + the LiveView client are **section L**; the AI plane is
+**section N**). The E15–E38 rows above are audited against ADR-055: live features point at their
+actual code paths, and the dormant E17–E20, E22–E30, E33–E34 and E36 scope stubs deleted by
+ADR-055 are not product claims (nor are the old E32 `documents`/E35 `approvals` scope stubs — the
+live Docs scope and `Samen.Approvals` engine are covered above). Also listed: the tested
+HuggingFace AI core, production deployment infrastructure, and the served OpenAPI document.
+**Honest scope:** the identity spine, its auth-surface rate-limiting, and the Stripe/ESP adapters
+are complete and verified — **but everything runs on the keyless lane.** Billing/ESP dispatch is
+proven against hermetic fakes + injected-transport cassettes; **no host wires a live provider**
+(every generated app boots with billing/ESP unconfigured and honestly says so), production
+persistence is fake-backed with the Ash-backed mirrors' host-wiring **deferred to T108**, and the
+live lanes (`STRIPE_TEST_KEY`, `SAMEN_POSTMARK_SMOKE`, `SAMEN_ESP_LIVE`) are documented-but-not-CI.
+The AI core runs keyless in CI; its host settings flow and credential sweep are not wired.
 
 ## Architecture
 
@@ -124,27 +103,19 @@ Two apps are the substrate; three are proof; one command spins up new ones.
   erasure, field masking and per-plane PII resolution, policies/RBAC and org-scoping, the
   machine-readable catalog (schema dictionary for LLM/tooling grounding), the hash-chained
   audit log, the `samen.verify.*` verifier tiers, the generators
-  (`mix samen.gen.app` / `gen.scope` / `gen.resource`), and the **HuggingFace AI integration**
-  (BYOK architecture with AES-256-GCM encryption, SSE streaming, token validation, usage
-  analytics, and background key validation sweeps).
+  (`mix samen.gen.app` / `gen.scope` / `gen.resource`), and the **HuggingFace AI core**
+  (BYOK provider with AES-256-GCM key encryption, SSE streaming, token validation and usage
+  analytics; the settings UI and daily sweep are not wired).
 - **`samen_web` — the UI kit and product surfaces.** Router mount macros for the tenant and
   operator planes, masked rendering, the **self-serve identity spine** (signup / login /
   email verification / password reset / sessions / team invites / OIDC with TOTP step-up /
-  TOTP 2FA enrollment / onboarding wizard), **SSO/SAML integration**, and the mountable
+  TOTP 2FA enrollment / onboarding wizard), and the mountable
   product surfaces: CRM, Billing, Support desk, Marketing, Files, CSV import/export,
   Search (⌘K command palette), Settings, notifications inbox, and cross-plane chat.
-- **Enterprise SaaS infrastructure** (`samenerp/lib/samenerp/`). Production-ready modules:
-  - **Deployment** — Dockerfile, docker-compose, runtime.exs, deployment guide
-  - **Rate Limiting** — Plan-based limits (Free/Pro/Enterprise)
-  - **Monitoring** — Sentry + OpenTelemetry integration
-  - **Backup** — Automated backups with retention
-  - **API Docs** — OpenAPI 3.0 specification
-  - **Support** — Ticketing system with priorities
-  - **Security** — CSP headers, HSTS, XSS protection
-  - **SSO** — SAML 2.0 enterprise integration
-  - **Audit Log** — Compliance audit trail
-  - **Data Residency** — Regional storage (US, EU, APAC)
-  - **White-Label** — Custom branding and domains
+- **Enterprise SaaS infrastructure** (`samenerp/lib/samenerp/`). Live: deployment files, the
+  served `/api/openapi.json`, and the Support-scope host mount. Monitoring, plan-based API/AI
+  limits, SAML SSO, customer audit-log export, data residency, white-label branding and
+  security-header middleware are **unwired shells**, not production claims.
 - **Verticals as proof, not product.**
   - `driftwood` — a freight vertical; the deepest reference, with the crypto-shred game-day.
   - `pawchart` — a veterinary vertical demonstrating the mount leverage: its four Ash
@@ -214,9 +185,7 @@ re-run this pass), `--warnings-as-errors` clean; treat exact counts as direction
 | `driftwood` | 123 |
 | `pawchart` | 49 |
 | sabotage harness | 308/308 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
-| E9–E38 (ERP modules) | 588 tests across 30 ERP modules |
-| HuggingFace AI Integration | 109 tests (59 unit + 50 streaming integration) |
-| Enterprise SaaS Features | 47 modules (Deployment, Rate Limiting, Monitoring, Backup, Docs, Support, Security, SSO, Audit, Data Residency, White-Label) |
+| HuggingFace AI core | 109 tests (59 unit + 50 streaming integration) |
 
 ## Getting started
 
@@ -225,15 +194,20 @@ localhost. All commands start from the repo root.
 
 ### AI Integration (HuggingFace BYOK)
 
-Samen supports Bring Your Own Key (BYOK) integration with HuggingFace for AI features:
+The kernel ships a tested HuggingFace BYOK core: `Samen.Scopes.Ai` stores AES-256-GCM-encrypted
+keys, validates tokens, generates text, streams SSE responses, and computes usage analytics from
+prompt logs. The `Samen.AI.Provider.HuggingFace` adapter implements `complete/2`; its `embed/2`
+returns `{:error, :not_implemented}` (the kernel's separate embedding path is documented in
+section N of the claim-evidence doc).
 
-1. **Connect your HuggingFace API key** at `/settings/huggingface`
-2. **Your key is encrypted** with AES-256-GCM and never exposed to the frontend
-3. **Use AI features** — text generation, embeddings, and more through the HuggingFace API
-4. **Usage is tracked** — view API calls, token consumption, and costs in the dashboard
-5. **Keys are validated daily** — background worker detects revoked/expired keys
+The `/settings/huggingface` LiveView is **not a working key flow**: its connect/validate/revoke
+handlers only display success messages, do not validate, encrypt, persist or load keys, and show
+hard-coded zero usage. The daily Oban `VerifyCredentialsWorker` is also a **scheduled no-op**
+(`get_tenants_with_hf_keys/0` returns `[]`), so keys are not swept or revoked. Until those are
+wired, key setup is a core-API path only, not a settings-page workflow.
 
-For details, see [docs/ai-integration.md](docs/ai-integration.md).
+For design background, see [docs/ai-integration.md](docs/ai-integration.md); it is not proof that
+the UI or sweep is wired.
 
 ### Enterprise SaaS Deployment
 
@@ -255,17 +229,15 @@ It performs the identical `ssh … "TARGET_SHA=<sha> bash -s" < scripts/deploy-p
 
 The manual fallback is `scripts/deploy.sh --local-gate` above: it is not a different deploy — it is the CI-gated one, gate and all, with the runner taken out of the path. Never deploy by editing the server checkout or running compose by hand; `deploy-prod.sh` resets the tree to the release commit and discards anything un-pushed (a backup branch is cut first).
 
-**Features:**
+**Live deployment surfaces:**
 - ✅ Docker + Docker Compose
-- ✅ Fly.io / AWS ECS / Kubernetes
-- ✅ Plan-based rate limiting
-- ✅ Sentry + OpenTelemetry monitoring
-- ✅ Automated backups
-- ✅ OpenAPI 3.0 documentation
-- ✅ SSO/SAML for enterprise
-- ✅ Customer audit log
-- ✅ Data residency (US, EU, APAC)
-- ✅ White-label branding
+- ✅ Fly.io / AWS ECS / Kubernetes guide
+- ✅ OpenAPI 3.0 JSON at `/api/openapi.json` (two paths today)
+- ✅ Support-scope host mount
+
+**Not live:** plan-based rate limiting, Sentry/OpenTelemetry monitoring, automated backups,
+SSO/SAML, customer audit-log export, data residency, and white-label branding. Those host modules
+are unwired shells; see the claim-set note above.
 
 For details, see [docs/deployment-guide.md](docs/deployment-guide.md).
 
@@ -309,12 +281,12 @@ command in this README and that tutorial is verified against the CI probes' exec
 
 | Path | What it is |
 |---|---|
-| `samen_core/` | The kernel: vault + crypto-shred, masking, policies/RBAC, catalog, audit, `samen.verify.*` verifier tiers, generators, and the **HuggingFace AI integration** (BYOK with AES-256-GCM, SSE streaming, token validation, usage analytics) |
+| `samen_core/` | The kernel: vault + crypto-shred, masking, policies/RBAC, catalog, audit, `samen.verify.*` verifier tiers, generators, and the **HuggingFace AI core** (BYOK with AES-256-GCM, SSE streaming, token validation, usage analytics; settings UI and daily sweep unwired) |
 | `samen_web/` | The framework web layer: tenant + operator plane mount macros, the UI kit, masked rendering, and the mountable product surfaces (CRM/Billing/Support/Marketing/Files/CSV/Search/Settings/chat) |
 | `demo/` | The API-only dogfood host — canonical Identity policy-matrix / red-path references |
 | `driftwood/` | Reference vertical: freight — the deepest gate, including the crypto-shred game-day |
 | `pawchart/` | Reference vertical: veterinary — thin scope mounts (~188 lines) plus a real, hand-authored clinic UI on top |
-| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, Budget/BudgetLine, TB/WIP/headcount rollups, the E1–E8 walkthrough, and the full 19-step verifier gate. **Enterprise SaaS modules:** deployment, rate limiting, monitoring, backup, API docs, support, security, SSO, audit log, data residency, white-label |
+| `samenerp/` | The WS-ERP host proof: Finance + Inventory scopes mounted AS-IS (one domain module + one router line) — CoA/journal/AP/stock/PO/work-order surfaces, Budget/BudgetLine, TB/WIP/headcount rollups, the E1–E8 walkthrough, and the full 19-step verifier gate. Plus deployment files, the served `/api/openapi.json`, and the Support-scope mount; the remaining enterprise modules are unwired shells (see the claim-set note). |
 | `spikes/` | The mechanism spikes (s00–s07) that de-risked the kernel; still run by root `ci.sh` |
 | `docs/` | ADRs (`docs/adr/`), guides (`docs/guides/`), the gate reports (`docs/gate-*.md`), the roadmap (`docs/saas-gap-roadmap.md`), and an archived long-form design variant (`docs/archive/samen-foundry.html`) |
 | `scripts/` | `sabotage.sh` + every committed sabotage patch (308 today, growing every phase) |
