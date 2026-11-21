@@ -113,19 +113,37 @@ document covers only auth-login and AI-generate today, not a full API reference.
 
 ### 6. Cost Structure (estimated)
 
-> All figures are list-price estimates for directional comparison, before implementation
-> scope, hosting variability and discounts. They are not benchmarked customer quotes.
+> **Pricing basis (checked 2026-11-21, USD).** License figures use vendor-published
+> prices where available; the remaining ranges are planning estimates, not vendor
+> quotes or benchmarks.
+>
+> - **Odoo** — Standard is US$24.90/user/month on annual billing for the first 12
+>   months, then US$31.10; Odoo Online hosting and support are included.
+>   [Odoo pricing](https://www.odoo.com/pricing?currency=USD)
+> - **ERPNext** — GPL-3.0; no license fee. Hosting, implementation and paid support
+>   are separate. [ERPNext pricing](https://frappe.io/erpnext/pricing)
+> - **NetSuite** — Oracle publishes no list price and prices by annual quote; the
+>   `$1,000+/mo` entry is a third-party planning range (reported US$999–$2,000/mo),
+>   not an Oracle quote. [Oracle NetSuite ERP](https://www.netsuite.com/portal/products/erp.shtml)
+>   · [reported range](https://ensurva.com/us/software-pricing/netsuite)
+> - **Samen** — self-hosted OSS; the `$0-$6K` Year 1 range is a hosting/ops
+>   allowance, with staff time excluded.
+>
+> Implementation, NetSuite premium-support and Year 1 ranges are internal planning
+> envelopes as of 2026-11-21, not vendor quotes. Samen excludes staff time, so the
+> comparison is directional. Vendor prices vary by country, currency, user count,
+> modules, term and discounts.
 
-| Cost (estimated) | Samen | NetSuite | Odoo | ERPNext |
+| Cost (estimated, USD) | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
-| License | Free (OSS) | $1,000+/mo | $24/user/mo | Free (OSS) |
+| License | Free (OSS) | $1,000+/mo (quote) | $24.90–$31.10/user/mo | Free (GPL-3.0) |
 | Implementation | DIY | $10K-$100K | $5K-$50K | DIY |
-| Hosting | Self-hosted | Included | Self/Cloud | Self-hosted |
-| Support | Community | $2K+/mo | $1K+/mo | Community |
+| Hosting | Self-hosted | Included | Included (Odoo Online) | Self-hosted |
+| Support | Community | $2K+/mo (premium allowance) | Included | Community |
 | Total Year 1 | $0-$6K | $24K-$200K | $12K-$100K | $0-$12K |
 
-**Verdict: Estimated major advantage** — roughly 10-100x cheaper than NetSuite list
-price; not a measured benchmark.
+**Verdict: Estimated major advantage** — roughly 4x–30x lower Year 1 cost than
+NetSuite's reported range on the table's assumptions; not a measured benchmark.
 
 ### 7. Customization
 
@@ -207,7 +225,7 @@ kernel-only.
 2. **Open source** — Full code access, no vendor lock-in
 3. **Modern stack** — Elixir/Phoenix, fast and scalable
 4. **Verified codebase** — 308 sabotages, generative proof
-5. **Cost** — estimated 10-100x cheaper than enterprise ERP list price; not benchmarked
+5. **Cost** — estimated 4x–30x lower Year 1 cost than NetSuite's reported range; not benchmarked
 6. **Self-hosted** — Full data control
 7. **Security** — Advanced PII vaulting, crypto-shred
 
@@ -248,7 +266,7 @@ kernel-only.
 
 ### Temporary Advantages
 1. **Speed to market** — AI-native architecture; host AI surfaces pending
-2. **Cost structure** — estimated list-price room to undercut; not a measured benchmark
+2. **Cost structure** — estimated room to undercut reported entry pricing; not a measured benchmark
 3. **Flexibility** — Self-hosted option
 
 ## Recommended Strategy
