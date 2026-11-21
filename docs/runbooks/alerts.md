@@ -11,7 +11,7 @@ matches) until egress is enabled.
 | Oban backlog | `samen.oban.job.queue_time` (event `[:samen,:oban,:job,:stop]`) + `oban_jobs` backlog count | p95 queue_time > 30s, OR backlog > 500 in a queue | p95 queue_time > 2m sustained 5m, OR `erasure`/`reveal` backlog > 50 | this file, §1 |
 | Discarded jobs | `oban_jobs` state=`discarded`, or `[:samen,:oban,:job,:stop]` result=`:error` rate | >5/hr outside `erasure`/`reveal` | ANY discarded job in `erasure` or `reveal` | this file, §2 |
 | Seal-lag | `[:samen,:audit_chain,:verify]` recency; `[:samen,:break_glass,:unanchored]` age | no verify success in 30m; unanchored entry > 20m | no verify success in 60m; ANY `[:samen,:audit_chain,:tamper]` | this file, §3; [breach-notification.md](breach-notification.md) |
-| KMS error rate | wrap/unwrap failure rate on `Samen.Kms.AwsKmsDynamo`; `/readyz` `:kms` check | any failures, non-sustained | ANY sustained KMS failure > 1m | this file, §4 |
+| KMS / keystore errors | `Samen.Kms.FileBacked` failures (unreadable/missing `SAMEN_KMS_KEY_DIR`, missing/corrupt `master.key` or DEK, disk full); `/readyz` `:kms` check | any failures, non-sustained | ANY sustained failure > 1m, OR a missing/replaced `master.key` (fresh master = logins break) | this file, §4 |
 | `/readyz` failing | `GET /readyz` 503 (`Samen.Web.Readiness.check/1`) | single flaky 503 | 503 sustained > 2m OR any machine failing Fly's health check | this file, §5 |
 | Pool saturation | `samen.pool.saturation.events` (event `[:samen,:pool,:saturation]`, default threshold 50ms checkout wait) | events present, low rate | sustained rate increase over baseline | this file, §6 |
 
@@ -78,30 +78,62 @@ First response:
 5. Once the worker resumes, confirm a clean `[:samen,:audit_chain,:verify]` for the affected org(s) before closing.
 6. Document the gap window (start of lag → resolution) — it matters if a breach investigation later needs to know when integrity attestation was degraded.
 
-## 4. KMS error rate
+## 4. KMS / keystore errors
 
-Prod KMS adapter is `Samen.Kms.AwsKmsDynamo` (AWS KMS wrap/unwrap of per-subject DEKs +
-DynamoDB wrapped-DEK store). Config: `SAMEN_KMS_KEY_ID`, `SAMEN_KMS_REGION`. The vault is
-**fail-closed** — a KMS failure means reads/writes of vaulted PII fields error rather than
-leak plaintext, so any sustained KMS failure is directly user-facing.
+Prod uses `Samen.Kms.FileBacked`, selected by `SAMEN_KMS_ADAPTER=file_backed`
+(default) with `SAMEN_KMS_KEY_DIR=/app/data/kms_keys` on a persistent volume. It
+reads local files, not AWS: `<key_dir>/master.key`, `subjects/*.dek`, and
+`subjects/*.tombstone`. The vault is **fail-closed** — unreadable key material makes
+vaulted reads/writes error rather than leak plaintext, so a sustained failure is
+directly user-facing.
 
-- **Warn:** any wrap/unwrap failures observed, not yet sustained.
-- **Page:** sustained KMS failure > 1m. Cross-check `/readyz`'s `:kms` component — a `/readyz`
-  503 with `kms: {:error, _}` corroborates this at the probe level (§5).
+Failure modes to distinguish:
+
+- **Wrong/unmounted `SAMEN_KMS_KEY_DIR`** — if the path is creatable, the adapter
+  mints a NEW `master.key` and new DEKs. Existing ciphertext cannot be unwrapped and
+  `sys:bidx` changes, so every email login stops resolving. This can look healthy at
+  first; treat it as data-access loss, not a transient error.
+- **Directory not writable by uid 1000** — `init!/0` raises; vault writes fail.
+- **Missing/truncated/corrupt `master.key`** — `unwrap/1` returns
+  `{:error, :unavailable}`.
+- **Disk full / I/O error** — reads and writes fail. A detached volume usually
+  behaves like the wrong/unmounted path above.
+
+`/readyz`'s `:kms` check is `attest/1` on a synthetic absent subject. For `FileBacked`
+an empty or missing directory still attests `{:ok, :absent}`, so **a green `/readyz`
+does not prove `master.key` exists**. When logins fail, inspect the directory itself.
+
+- **Warn:** any `:kms` failure, or a `/readyz` 503 with `kms: {:error, _}`.
+- **Page:** sustained failure > 1m, OR evidence that `master.key` is missing/empty or
+  was replaced (a new master was minted) — that is unrecoverable without the backup.
 
 First response:
-1. Check AWS KMS and DynamoDB service health (AWS Health Dashboard) for the configured `SAMEN_KMS_REGION`.
-2. Verify `SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION` are still correct and the key isn't disabled/scheduled for deletion (AWS Console → KMS → key state).
-3. Check IAM: the deploying role/credential still has `kms:Encrypt`/`kms:Decrypt`/`kms:GenerateDataKey` on the key, and DynamoDB table access for the wrapped-DEK store.
-4. Confirm `/readyz` is failing closed as expected (503, not a false 200) — this is correct behavior, not a bug to work around.
-5. If AWS-side and healthy, check network egress from the Fly app to AWS (VPC peering / firewall changes).
-6. Do not attempt a workaround that bypasses the vault chokepoint — there is no degraded path that manufactures plaintext by design; wait for KMS to recover or engage AWS support.
+1. Hit `/readyz` and read the `kms` component; then inspect the keystore directly.
+2. Confirm `SAMEN_KMS_KEY_DIR` is the mounted volume, not the container filesystem:
+   `ls -la` it in the running Machine (or a throwaway Machine with the volume mounted).
+   Check `master.key` is 32 bytes and mode 600, and `subjects/` is populated.
+3. If the directory is empty/new, **stop serving logins** and restore the volume or
+   the off-host backup before letting the app mint more keys. Do not delete or replace
+   `master.key`; the next keystore use against an empty dir mints another new master.
+4. If ownership is wrong, `chown 1000:1000` the directory (the deployment guide does
+   this before the first deploy) and restart; then verify `/readyz` and a real login.
+5. If the volume is full or detached, grow or reattach it before restarting.
+6. Do not "fail over" to `aws_kms_dynamo`: it is a boot-refusing skeleton. Do not
+   bypass the vault chokepoint; there is no degraded path that manufactures plaintext.
+
+**AWS path is future work:** `Samen.Kms.AwsKmsDynamo` is not a production fallback
+today (`Samen.Kms.assert_prod_adapter_ready!/0` refuses it in prod). The
+`SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION` variables belong to the `mix samen.gen.app --deploy`
+template, not `samenerp`; this host reads `SAMEN_KMS_AWS_REGION` and
+`SAMEN_KMS_DYNAMO_TABLE` only if that skeleton is selected.
 
 ## 5. `/readyz` failing
 
-`Samen.Web.Readiness.check/1` probes Repo `SELECT 1`, KMS store attest, and Oban liveness →
-200/503. `/healthz` is a separate static-200 liveness check (proves the BEAM is up, nothing
-more). Fly's `[[http_service.checks]]` gates traffic on the readiness check.
+`Samen.Web.Readiness.check/1` probes Repo `SELECT 1`, the configured KMS adapter's
+`attest/1`, and Oban liveness → 200/503. For `FileBacked`, `attest/1` is a file-presence
+check: a green `:kms` does not prove `master.key` exists (see §4). `/healthz` is a
+separate static-200 liveness check (proves the BEAM is up, nothing more). Fly's
+`[[http_service.checks]]` gates traffic on the readiness check.
 
 - **Warn:** a single flaky 503 (one probe cycle).
 - **Page:** 503 sustained > 2m, or any machine failing Fly's health check and being pulled from rotation.

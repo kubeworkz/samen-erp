@@ -2,19 +2,22 @@
 
 Rotation procedures for the fail-closed secret set a deployed Samen app reads at boot
 (`config/runtime.exs`, ADR-024/AC-G16-2): `DATABASE_URL`, `SECRET_KEY_BASE`, `PHX_HOST`,
-`SAMEN_KMS_KEY_ID`, `SAMEN_KMS_REGION` — plus the per-webhook HMAC signing secret, which is
-vaulted data, not an env var. Also see the generated per-app [`deploy.md`](deploy.md) for the
-original secrets checklist.
+and the file-backed KMS configuration (`SAMEN_KMS_ADAPTER`, `SAMEN_KMS_KEY_DIR`) — plus the
+per-webhook HMAC signing secret, which is vaulted data, not an env var. Also see the
+generated per-app [`deploy.md`](deploy.md) for the original secrets checklist.
 
-**Fail-closed contract:** `config/runtime.exs` **raises** a named error on any missing or
-empty secret at boot. Never unset a secret before its replacement is set and confirmed — a
-gap boots nothing.
+**Fail-closed contract:** `config/runtime.exs` **raises** a named error on a missing
+`DATABASE_URL` or `SECRET_KEY_BASE`, and on an unknown `SAMEN_KMS_ADAPTER`. (`PHX_HOST`
+defaults to `localhost` if unset — set it explicitly in production.) KMS reads fail
+closed at the adapter: unreadable key material returns `{:error, :unavailable}` rather
+than falling back to plaintext. Never unset a DB/auth secret before its replacement is
+set and confirmed.
 
 | Secret | Where set | Rotation trigger | Downtime/impact | Steps |
 |---|---|---|---|---|
 | `DATABASE_URL` | `fly secrets` (Neon connection string) | Credential compromise, scheduled rotation, Neon role change | Zero, if rolled per §1 | §1 |
 | `SECRET_KEY_BASE` | `fly secrets` | Compromise, scheduled rotation | Invalidates existing sessions/signed cookies — forced re-login | §2 |
-| `SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION` | `fly secrets` | CMK rotation/replacement, region migration | High-risk if changing to a **different** key — requires DEK re-wrap | §3 |
+| `SAMEN_KMS_ADAPTER` / `SAMEN_KMS_KEY_DIR` | `fly secrets` (or `fly.toml`) | Volume migration; keystore replacement | Losing or replacing `master.key` makes all existing vaulted data unreadable and breaks email login; no in-place master-key rotation is implemented | §3 |
 | Webhook HMAC signing secret (`pii_wh_signing_secret`) | Vaulted per-webhook field, minted via governed Primitives webhook resource | Compromise, scheduled rotation, consumer offboarding | Per-webhook; old signature verification breaks for that endpoint once retired | §4 |
 | Provider API keys (e.g. `SAMEN_RESEND_API_KEY`) | `.env.production.local` on the app server (docker compose `env_file`) — NOT `fly secrets` | Key leak, staff offboarding, scheduled rotation | Zero — healthz-gated container recreate (~5s) | §5 |
 
@@ -48,38 +51,65 @@ assuming otherwise).
 4. Communicate the impact ahead of the window if this is a synchronous cutover — every logged-in user is signed out and any outstanding signed URL/token (e.g. email confirmation links) becomes invalid.
 5. Confirm `/readyz` and a fresh login flow work post-rotation.
 
-## 3. KMS (`SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION`)
+## 3. KMS key store (`SAMEN_KMS_ADAPTER` / `SAMEN_KMS_KEY_DIR`)
 
-This is the vault master-key context for `Samen.Kms.AwsKmsDynamo`: per-subject DEKs are
-wrapped by the configured CMK, and unwrapped through it on every governed read. There are two
-very different operations hiding under "KMS rotation" — treat them differently:
+`samenerp` runs `Samen.Kms.FileBacked` in production: `SAMEN_KMS_ADAPTER=file_backed`
+(the default) and `SAMEN_KMS_KEY_DIR=/app/data/kms_keys` on a persistent volume. That
+directory is the external wrapped-DEK store:
 
-- **AWS-native CMK key rotation** (automatic annual rotation, or manual re-key of the *same*
-  key ARN) — AWS re-wraps the key material internally; `SAMEN_KMS_KEY_ID` does not change and
-  existing wrapped DEKs remain valid. This is the low-risk, routine case; no app-side action
-  needed beyond confirming AWS rotation is enabled on the key.
-- **Changing `SAMEN_KMS_KEY_ID` to a genuinely different key** (new CMK, region migration,
-  key replacement after suspected compromise) — every existing wrapped DEK in the DynamoDB
-  store was wrapped by the OLD key. Pointing the app at a new key ID without re-wrapping means
-  every existing subject's DEK becomes unwrappable — a fail-closed outage on every vaulted
-  field read for that subject, not a graceful fallback.
+    <key_dir>/master.key                    32 random bytes — the CMK stand-in, minted on first use
+    <key_dir>/subjects/<subject>.dek        per-subject wrapped DEK
+    <key_dir>/subjects/<subject>.tombstone  positive shred attestation
 
-For the second case:
+`SAMEN_KMS_FILE_PATH` is vestigial; the adapter ignores it. Keep the directory outside
+Postgres dumps and outside the repo.
 
-1. Treat this as a **careful, staged, drill-first operation** — do not attempt it live on a
-   production key for the first time. Apply the same philosophy as
-   [pitr-gameday.md](pitr-gameday.md): rehearse the full re-wrap procedure against a
-   non-production KMS key + DynamoDB table first, and only promote to production once the
-   drill is clean.
-2. Plan the re-wrap: for every existing wrapped-DEK record, unwrap with the OLD key, wrap with
-   the NEW key, write back — an online migration, not a config flip. Do this BEFORE changing
-   `SAMEN_KMS_KEY_ID` in the running app, or run it in a mode that accepts both keys during the
-   transition (unwrap-tries-old-then-new) if the adapter supports it.
-3. Confirm IAM grants `kms:Decrypt` on the OLD key and `kms:Encrypt`/`kms:GenerateDataKey` on
-   the NEW key to the migration runner for the duration of the re-wrap.
-4. Only after every wrapped DEK is confirmed re-wrapped under the new key: `fly secrets set SAMEN_KMS_KEY_ID=<new-id> SAMEN_KMS_REGION=<region>`.
-5. Watch `/readyz`'s `:kms` check and the KMS error-rate alert ([alerts.md](alerts.md) §4) closely through the rollout.
-6. Keep the old CMK enabled (not scheduled for deletion) for a safety window after cutover, in case a re-wrap gap surfaces.
+**There is no supported master-key rotation.** Every DEK is wrapped under the single
+`master.key`; the adapter has no rotate/re-wrap callback, and `init!/0` only mints a
+master when none exists. Deleting, truncating or replacing `master.key` makes every
+existing DEK unwrappable: vaulted reads fail closed, and blind-index (`email_bidx`)
+lookups stop matching because `sys:bidx` was derived under a different key. Treat
+`master.key` as immutable key material, not a secret to roll on a schedule.
+
+**Back up the whole directory out-of-band.** It is not in the Postgres dump, and the
+adapter reports continuous backup/PITR disabled (`backups_disabled?/0` is true) — any
+copy is operator-supplied. Store an encrypted, access-controlled copy off-host and
+rehearse restoring it into a scratch volume. A restore must put back the exact
+`master.key` and `subjects/` tree; restoring only Postgres brings back ciphertext
+without keys.
+
+**Moving the keystore** (new volume or host) is a copy, not a rotation: stop writes,
+copy the entire directory with `master.key` and `subjects/` intact, point
+`SAMEN_KMS_KEY_DIR` at the new mount, restart, and verify `/readyz` plus a real login.
+Do not repoint an existing deployment at an empty directory — it mints a new master
+and silently starts a new blind-index key, orphaning the old ciphertext. A first-ever
+deploy is different: with no existing data, the empty volume is expected and the first
+keystore use mints the initial master. `/readyz`'s `:kms` check is an `attest/1`
+file-presence probe, so for `FileBacked` a green result does not prove `master.key`
+exists; check the directory itself.
+
+**Per-subject key destruction** is the supported destructive operation:
+`Samen.Erasure.shred/2` removes the DEK and writes a positive tombstone. It is
+irreversible and governed; never delete `.dek` files by hand. This is the per-subject
+destruction half of the KMS drill in [launch-checklist.md](../launch-checklist.md) §6;
+master-key rotation remains future work.
+
+**Lost or compromised key material.** If `master.key` is lost, restore the exact
+directory from backup; without a backup the data is unrecoverable by design
+(crypto-shred), so treat it as data loss. If compromise is suspected, treat it as a
+breach (the key can decrypt existing data) and follow
+[breach-notification.md](breach-notification.md); the only remediation is re-encrypting
+under a new keystore, and there is no built-in re-wrap migration — that is a planned
+migration, not a `fly secrets set`.
+
+**AWS path is future work.** `SAMEN_KMS_ADAPTER=aws_kms_dynamo` selects
+`Samen.Kms.AwsKmsDynamo`, which is a boot-refusing skeleton:
+`Samen.Kms.assert_prod_adapter_ready!/0` refuses production until its ADR-001 §8.2
+obligations are implemented and its `__kms_skeleton__?/0` marker is removed. The
+`SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION` names belong to the `mix samen.gen.app --deploy`
+template, not this runtime; `samenerp` reads `SAMEN_KMS_AWS_REGION` and
+`SAMEN_KMS_DYNAMO_TABLE` only when that skeleton is selected. Do not plan a rotation
+around it until it boots and has a real re-wrap procedure.
 
 ## 4. Webhook HMAC signing secret
 
