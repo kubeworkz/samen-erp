@@ -296,12 +296,29 @@ defmodule Samenerp.Seeds do
 
   Idempotent, and bounded by the host directory (the operator seat is excluded by
   `Samenerp.Directory.orgs/0`).
+
+  It ALSO repairs the other half of the book's history: account rows the console created
+  BEFORE it minted their Bridge-B tenant back-reference exist with `slug: nil`, so they list
+  but cannot be opened (ADR-010 §3.3). `Samen.Web.Operator.backfill_tenant_back_references!/1`
+  stamps exactly those rows with their own id and never touches an already-stamped row, so
+  this boot sweep is safe to replay.
   """
   @spec backfill_operator_accounts!() :: :ok
   def backfill_operator_accounts! do
     Enum.each(Samenerp.Directory.orgs(), fn {org_id, _name} ->
       :ok = ensure_operator_account!(org_id)
     end)
+
+    Samen.Web.Operator.backfill_tenant_back_references!(operator_identity_mount())
+  end
+
+  # The identity namespace as THIS host mounts it — the same namespace/repo the operator
+  # router mounts, with the operator org pinned explicitly (a boot sweep must not depend on
+  # app-env resolution order).
+  defp operator_identity_mount do
+    Mount.new(:identity, Samenerp.Operator, Samenerp.Repo,
+      labels: %{operator_org_id: @operator_org_id}
+    )
   end
 
   defp approval_policy(org_id) do

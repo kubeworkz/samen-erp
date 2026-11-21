@@ -32,6 +32,8 @@ defmodule Samen.Web.Operator do
   (masked). `scope/1` therefore always produces the operator org on the TENANT plane.
   """
 
+  require Ash.Query
+
   alias Samen.Web.{Mount, Plane}
 
   @doc """
@@ -77,6 +79,55 @@ defmodule Samen.Web.Operator do
     do: Plane.scope(plane, org_id(mount))
 
   def scope(%Mount{} = mount), do: Plane.scope(Plane.tenant(), org_id(mount))
+
+  @doc """
+  Stamp the Bridge-B tenant back-reference (`Org.slug = Org.id`) on operator-book ACCOUNT
+  rows that predate the console minting it at creation (ADR-010 §3.3).
+
+  An operator-created account IS its own tenant org — the id its workspace is provisioned
+  under — so a legacy row's missing `slug` is repaired to its OWN id, never to a second
+  minted tenant. Every account-addressed surface keys on `Org.slug` (`Reads.account_row/2`
+  → `tenant_org_id`, the "Open account →" POST and the masked impersonate link,
+  `Reads.account_for_tenant/3` drill-in back-links), so a row without one lists but cannot
+  be opened.
+
+  Writes ONLY `slug IS NULL` rows: an already-stamped row (a signup mirror, whose slug is
+  the TENANT org's id, or an account the console created after the mint) is left
+  byte-untouched, so replaying this on every boot is safe. The operator org itself is not
+  an account and is never stamped.
+
+  Raises when the mount names no operator org OR a stamp fails: an unrepaired legacy row
+  must never read as success. Returns `:ok` (including when nothing needs repair).
+
+  Boot wiring: `Samenerp.Seeds.backfill_operator_accounts!/0` calls this on every boot for
+  the host's identity namespace, alongside the tenant-org mirror. It is the repair half of
+  the mint `Samen.Web.Operator.AccountsLive` performs at creation.
+  """
+  @spec backfill_tenant_back_references!(Mount.t()) :: :ok
+  def backfill_tenant_back_references!(%Mount{} = mount) do
+    case org_id(mount) do
+      nil ->
+        raise ArgumentError,
+              "cannot backfill tenant back-references: this mount names no operator org"
+
+      operator_org_id ->
+        Mount.resource(mount, Org)
+        |> Ash.Query.filter(
+          org_id == ^operator_org_id and id != ^operator_org_id and is_nil(slug)
+        )
+        |> Ash.read!(authorize?: false)
+        |> Enum.each(fn org ->
+          # `:update` is `OrgIsSelf`-gated and these rows are OTHER orgs' anchors; the write
+          # is provisioning (the same authorization posture the console's create-mint and
+          # the identity anchor's other provisioning writes use), never client input.
+          org
+          |> Ash.Changeset.for_update(:update, %{slug: org.id}, authorize?: false)
+          |> Ash.update!()
+        end)
+    end
+
+    :ok
+  end
 
   @doc """
   WHERE an operator's act-as crossing LANDS — the `return_to` both operator act-as affordances

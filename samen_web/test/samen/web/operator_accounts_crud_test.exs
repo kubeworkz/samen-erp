@@ -145,6 +145,48 @@ defmodule Samen.Web.OperatorAccountsCrudTest do
     assert rendered =~ "impersonate-account"
   end
 
+  test "the boot backfill stamps a legacy slug-nil account so it opens, and leaves an already-stamped row untouched" do
+    op = seed_operator_org()
+    mount = build_operator_mount(op.id)
+
+    # The legacy shape (created before the console minted the reference), plus an
+    # ALREADY-STAMPED account in the SIGNUP-MIRROR shape: its slug is the TENANT org's id,
+    # never its own — so a repair that rewrote it would be visible.
+    [legacy, already_stamped] = seed_accounts(op.id, 2)
+
+    already_stamped =
+      already_stamped
+      |> Ash.Changeset.for_update(:update, %{slug: "tenant-#{already_stamped.id}"},
+        authorize?: false
+      )
+      |> Ash.update!()
+
+    # RED — the legacy row lists but has no act-as/impersonate handle (the reported gap);
+    # the stamped row is already openable.
+    rendered = html(mount_socket(mount))
+    assert rendered =~ "Account 01"
+    refute rendered =~ "/session/org/#{legacy.id}"
+    refute rendered =~ "?org=#{legacy.id}"
+    assert rendered =~ "/session/org/#{already_stamped.slug}"
+
+    assert :ok = Samen.Web.Operator.backfill_tenant_back_references!(mount)
+
+    # GREEN — the legacy row's missing back-reference is its OWN id...
+    assert Ash.get!(Op.Org, legacy.id, authorize?: false).slug == legacy.id
+
+    # ...and the already-stamped row still carries ITS tenant id, not its own: untouched.
+    assert Ash.get!(Op.Org, already_stamped.id, authorize?: false).slug == already_stamped.slug
+
+    rendered = html(mount_socket(mount))
+    assert rendered =~ "/session/org/#{legacy.id}?return_to="
+    assert rendered =~ "?org=#{legacy.id}"
+
+    # Replaying the boot sweep changes nothing.
+    assert :ok = Samen.Web.Operator.backfill_tenant_back_references!(mount)
+    assert Ash.get!(Op.Org, legacy.id, authorize?: false).slug == legacy.id
+    assert Ash.get!(Op.Org, already_stamped.id, authorize?: false).slug == already_stamped.slug
+  end
+
   test "RED PATH (AC-G1-2): an INVALID submit (missing required name) shows inline errors and persists NOTHING" do
     op = seed_operator_org()
     socket = mount_socket(build_operator_mount(op.id)) |> event("new_account", %{})

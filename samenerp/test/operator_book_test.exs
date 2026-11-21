@@ -124,6 +124,54 @@ defmodule Samenerp.OperatorBookTest do
     assert :ok = Samenerp.Seeds.ensure_operator_account!(operator_org_id)
   end
 
+  test "the boot backfill stamps a legacy operator-created account's back-reference, and only that",
+       %{operator_org_id: operator_org_id} do
+    # The pre-fix console shape: an account row that IS the tenant org but carries no slug.
+    legacy =
+      Op.Org
+      |> Ash.Changeset.for_create(
+        :create,
+        %{org_id: operator_org_id, name: "Legacy Console Account", plan: "growth"},
+        authorize?: false
+      )
+      |> Ash.create!(authorize?: false)
+
+    # An already-stamped row in the SIGNUP-MIRROR shape (slug = a TENANT org's id): if the
+    # repair rewrote it to its own id it would be visible here.
+    mirror =
+      Op.Org
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: operator_org_id,
+          name: "Mirror Account",
+          plan: "free",
+          slug: "tenant-legacy-account-id"
+        },
+        authorize?: false
+      )
+      |> Ash.create!(authorize?: false)
+
+    assert legacy.slug == nil
+
+    assert :ok = Samenerp.Seeds.backfill_operator_accounts!()
+
+    assert Ash.get!(Op.Org, legacy.id, authorize?: false).slug == legacy.id
+
+    # The repaired row is now OPENABLE at the read layer — the console puts `slug` behind
+    # "Open account →" as `tenant_org_id`.
+    assert Enum.any?(console_items(operator_org_id), fn account ->
+             account.id == legacy.id and account.tenant_org_id == legacy.id
+           end)
+
+    assert Ash.get!(Op.Org, mirror.id, authorize?: false).slug == mirror.slug
+
+    # Idempotent on the next boot.
+    assert :ok = Samenerp.Seeds.backfill_operator_accounts!()
+    assert Ash.get!(Op.Org, legacy.id, authorize?: false).slug == legacy.id
+    assert Ash.get!(Op.Org, mirror.id, authorize?: false).slug == mirror.slug
+  end
+
   test "the boot backfill repairs tenants that predate the hook",
        %{operator_org_id: operator_org_id} do
     legacy = tenant_org!("Legacy")
