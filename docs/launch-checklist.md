@@ -67,25 +67,46 @@ The Stripe mirror schema is real; `SyncAdapter.Stub` returns `{:ok, %{stub: true
 
 ## 4 · Secrets & KMS — real key material **[BLOCKER]**
 
-- [ ] **KMS.** Dev uses a file-backed keystore (`priv/dev_keystore/`, gitignored). Production
-      MUST inject AWS KMS (+ DynamoDB wrapped-DEK store + S3 Object-Lock) via the deploy runtime.
-      The generated `config/runtime.exs` RAISES on missing `SAMEN_KMS_*` (ADR-024) — it will not
-      boot half-configured.
+- [ ] **KMS — first-ever deploy.** Production uses the file-backed keystore:
+      `SAMEN_KMS_ADAPTER=file_backed` (the default) and
+      `SAMEN_KMS_KEY_DIR=/app/data/kms_keys` on a persistent volume (Fly `[mounts]`).
+      A fresh volume is expected to be empty: the first keystore use mints `master.key`
+      and `subjects/`. Set the directory's owner to the app uid before first boot
+      (`chown 1000:1000` from a throwaway Machine with the volume mounted). See
+      `docs/deployment-guide.md` (Fly volume/KMS steps) and
+      `docs/runbooks/secrets-rotation.md` §3.
+- [ ] **KMS — moving an existing keystore.** Copy the entire directory, including
+      `master.key` and `subjects/`, to the new volume; point `SAMEN_KMS_KEY_DIR` at it;
+      restart and verify `/readyz` plus a real login. Never repoint an existing
+      deployment at an empty directory — it mints a new master and orphans the old
+      ciphertext.
+- [ ] **Do not use the AWS adapter as a shortcut.** `aws_kms_dynamo` is a boot-refusing
+      skeleton: injecting `SAMEN_KMS_KEY_ID` / `SAMEN_KMS_REGION` does not make it boot.
+      The `mix samen.gen.app --deploy` template is still AWS-specific (it requires those
+      keys and selects that skeleton), so it cannot be used unmodified for a production
+      launch; use the committed `samenerp` file-backed `config/runtime.exs` pattern,
+      or implement the AWS adapter first — until that guard is removed, file-backed is
+      the only production-usable adapter.
 - [ ] **`SECRET_KEY_BASE` / `DATABASE_URL` / `PHX_HOST`.** Injected from the environment by the
-      deploy runtime (it raises naming any missing secret). Never commit them.
-- [ ] Confirm `/readyz` returns 200 only when Postgres + the KMS wrapped-DEK store + Oban all
-      answer (it is the deploy traffic gate; `/healthz` stays a static liveness 200).
+      deploy runtime; never commit them. (`PHX_HOST` defaults to `localhost`, so set it
+      explicitly in production.)
+- [ ] Confirm `/readyz` returns 200 only when Postgres, the configured KMS adapter's
+      `attest/1`, and Oban all answer (it is the deploy traffic gate; `/healthz` stays a
+      static liveness 200). For `FileBacked`, `attest/1` is a file-presence probe, so a
+      green result does not prove `master.key` exists — verify a real login too.
 
 ## 5 · Deploy **[BLOCKER]**
 
-- [ ] Generate/adopt the deploy artifacts (`mix samen.gen.app --deploy` or the committed
-      `fly.toml`/`runtime.exs` pattern); front the endpoint with TLS; point `DATABASE_URL` at a
-      managed Postgres (Neon) branch. See `docs/adr/ADR-024-*` and the generated `runbook.md`.
+- [ ] Generate/adopt the deploy artifacts (`mix samen.gen.app --deploy` with its KMS
+      config switched to `file_backed`, or the committed `samenerp` `config/runtime.exs`
+      pattern); front the endpoint with TLS; point `DATABASE_URL` at a managed Postgres
+      (Neon) branch. See `docs/adr/ADR-024-*` and the generated `runbook.md`.
 
 ## 6 · Production drills **[DRILL]**
 
 - [ ] **Neon PITR** restore drill (the crypto-shred game-day rehearses the erasure math locally).
-- [ ] **KMS key rotation / destruction** rehearsal against the real store.
+- [ ] **KMS destruction** rehearsal against the real store (per-subject
+      `Samen.Erasure.shred/2`; the file-backed adapter has no master-key rotation/re-wrap).
 - [ ] **ClickHouse ClickPipes** activation if you use the CDC analytics tier.
 
 ---
@@ -93,6 +114,6 @@ The Stripe mirror schema is real; `SyncAdapter.Stub` returns `{:ok, %{stub: true
 ## The honest boundary, restated
 
 Every item above is a place where samen **refuses rather than pretends**: an unconfigured ESP
-blocks the send, a stubbed Stripe sync is labeled, a missing KMS secret raises at boot, and — as
-of F2 — an unauthenticated prod request gets no actor. The launch gate is walking this list until
+blocks the send, a stubbed Stripe sync is labeled, the AWS KMS skeleton refuses prod boot,
+and — as of F2 — an unauthenticated prod request gets no actor. The launch gate is walking this list until
 each fail-honest boundary is backed by the real provider you bring.
