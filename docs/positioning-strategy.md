@@ -58,7 +58,7 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 - **Profile:** Project-based work, client billing
 - **Pain points:** Need project management + accounting, want modern UX
 - **Value prop:** All-in-one with a governed AI kernel; host AI UI pending
-- **Price:** $50-200/month SaaS
+- **Price:** $50/user/month SaaS (Pro; target)
 
 ### Segment 3: SaaS Companies (Tertiary)
 - **Size:** 10-200 employees
@@ -66,7 +66,7 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 - **Profile:** Subscription businesses, high growth
 - **Pain points:** Need billing + usage tracking, want API-first
 - **Value prop:** Built for SaaS metrics, API-native
-- **Price:** $100-500/month SaaS
+- **Price:** $50-$100/user/month SaaS (Pro/Enterprise; target)
 
 ## Competitive Positioning
 
@@ -146,9 +146,14 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 - **Enterprise license** — $500/month for premium support
 
 ### SaaS (Hosted)
-- **Free tier** — 1 user, 100 API calls/month
-- **Pro** — $50/user/month, 10,000 API calls/month
-- **Enterprise** — $100/user/month, unlimited API calls
+
+> API allowances are **unenforced target limits**: plan-based API/AI rate limiting is
+> an unwired shell, so no quota is enforced today. Segment prices above use the same
+> per-user basis as these plans.
+
+- **Free tier** — 1 user; 100 API calls/month (target, unenforced)
+- **Pro** — $50/user/month; 10,000 API calls/month (target, unenforced)
+- **Enterprise** — $100/user/month; unlimited API calls (target, unenforced)
 
 ### AI Features (target)
 - **Bring your own HuggingFace key** — host key flow and credential sweep are not wired; this is a target, not a billable feature.
