@@ -12,15 +12,26 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 
 ## Competitive Landscape
 
+> **Market-figure basis (2026-11-21).** Revenue and headcount are rounded, directional
+> estimates for segmentation, not audited product-line disclosures. Public-company
+> reference points: [Oracle](https://investor.oracle.com/),
+> [SAP](https://www.sap.com/investors/en.html),
+> [Microsoft](https://www.microsoft.com/en-us/investor),
+> [Intuit](https://investors.intuit.com/), and
+> [Xero](https://www.xero.com/investors/); those groups generally do not break out the
+> named product line. Headcount is not a consistent denominator — some rows are
+> product estimates, others group-level proxies. Odoo, Frappe/ERPNext, Katana, Mrpeasy
+> and FreshBooks are private/open-source planning estimates. Recheck before external use.
+
 ### Tier 1: Enterprise ERP (Not Our Market)
-| Competitor | Revenue | Employees | Target |
+| Competitor | Revenue (est.) | Employees (est.) | Target |
 |---|---|---|---|
 | NetSuite (Oracle) | $3B+ | 10,000+ | Mid-market to enterprise |
 | SAP Business One | $5B+ | 100,000+ (SAP group total) | Mid-market |
 | Microsoft Dynamics | $10B+ | 200,000+ (Microsoft group total) | Enterprise |
 
 ### Tier 2: Mid-Market ERP (Our Competition)
-| Competitor | Revenue | Employees | Target |
+| Competitor | Revenue (est.) | Employees (est.) | Target |
 |---|---|---|---|
 | Odoo | $500M+ | 5,000+ | SMB to mid-market |
 | ERPNext | $50M+ | 500+ | Small business |
@@ -28,7 +39,7 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 | Mrpeasy | $20M+ | 200+ | Manufacturing |
 
 ### Tier 3: Accounting Only (Partial Overlap)
-| Competitor | Revenue | Employees | Target |
+| Competitor | Revenue (est.) | Employees (est.) | Target |
 |---|---|---|---|
 | QuickBooks | $5B+ | 10,000+ | Small business |
 | Xero | $1B+ | 5,000+ | Small business |
@@ -300,7 +311,11 @@ kernel-only.
 - AI-native teams
 - Cost-sensitive SMBs
 
-## Market Sizing
+## Market Sizing (estimated)
+
+> **Basis (2026-11-21).** TAM/SAM/SOM are internal, rounded planning assumptions,
+> not third-party market research or a forecast. No external market study is cited;
+> SOM is a goal, not a committed outcome. Re-derive before external use.
 
 ### Total Addressable Market (TAM)
 - Global ERP market: $50B+ annually
