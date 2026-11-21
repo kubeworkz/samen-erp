@@ -445,6 +445,10 @@ defmodule Samen.Web.ErpApPaymentRunTest do
                }
              )
 
+    assert artifact.rail == :eft_cad
+    assert artifact.file_creation_number == "0042"
+    assert artifact.name == "eft-NOV-CAD-ART.txt"
+
     html = render(open(paid.id))
 
     assert html =~ "Stored payment files"
