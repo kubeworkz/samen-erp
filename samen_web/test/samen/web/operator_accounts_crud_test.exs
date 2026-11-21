@@ -33,7 +33,9 @@ defmodule Samen.Web.OperatorAccountsCrudTest do
   defp seed_operator_org do
     org =
       Op.Org
-      |> Ash.Changeset.for_create(:create, %{name: "Samen SaaS, Inc.", plan: "operator"}, authorize?: false)
+      |> Ash.Changeset.for_create(:create, %{name: "Samen SaaS, Inc.", plan: "operator"},
+        authorize?: false
+      )
       |> Ash.create!()
 
     org
@@ -101,12 +103,46 @@ defmodule Samen.Web.OperatorAccountsCrudTest do
     assert rendered =~ ~s(id="new-account-form")
     assert rendered =~ ~s(name="form[name]")
 
-    socket = event(socket, "save_new", %{"form" => %{"name" => "Cascade Freight Co", "plan" => "growth"}})
+    socket =
+      event(socket, "save_new", %{"form" => %{"name" => "Cascade Freight Co", "plan" => "growth"}})
 
     refute socket.assigns.show_new
     assert account_count(op.id) == 1
     rendered = html(socket)
     assert rendered =~ "Cascade Freight Co"
+  end
+
+  test "a created account MINTS its tenant back-reference (slug = its own org id), so the row can be opened" do
+    op = seed_operator_org()
+    mount = build_operator_mount(op.id)
+
+    # The pre-fix shape, pinned: an account row with `slug: nil` lists but carries no act-as
+    # target — every account-addressed surface ("Open account →", masked impersonate, the
+    # drill-in back-links via `Reads.account_for_tenant/3`) keys on `Org.slug` (ADR-010
+    # Bridge-B). `seed_accounts/2` is that shape.
+    seed_accounts(op.id, 1)
+    seeded = html(mount_socket(mount))
+    assert seeded =~ "Account 01"
+    refute seeded =~ "impersonate-account"
+
+    socket =
+      mount_socket(mount)
+      |> event("new_account", %{})
+      |> event("save_new", %{"form" => %{"name" => "Cascade Freight Co", "plan" => "growth"}})
+
+    row = Enum.find(socket.assigns.page.items, &(&1.name == "Cascade Freight Co"))
+    account = Ash.get!(Op.Org, row.id, authorize?: false)
+
+    # An operator-created account IS a tenant org (its own id is what the provisioning seam
+    # provisions its workspace under), so the back-reference is its OWN id — not a second
+    # minted tenant row.
+    assert account.slug == account.id
+    assert account_count(op.id) == 2
+
+    # ...and the console row now renders the act-as/impersonate handles the slug unlocks.
+    rendered = html(socket)
+    assert rendered =~ "/session/org/#{account.id}?return_to="
+    assert rendered =~ "impersonate-account"
   end
 
   test "RED PATH (AC-G1-2): an INVALID submit (missing required name) shows inline errors and persists NOTHING" do

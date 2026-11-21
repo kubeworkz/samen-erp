@@ -118,6 +118,13 @@ defmodule Samen.Web.Operator.AccountsLive do
   def handle_event("save_new", %{"form" => params}, socket) do
     case AshPhoenix.Form.submit(socket.assigns.new_form, params: with_org(params, socket)) do
       {:ok, org} ->
+        # ADR-010 §3.3 (Bridge-B) — an operator-created account IS a tenant org (the create's
+        # per-org provisioning below runs on THIS row's id), so its tenant back-reference is
+        # its OWN id. Every account-addressed surface keys on `Org.slug`: "Open account →" and
+        # the masked impersonate link, `Reads.account_for_tenant/3` (drill-in back-links), and
+        # the fleet name-scope gate. A row created without one lists but cannot be opened.
+        org = stamp_tenant_back_reference(org)
+
         # WS-Notes Phase 6 — an operator-created account IS a tenant org, so it goes through the
         # SAME per-org provisioning seam the self-serve signup does (`Samen.Web.OrgProvisioning`:
         # this host's Pages search registry). Non-fatal and loud, never a rolled-back account.
@@ -136,6 +143,19 @@ defmodule Samen.Web.Operator.AccountsLive do
   end
 
   defp with_org(params, socket), do: Map.put(params, "org_id", socket.assigns.operator_org_id)
+
+  # The anchor CREATE is the domain's always-authorized action (a new org has no member to
+  # self-scope to), while `:update` is `OrgIsSelf`-gated — the just-created row's id is NOT
+  # the operator org's. Minting the back-reference is therefore part of account provisioning,
+  # written with the same authorization bypass the org anchor's other provisioning writes use
+  # (`Samen.Identity.Register`, `Samenerp.Seeds`), never a client-supplied value.
+  defp stamp_tenant_back_reference(%{slug: nil} = org) do
+    org
+    |> Ash.Changeset.for_update(:update, %{slug: org.id}, authorize?: false)
+    |> Ash.update!()
+  end
+
+  defp stamp_tenant_back_reference(org), do: org
 
   @impl true
   def render(assigns) do
