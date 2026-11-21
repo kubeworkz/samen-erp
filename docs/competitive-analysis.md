@@ -31,13 +31,13 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 |---|---|---|---|
 | Odoo | €620M (2025) | ~7,500 (2026) | SMB to mid-market |
 | ERPNext | Not disclosed | Not disclosed | Small business |
-| Katana MRP | €10.5M (2025) | ~47 (2026) | Manufacturing |
-| Mrpeasy | €6.8M (2025) | ~35 (2026) | Manufacturing |
+| Katana MRP | €10.5M (2025) | 47 (Q3 2026) | Manufacturing |
+| Mrpeasy | €6.8M (2025) | 34 (Q3 2026) | Manufacturing |
 
 ### Tier 3: Accounting Only (Partial Overlap)
 | Competitor | Revenue (latest) | Employees (latest) | Target |
 |---|---|---|---|
-| QuickBooks | $6.9B (FY2026) | 18,600 (Intuit group) | Small business |
+| QuickBooks | $6.9B (FY2026, accounting) | 18,600 (Intuit group) | Small business |
 | Xero | NZ$2.75B (FY2026) | 5,114 (FY2026) | Small business |
 | FreshBooks | Not disclosed | ~380 (2026 est.) | Freelancers |
 
@@ -45,16 +45,16 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 
 | Row | Revenue basis | Headcount basis |
 |---|---|---|
-| NetSuite (Oracle) | Not disclosed. Oracle reports NetSuite SaaS quarterly, not annually: **$1.1B in Q4 FY2026** (quarter ended 2026-05-31), which is not an annual figure. [Oracle Q4 FY26 slides](https://s23.q4cdn.com/440135859/files/doc_earnings/2026/q4/presentation/Presentation-Slides-Q4-26.pdf) | Not disclosed for NetSuite. **141,000** Oracle group full-time employees at 2026-05-31. [Oracle FY2026 10-K](https://www.sec.gov/Archives/edgar/data/1341439/000119312526277521/orcl-20260531.htm) |
-| SAP Business One | Not disclosed. SAP does not break out Business One; group revenue was **€36.8B** in FY2025. [SAP Integrated Report 2025](https://www.sap.com/docs/download/investors/2025/sap-2025-integrated-report.pdf) | Not disclosed for Business One. **111,397** SAP group headcount at 2025-12-31 (110,650 FTE). [SAP 2025 Form 20-F](https://www.sec.gov/Archives/edgar/data/1000184/000110465926020058/sap-20251231x20f.htm) |
+| NetSuite (Oracle) | Not disclosed. Oracle's Q4 FY2026 slide gives NetSuite revenue only for the quarter: **$1.1B** (quarter ended 2026-05-31); no annual product figure is given there. [Oracle Q4 FY26 slides](https://s23.q4cdn.com/440135859/files/doc_earnings/2026/q4/presentation/Presentation-Slides-Q4-26.pdf) | Not disclosed for NetSuite. **141,000** Oracle group full-time employees at 2026-05-31. [Oracle FY2026 10-K](https://www.sec.gov/Archives/edgar/data/1341439/000119312526277521/orcl-20260531.htm) |
+| SAP Business One | Not disclosed. No separately disclosed Business One revenue was located; group revenue was **€36.8B** in FY2025. [SAP Integrated Report 2025](https://www.sap.com/docs/download/investors/2025/sap-2025-integrated-report.pdf) | Not disclosed for Business One. **111,397** SAP group headcount at 2025-12-31 (110,650 FTE). [SAP 2025 Form 20-F](https://www.sec.gov/Archives/edgar/data/1000184/000110465926020058/sap-20251231x20f.htm) |
 | Microsoft Dynamics | **$9.006B** in FY2026 for "Dynamics products and cloud services". [Microsoft FY2026 10-K](https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm) | Not disclosed for Dynamics. **223,000** Microsoft group full-time employees at 2026-06-30. [Microsoft FY2026 10-K](https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm) |
 | Odoo | **€620M** revenue in 2025, company-reported. [Brussels Times, 2026-09-24](https://www.brusselstimes.com/business/2332306/odoo-announces-e10-billion-valuation-and-a-partial-price-increase) | **~7,500** employees worldwide in 2026, company-reported. [Brussels Times, 2026-09-24](https://www.brusselstimes.com/business/2332306/odoo-announces-e10-billion-valuation-and-a-partial-price-increase) |
-| ERPNext | Not disclosed. Frappe Technologies is private and publishes no ERPNext product revenue. [Frappe](https://frappe.io/about) | Not disclosed. No separate ERPNext headcount is published. |
-| Katana MRP | **€10.5M** revenue in 2025, Estonian business register. [Katana Technologies OÜ](https://ariregister.rik.ee/eng/company/14239650/Katana-Technologies-O%C3%9C) | **~47** employees in Q3 2026 (Estonian Tax Board); 89 average FTE in 2025. [Katana Technologies OÜ](https://ariregister.rik.ee/eng/company/14239650/Katana-Technologies-O%C3%9C) |
-| Mrpeasy | **€6.84M** revenue in 2025, Estonian business register. [MRPEasy OÜ](https://ariregister.rik.ee/eng/company/12617332/MRPEasy-O%C3%9C) | **~30–35** employees in 2026 (Estonian Tax Board). [MRPEasy OÜ](https://ariregister.rik.ee/eng/company/12617332/MRPEasy-O%C3%9C) |
-| QuickBooks | **$6.9B** in FY2026, sum of QuickBooks Online Accounting ($5.051B) and Desktop Accounting ($1.801B). [Intuit FY2026 10-K](https://www.sec.gov/Archives/edgar/data/896878/000089687826000037/intu-20260731.htm) | Not disclosed for QuickBooks. **18,600** Intuit group employees at 2026-07-31. [Intuit FY2026 10-K](https://www.sec.gov/Archives/edgar/data/896878/000089687826000037/intu-20260731.htm) |
+| ERPNext | Not disclosed. No product-level ERPNext revenue figure was located in Frappe's public materials. [Frappe](https://frappe.io/about) | Not disclosed. No separate ERPNext headcount was located. |
+| Katana MRP | **€10,503,344 (€10.5M)** in 2025, Estonian business register. [iReg, citing the register](https://ireg.ee/en/firma/14239650-katana-technologies-ou) | **47** in Q3 2026, Estonian Tax and Customs Board. [iReg, citing EMTA](https://ireg.ee/en/firma/14239650-katana-technologies-ou) |
+| Mrpeasy | **€6,841,955 (€6.8M)** in 2025, Estonian business register. [MRPEasy OÜ](https://ariregister.rik.ee/eng/company/12617332/MRPEasy-O%C3%9C) | **34** in Q3 2026, Estonian Tax and Customs Board. [Firmo, citing EMTA](https://www.firmo.ee/en/ettevote/12617332-mrpeasy-ou) |
+| QuickBooks | **$6.9B** in FY2026, sum of QuickBooks Online Accounting ($5.051B) and Desktop Accounting ($1.801B); this excludes Online Services, so it is not total QuickBooks ecosystem revenue. [Intuit FY2026 10-K](https://www.sec.gov/Archives/edgar/data/896878/000089687826000037/intu-20260731.htm) | Not disclosed for QuickBooks. **18,600** Intuit group employees at 2026-07-31. [Intuit FY2026 10-K](https://www.sec.gov/Archives/edgar/data/896878/000089687826000037/intu-20260731.htm) |
 | Xero | **NZ$2.75B** operating revenue in FY2026 (year ended 2026-03-31). [Xero FY26 Annual Report](https://brandfolder.xero.com/NE531UQB/as/xqkt6qjxpxcc3mgstvkfh676/Xero_FY26_Annual_Report.pdf) | **5,114** employees at 2026-03-31. [Xero FY26 Annual Report](https://brandfolder.xero.com/NE531UQB/as/xqkt6qjxpxcc3mgstvkfh676/Xero_FY26_Annual_Report.pdf) |
-| FreshBooks | Not disclosed. Private; no audited revenue figure. [Tracxn](https://tracxn.com/d/companies/freshbooks/__FodOJN0CRJhaeEA3kDg_7oh4plQTHkBD2AVaxCN8TKw) | **~380** in 2026 (third-party estimate; LinkedIn shows 377). Company declined to confirm headcount in 2024. [Tracxn](https://tracxn.com/d/companies/freshbooks/__FodOJN0CRJhaeEA3kDg_7oh4plQTHkBD2AVaxCN8TKw) · [BetaKit](https://betakit.com/inside-freshbooks-struggle-to-reach-profitability) |
+| FreshBooks | Not disclosed. No company-reported revenue figure located; Tracxn shows only a broad range. [Tracxn](https://tracxn.com/d/companies/freshbooks/__FodOJN0CRJhaeEA3kDg_7oh4plQTHkBD2AVaxCN8TKw) | **380 as of 2026-09-30** (third-party estimate). Company declined to confirm headcount in 2024. [Tracxn](https://tracxn.com/d/companies/freshbooks/__FodOJN0CRJhaeEA3kDg_7oh4plQTHkBD2AVaxCN8TKw) · [BetaKit](https://betakit.com/inside-freshbooks-struggle-to-reach-profitability) |
 
 ## Detailed Comparison
 
