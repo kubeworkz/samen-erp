@@ -364,6 +364,11 @@ config :samenerp, :operator_org_id, "0f000000-0000-4000-8000-0000000000aa"
 # for existing orgs, so a deploy never retroactively gates their history. Both are admin changes
 # (journal changes are additionally two-admin), and neither path overwrites a configured row.
 config :samenerp, :org_provisioning, [
+  # ADR-010 §3.3 (Bridge-B) — mirror the new tenant into the operator's book of business,
+  # so a self-serve signup is visible in /operator/accounts and "Open account →" has a
+  # tenant back-reference to open. Without this the org row exists with org_id/slug nil and
+  # every operator-org-scoped read (the console) cannot see it.
+  {Samenerp.Seeds, :ensure_operator_account!, []},
   {Samenerp.Seeds, :ensure_notes_search_index!, []},
   {Samenerp.Seeds, :ensure_journal_approval_policy!, []},
   {Samenerp.Seeds, :ensure_approval_policy!, []}

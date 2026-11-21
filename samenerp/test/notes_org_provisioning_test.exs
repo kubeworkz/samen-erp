@@ -50,8 +50,9 @@ defmodule Samenerp.NotesOrgProvisioningTest do
   # 1. the wiring itself
   # ---------------------------------------------------------------------------
 
-  test "this host wires the search, journal-policy and AP-policy hooks from the MOUNT" do
+  test "this host wires the operator-book, search, journal-policy and AP-policy hooks from the MOUNT" do
     assert OrgProvisioning.hooks(:samenerp) == [
+             {Seeds, :ensure_operator_account!, []},
              {Seeds, :ensure_notes_search_index!, []},
              {Seeds, :ensure_journal_approval_policy!, []},
              {Seeds, :ensure_approval_policy!, []}

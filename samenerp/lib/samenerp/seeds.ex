@@ -235,6 +235,75 @@ defmodule Samenerp.Seeds do
     end)
   end
 
+  @doc """
+  Mirror a tenant org into the operator's BOOK OF BUSINESS as its Bridge-B ACCOUNT row
+  (ADR-010 §3.3): an operator-namespace `Org` row carrying `org_id: <operator org>` and
+  `slug: <tenant org id>` — the `tenant_org_id` back-reference `Samen.Web.Operator.Reads`
+  puts behind "Open account →".
+
+  Wired as an `:org_provisioning` hook, so a self-serve signup (and any other org created
+  through that seam) is visible to the operator the moment the org exists. Without the row
+  a signup org — created with `org_id: nil, slug: nil` — is invisible to the operator
+  console's operator-org-scoped read and has nothing for act-as to open.
+
+  Idempotent: a tenant already in the book — keyed by its own row id (an operator-created
+  account) or by `slug` (a previous mirror) — is left untouched. The operator org itself is
+  skipped. Raises on an unknown org (an unmirrorable id must never read as success).
+  """
+  @spec ensure_operator_account!(String.t()) :: :ok
+  def ensure_operator_account!(org_id) when is_binary(org_id) do
+    cond do
+      org_id == operator_org_id() -> :ok
+      operator_book_row?(org_id) -> :ok
+      true -> mirror_tenant_org!(org_id)
+    end
+  end
+
+  defp operator_book_row?(org_id) do
+    Op.Org
+    |> Ash.Query.filter(org_id == ^operator_org_id() and (id == ^org_id or slug == ^org_id))
+    |> Ash.exists?(authorize?: false)
+  end
+
+  defp mirror_tenant_org!(org_id) do
+    case Op.Org |> Ash.Query.filter(id == ^org_id) |> Ash.read_one!(authorize?: false) do
+      nil ->
+        raise ArgumentError, "cannot mirror unknown org #{inspect(org_id)} into the operator book"
+
+      tenant ->
+        Op.Org
+        |> Ash.Changeset.for_create(
+          :create,
+          %{
+            org_id: operator_org_id(),
+            name: tenant.name,
+            plan: tenant.plan || "free",
+            slug: tenant.id
+          },
+          authorize?: false
+        )
+        |> Ash.create!()
+
+        :ok
+    end
+  end
+
+  @doc """
+  Mirror EVERY tenant org into the operator book — the deploy-time repair half of
+  `ensure_operator_account!/1`. `seed!/0,1` runs it on every boot (the release entrypoint
+  calls `seed!/0`), so tenants created before the hook existed, or by a signup whose
+  post-commit provisioning hook failed, are repaired instead of staying invisible.
+
+  Idempotent, and bounded by the host directory (the operator seat is excluded by
+  `Samenerp.Directory.orgs/0`).
+  """
+  @spec backfill_operator_accounts!() :: :ok
+  def backfill_operator_accounts! do
+    Enum.each(Samenerp.Directory.orgs(), fn {org_id, _name} ->
+      :ok = ensure_operator_account!(org_id)
+    end)
+  end
+
   defp approval_policy(org_id) do
     Samenerp.Erp.ApprovalPolicy
     |> Ash.Query.filter(org_id == ^org_id and kind == ^@ap_policy_kind)
@@ -406,6 +475,7 @@ defmodule Samenerp.Seeds do
     # dev data (`run/0`), not a deploy side effect.
     :ok = backfill_notes_search_index!()
     :ok = backfill_policy_defaults!()
+    :ok = backfill_operator_accounts!()
 
     result
   end
@@ -433,6 +503,7 @@ defmodule Samenerp.Seeds do
 
     :ok = backfill_notes_search_index!()
     :ok = backfill_policy_defaults!()
+    :ok = backfill_operator_accounts!()
 
     result
   end
