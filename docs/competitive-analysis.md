@@ -1,8 +1,14 @@
 # Samen ERP Competitive Analysis
 
+> **Status note (2026-11-21).** The Samen column follows the README's live-vs-shell
+> split, not an aspirational feature list. "Core only" means the kernel ships but the
+> host key flow or UI is unwired; "shell only" means the module is compile-listed but
+> unmounted. Competitor cells, cost figures and market sizing are estimates, not
+> audited figures.
+
 ## Executive Summary
 
-This analysis compares Samen ERP against major ERP competitors across 12 dimensions. Samen wins on **developer experience**, **AI integration**, and **cost**, but loses on **maturity**, **ecosystem**, and **support**.
+This analysis compares Samen ERP against major ERP competitors across 12 dimensions. Samen has an **estimated cost advantage** and a **kernel-level lead** in PII governance and AI plumbing, but those are not the same as shipped AI or enterprise features; it loses on **maturity**, **ecosystem**, and **support**.
 
 ## Competitive Landscape
 
@@ -41,64 +47,76 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 | HR | ✅ | ✅ | ✅ | ✅ |
 | CRM | ✅ | ✅ | ✅ | ✅ |
 | Project Management | ✅ | ✅ | ✅ | ✅ |
-| eCommerce | ✅ | ✅ | ✅ | ✅ |
+| eCommerce | ❌ | ✅ | ✅ | ✅ |
 
-**Verdict: Parity** — All major features implemented.
+**Verdict: Parity on shipped ERP scopes** — Finance, Inventory, Procurement, SalesOrder,
+Manufacturing, HR and CRM/Billing/Support are live; eCommerce is not a shipped scope.
 
-### 2. AI Integration
+### 2. AI Integration (kernel vs host)
 
 | Feature | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
-| AI Text Generation | ✅ BYOK | ❌ Limited | ❌ | ❌ |
-| AI Embeddings | ✅ BYOK | ❌ | ❌ | ❌ |
-| AI in Workflows | ✅ Native | ⚠️ Oracle AI | ❌ | ❌ |
-| Custom AI Models | ✅ HuggingFace | ❌ | ❌ | ❌ |
-| AI Usage Tracking | ✅ Built-in | ❌ | ❌ | ❌ |
+| AI Text Generation | ⚠️ Core only | ❌ Limited | ❌ | ❌ |
+| AI Embeddings | ⚠️ Keyless only | ❌ | ❌ | ❌ |
+| AI in Workflows | ⚠️ Kernel verbs only | ⚠️ Oracle AI | ❌ | ❌ |
+| Custom AI Models | ⚠️ Registry only | ❌ | ❌ | ❌ |
+| AI Usage Tracking | ⚠️ Needs PromptLog writes | ❌ | ❌ | ❌ |
 
-**Verdict: Major Win** — Samen is the only AI-native ERP.
+**Verdict: Kernel lead, host gap** — the tested AI plane (BYOK crypto, token validation,
+completion/SSE, no-PII-egress chokepoint, kernel verbs) is real, but the
+`/settings/huggingface` key flow, daily sweep, prompt-log writes, HF embeddings and
+in-workflow UI are not wired. Not a shipping AI feature yet.
 
 ### 3. Deployment Options
 
 | Option | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
 | Self-Hosted | ✅ | ❌ | ✅ | ✅ |
-| Cloud SaaS | ✅ | ✅ | ✅ | ✅ |
-| Docker/K8s | ✅ | ❌ | ✅ | ✅ |
-| One-Click Deploy | ✅ | N/A | ✅ | ✅ |
-| Data Residency | ✅ 6 regions | ✅ | ⚠️ | ⚠️ |
+| Cloud SaaS | ⚠️ Deployable, not operated | ✅ | ✅ | ✅ |
+| Docker/K8s | ⚠️ Docker only | ❌ | ✅ | ✅ |
+| One-Click Deploy | ⚠️ Scripted | N/A | ✅ | ✅ |
+| Data Residency | ❌ US-only | ✅ | ⚠️ | ⚠️ |
 
-**Verdict: Win** — More deployment flexibility than NetSuite.
+**Verdict: Partial** — Docker/Compose and deploy files ship; Kubernetes is a guide,
+not manifests. There is no operated hosted SaaS, no one-click deploy and no
+per-tenant residency (US-only).
 
 ### 4. Security & Compliance
 
 | Feature | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
-| SOC2 | ⚠️ In progress | ✅ | ✅ | ❌ |
-| GDPR | ✅ | ✅ | ✅ | ⚠️ |
+| SOC2 | ❌ Not certified | ✅ | ✅ | ❌ |
+| GDPR | ⚠️ Control posture | ✅ | ✅ | ⚠️ |
 | PII Vaulting | ✅ Advanced | ✅ Basic | ⚠️ | ❌ |
 | Crypto-Shred | ✅ | ❌ | ❌ | ❌ |
-| Audit Log | ✅ Hash-chained | ✅ | ✅ | ✅ |
+| Audit Log | ✅ Hash-chained (no export) | ✅ | ✅ | ✅ |
 | 2FA/MFA | ✅ TOTP | ✅ | ✅ | ✅ |
-| SSO/SAML | ✅ | ✅ | ✅ | ⚠️ |
+| SSO/SAML | ❌ Shell only | ✅ | ✅ | ⚠️ |
 
-**Verdict: Win** — Better security than most, unique crypto-shred.
+**Verdict: Partial win** — PII vaulting, crypto-shred, hash-chained audit and
+audit-on-write are live; SSO/SAML and customer audit-log export are shells, and the
+compliance posture is controls, not certification or an audit.
 
 ### 5. Developer Experience
 
 | Feature | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
-| API | ✅ REST + GraphQL | ⚠️ REST only | ⚠️ RPC | ✅ REST |
-| OpenAPI Spec | ✅ Full | ❌ | ❌ | ⚠️ |
+| API | ✅ REST/JSON:API | ⚠️ REST only | ⚠️ RPC | ✅ REST |
+| OpenAPI Spec | ⚠️ 2 paths | ❌ | ❌ | ⚠️ |
 | SDKs | ❌ (coming) | ⚠️ SuiteScript | ⚠️ Python | ⚠️ Python |
 | Webhooks | ✅ | ⚠️ | ✅ | ✅ |
 | Custom Code | ✅ Elixir | ⚠️ SuiteScript | ✅ Python | ✅ Python |
 | Code Quality | ✅ Verified | ⚠️ | ⚠️ | ⚠️ |
 
-**Verdict: Win** — Modern stack, full API, verified codebase.
+**Verdict: Partial** — modern stack and verified codebase; the served OpenAPI
+document covers only auth-login and AI-generate today, not a full API reference.
 
-### 6. Cost Structure
+### 6. Cost Structure (estimated)
 
-| Cost | Samen | NetSuite | Odoo | ERPNext |
+> All figures are list-price estimates for directional comparison, before implementation
+> scope, hosting variability and discounts. They are not benchmarked customer quotes.
+
+| Cost (estimated) | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
 | License | Free (OSS) | $1,000+/mo | $24/user/mo | Free (OSS) |
 | Implementation | DIY | $10K-$100K | $5K-$50K | DIY |
@@ -106,7 +124,8 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 | Support | Community | $2K+/mo | $1K+/mo | Community |
 | Total Year 1 | $0-$6K | $24K-$200K | $12K-$100K | $0-$12K |
 
-**Verdict: Major Win** — 10-100x cheaper than NetSuite.
+**Verdict: Estimated major advantage** — roughly 10-100x cheaper than NetSuite list
+price; not a measured benchmark.
 
 ### 7. Customization
 
@@ -114,11 +133,12 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 |---|---|---|---|---|
 | Custom Fields | ✅ Dynamic | ✅ | ✅ | ✅ |
 | Custom Workflows | ✅ Full Elixir | ⚠️ SuiteScript | ✅ Python | ✅ Python |
-| White-Label | ✅ | ❌ | ✅ | ✅ |
-| Custom Themes | ✅ | ❌ | ✅ | ✅ |
+| White-Label | ❌ Shell only | ❌ | ✅ | ✅ |
+| Custom Themes | ❌ Not shipped | ❌ | ✅ | ✅ |
 | Custom Modules | ✅ Full code | ⚠️ Limited | ✅ | ✅ |
 
-**Verdict: Win** — Full code access, no restrictions.
+**Verdict: Partial** — custom fields/workflows/modules and code access are live;
+white-label branding and a theme layer are not shipped.
 
 ### 8. Ecosystem & Integrations
 
@@ -126,11 +146,12 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 |---|---|---|---|---|
 | App Marketplace | ❌ | ✅ 100+ apps | ✅ 30K+ modules | ✅ 1K+ apps |
 | Zapier | ❌ (coming) | ✅ | ✅ | ⚠️ |
-| Stripe | ✅ | ✅ | ✅ | ✅ |
-| Email Providers | ✅ 3 vendors | ✅ | ✅ | ✅ |
+| Stripe | ⚠️ Adapter, unconfigured | ✅ | ✅ | ✅ |
+| Email Providers | ⚠️ 3 adapters, unconfigured | ✅ | ✅ | ✅ |
 | Accounting | ⚠️ Basic | ✅ Advanced | ✅ | ✅ |
 
-**Verdict: Loss** — Ecosystem is immature vs established players.
+**Verdict: Loss** — ecosystem is immature; Stripe is a tested adapter with no live
+host wiring, and the three ESP adapters ship but no host wires a live provider.
 
 ### 9. Support & Documentation
 
@@ -161,7 +182,7 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 |---|---|---|---|---|
 | Manufacturing | ✅ Basic | ✅ Advanced | ✅ | ✅ |
 | Retail | ⚠️ | ✅ | ✅ | ✅ |
-| Services | ✅ | ✅ | ✅ | ✅ |
+| Services | ⚠️ Generic | ✅ | ✅ | ✅ |
 | Healthcare | ❌ | ✅ | ⚠️ | ❌ |
 | Construction | ❌ | ✅ | ⚠️ | ❌ |
 
@@ -171,21 +192,22 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 
 | Feature | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
-| Release Cadence | ✅ Daily | ⚠️ Quarterly | ⚠️ Monthly | ⚠️ Monthly |
-| AI Features | ✅ Advanced | ⚠️ Basic | ❌ | ❌ |
+| Release Cadence | ⚠️ Active | ⚠️ Quarterly | ⚠️ Monthly | ⚠️ Monthly |
+| AI Features | ⚠️ Kernel only | ⚠️ Basic | ❌ | ❌ |
 | Modern Stack | ✅ Elixir | ❌ Java | ⚠️ Python | ⚠️ Python |
 | Open Source | ✅ Full | ❌ | ✅ | ✅ |
 
-**Verdict: Win** — Faster innovation, modern technology.
+**Verdict: Partial win** — faster iteration and modern technology; AI remains
+kernel-only.
 
 ## SWOT Analysis
 
 ### Strengths
-1. **AI-native** — Only ERP with embedded AI
+1. **AI-native architecture** — tested kernel AI plane and no-PII-egress chokepoint; host AI flow is not shipped yet
 2. **Open source** — Full code access, no vendor lock-in
 3. **Modern stack** — Elixir/Phoenix, fast and scalable
 4. **Verified codebase** — 308 sabotages, generative proof
-5. **Cost** — 10-100x cheaper than enterprise ERP
+5. **Cost** — estimated 10-100x cheaper than enterprise ERP list price; not benchmarked
 6. **Self-hosted** — Full data control
 7. **Security** — Advanced PII vaulting, crypto-shred
 
@@ -219,14 +241,14 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 ## Competitive Advantages
 
 ### Sustainable Advantages
-1. **AI integration depth** — Hard to replicate quickly
+1. **AI kernel depth** — no-PII-egress chokepoint and governed verbs; host wiring still needed
 2. **Code verification** — Unique selling point
 3. **Modern architecture** — Elixir/Phoenix performance
 4. **Open source community** — Network effects over time
 
 ### Temporary Advantages
-1. **Speed to market** — First AI-native ERP
-2. **Cost structure** — Can undercut on price
+1. **Speed to market** — AI-native architecture; host AI surfaces pending
+2. **Cost structure** — estimated list-price room to undercut; not a measured benchmark
 3. **Flexibility** — Self-hosted option
 
 ## Recommended Strategy
@@ -234,7 +256,7 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 ### 1. Don't Compete on Features
 - NetSuite has 25 years of features
 - We can't catch up on breadth
-- Compete on **depth** (AI, security, developer experience)
+- Compete on **depth** (AI kernel, security, developer experience)
 
 ### 2. Compete on Experience
 - Modern UI/UX
@@ -280,11 +302,12 @@ This analysis compares Samen ERP against major ERP competitors across 12 dimensi
 Samen ERP can compete — but not by being a better NetSuite. We compete by:
 
 1. **Serving a different market** (SMBs, not enterprise)
-2. **Differentiation** (AI-native, open source, developer-first)
+2. **Differentiation** (AI-native architecture, open source, developer-first)
 3. **Pricing** (free self-hosted, usage-based SaaS)
 4. **Speed** (modern stack, rapid iteration)
 
-The opportunity is real. The market is underserved. The technology is ready.
+The opportunity is real. The market is underserved. The kernel is ready; the host AI
+and enterprise surfaces still need wiring.
 
 **Next steps:**
 1. Launch open source

@@ -1,8 +1,15 @@
 # Samen ERP Positioning Strategy
 
+> **Status note (2026-11-21).** This is target positioning, not a live feature
+> inventory. The tested HuggingFace BYOK kernel ships, but the host settings/key
+> flow, daily sweep, prompt-log writes, HF embeddings and in-workflow AI UI are not
+> wired; SSO/SAML, monitoring, backups/PITR, plan-based limits, audit export,
+> residency and white-label are named shells. See `README.md` for the claim set.
+> Market sizing, pricing and phase timelines are targets, not results.
+
 ## Executive Summary
 
-Samen ERP is an open-source, AI-native ERP system designed for developer-led companies with 10-200 employees. We don't compete with NetSuite — we serve the companies they ignore.
+Samen ERP is an open-source ERP with an AI-native kernel, designed for developer-led companies with 10-200 employees. We don't compete with NetSuite — we serve the companies they ignore.
 
 ## The Market Gap
 
@@ -23,7 +30,17 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 
 ## Positioning Statement
 
-> **Samen ERP is the open-source, AI-native ERP for developer-led companies who want control over their data, deep customization, and embedded AI — without the cost and lock-in of traditional enterprise ERP.**
+> **Samen ERP is the open-source, developer-first ERP for companies that want control over their data, deep customization, and a governed AI architecture — without the cost and lock-in of traditional enterprise ERP.**
+
+### Live vs shell (AI and enterprise)
+
+- **Live:** kernel BYOK AES-256-GCM key storage, token validation, completion/SSE and
+  usage analytics over supplied logs; PII vault, crypto-shred, hash-chained audit and
+  audit-on-write.
+- **Not live:** the `/settings/huggingface` key flow, daily credential sweep,
+  `PromptLog` writes, HuggingFace embeddings provider, and in-workflow AI UI.
+- **Enterprise shells:** SSO/SAML, monitoring, backups/PITR, plan-based API/AI limits,
+  customer audit-log export, data residency and white-label branding.
 
 ## Target Segments
 
@@ -32,7 +49,7 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 - **Revenue:** $1M-$10M
 - **Profile:** Technical founders, engineering-first culture
 - **Pain points:** Can't afford NetSuite, want to own code, want AI
-- **Value prop:** Self-host, customize, integrate AI
+- **Value prop:** Self-host, customize, integrate the AI kernel
 - **Price:** Free (self-hosted)
 
 ### Segment 2: Digital Agencies (Secondary)
@@ -40,7 +57,7 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 - **Revenue:** $5M-$50M
 - **Profile:** Project-based work, client billing
 - **Pain points:** Need project management + accounting, want modern UX
-- **Value prop:** All-in-one with AI features
+- **Value prop:** All-in-one with a governed AI kernel; host AI UI pending
 - **Price:** $50-200/month SaaS
 
 ### Segment 3: SaaS Companies (Tertiary)
@@ -56,21 +73,21 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 ### vs NetSuite
 - **NetSuite:** "Enterprise ERP for mid-market"
 - **Samen:** "Developer-first ERP for startups"
-- **Differentiation:** Open source, self-hostable, AI-native, modern stack
+- **Differentiation:** Open source, self-hostable, AI-native architecture, modern stack
 
 ### vs Odoo
 - **Odoo:** "Open source ERP for everyone"
-- **Samen:** "AI-native ERP for developers"
-- **Differentiation:** Better tech stack, built-in AI, verified codebase
+- **Samen:** "Developer-first ERP with a governed AI plane"
+- **Differentiation:** Better tech stack, governed AI kernel, verified codebase
 
 ### vs ERPNext
 - **ERPNext:** "Open source ERP for small business"
-- **Samen:** "Developer-first ERP with AI"
-- **Differentiation:** Modern Elixir stack, AI integration, self-hosting
+- **Samen:** "Developer-first ERP with an AI kernel"
+- **Differentiation:** Modern Elixir stack, AI kernel, self-hosting
 
 ### vs QuickBooks/Xero
 - **QuickBooks:** "Accounting for small business"
-- **Samen:** "Full ERP with AI for developers"
+- **Samen:** "Full ERP with a governed AI plane for developers"
 - **Differentiation:** Not just accounting, full ERP, self-hostable
 
 ## Messaging Framework
@@ -79,22 +96,21 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 **"The ERP developers actually want to use."**
 
 ### Subheadline
-**"Open source. AI-native. Self-hosted. No lock-in."**
+**"Open source. Governed AI kernel. Self-hosted. No lock-in."**
 
 ### Key Messages
 
 1. **Own your data** — Self-host on your infrastructure, no vendor lock-in
-2. **AI built-in** — HuggingFace BYOK, embedded in every workflow
-3. **Developer-friendly** — Elixir/Phoenix, modern stack, full API
-4. **Verify everything** — 308 sabotages, generative proof, no hidden bugs
+2. **AI, governed by construction** — tested HuggingFace BYOK kernel and no-PII-egress chokepoint; the host key flow and in-workflow AI UI are the next milestone
+3. **Developer-friendly** — Elixir/Phoenix, modern stack, versioned JSON:API
+4. **Verify everything** — 308 sabotages and generative proof; verification, not a no-bug guarantee
 5. **Scale with you** — From 10 to 200 employees, free to enterprise
 
 ### Proof Points
-- 47 enterprise features built
-- 697 tests passing
+- Live-vs-shell claim set documented in `README.md`
 - 308 sabotage tests proving correctness
-- Full OpenAPI 3.0 documentation
-- Docker/K8s deployment ready
+- OpenAPI 3.0 JSON at `/api/openapi.json` (two paths today)
+- Docker/Compose deploy files; Kubernetes guide only (no manifests)
 
 ## Go-to-Market Strategy
 
@@ -123,10 +139,10 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 - Advanced features (multi-entity, consolidations)
 - White-label program
 
-## Pricing Strategy
+## Pricing Strategy (target)
 
 ### Self-Hosted (Open Source)
-- **Free forever** — Core ERP + AI features
+- **Free forever** — Core ERP + tested AI kernel
 - **Enterprise license** — $500/month for premium support
 
 ### SaaS (Hosted)
@@ -134,9 +150,9 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 - **Pro** — $50/user/month, 10,000 API calls/month
 - **Enterprise** — $100/user/month, unlimited API calls
 
-### AI Features
-- **Pay-as-you-go** — Bring your own HuggingFace key
-- **Usage-based** — $0.0001 per 1K tokens (pass-through pricing)
+### AI Features (target)
+- **Bring your own HuggingFace key** — host key flow and credential sweep are not wired; this is a target, not a billable feature.
+- **Usage-based** — target: $0.0001 per 1K tokens (pass-through pricing); no metered AI billing is wired.
 
 ## Success Metrics
 
@@ -177,7 +193,7 @@ Samen ERP is an open-source, AI-native ERP system designed for developer-led com
 Samen ERP can compete — but not by building a worse NetSuite. We compete by:
 
 1. **Serving a different market** (SMBs, not enterprise)
-2. **Differentiation** (open source, AI-native, developer-first)
+2. **Differentiation** (open source, AI-native architecture, developer-first)
 3. **Pricing** (free self-hosted, usage-based SaaS)
 4. **Speed** (modern stack, rapid iteration)
 
