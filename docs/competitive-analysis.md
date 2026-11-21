@@ -198,7 +198,7 @@ host wiring, and the three ESP adapters ship but no host wires a live provider.
 
 | Feature | Samen | NetSuite | Odoo | ERPNext |
 |---|---|---|---|---|
-| Multi-Entity | ⚠️ Basic | ✅ Advanced | ✅ | ✅ |
+| Multi-Entity | ❌ Not shipped (roadmap) | ✅ Advanced | ✅ | ✅ |
 | Global Operations | ⚠️ Limited | ✅ 200+ countries | ✅ | ⚠️ |
 | Concurrent Users | ⚠️ Untested | ✅ 10K+ | ✅ | ✅ |
 | Data Volume | ⚠️ Untested | ✅ | ✅ | ✅ |
