@@ -6,7 +6,7 @@ decision in one clause. Read the ADR itself before changing anything it governs 
 
 Numbering is chronological, not thematic; the columns below group them by concern so you can
 scan for "everything about the vault" or "everything about the operator plane" without
-reading all 56.
+reading all 57.
 
 ## Vault, crypto-shred, audit
 
@@ -180,7 +180,15 @@ reading all 56.
 
 ---
 
-56 ADRs total. All are `Status: Accepted` except ADR-025 (`Proposed (deferred)`) and **ADR-048**
+## Logistics & supply chain (WS-LOG)
+
+| # | Title | Decision |
+|---|---|---|
+| [056](ADR-056-logistics-supply-chain.md) | Logistics & supply chain: an optional Inventory `logistics:` branch, shipments as stock documents, and a fail-honest carrier boundary | **PROPOSED (2026-11-22) — design only; no code, abbrev rows, migrations or L1 work; D1–D10 proposed and seven open decisions unresolved.** Extends `Samen.Scopes.Inventory` instead of adding a new scope. Partial shipments become `Shipment` documents over the existing stock/COGS/invoice chokepoint; E5's `:fulfill` stays untouched in L1. Adds carrier/tracking, RMA, ASN/landed cost and cycle counts under R6–R9; E13/E14 are recorded as unusable skeletons to repair or remove, not live workflows. Bin grain, TMS/WMS, serials, customs, MRP/auto-PO and FX freight stay out of scope. |
+
+---
+
+57 ADRs total. All are `Status: Accepted` except ADR-025 (`Proposed (deferred)`) and **ADR-048**
 (`PROPOSED` — draft only, no code authored, six decisions + six open questions all OPEN,
 awaiting operator ratification), **ADR-052** (`PROPOSED` — design complete and filed ahead of
 the build; Lane A's dev-only probe is BUILT, Lane B is NOT STARTED, §8 D1–D5 all OPEN), and
@@ -200,7 +208,7 @@ touched), all eighteen decisions TAKEN and the five operator-facing calls record
 rationales in its "Ratification" section; and **ADR-055** is `Accepted` (2026-10-27) — the
 ruling on the dormant ERP module sets (**DELETE**; 89 files, 87 never-created tables, 89 abbrev rows
 to retire, 509 tautological tests), **execution NOT STARTED** (no file deleted, no abbrev row
-touched). If you add a new one, append a row here in the same pass
+touched); and **ADR-056** is `PROPOSED` (2026-11-22) — design only, no code/abbrevs/migrations/L1, D1–D10 proposed and seven open decisions unresolved. If you add a new one, append a row here in the same pass
 (`docs/guides/cookbook.md`'s claim-evidence discipline applies to this index too — keep it honest,
 not aspirational).
 
