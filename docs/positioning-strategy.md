@@ -14,19 +14,22 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 ## The Market Gap
 
 ### Who NetSuite Serves
-- Mid-market to enterprise (200+ employees)
-- Companies with $10M+ revenue
-- Teams with dedicated IT/finance departments
-- Budget: $1,000+/month + $10K+ implementation
+- Mid-market to enterprise
+- Companies with multi-team finance and IT operations
+- Budget: reported/planning range of $1,000+/month plus $10K+ implementation
 
 ### Who NetSuite Ignores
-- **SMBs** (10-200 employees)
+- **SMBs** (our 10-200 employee target)
 - **Developer-led companies** (startups, agencies, SaaS)
 - **Privacy-first teams** (GDPR/CCPA concerned)
 - **AI-native companies** (want AI embedded everywhere)
 - **Self-hosters** (want to own their infrastructure)
 
 **This is our market: a $15B+ SMB ERP segment with a $1B+ self-hosted slice, underserved and growing.**
+
+> Customer-size and revenue bands in this document are internal targeting
+> assumptions, not vendor disclosures. The sourced table classifies NetSuite's
+> target only as "mid-market to enterprise".
 
 ## Positioning Statement
 
