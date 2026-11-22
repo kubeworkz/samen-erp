@@ -2,15 +2,16 @@
 # shipments as stock documents, and a fail-honest carrier boundary
 
 - **Status:** **PROPOSED (2026-11-22) — design record only; no code, abbrev rows,
-  migrations or L1 work authored. D1–D10 are proposed, not ratified, and all
-  seven open decisions remain OPEN until the operator ratifies them. The pre-L1
-  review RECOMMENDS ratifying OD-1, the L1 half of OD-2 and OD-7, and recommends
-  deferring OD-2's L1b half and OD-3–OD-6 to their phases.** This ADR transcribes
-  the WS-LOG design (§2 and §9) and closes the documentation half of L0; it does
-  not ratify the build.
+  migrations or L1 work authored. The operator RATIFIED three of its seven
+  decisions on 2026-11-22 — OD-1 (an Inventory `logistics:` branch), the L1 half
+  of OD-2 (`:fulfill` untouched; `Shipment :ship` is the partial path) and OD-7
+  (repair E13/E14 in L4/L5); OD-2's L1b half and OD-3–OD-6 remain DEFERRED and
+  unratified.** This ADR transcribes the WS-LOG
+  design (§2 and §9) and closes the documentation half of L0; it does not ratify
+  the build.
 - **Date:** 2026-11-22
-- **Deciders:** the operator (ADR ratification and all seven open decisions
-  pending); the pre-L1 review's recommendations are recorded in §6. The audit
+- **Deciders:** the operator (RATIFIED OD-1, the L1 half of OD-2 and OD-7 on
+  2026-11-22; the ADR itself and the deferred decisions remain pending). The audit
   evidence is from
   `docs/ws-log/design.md` and `docs/ws-log/build-plan.md`.
 - **Consumes:** ADR-049 (the ERP base scopes and reconciliation spine), ADR-054
@@ -62,6 +63,8 @@ second quantity table.
 
 ### D1 — Extend `Samen.Scopes.Inventory` with an optional `logistics:` branch
 
+**RATIFIED (2026-11-22, OD-1).**
+
 Shipments, returns, ASNs and counts are stock documents. They belong beside
 `SalesOrder`, not in a new scope that would need its own copy of moving-average
 reads, `NegativeStock`, rollup sync and reconciliation.
@@ -81,6 +84,9 @@ absorbed procurement. Carrier adapters remain separate (D4): they are kernel
 behaviour, not scope resources.
 
 ### D2 — The Shipment is the fulfillment event for partials; E5's `:fulfill` stays untouched in L1
+
+**RATIFIED for L1 (2026-11-22, OD-2 L1 half); the L1b half below stays
+DEFERRED.**
 
 E5's `:fulfill` consumes the order's own frozen lines, emits one invoice and posts
 COGS in one transaction. That is the correct shape but the wrong grain for partial
@@ -194,11 +200,11 @@ but that is the extent of it:
   `transfer_order.ex` file; the test does not exist and ADR-055 records the old
   one as vacuous.
 
-**Disposition (RECOMMENDED, not ratified):** either repair the skeletons in
-L4/L5 or remove them; OD-7 carries the choice and stays OPEN. The recommendation
-is repair, but no workflow is exposed until it ships with its reconciliation
-test. ADR-055's "live" means mounted, migrated and allowlisted — not wired. No
-surface may advertise a placeholder as a live workflow.
+**Disposition (RATIFIED 2026-11-22, OD-7):** repair the skeletons in L4/L5;
+removal is not the chosen path. Repair is a phase obligation, not a claim that
+either resource works today: no workflow is exposed until it ships with its
+reconciliation test. ADR-055's "live" means mounted, migrated and allowlisted —
+not wired. No surface may advertise a placeholder as a live workflow.
 
 ### D8 — Bin-level stock is a later, explicit schema decision
 
@@ -226,26 +232,22 @@ an AP payee. Keep `Carrier` separate with an optional `vendor_id` (the
 master would put service/SCAC/tracking semantics into an AP noun; a pure link
 keeps both clean.
 
-## Open decisions
+## Decision register
 
-The ADR is `PROPOSED` and the operator has ratified none of these decisions:
-every row below stays OPEN, and the pre-L1 review records only RECOMMENDATIONS.
-It recommends ratifying the decisions that shape L1's code path — the scope
-boundary (OD-1) and the L1 half of the fulfillment decision (OD-2) — plus OD-7,
-because L0 owns the E13/E14 audit and that choice does not block L1. It
-recommends deferring OD-2's L1b half and OD-3–OD-6 to their phases. D3 (one
-quantity truth, one money truth) and D9 (no PII in L1) are not open questions;
-they are binding L1 constraints.
+Three decisions are RATIFIED — OD-1, OD-2's L1 half and OD-7 — and the rest are
+DEFERRED and unratified. The ADR itself remains `PROPOSED` and the build is not
+ratified. D3 (one quantity truth, one money truth) and D9 (no PII in L1) are not
+open questions; they are binding L1 constraints.
 
-| ID | Open decision | Disposition |
+| ID | Decision | Disposition |
 |---|---|---|
-| OD-1 | Scope boundary: Inventory `logistics:` branch vs a standalone Logistics scope | **RECOMMENDED (2026-11-22) — Inventory branch; OPEN pending ratification.** A standalone scope would duplicate the quantity chokepoint. |
-| OD-2 | Fulfillment unification: keep two posting paths in L1, then decide whether `:fulfill` creates a full shipment and whether the SO invoice anchor is retired or aliased | **L1 half RECOMMENDED (2026-11-22):** leave `:fulfill` untouched; `Shipment :ship` is the partial path — OPEN pending ratification. **L1b half DEFERRED:** decide unification and the SO anchor after L1 proves R6. |
+| OD-1 | Scope boundary: Inventory `logistics:` branch vs a standalone Logistics scope | **RATIFIED (2026-11-22) — Inventory `logistics:` branch.** A standalone scope would duplicate the quantity chokepoint. |
+| OD-2 | Fulfillment unification: keep two posting paths in L1, then decide whether `:fulfill` creates a full shipment and whether the SO invoice anchor is retired or aliased | **L1 half RATIFIED (2026-11-22):** leave `:fulfill` untouched; `Shipment :ship` is the partial path. **L1b half DEFERRED:** decide unification and the SO anchor after L1 proves R6. |
 | OD-3 | Ship-to source in L1b: snapshot the address/recipient on the Shipment or read live from CRM | **DEFERRED to L1b.** Snapshot for historical accuracy. |
 | OD-4 | Carrier credentials: host runtime configuration/secrets vs a database column | **DEFERRED to L2.** Runtime config/secrets keyed by org + carrier code; never a DB secret, log line or shipment row. |
 | OD-5 | Bin grain: warehouse-level stock first, then a bin-level amendment | **DEFERRED to L5.** Require an ADR-056 amendment plus migration/backfill and a re-proven R3 before bins. |
 | OD-6 | Return refunds: credit note only vs a cash refund/payment reversal in the base | **DEFERRED to L3.** Credit note only in the base; cash refunds use Finance's existing path later. |
-| OD-7 | E13/E14 disposition: repair the skeletons vs delete them | **RECOMMENDED (2026-11-22) — repair in L4/L5 rather than delete; OPEN pending ratification.** Do not expose a surface over a placeholder. |
+| OD-7 | E13/E14 disposition: repair the skeletons vs delete them | **RATIFIED (2026-11-22) — repair in L4/L5, not delete.** Do not expose a surface over a placeholder. |
 
 ## Consequences
 
