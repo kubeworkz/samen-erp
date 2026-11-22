@@ -8,7 +8,10 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
 
   use ExUnit.Case, async: false
 
+  # Ecto.Migrator reads this source DIRECTORY, so a patched source migration is
+  # the one that executes — never a stale priv copy under `_build`.
   @migrations Path.expand("../priv/repo/migrations", __DIR__)
+  @l1_migration Path.join(@migrations, "20261122120000_mount_inventory_logistics.exs")
   @l1_version 20_261_122_120_000
   @lot_item_id Ecto.UUID.generate()
   @plain_item_id Ecto.UUID.generate()
@@ -18,6 +21,9 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
   end
 
   setup_all do
+    assert File.regular?(@l1_migration),
+           "the L1 backfill test must load the source migration from #{@migrations}"
+
     config =
       Samenerp.Repo.config()
       |> Keyword.delete(:pool)

@@ -272,7 +272,8 @@ lot guard is added.
   assert the flag becomes `true`; the non-lot control still ships. The named test is `migration
   backfills Item.lot_tracked for existing Lot items and leaves non-lot items false`.
 - New sabotage patches (next free numbers): one flips the named R6 tests (stock without
-  invoice/COGS, and an accepted over-ship); one is the backfill patch below; one removes the
+  invoice/COGS, and an accepted over-ship); two are the backfill mutations below (no-op and
+  overbroad, both targeting the migration with the test unchanged); one removes the
   `Lot :create` flag maintenance and must fail `Lot :create marks its Item lot_tracked`; one
   removes the `Item` clear guard and must fail `an Item cannot clear lot_tracked while a Lot
   exists`; one removes `phase: :expand` from the host migration and must fail the target
@@ -280,17 +281,32 @@ lot guard is added.
   the named post-backfill test; one bypasses the same guard in `fulfill_order.ex` and must fail
   the named legacy test. All must fail their named tests and restore byte-exact.
 
-**Backfill sabotage header (next free patch number):**
+**Backfill sabotage headers (431/432):**
+
+Two patches mutate the migration, not the assertion. The named test is unchanged, so the positive
+lot assertion and the non-lot control must each catch a different direction.
 
 ```text
+# SABOTAGE: Disable the L1 lot_tracked backfill so a lot-backed item stays false.
 # APP: samenerp
 # TEST_FILES: test/logistics_lot_tracked_backfill_test.exs
-# MUST_FAIL: migration backfills Item.lot_tracked for existing Lot items
+# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows
 ```
 
-No `# ENV:` line is required because this test is not opt-in. Flip the `lot_tracked` assertion so
-the lot-backed item is expected `false` (or the non-lot control `true`); the named test must fail;
-restore the test byte-exact.
+No `# ENV:` line is required because this test is not opt-in. Remove or disable the `UPDATE`; the
+lot-backed item stays `false`; restore the migration byte-exact.
+
+```text
+# SABOTAGE: Drop the EXISTS predicate so every item is marked lot-tracked.
+# APP: samenerp
+# TEST_FILES: test/logistics_lot_tracked_backfill_test.exs
+# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows
+```
+
+No `# ENV:` line is required because this test is not opt-in. Remove the `WHERE EXISTS` predicate
+so every item becomes `true` and the non-lot control fails; restore the migration byte-exact. Both
+patches target the migration, never the test's expected values. The test reads
+`samenerp/priv/repo/migrations` directly (not a `_build` copy), so the patched source executes.
 
 **Flag-maintenance sabotage headers (next free patch numbers):**
 
@@ -363,11 +379,11 @@ MIX_ENV=test mix samen.verify.catalog_parity
 MIX_ENV=test mix samen.verify.prefixes
 MIX_ENV=test mix samen.verify.migrations --repo Samenerp.Repo --migrations priv/repo/migrations
 cd ..
+# The backfill sabotage pair mutates the migration itself; the test stays unchanged.
 bash scripts/sabotage.sh --touching samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
 bash scripts/sabotage.sh --touching samen_core/lib/samen/scopes/inventory/blueprint.ex
 bash scripts/sabotage.sh --touching samen_core/lib/samen/scopes/inventory/ship_posting.ex
 bash scripts/sabotage.sh --touching samen_core/lib/samen/scopes/inventory/fulfill_order.ex
-bash scripts/sabotage.sh --touching samenerp/test/logistics_lot_tracked_backfill_test.exs
 ```
 
 **L1 acceptance:** partial shipments produce correct stock/COGS/invoices; the order's shipped +
