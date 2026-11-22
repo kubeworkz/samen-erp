@@ -26,7 +26,7 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 - **AI-native companies** (want AI embedded everywhere)
 - **Self-hosters** (want to own their infrastructure)
 
-**This is our market: $1B+ annually, underserved and growing.**
+**This is our market: a $15B+ SMB ERP segment with a $1B+ self-hosted slice, underserved and growing.**
 
 ## Positioning Statement
 
@@ -83,7 +83,7 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 ### vs ERPNext
 - **ERPNext:** "Open source ERP for small business"
 - **Samen:** "Developer-first ERP with an AI kernel"
-- **Differentiation:** Modern Elixir stack, AI kernel, self-hosting
+- **Differentiation:** Modern Elixir stack, governed AI kernel, verified codebase
 
 ### vs QuickBooks/Xero
 - **QuickBooks:** "Accounting for small business"
@@ -202,4 +202,4 @@ Samen ERP can compete — but not by building a worse NetSuite. We compete by:
 3. **Pricing** (free self-hosted, usage-based SaaS)
 4. **Speed** (modern stack, rapid iteration)
 
-The $1B+ SMB ERP market is ours to win.
+The $15B+ SMB ERP market is ours to win, starting with the $1B+ self-hosted slice.
