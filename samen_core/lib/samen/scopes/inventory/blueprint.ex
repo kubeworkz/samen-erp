@@ -1191,7 +1191,9 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             public?: true,
             allow_nil?: false,
             default: :draft,
-            constraints: [one_of: [:draft, :confirmed, :fulfilled, :cancelled]]
+            constraints: [
+              one_of: [:draft, :confirmed, :partially_fulfilled, :fulfilled, :cancelled]
+            ]
           )
 
           # The emitted-invoice anchor (the PaymentReceipt contract shape):

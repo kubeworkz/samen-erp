@@ -166,7 +166,9 @@ defmodule Samen.Scopes.Inventory do
     production_log: "ipg",
     transfer_order: "trn",
     landed_cost: "lcd",
-    lot: "ilt"
+    lot: "ilt",
+    shipment: "shp",
+    shipment_line: "shm"
   }
 
   @doc false
@@ -210,6 +212,11 @@ defmodule Samen.Scopes.Inventory do
     # (the host's Billing Invoice surface — or a mirror shaped like its
     # money/status contract). Fulfillment emits the invoice INTO that module.
     billing_opts = Keyword.get(opts, :billing)
+
+    # WS-LOG L1: the shipment pair is opt-in and rides the same Finance +
+    # Billing seams as the sales bridge. `logistics: true` compiles the two
+    # resources; the host migration owns their tables and catalog rows.
+    logistics_opts = Keyword.get(opts, :logistics)
 
     # Lot lives behind the Finance seam; Item's lot_tracked guard needs its
     # module only when the mount defines it.
@@ -350,9 +357,49 @@ defmodule Samen.Scopes.Inventory do
         :ok
       end
 
+    logistics_defines =
+      if logistics_opts && finance_opts && billing_opts do
+        shipment_mod = Module.concat(namespace, Shipment)
+        shipment_line_mod = Module.concat(namespace, ShipmentLine)
+        sales_order_mod = Module.concat(namespace, SalesOrder)
+        so_line_mod = Module.concat(namespace, SoLine)
+
+        quote do
+          resources do
+            resource(unquote(shipment_mod))
+            resource(unquote(shipment_line_mod))
+          end
+
+          Samen.Scopes.Inventory.BlueprintLogistics.define_shipment(
+            unquote(shipment_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.shipment),
+            unquote(sales_order_mod),
+            unquote(warehouse_mod),
+            unquote(shipment_line_mod)
+          )
+
+          Samen.Scopes.Inventory.BlueprintLogistics.define_shipment_line(
+            unquote(shipment_line_mod),
+            unquote(otp_app),
+            unquote(domain),
+            unquote(repo),
+            unquote(abbrevs.shipment_line),
+            unquote(shipment_mod),
+            unquote(so_line_mod),
+            unquote(item_mod)
+          )
+        end
+      else
+        :ok
+      end
+
     quote do
       require Samen.Scopes.Inventory.Blueprint
       require Samen.Scopes.Inventory.BlueprintE6
+      require Samen.Scopes.Inventory.BlueprintLogistics
 
       resources do
         resource(unquote(item_mod))
@@ -407,6 +454,10 @@ defmodule Samen.Scopes.Inventory do
       # `billing:` are wired — fulfillment needs the stock machinery AND the
       # host's invoice surface) ──
       unquote(e5_defines)
+
+      # ── WS-LOG L1: the shipment pair (present ONLY when `logistics: true`
+      # and the same Finance + Billing seams are wired) ──
+      unquote(logistics_defines)
 
       # ── E6: Manufacturing — BOM/WorkOrder/ProductionLog, always present
       # (the posting facade needs only this scope's own machinery) ──

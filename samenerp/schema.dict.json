@@ -5049,6 +5049,12 @@
           "type": "Atom"
         },
         {
+          "column_name": "eni_lot_tracked",
+          "logical_name": "lot_tracked",
+          "pii": false,
+          "type": "Boolean"
+        },
+        {
           "column_name": "eni_name",
           "logical_name": "name",
           "pii": false,
@@ -11525,6 +11531,150 @@
       ],
       "resource": "Samenerp.Hr.LeaveRequest",
       "table_name": "shl_leave_request"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "shm_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shm_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "shm_item_id",
+          "logical_name": "item_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shm_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shm_qty",
+          "logical_name": "qty",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "shm_shipment_id",
+          "logical_name": "shipment_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shm_so_line_id",
+          "logical_name": "so_line_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shm_unit_cost_cents",
+          "logical_name": "unit_cost_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "shm_unit_price_cents",
+          "logical_name": "unit_price_cents",
+          "pii": false,
+          "type": "Integer"
+        },
+        {
+          "column_name": "shm_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        }
+      ],
+      "resource": "Samenerp.Erp.ShipmentLine",
+      "table_name": "shm_shipment_line"
+    },
+    {
+      "fields": [
+        {
+          "column_name": "shp_id",
+          "logical_name": "id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shp_inserted_at",
+          "logical_name": "inserted_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "shp_invoice_id",
+          "logical_name": "invoice_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shp_invoice_key",
+          "logical_name": "invoice_key",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "shp_memo",
+          "logical_name": "memo",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "shp_number",
+          "logical_name": "number",
+          "pii": false,
+          "type": "String"
+        },
+        {
+          "column_name": "shp_org_id",
+          "logical_name": "org_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shp_sales_order_id",
+          "logical_name": "sales_order_id",
+          "pii": false,
+          "type": "UUID"
+        },
+        {
+          "column_name": "shp_shipped_at",
+          "logical_name": "shipped_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "shp_status",
+          "logical_name": "status",
+          "pii": false,
+          "type": "Atom"
+        },
+        {
+          "column_name": "shp_updated_at",
+          "logical_name": "updated_at",
+          "pii": false,
+          "type": "UtcDatetime"
+        },
+        {
+          "column_name": "shp_warehouse_id",
+          "logical_name": "warehouse_id",
+          "pii": false,
+          "type": "UUID"
+        }
+      ],
+      "resource": "Samenerp.Erp.Shipment",
+      "table_name": "shp_shipment"
     },
     {
       "fields": [

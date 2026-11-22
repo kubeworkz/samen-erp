@@ -126,7 +126,9 @@ defmodule Samenerp.Erp do
       production_log: "epg",
       transfer_order: "etn",
       landed_cost: "eld",
-      lot: "elt"
+      lot: "elt",
+      shipment: "shp",
+      shipment_line: "shm"
     },
     finance: [
       entry: Samenerp.Erp.JournalEntry,
@@ -138,7 +140,8 @@ defmodule Samenerp.Erp do
     ],
     billing: [
       invoice: Samenerp.Billing.Invoice
-    ]
+    ],
+    logistics: true
 
   resources do
     resource(Samenerp.Erp.Account)
@@ -173,6 +176,8 @@ defmodule Samenerp.Erp do
     resource(Samenerp.Erp.OrgFxSettings)
     resource(Samenerp.Erp.TransferOrder)
     resource(Samenerp.Erp.LandedCost)
+    resource(Samenerp.Erp.Shipment)
+    resource(Samenerp.Erp.ShipmentLine)
     resource(Samenerp.Erp.CostObject)
     resource(Samenerp.Erp.Lot)
     resource(Samenerp.Erp.RevenueSchedule)
