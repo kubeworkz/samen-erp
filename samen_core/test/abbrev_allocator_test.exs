@@ -364,8 +364,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # +3 payroll-settlement rows (`pss` samen_core, `pst` samen_web, `psy`
       # samenerp — the PayrollSettlement batch per Finance host), all
       # allocator-reserved -> 37_730 bytes, 797 flat.
-      assert byte_size(committed) == 37_730
-      assert map_size(R.load()) == 797
+      # +2 WS-LOG L1 shipment pair (`shp`/`shm` in samenerp) -> 37_810 bytes,
+      # 799 flat.
+      assert byte_size(committed) == 37_810
+      assert map_size(R.load()) == 799
     end
   end
 

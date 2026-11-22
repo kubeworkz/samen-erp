@@ -45,6 +45,7 @@ defmodule SamenCore.TestRepo.Migrations.InventoryScopeFixture do
       add(:sit_name, :text, null: false)
       add(:sit_kind, :text, null: false, default: "stocked")
       add(:sit_uom, :text, null: false, default: "unit")
+      add(:sit_lot_tracked, :boolean, null: false, default: false)
       add(:sit_reorder_point, :integer)
       add(:sit_default_income_account_id, :uuid)
       add(:sit_default_expense_account_id, :uuid)

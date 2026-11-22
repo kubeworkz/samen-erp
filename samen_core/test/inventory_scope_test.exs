@@ -467,7 +467,7 @@ defmodule Samen.InventoryScopeTest do
   describe "s11 — catalog registration (mix samen.verify.catalog_parity is green)" do
     test "every E3 fixture column is catalogued in fld_field" do
       tables = %{
-        "sit_item" => ["sit_sku", "sit_name", "sit_kind", "sit_uom", "sit_org_id"],
+        "sit_item" => ["sit_sku", "sit_name", "sit_kind", "sit_uom", "sit_lot_tracked", "sit_org_id"],
         "swh_warehouse" => ["swh_code", "swh_name", "swh_allow_negative", "swh_address", "swh_org_id"],
         "skl_stock_ledger" => [
           "skl_kind",

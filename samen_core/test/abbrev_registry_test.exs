@@ -192,7 +192,9 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 each in WS-ERP adjustment documents (#6): `ecn`/`evc` (samenerp),
       # `sdc`/`sdv` (samen_core fixture), `fcn`/`fvc` (samen_web test host).
       # +3 each in WS-ERP E31 (#12): expense category/card/report tables.
-      assert map_size(hosts["samenerp"]) == 146
+      # +2 WS-LOG L1 shipment pair: `shp`/`shm` (the `shl` candidate was
+      # already owned by the HR LeaveRequest), allocator-reserved.
+      assert map_size(hosts["samenerp"]) == 148
       assert map_size(hosts["samen_core"]) == 137
       assert map_size(hosts["samen_web"]) == 119
 
@@ -1031,7 +1033,11 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ERP E31 (#12): expense category, card and report.
                  "ecg" => "Samenerp.Erp.ExpenseCategory",
                  "ecy" => "Samenerp.Erp.CorporateCard",
-                 "ecz" => "Samenerp.Erp.ExpenseReport"
+                 "ecz" => "Samenerp.Erp.ExpenseReport",
+                 # WS-LOG L1: the shipment header and line (`shm`, not the
+                 # already-owned `shl`), allocator-reserved.
+                 "shp" => "Samenerp.Erp.Shipment",
+                 "shm" => "Samenerp.Erp.ShipmentLine"
                }
              }
 
@@ -1181,7 +1187,8 @@ defmodule Samen.AbbrevRegistryTest do
       # in the three Finance hosts — samen_core `spf`/`psf`, samen_web
       # `wep`/`ewp`, samenerp `sep`/`spe`, allocator-reserved = 782 flat.)
       # (+3 durable payroll-register provenance rows = 791 flat.)
-      assert map_size(Reg.load()) == 797
+      # (+2 WS-LOG L1 shipment pair: `shp`/`shm`.)
+      assert map_size(Reg.load()) == 799
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

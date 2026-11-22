@@ -20,7 +20,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
   # Item — the item master (Tier-0 config row)
   # ---------------------------------------------------------------------------
 
-  defmacro define_item(module, otp_app, domain, repo, abbrev) do
+  defmacro define_item(module, otp_app, domain, repo, abbrev, lot_mod) do
     quote do
       defmodule unquote(module) do
         @moduledoc """
@@ -63,6 +63,17 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             constraints: [one_of: [:unit, :case, :kg, :hour]]
           )
 
+          # WS-LOG L1: the lot-tracked gate is a maintained item flag. The
+          # migration backfills it from existing Lot rows; L1's Lot :create
+          # keeps it true and Item :update refuses clearing it while a lot
+          # exists. Shipment/fulfillment still perform the live Lot EXISTS
+          # check, so this flag is never the sole authorization.
+          attribute(:lot_tracked, :boolean,
+            public?: true,
+            allow_nil?: false,
+            default: false
+          )
+
           # A floor, not an engine: replenishment suggestions are a pure read;
           # auto-PO generation is a P2 carry (design §7 honesty list).
           attribute(:reorder_point, :integer, public?: true)
@@ -77,6 +88,13 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           attribute(:default_inventory_account_id, :uuid, public?: true)
         end
 
+        changes do
+          # WS-LOG L1: the Item-side half of the lot_tracked invariant. The
+          # flag is set by Lot :create and may only be cleared while no Lot
+          # row names this item.
+          change({Samen.Scopes.Inventory.ItemLotTrackedGuard, lot: unquote(lot_mod)})
+        end
+
         actions do
           read :read do
             primary?(true)
@@ -86,6 +104,9 @@ defmodule Samen.Scopes.Inventory.Blueprint do
           create :create do
             # org_id is an explicit accept (the Automation-scope idiom): the
             # tenant-plane write names its own org; OrgScope + SameOrgFk govern it.
+            # lot_tracked is deliberately NOT accepted here: it is maintained
+            # by Lot :create (and initialized by the L1 migration), never set
+            # by a caller.
             accept([
               :org_id,
               :sku,
@@ -104,6 +125,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
               :name,
               :kind,
               :uom,
+              :lot_tracked,
               :reorder_point,
               :default_income_account_id,
               :default_expense_account_id,
@@ -374,6 +396,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
 
         changes do
           change({Samen.Policy.SameOrgFk, relationships: [:item, :cost_object]})
+          change({Samen.Scopes.Inventory.LotTrackedFlag, item: unquote(item_mod)})
         end
 
         identities do

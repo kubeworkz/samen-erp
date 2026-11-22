@@ -233,6 +233,56 @@ defmodule Samen.InventoryLotsTest do
       assert read.cost_object_id == co.id
     end
 
+    test "Lot :create marks its Item lot_tracked", %{org: org, scope: scope, admin: admin} do
+      item = new_item(scope, org, "FLAG-ITEM")
+      refute item.lot_tracked
+
+      co = new_cost_object(admin, org, "FLAG-CO")
+      _lot = new_lot(scope, org, item, co, "LOT-FLAG-001")
+
+      assert Ash.get!(Item, item.id, scope: scope).lot_tracked
+    end
+
+    test "an Item cannot clear lot_tracked while a Lot exists", %{
+      org: org,
+      scope: scope,
+      admin: admin
+    } do
+      item = new_item(scope, org, "FLAG-GUARD")
+      co = new_cost_object(admin, org, "FLAG-GUARD-CO")
+      _lot = new_lot(scope, org, item, co, "LOT-FLAG-GUARD")
+
+      current = Ash.get!(Item, item.id, scope: scope)
+      assert current.lot_tracked
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               current
+               |> Ash.Changeset.for_update(:update, %{lot_tracked: false}, scope: scope)
+               |> Ash.update()
+
+      assert inspect(error) =~ "lot_tracked_has_lots"
+      assert Ash.get!(Item, item.id, scope: scope).lot_tracked
+    end
+
+    test "an Item with no Lot can clear lot_tracked (CONTROL)", %{
+      org: org,
+      scope: scope
+    } do
+      item = new_item(scope, org, "FLAG-FREE")
+
+      assert {:ok, %{lot_tracked: true}} =
+               item
+               |> Ash.Changeset.for_update(:update, %{lot_tracked: true}, scope: scope)
+               |> Ash.update()
+
+      assert {:ok, cleared} =
+               Ash.get!(Item, item.id, scope: scope)
+               |> Ash.Changeset.for_update(:update, %{lot_tracked: false}, scope: scope)
+               |> Ash.update()
+
+      refute cleared.lot_tracked
+    end
+
     test "code is unique per org (RED) — a second lot with the same code is refused", %{
       org: org,
       scope: scope,

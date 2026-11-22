@@ -211,13 +211,16 @@ defmodule Samen.Scopes.Inventory do
     # money/status contract). Fulfillment emits the invoice INTO that module.
     billing_opts = Keyword.get(opts, :billing)
 
+    # Lot lives behind the Finance seam; Item's lot_tracked guard needs its
+    # module only when the mount defines it.
+    lot_mod = if finance_opts, do: Module.concat(namespace, Lot), else: nil
+
     e4_defines =
       if finance_opts do
         purchase_order_mod = Module.concat(namespace, PurchaseOrder)
         po_line_mod = Module.concat(namespace, PoLine)
         goods_receipt_mod = Module.concat(namespace, GoodsReceipt)
         receipt_line_mod = Module.concat(namespace, ReceiptLine)
-        lot_mod = Module.concat(namespace, Lot)
 
         finance_entry = Keyword.fetch!(finance_opts, :entry)
         finance_posting_account = Keyword.fetch!(finance_opts, :posting_account)
@@ -363,7 +366,8 @@ defmodule Samen.Scopes.Inventory do
         unquote(otp_app),
         unquote(domain),
         unquote(repo),
-        unquote(abbrevs.item)
+        unquote(abbrevs.item),
+        unquote(lot_mod)
       )
 
       Samen.Scopes.Inventory.Blueprint.define_warehouse(
