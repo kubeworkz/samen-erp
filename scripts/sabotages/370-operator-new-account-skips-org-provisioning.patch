@@ -12,14 +12,16 @@
 # NOT TOUCHED, deliberately: the seam, the signup controller call site, and the org-create action
 # itself (the write is unchanged — provisioning never gates the account).
 #
-# No warning is introduced: `{:ok, org}` becomes `{:ok, _org}` because the only consumer of `org`
-# was the deleted call.
+# No warning is introduced: the tenant back-reference stamp still consumes `org`, so
+# dropping the provisioning call leaves no unused binding to warn on.
 # APP: samen_web
 # TEST_FILES: test/samen/web/org_provisioning_test.exs
 # MUST_FAIL: the operator New-account write provisions the tenant org it just created
+diff --git a/samen_web/lib/samen/web/operator/accounts_live.ex b/samen_web/lib/samen/web/operator/accounts_live.ex
+index 0b648811..966fe13a 100644
 --- a/samen_web/lib/samen/web/operator/accounts_live.ex
 +++ b/samen_web/lib/samen/web/operator/accounts_live.ex
-@@ -37,7 +37,6 @@
+@@ -38,7 +38,6 @@ defmodule Samen.Web.Operator.AccountsLive do
    alias Samen.Web.Mount
    alias Samen.Web.Operator
    alias Samen.Web.Operator.Reads
@@ -27,12 +29,13 @@
  
    use Samen.Web.ListLive,
      resource: Org,
-@@ -114,11 +113,10 @@
-   # adds no policy of its own.
-   def handle_event("save_new", %{"form" => params}, socket) do
-     case AshPhoenix.Form.submit(socket.assigns.new_form, params: with_org(params, socket)) do
--      {:ok, org} ->
-+      {:ok, _org} ->
+@@ -123,12 +122,11 @@ defmodule Samen.Web.Operator.AccountsLive do
+         # its OWN id. Every account-addressed surface keys on `Org.slug`: "Open account →" and
+         # the masked impersonate link, `Reads.account_for_tenant/3` (drill-in back-links), and
+         # the fleet name-scope gate. A row created without one lists but cannot be opened.
+-        org = stamp_tenant_back_reference(org)
++        stamp_tenant_back_reference(org)
+
          # WS-Notes Phase 6 — an operator-created account IS a tenant org, so it goes through the
          # SAME per-org provisioning seam the self-serve signup does (`Samen.Web.OrgProvisioning`:
          # this host's Pages search registry). Non-fatal and loud, never a rolled-back account.
