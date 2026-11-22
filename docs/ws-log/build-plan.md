@@ -271,6 +271,72 @@ lot guard is added.
   refuses it while the flag is still `false`, run the idempotent post-deploy reconciliation, and
   assert the flag becomes `true`; the non-lot control still ships. The named test is `migration
   backfills Item.lot_tracked for existing Lot items and leaves non-lot items false`.
+
+**Backfill harness (the executable seam).** `samenerp/test/test_helper.exs` boots the host schema
+to head through `Samen.TestDb.boot!(Repo)` before ExUnit starts, so a pre-migration row cannot be
+seeded in the shared test database. This test owns a scratch database and drives the real
+migration directory itself. `async: false` is required — one scratch database and one migrator
+advisory lock per module.
+
+1. Derive the config from `Samenerp.Repo.config()`: delete `:pool` (the SQL sandbox must not wrap
+   the DDL), give it a unique name
+   (`samenerp_logistics_backfill_#{System.unique_integer([:positive])}`), and set a real pool
+   (`DBConnection.ConnectionPool`, `pool_size: 3`) — Ecto's migrator needs two connections.
+2. Create the database with `Samen.TestDb.ensure_up!(config)`. This is the repository's one
+   tolerant create; the db-boot verifier rejects raw adapter `storage_up`/`storage_down` calls in
+   any harness that owns a database, and this scratch path is no exception.
+3. Start a scratch repo defined in the test module, using the same shape as
+   `mix samen.verify.migrations`'s `define_scratch_repo/2` (`use Ecto.Repo,
+   otp_app: :samenerp, adapter: Ecto.Adapters.Postgres`) and `start_link(config)`.
+4. Migrate the real directory to the version immediately before L1:
+   `Ecto.Migrator.run(ScratchRepo, @migrations, :up, to: @l1_version - 1, log: false)`, with
+   `@migrations = Path.expand("../priv/repo/migrations", __DIR__)` and
+   `@l1_version = 20_261_122_120_000`. `:to` is inclusive, so this runs everything strictly
+   before the target. The path is the source directory, never a `_build` copy: a patched source
+   migration must be the one that executes, so assert `File.regular?` on the L1 file first.
+5. Seed the pre-migration state with raw SQL (`Ecto.Adapters.SQL.query!/3`). Ash actions would
+   apply the post-L1 `lot_tracked` behavior, and the fixture exists to reproduce rows written
+   before the column existed.
+6. Run the target: `Ecto.Migrator.run(ScratchRepo, @migrations, :up, to: @l1_version, log: false)`.
+7. Assert the loaded state, not the migration's return value: the lot-backed item's
+   `eni_lot_tracked` is `true` and the control item's is `false`; the column is `boolean`,
+   `NOT NULL`, default `false` (`information_schema.columns`); an item inserted after the
+   migration defaults to `false`; and the catalog row (`fld_table_name = 'eni_item'`,
+   `fld_column_name = 'eni_lot_tracked'`, `fld_type = 'Boolean'`) exists.
+8. Tear down in `on_exit`: `Supervisor.stop(ScratchRepo)` when `Process.whereis(ScratchRepo)` is
+   set, then `Ecto.Adapters.Postgres.storage_down(config)`. Never leave the scratch database
+   behind. Wrap both migration runs in the module-conflict toggle
+   (`Code.get_compiler_option(:ignore_module_conflict)` → `true`, restored in `after`) because
+   the run compiles migration modules that may already be loaded.
+
+**Fixture graph (four nodes, not two).** `elt_lot` carries `NOT NULL` FKs to `eni_item` and
+`eco_cost_object`, so "an item and a lot" is not a seedable state. The minimum graph is:
+
+```text
+org_id (uuid)                — tenant pin; the org columns below carry no FK, so no org_org row is needed
+├─ eco_cost_object           — eco_id, eco_org_id = org_id, eco_code (unique per org), eco_name, eco_kind
+├─ eni_item (lot-backed)     — eni_id, eni_org_id = org_id, eni_sku, eni_name, eni_kind 'stocked', eni_uom 'unit'
+│    └─ elt_lot              — elt_item_id = that item, elt_cost_object_id = that cost object,
+│                              elt_code (unique per org), elt_stage 'design', counts 0
+└─ eni_item (control)        — same shape, no elt_lot row
+```
+
+- `eco_cost_object`: `eco_code`, `eco_name` and `eco_kind` are non-null; `eco_kind` is
+  host-defined (`project` works); both timestamps are non-null. One row covers every lot in the
+  fixture.
+- `eni_item`: `eni_sku` and `eni_name` are non-null and `(eni_org_id, eni_sku)` is unique; set
+  `eni_kind 'stocked'`, `eni_uom 'unit'` and both timestamps. Do **not** write `eni_lot_tracked`
+  — the migration under test adds it; the seed predates the column.
+- `elt_lot`: `elt_item_id` → the lot-backed `eni_item` and `elt_cost_object_id` → the
+  `eco_cost_object` are both `null: false` FKs (`elt_lot_elt_item_id_fkey`,
+  `elt_lot_elt_cost_object_id_fkey`); `elt_code` is unique per org; `elt_stage` must be one of
+  `design|mask|fab|dice|assembly|test|delivered`; the three count columns are `>= 0`; both
+  timestamps are non-null. Insert exactly one lot for the lot-backed item and none for the
+  control.
+- The control is what makes the backfill's predicate observable: it stays `false` after the
+  migration, so an `UPDATE` without the `EXISTS` guard (sabotage 432) fails this test instead of
+  passing vacuously.
+
 - New sabotage patches (next free numbers): one flips the named R6 tests (stock without
   invoice/COGS, and an accepted over-ship); two are the backfill mutations below (no-op and
   overbroad, both targeting the migration with the test unchanged); one removes the

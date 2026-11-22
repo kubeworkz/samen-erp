@@ -75,10 +75,30 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
              []
            ) == "Boolean"
 
-    assert query_value(
-             "SELECT data_type FROM information_schema.columns WHERE table_name = 'eni_item' AND column_name = 'eni_lot_tracked'",
+    assert query_row(
+             "SELECT is_nullable, data_type, column_default FROM information_schema.columns " <>
+               "WHERE table_name = 'eni_item' AND column_name = 'eni_lot_tracked'",
              []
-           ) == "boolean"
+           ) == ["NO", "boolean", "false"]
+
+    # The seed predates the column, so a row written after the migration is the
+    # only witness to the column default: it must start `false` (and be unset
+    # here, not written explicitly).
+    post_migration_item_id = uuid()
+
+    execute(
+      """
+      INSERT INTO eni_item
+        (eni_id, eni_org_id, eni_sku, eni_name, eni_kind, eni_uom, eni_inserted_at, eni_updated_at)
+      VALUES ($1, $2, 'L1-POST', 'L1 post-migration item', 'stocked', 'unit', $3, $3)
+      """,
+      [post_migration_item_id, uuid(), now()]
+    )
+
+    assert query_value(
+             "SELECT eni_lot_tracked FROM eni_item WHERE eni_id = $1",
+             [post_migration_item_id]
+           ) == false
   end
 
   defp seed_items_and_lot do
@@ -121,6 +141,11 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
   defp query_value(sql, params) do
     %{rows: [[value]]} = execute(sql, params)
     value
+  end
+
+  defp query_row(sql, params) do
+    %{rows: [row]} = execute(sql, params)
+    row
   end
 
   defp now, do: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
