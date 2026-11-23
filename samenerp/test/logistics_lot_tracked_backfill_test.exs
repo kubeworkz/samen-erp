@@ -4,6 +4,11 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
   without one BEFORE the L1 logistics migration, then apply only that
   migration and assert the physical `eni_item.eni_lot_tracked` state and its
   catalog row.
+
+  This test is deliberately MIGRATION-ONLY. It proves the historical-row
+  backfill and that the real source migration ran; the live `Lot` ship refusal
+  and its non-lot control are the core inventory shipment suite's proof, so a
+  migration regression cannot hide behind a shipment/Billing/Finance fixture.
   """
 
   use ExUnit.Case, async: false
@@ -60,6 +65,10 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
   end
 
   test "the L1 migration backfills Item.lot_tracked from existing Lot rows" do
+    # The target version is recorded, so the flags below are read from a schema
+    # this migration built — not an older head or a stale `_build` copy.
+    assert @l1_version in Ecto.Migrator.migrated_versions(ScratchRepo)
+
     assert query_value(
              "SELECT eni_lot_tracked FROM eni_item WHERE eni_id = $1",
              [uuid_param(@lot_item_id)]

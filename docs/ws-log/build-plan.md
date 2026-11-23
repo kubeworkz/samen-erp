@@ -263,14 +263,18 @@ lot guard is added.
   logistics migration is discovered as an :expand down-check target`.
 - `samenerp/test/logistics_walkthrough_test.exs`: SO → partial shipment → invoice → second
   shipment → fulfilled, against the host mount.
-- `samenerp/test/logistics_lot_tracked_backfill_test.exs`: seed an existing `Item` with a `Lot`
-  row and one without before the L1 logistics migration, run the migration, and assert
-  `lot_tracked = true` only for the item with a `Lot` row; also assert the physical
-  `eni_item.eni_lot_tracked` column and its `fld_field` row (`eni_lot_tracked` / `lot_tracked`)
-  exist. Then insert a `Lot` directly for the previously non-lot item, assert `Shipment :ship`
-  refuses it while the flag is still `false`, run the idempotent post-deploy reconciliation, and
-  assert the flag becomes `true`; the non-lot control still ships. The named test is `the L1
-  migration backfills Item.lot_tracked from existing Lot rows`.
+- `samenerp/test/logistics_lot_tracked_backfill_test.exs` — **the migration proof only.** Seed an
+  existing `Item` with a `Lot` row and one without before the L1 logistics migration, run the real
+  source migration directory, and assert: (a) `lot_tracked = true` for the item with a `Lot` row;
+  (b) `false` for the item without one; (c) the target version is recorded in `schema_migrations`
+  (the real migration module ran, not a `_build` copy) and the physical
+  `eni_item.eni_lot_tracked` column plus its `fld_field` row (`eni_lot_tracked` / `lot_tracked`)
+  exist. The named test is `the L1 migration backfills Item.lot_tracked from existing Lot rows`.
+  Do **not** assert the live-`Lot` ship refusal here: that proof (a `Lot` inserted directly while
+  `lot_tracked` is still `false` is refused, and the non-lot control still ships) is the core
+  `samen_core/test/inventory_shipment_test.exs` named test above. A host test that also needs the
+  full Shipment/Billing/Finance fixture would let an unrelated fixture failure obscure a migration
+  regression, and each sabotage anchor needs exactly one home.
 
 **Backfill harness (the executable seam).** `samenerp/test/test_helper.exs` boots the host schema
 to head through `Samen.TestDb.boot!(Repo)` before ExUnit starts, so a pre-migration row cannot be
