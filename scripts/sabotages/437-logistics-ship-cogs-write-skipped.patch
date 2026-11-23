@@ -1,0 +1,12 @@
+# SABOTAGE: Skip the shipment's COGS entry while leaving stock and invoice posted.
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: a shipped shipment reconciles stock, lines, invoice, COGS and the order's open qty
+diff --git a/samen_core/lib/samen/scopes/inventory/ship_posting.ex b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+--- a/samen_core/lib/samen/scopes/inventory/ship_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+@@ -282,3 +282,3 @@ defmodule Samen.Scopes.Inventory.ShipPosting do
+-    value = cogs_value(lines, costs)
++    value = 0
+ 
+     if value == 0 do

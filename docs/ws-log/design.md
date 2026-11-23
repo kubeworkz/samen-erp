@@ -2,7 +2,9 @@
 
 - **Status:** PROPOSED (L1.1 migration contract implemented — shipment resources, `lot_tracked`,
   scoped catalog sync/down and the reversible `:expand` migration; plus L1's legacy `:fulfill`
-  live lot refusal. The rest of L1.2+ is design only). ADR-056 is filed;
+  live lot refusal, L1.2's `ShipPosting`/`Shipment :ship` posting path and R6's
+  `ReconcileShipment` read. L1.3 and the remaining L1.4 proofs are design only). ADR-056 is
+  filed;
   on 2026-11-22 the operator RATIFIED OD-1 (the Inventory `logistics:` branch), the L1 half of
   OD-2 (`:fulfill` keeps its full-order shape with the shared lot refusal; `Shipment :ship` is the
   partial path) and OD-7 (repair E13/E14 in

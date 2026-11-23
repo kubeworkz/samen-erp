@@ -1319,6 +1319,22 @@ defmodule Samen.Scopes.Inventory.Blueprint do
             )
           end
 
+          # WS-LOG L1.2: the private internal partial-fulfillment transition.
+          # `ShipPosting` is the only caller; no UI route exposes it. The target
+          # comes as an argument so `SoState` can validate (pre-state, target).
+          update :apply_shipment do
+            accept([])
+            require_atomic?(false)
+
+            argument(:status, :atom,
+              allow_nil?: false,
+              constraints: [one_of: [:partially_fulfilled, :fulfilled]]
+            )
+
+            change(Samen.Scopes.Finance.PostingMarker)
+            change(Samen.Scopes.Inventory.ApplyShipmentState)
+          end
+
           update :cancel do
             accept([])
             require_atomic?(false)

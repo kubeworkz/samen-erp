@@ -195,7 +195,7 @@ defmodule Samen.AbbrevRegistryTest do
       # +2 WS-LOG L1 shipment pair: `shp`/`shm` (the `shl` candidate was
       # already owned by the HR LeaveRequest), allocator-reserved.
       assert map_size(hosts["samenerp"]) == 148
-      assert map_size(hosts["samen_core"]) == 137
+      assert map_size(hosts["samen_core"]) == 139
       assert map_size(hosts["samen_web"]) == 119
 
       # F3 Unit 1: the ConsentEvent ledger reserved a host-namespaced abbrev per marketing
@@ -478,6 +478,10 @@ defmodule Samen.AbbrevRegistryTest do
                  # WS-ACCT Phase 4 (ADR-054 D3): the fixture's physical production
                  # lot, allocator-reserved (--host samen_core).
                  "slt" => "SamenCore.Support.InventoryFixture.Lot",
+                 # WS-LOG L1.2: the fixture's shipment pair, allocator-reserved
+                 # (--host samen_core; `shp`/`shm` are the samenerp host's own).
+                 "sis" => "SamenCore.Support.InventoryFixture.Shipment",
+                 "ssi" => "SamenCore.Support.InventoryFixture.ShipmentLine",
                  # WS-ACCT Phase 6 (ADR-054 D5): the fixture's deferred-revenue
                  # schedule and its per-period recognitions, allocator-reserved.
                  "fsd" => "SamenCore.Support.FinanceFixture.RevenueSchedule",
@@ -1188,7 +1192,8 @@ defmodule Samen.AbbrevRegistryTest do
       # `wep`/`ewp`, samenerp `sep`/`spe`, allocator-reserved = 782 flat.)
       # (+3 durable payroll-register provenance rows = 791 flat.)
       # (+2 WS-LOG L1 shipment pair: `shp`/`shm`.)
-      assert map_size(Reg.load()) == 799
+      # (+2 WS-LOG L1.2 fixture shipment pair: `sis`/`ssi` = 801 flat.)
+      assert map_size(Reg.load()) == 801
     end
 
     test "load/1 (compat shim) reads a flat file byte-identically — hosts empty" do

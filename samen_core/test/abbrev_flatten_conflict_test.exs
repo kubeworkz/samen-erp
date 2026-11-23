@@ -140,8 +140,8 @@ defmodule Samen.AbbrevFlattenConflictTest do
       # samenerp — the PayrollSettlement batch per Finance host),
       # allocator-reserved -> 797 flat.
       # +2 WS-LOG L1.1 shipment pair (`shp`/`shm` — Shipment/ShipmentLine on
-      # samenerp), allocator-reserved -> 799 flat.
-      assert map_size(flat) == 799
+      # samenerp), allocator-reserved -> 799 flat; +2 L1.2 fixture rows -> 801 flat.
+      assert map_size(flat) == 801
       # A global entry and a host entry both survive the (lossless) flatten.
       assert flat["com"] == "SamenCore.Support.Crm.Contact"
       assert flat["mce"] == "Demo.MarketingScope.ConsentEvent"

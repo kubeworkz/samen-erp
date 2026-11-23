@@ -57,6 +57,8 @@ defmodule SamenCore.Support.InventoryFixture do
     billing: [
       invoice: SamenCore.Support.FinanceFixture.InvoiceMirror
     ],
+    # WS-LOG L1.2: the shipment pair + its :ship posting path.
+    logistics: true,
     abbrevs: %{
       item: "sit",
       warehouse: "swh",
@@ -72,6 +74,8 @@ defmodule SamenCore.Support.InventoryFixture do
       bom_line: "sbl",
       work_order: "swk",
       production_log: "spg",
-      lot: "slt"
+      lot: "slt",
+      shipment: "sis",
+      shipment_line: "ssi"
     }
 end

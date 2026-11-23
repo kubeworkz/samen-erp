@@ -21,7 +21,16 @@ defmodule Samen.Scopes.Inventory.BlueprintLogistics do
              abbrev,
              sales_order_mod,
              warehouse_mod,
-             shipment_line_mod
+             shipment_line_mod,
+             so_line_mod,
+             ledger_mod,
+             level_mod,
+             invoice_mod,
+             entry_mod,
+             posting_account_mod,
+             item_mod,
+             lot_mod,
+             org_fx_settings_mod
            ) do
     quote do
       defmodule unquote(module) do
@@ -105,6 +114,33 @@ defmodule Samen.Scopes.Inventory.BlueprintLogistics do
 
             change(set_attribute(:status, :draft))
           end
+
+          # WS-LOG L1.2: the posting chokepoint. `ShipPosting` locks the
+          # shipment then its SO, re-reads the live remaining quantity, posts
+          # the stock/COGS/invoice legs and flips both documents. accept([]) —
+          # the facts come from the shipment's own lines.
+          update :ship do
+            accept([])
+            require_atomic?(false)
+
+            change(Samen.Scopes.Finance.PostingMarker)
+
+            change(
+              {Samen.Scopes.Inventory.ShipPosting,
+               sales_order: unquote(sales_order_mod),
+               warehouse: unquote(warehouse_mod),
+               shipment_line: unquote(shipment_line_mod),
+               so_line: unquote(so_line_mod),
+               ledger: unquote(ledger_mod),
+               level: unquote(level_mod),
+               invoice: unquote(invoice_mod),
+               entry: unquote(entry_mod),
+               posting_account: unquote(posting_account_mod),
+               item: unquote(item_mod),
+               lot: unquote(lot_mod),
+               org_fx_settings: unquote(org_fx_settings_mod)}
+            )
+          end
         end
 
         policies do
@@ -112,7 +148,7 @@ defmodule Samen.Scopes.Inventory.BlueprintLogistics do
             authorize_if(Samen.Policy.OrgScope)
           end
 
-          policy action_type(:create) do
+          policy action_type([:create, :update]) do
             forbid_unless(Samen.Policy.OrgScope)
             forbid_unless({Samen.Policy.RoleAtLeast, role: :member})
             authorize_if(always())

@@ -55,7 +55,7 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
 
   use Ash.Resource.Change
 
-  alias Samen.Scopes.Finance.ApFx
+  alias Samen.Scopes.Inventory.ShipPosting
 
   @source_key "sales_order"
   @invoice_key "billing_invoice"
@@ -92,20 +92,41 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
 
     with :ok <- refuse_not_confirmed(so),
          {:ok, lines} <- frozen_lines(so_line_resource, org_id, so),
-         {:ok, item_accounts, items} <- item_accounts(item_resource, org_id, lines),
+         {:ok, item_accounts, items} <- ShipPosting.item_accounts(item_resource, org_id, lines),
          :ok <- refuse_lot_backed(lot_resource, org_id, items, lines),
-         {:ok, costs} <- moving_averages(level_resource, org_id, so.warehouse_id, lines),
-         {:ok, cogs_account} <- posting_account(posting_account_resource, org_id, :cogs),
+         {:ok, costs} <-
+           ShipPosting.moving_averages(level_resource, org_id, so.warehouse_id, lines),
+         {:ok, cogs_account} <-
+           ShipPosting.posting_account(posting_account_resource, org_id, :cogs),
          {:ok, invoice} <-
-           emit_invoice(invoice_resource, org_id, so, lines, org_fx_settings) do
+           ShipPosting.emit_invoice(
+             invoice_resource,
+             org_id,
+             so.customer_id,
+             lines,
+             org_fx_settings,
+             "SO #{so.number} line"
+           ) do
       # ── 1. the stock events (the negative-qty demand side) ─────────────
       # ── 2. the COGS entry (Dr :cogs / Cr each item's inventory account) ──
-      with {:ok, _events} <- write_stock_events(ledger_resource, org_id, so, lines, costs),
+      with {:ok, _events} <-
+             ShipPosting.write_stock_events(
+               ledger_resource,
+               org_id,
+               so.warehouse_id,
+               @source_key,
+               so.id,
+               lines,
+               costs
+             ),
            {:ok, _entry} <-
-             write_cogs_entry(
+             ShipPosting.write_cogs_entry(
                entry_resource,
                org_id,
-               so,
+               Date.utc_today(),
+               "COGS for sales order #{so.number}",
+               @source_key,
+               so.id,
                lines,
                costs,
                item_accounts,
@@ -134,122 +155,6 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
           field: :base,
           message: "the sales order cannot be fulfilled: #{format(reason)}"
         )
-    end
-  end
-
-  # ── the write steps (any failure rolls the WHOLE transaction back) ──────────
-
-  defp write_stock_events(ledger_resource, org_id, so, lines, costs) do
-    Enum.reduce_while(lines, {:ok, []}, fn line, {:ok, acc} ->
-      case ledger_resource
-           |> Ash.Changeset.for_create(:record, %{
-             org_id: org_id,
-             item_id: line.item_id,
-             warehouse_id: so.warehouse_id,
-             kind: :sale,
-             qty: -line.qty,
-             unit_cost_cents: Map.fetch!(costs, line.item_id),
-             source_key: @source_key,
-             source_id: so.id
-           })
-           |> Ash.create(authorize?: false) do
-        {:ok, event} -> {:cont, {:ok, [event | acc]}}
-        {:error, reason} -> {:halt, {:error, {:stock_event_failed, reason}}}
-      end
-    end)
-  end
-
-  # The COGS leg: one posted entry anchored to the sales order, Dr :cogs and
-  # Cr each line's item `default_inventory_account_id` for qty × the
-  # moving-average cost snapshot. It runs after the stock events, inside the
-  # outer `:fulfill` transaction, so a missing item link / unmapped :cogs /
-  # closed period rolls the whole fulfillment back.
-  #
-  # A zero total is deliberately a SKIP, not a zero-value entry: LineAmounts
-  # refuses a line with both amounts zero, and an entry with no amount is
-  # accounting noise rather than a fact. In a mixed sale, zero-cost lines are
-  # omitted so the positive lines remain a valid balanced entry.
-  defp write_cogs_entry(entry_resource, org_id, so, lines, costs, item_accounts, cogs) do
-    value = cogs_value(lines, costs)
-
-    if value == 0 do
-      {:ok, nil}
-    else
-      entry_lines =
-        [
-          %{
-            account_id: cogs.account_id,
-            debit_cents: value,
-            credit_cents: 0
-          }
-        ] ++
-          (lines
-           |> Enum.map(fn line ->
-             %{
-               account_id: Map.fetch!(item_accounts, line.item_id),
-               debit_cents: 0,
-               credit_cents: line.qty * Map.fetch!(costs, line.item_id)
-             }
-           end)
-           |> Enum.reject(&(&1.credit_cents == 0)))
-
-      entry_attrs = %{
-        org_id: org_id,
-        entry_date: Date.utc_today(),
-        memo: "COGS for sales order #{so.number}",
-        source_key: @source_key,
-        source_id: so.id,
-        lines: entry_lines
-      }
-
-      # The posted-born internal factory (the GoodsPosting shape): the COGS
-      # entry is a fact at fulfillment, not a draft hidden from the GL.
-      case entry_resource
-           |> Ash.Changeset.for_create(:create_reversal, entry_attrs, authorize?: false)
-           |> Ash.create(authorize?: false) do
-        {:ok, entry} -> {:ok, entry}
-        {:error, reason} -> {:error, {:cogs_entry_failed, reason}}
-      end
-    end
-  end
-
-  defp cogs_value(lines, costs) do
-    Enum.sum(Enum.map(lines, &(&1.qty * Map.fetch!(costs, &1.item_id))))
-  end
-
-  # The per-item inventory-account link is a precondition of the whole
-  # fulfillment (the GoodsPosting posture): an unlinked item cannot post a
-  # COGS credit, so it refuses before the invoice or any stock event lands.
-  defp item_accounts(item_resource, org_id, lines) do
-    require Ash.Query
-
-    item_ids = lines |> Enum.map(& &1.item_id) |> Enum.uniq()
-
-    case item_resource
-         |> Ash.Query.filter(org_id == ^org_id and id in ^item_ids)
-         |> Ash.read(authorize?: false) do
-      {:ok, items} ->
-        by_id = Map.new(items, &{&1.id, &1})
-
-        with {:ok, accounts} <-
-               Enum.reduce_while(lines, {:ok, %{}}, fn line, {:ok, acc} ->
-                 case Map.fetch(by_id, line.item_id) do
-                   {:ok, %{default_inventory_account_id: account_id}}
-                   when is_binary(account_id) ->
-                     {:cont, {:ok, Map.put(acc, line.item_id, account_id)}}
-
-                   {:ok, _item} ->
-                     {:halt, {:error, {:missing_inventory_account, line.item_id}}}
-
-                   :error ->
-                     {:halt, {:error, {:item_not_found, line.item_id}}}
-                 end
-               end) do
-          {:ok, accounts, by_id}
-        end
-
-      {:error, reason} ->
-        {:error, {:items_read_failed, reason}}
     end
   end
 
@@ -283,73 +188,6 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
     end
   end
 
-  defp posting_account(pa_resource, org_id, key) do
-    require Ash.Query
-
-    case pa_resource
-         |> Ash.Query.filter(org_id == ^org_id and key == ^key)
-         |> Ash.read_one(authorize?: false) do
-      {:ok, nil} -> {:error, {:unmapped_posting_account, key}}
-      {:ok, row} -> {:ok, row}
-      {:error, reason} -> {:error, {:posting_account_read_failed, key, reason}}
-    end
-  end
-
-  # The invoice emission: create the host's real invoice as a DRAFT in the
-  # org's functional currency, then open it through the one sanctioned
-  # `:issue` action. Both writes are inside the outer `:fulfill` transaction
-  # (whose PostingMarker is already armed), so stock, the AR entry, COGS and
-  # the invoice flip commit or roll back together. amount_due = Σ qty×price;
-  # the line items carry the bounded jsonb shape.
-  defp emit_invoice(invoice_resource, org_id, so, lines, org_fx_settings) do
-    if Ash.Resource.Info.action(invoice_resource, :issue) do
-      line_items =
-        Enum.map(lines, fn line ->
-          %{
-            "description" => "SO #{so.number} line",
-            "quantity" => line.qty,
-            "amount_cents" => line.qty * line.unit_price_cents
-          }
-        end)
-
-      amount_due = Enum.sum(Enum.map(lines, &(&1.qty * &1.unit_price_cents)))
-      currency = ApFx.base_currency(org_fx_settings, org_id)
-
-      with {:ok, draft} <-
-             create_invoice(invoice_resource, %{
-               org_id: org_id,
-               customer_id: so.customer_id,
-               amount_due_cents: amount_due,
-               amount_paid_cents: 0,
-               currency: currency,
-               line_items: line_items
-             }),
-           {:ok, issued} <- issue_invoice(draft) do
-        {:ok, issued}
-      end
-    else
-      {:error, {:invoice_issue_action_missing, invoice_resource}}
-    end
-  end
-
-  defp create_invoice(invoice_resource, attrs) do
-    case invoice_resource
-         |> Ash.Changeset.for_create(:create, attrs)
-         |> Ash.create(authorize?: false) do
-      {:ok, invoice} -> {:ok, invoice}
-      {:error, reason} -> {:error, {:invoice_failed, reason}}
-    end
-  end
-
-  defp issue_invoice(invoice) do
-    case invoice
-         |> Ash.Changeset.for_update(:issue, %{})
-         |> Ash.update(authorize?: false) do
-      {:ok, issued} -> {:ok, issued}
-      {:error, reason} -> {:error, {:invoice_issue_failed, reason}}
-    end
-  end
-
   # ── reads + refusals ────────────────────────────────────────────────────────
 
   defp refuse_not_confirmed(so) do
@@ -371,46 +209,6 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
       {:ok, lines} -> {:ok, Enum.sort_by(lines, & &1.id)}
       {:error, reason} -> {:error, {:lines_read_failed, reason}}
     end
-  end
-
-  # The moving-average snapshot per line's item, BEFORE the sale lands —
-  # read off the rollup rows in-transaction. A level row is guaranteed to
-  # exist for any pair the goods receipts touched; a NEVER-stocked pair is
-  # refused fail-honest (selling stock the org never received is a data
-  # error even when the warehouse would allow negative).
-  defp moving_averages(level_resource, org_id, warehouse_id, lines) do
-    require Ash.Query
-
-    Enum.reduce_while(lines, {:ok, %{}}, fn line, {:ok, acc} ->
-      cond do
-        Map.has_key?(acc, line.item_id) ->
-          {:cont, {:ok, acc}}
-
-        true ->
-          case level_resource
-               |> Ash.Query.filter(
-                 org_id == ^org_id and item_id == ^line.item_id and
-                   warehouse_id == ^warehouse_id
-               )
-               |> Ash.read_one(authorize?: false) do
-            {:ok, %{avg_unit_cost_cents: avg}} when is_integer(avg) ->
-              {:cont, {:ok, Map.put(acc, line.item_id, avg)}}
-
-            # StockLevelSync leaves the average NULL when no observed event was
-            # VALUED (cost > 0) — a zero-cost receipt is exactly that case. A
-            # level row means the pair was stocked, so its cost is zero, not
-            # "never stocked".
-            {:ok, %{avg_unit_cost_cents: nil}} ->
-              {:cont, {:ok, Map.put(acc, line.item_id, 0)}}
-
-            {:ok, _} ->
-              {:halt, {:error, {:never_stocked, line.item_id}}}
-
-            {:error, reason} ->
-              {:halt, {:error, {:level_read_failed, reason}}}
-          end
-      end
-    end)
   end
 
   # ── formatting ──────────────────────────────────────────────────────────────

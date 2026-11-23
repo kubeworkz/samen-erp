@@ -1,0 +1,27 @@
+# SABOTAGE: Bypass the live Lot existence check in ShipPosting so an out-of-band lot can ship.
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: a Lot created after the L1 backfill cannot ship as a non-lot item
+diff --git a/samen_core/lib/samen/scopes/inventory/ship_posting.ex b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+--- a/samen_core/lib/samen/scopes/inventory/ship_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+@@ -466,17 +466,8 @@ defmodule Samen.Scopes.Inventory.ShipPosting do
+   end
+ 
+   defp existing_lots(lot_resource, org_id, lines) do
+-    require Ash.Query
+-
+-    item_ids = lines |> Enum.map(& &1.item_id) |> Enum.uniq()
+-
+-    case lot_resource
+-         |> Ash.Query.filter(org_id == ^org_id and item_id in ^item_ids)
+-         |> Ash.read(authorize?: false) do
+-      {:ok, []} -> :ok
+-      {:ok, [lot | _]} -> {:error, {:lot_tracked_requires_l1b, lot.item_id}}
+-      {:error, reason} -> {:error, {:lots_read_failed, reason}}
+-    end
++    _ = {lot_resource, org_id, lines}
++    :ok
+   end
+ 
+   defp stamp_costs(expanded, costs) do

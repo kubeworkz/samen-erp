@@ -4,9 +4,10 @@
   ADR's build half). On 2026-11-22 the operator RATIFIED OD-1, the L1 half of OD-2, OD-7, PF-1,
   PF-2 Option A and PF-3; OD-2's L1b half and OD-3–OD-6 remain DEFERRED and unratified. L1.1's
   migration contract (shipment resources, `lot_tracked`, scoped catalog sync/down and the
-  reversible `:expand` migration) is implemented, as is L1's legacy `:fulfill` live lot refusal;
-  `ShipPosting`/`Shipment :ship`, the L1.3 surface and the remaining L1.4 tests are not authored
-  by this plan.
+  reversible `:expand` migration) is implemented, as are L1's legacy `:fulfill` live lot refusal
+  and L1.2's `ShipPosting`/`Shipment :ship` (lock/re-read/flip, frozen cost, stock/COGS/invoice)
+  plus R6's `ReconcileShipment` read; the L1.3 surface and the remaining L1.4 proofs are not
+  authored by this plan.
 - **Sizing:** one deliverable per unit, serialized by default, each phase independently
   committable and gate-able. Every phase ends with the adversarial gate: named tests flip under a
   committed sabotage patch, revert byte-exact, and the suites + verifiers stay green.
@@ -240,7 +241,7 @@ lot guard is added.
   - the frozen `unit_cost_cents` is used for COGS; zero-cost lines post no COGS and no zero-value
     journal; a missing item inventory/posting account refuses before any write;
   - replay/retry refused (exactly-once);
-  - R6 green; `ReconcileShipment.divergences/2` empty for every shipped shipment;
+  - R6 green; `ReconcileShipment.divergences/3` empty for every shipped shipment;
   - **E5's existing non-lot `:fulfill` suite stays green**; the new legacy lot-refusal test is the
     only added behavior coverage;
   - legacy R3/R4/R5 suites unchanged green.
@@ -343,8 +344,8 @@ org_id (uuid)                — tenant pin; the org columns below carry no FK, 
   migration, so an `UPDATE` without the `EXISTS` guard (sabotage 432) fails this test instead of
   passing vacuously.
 
-- New sabotage patches (next free numbers): one flips the named R6 tests (stock without
-  invoice/COGS, and an accepted over-ship); two are the backfill mutations below (no-op and
+- New sabotage patches (next free number: 438; the R6 anchor is 437): one flips the named R6
+  tests (stock without invoice/COGS, and an accepted over-ship); two are the backfill mutations below (no-op and
   overbroad, both targeting the migration with the test unchanged); one removes the
   `Lot :create` flag maintenance and must fail `Lot :create marks its Item lot_tracked`; one
   removes the `Item` clear guard and must fail `an Item cannot clear lot_tracked while a Lot
@@ -411,7 +412,7 @@ No `# ENV:` line is required because this test is not opt-in. Remove or bypass t
 No `# ENV:` line is required because this test is not opt-in. Remove the `phase: :expand`
 option from the migration; the named test must fail; restore the source byte-exact.
 
-**Live-gate sabotage header (next free patch number):**
+**Live-gate sabotage header (435):**
 
 ```text
 # APP: samen_core
@@ -421,6 +422,28 @@ option from the migration; the named test must fail; restore the source byte-exa
 
 No `# ENV:` line is required because this test is not opt-in. Remove or bypass the live `Lot`
 existence check in `ShipPosting`; the named test must fail; restore the source byte-exact.
+
+**Remaining-quantity sabotage (436):**
+
+```text
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: an over-shipment is refused before any write, then a valid shipment lands
+```
+
+No `# ENV:` line is required. Drop the live remaining-quantity check in `ShipPosting`; the
+named test must fail; restore the source byte-exact.
+
+**R6 COGS sabotage (437):**
+
+```text
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: a shipped shipment reconciles stock, lines, invoice, COGS and the order's open qty
+```
+
+No `# ENV:` line is required. Skip the COGS entry while stock and invoice still post; the R6
+green test must fail on the missing COGS leg; restore the source byte-exact.
 
 **Legacy-gate sabotage header (434):**
 

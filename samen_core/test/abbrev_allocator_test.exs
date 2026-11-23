@@ -366,8 +366,10 @@ defmodule Samen.Abbrev.AllocatorTest do
       # allocator-reserved -> 37_730 bytes, 797 flat.
       # +2 WS-LOG L1 shipment pair (`shp`/`shm` in samenerp) -> 37_810 bytes,
       # 799 flat.
-      assert byte_size(committed) == 37_810
-      assert map_size(R.load()) == 799
+      # +2 WS-LOG L1.2 fixture shipment pair (`sis`/`ssi` in samen_core) ->
+      # 37_934 bytes, 801 flat.
+      assert byte_size(committed) == 37_934
+      assert map_size(R.load()) == 801
     end
   end
 

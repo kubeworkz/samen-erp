@@ -364,6 +364,10 @@ defmodule Samen.Scopes.Inventory do
         shipment_line_mod = Module.concat(namespace, ShipmentLine)
         sales_order_mod = Module.concat(namespace, SalesOrder)
         so_line_mod = Module.concat(namespace, SoLine)
+        billing_invoice = Keyword.fetch!(billing_opts, :invoice)
+        finance_entry = Keyword.fetch!(finance_opts, :entry)
+        finance_posting_account = Keyword.fetch!(finance_opts, :posting_account)
+        finance_org_fx_settings = Keyword.get(finance_opts, :org_fx_settings)
 
         quote do
           resources do
@@ -379,7 +383,16 @@ defmodule Samen.Scopes.Inventory do
             unquote(abbrevs.shipment),
             unquote(sales_order_mod),
             unquote(warehouse_mod),
-            unquote(shipment_line_mod)
+            unquote(shipment_line_mod),
+            unquote(so_line_mod),
+            unquote(ledger_mod),
+            unquote(level_mod),
+            unquote(billing_invoice),
+            unquote(finance_entry),
+            unquote(finance_posting_account),
+            unquote(item_mod),
+            unquote(lot_mod),
+            unquote(finance_org_fx_settings)
           )
 
           Samen.Scopes.Inventory.BlueprintLogistics.define_shipment_line(

@@ -11,9 +11,14 @@ defmodule Samen.Scopes.Inventory.SoState do
     commitment, not a sketch).
   * `:cancel` — only a pre-fulfillment SO (`:draft`/`:confirmed`) may
     cancel; a fulfilled SO's stock and invoice are facts.
+  * `:apply_shipment` — the private internal partial path admits only
+    `:confirmed -> :partially_fulfilled` and
+    `:partially_fulfilled -> :fulfilled`. A first complete shipment makes
+    both transitions in that order; every other pre-state/target pair is
+    refused before the DB belt sees it.
 
-  The cascade's own flip (FulfillOrder stamps `:fulfilled` on `:fulfill`)
-  does not run through a guarded transition action — the cascade
+  The legacy cascade's own flip (FulfillOrder stamps `:fulfilled` on
+  `:fulfill`) does not run through a guarded transition action — the cascade
   force-stamps after its own pre-state check, and the DB belt admits
   `→fulfilled` ONLY under the posting marker.
   """
@@ -33,15 +38,29 @@ defmodule Samen.Scopes.Inventory.SoState do
         value -> value
       end
 
-    case {action, pre} do
-      {:confirm, :draft} -> changeset
-      {:fulfill, :confirmed} -> changeset
-      {:cancel, s} when s in [:draft, :confirmed] -> changeset
-      {:confirm, other} -> refuse(changeset, :confirm, other)
-      {:fulfill, other} -> refuse(changeset, :fulfill, other)
-      {:cancel, other} -> refuse(changeset, :cancel, other)
-      {_, _} -> changeset
+    target = Ash.Changeset.get_attribute(changeset, :status)
+
+    case {action, pre, target} do
+      {:confirm, :draft, _} -> changeset
+      {:fulfill, :confirmed, _} -> changeset
+      {:cancel, s, _} when s in [:draft, :confirmed] -> changeset
+      {:apply_shipment, :confirmed, :partially_fulfilled} -> changeset
+      {:apply_shipment, :partially_fulfilled, :fulfilled} -> changeset
+      {:apply_shipment, _, _} -> refuse_apply_shipment(changeset, pre, target)
+      {:confirm, other, _} -> refuse(changeset, :confirm, other)
+      {:fulfill, other, _} -> refuse(changeset, :fulfill, other)
+      {:cancel, other, _} -> refuse(changeset, :cancel, other)
+      {_, _, _} -> changeset
     end
+  end
+
+  defp refuse_apply_shipment(changeset, pre, target) do
+    Ash.Changeset.add_error(changeset,
+      field: :status,
+      message:
+        "illegal :apply_shipment transition: #{inspect(pre)} -> #{inspect(target)} — only " <>
+          ":confirmed -> :partially_fulfilled and :partially_fulfilled -> :fulfilled are admitted"
+    )
   end
 
   defp refuse(changeset, action, state) do

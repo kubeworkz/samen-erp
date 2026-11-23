@@ -1,0 +1,21 @@
+# SABOTAGE: Drop the live remaining-quantity check so ShipPosting accepts an over-shipment.
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: an over-shipment is refused before any write, then a valid shipment lands
+diff --git a/samen_core/lib/samen/scopes/inventory/ship_posting.ex b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+--- a/samen_core/lib/samen/scopes/inventory/ship_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+@@ -487,11 +487,4 @@ defmodule Samen.Scopes.Inventory.ShipPosting do
+   defp refuse_over_ship(expanded, posted) do
+-    Enum.reduce_while(expanded, :ok, fn %{so_line: so_line, qty: qty}, :ok ->
+-      remaining = so_line.qty - Map.get(posted, so_line.id, 0)
+-
+-      if qty > remaining do
+-        {:halt, {:error, {:over_ship, so_line.id, remaining, qty}}}
+-      else
+-        {:cont, :ok}
+-      end
+-    end)
++    _ = {expanded, posted}
++    :ok
+   end

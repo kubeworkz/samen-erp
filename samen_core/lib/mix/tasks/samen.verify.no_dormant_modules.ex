@@ -57,6 +57,7 @@ defmodule Mix.Tasks.Samen.Verify.NoDormantModules do
     "Samen.Scopes.Finance.ReconcileRecognition",
     "Samen.Scopes.Finance.TaxCalculator",
     "Samen.Scopes.Inventory.ReconcileFulfillment",
+    "Samen.Scopes.Inventory.ReconcileShipment",
     "Samen.Scopes.Inventory.ReconcileProcurement",
     "Samen.Scopes.Inventory.ReconcileProduction"
   ]
