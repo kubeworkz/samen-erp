@@ -269,8 +269,8 @@ lot guard is added.
   `eni_item.eni_lot_tracked` column and its `fld_field` row (`eni_lot_tracked` / `lot_tracked`)
   exist. Then insert a `Lot` directly for the previously non-lot item, assert `Shipment :ship`
   refuses it while the flag is still `false`, run the idempotent post-deploy reconciliation, and
-  assert the flag becomes `true`; the non-lot control still ships. The named test is `migration
-  backfills Item.lot_tracked for existing Lot items and leaves non-lot items false`.
+  assert the flag becomes `true`; the non-lot control still ships. The named test is `the L1
+  migration backfills Item.lot_tracked from existing Lot rows`.
 
 **Backfill harness (the executable seam).** `samenerp/test/test_helper.exs` boots the host schema
 to head through `Samen.TestDb.boot!(Repo)` before ExUnit starts, so a pre-migration row cannot be
