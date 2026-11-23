@@ -1,0 +1,17 @@
+# SABOTAGE: Drop phase: :expand from the L1 logistics migration so the down-check target is not discovered.
+# APP: samenerp
+# TEST_FILES: test/logistics_migration_contract_test.exs
+# MUST_FAIL: the L1 logistics migration is discovered as an :expand down-check target
+diff --git a/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs b/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
+index 826a0ec4..37f8d481 100644
+--- a/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
++++ b/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
+@@ -19,7 +19,7 @@ defmodule Samenerp.Repo.Migrations.MountInventoryLogistics do
+   catalog rows are written in the same transaction as the DDL.
+   """
+ 
+-  use Samen.Migration, phase: :expand
++  use Samen.Migration
+ 
+   @shipment_resources [Samenerp.Erp.Shipment, Samenerp.Erp.ShipmentLine]
+ 

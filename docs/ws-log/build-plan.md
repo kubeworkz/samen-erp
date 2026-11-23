@@ -394,7 +394,7 @@ change in `Lot :create`; the named test must fail; restore the source byte-exact
 No `# ENV:` line is required because this test is not opt-in. Remove or bypass the clear guard in
 `Item :update`; the named test must fail; restore the source byte-exact.
 
-**Migration-discovery sabotage header (next free patch number):**
+**Migration-discovery sabotage (433):**
 
 ```text
 # APP: samenerp
