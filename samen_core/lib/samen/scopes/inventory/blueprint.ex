@@ -1139,6 +1139,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
              entry_mod,
              posting_account_mod,
              item_mod,
+             lot_mod,
              org_fx_settings_mod
            ) do
     quote do
@@ -1313,6 +1314,7 @@ defmodule Samen.Scopes.Inventory.Blueprint do
                entry: unquote(entry_mod),
                posting_account: unquote(posting_account_mod),
                item: unquote(item_mod),
+               lot: unquote(lot_mod),
                org_fx_settings: unquote(org_fx_settings_mod)}
             )
           end

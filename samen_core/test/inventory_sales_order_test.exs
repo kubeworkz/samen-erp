@@ -48,6 +48,7 @@ defmodule Samen.InventorySalesOrderTest do
 
   alias SamenCore.Support.FinanceFixture.{
     Account,
+    CostObject,
     InvoiceMirror,
     JournalEntry,
     JournalLine,
@@ -55,7 +56,7 @@ defmodule Samen.InventorySalesOrderTest do
     PostingAccount
   }
 
-  alias SamenCore.Support.InventoryFixture.{Item, SalesOrder, SoLine, StockLedger, Warehouse}
+  alias SamenCore.Support.InventoryFixture.{Item, Lot, SalesOrder, SoLine, StockLedger, Warehouse}
   alias SamenCore.Support.SalesOpsFixture.Lead
 
   @repo SamenCore.TestRepo
@@ -905,6 +906,90 @@ defmodule Samen.InventorySalesOrderTest do
     end
   end
 
+  # ── f9: the L1 lot gate on the legacy path ───────────────────────────────────
+
+  describe "f9 — the L1 lot gate (legacy :fulfill)" do
+    test "legacy :fulfill refuses a lot-backed item before any write", %{
+      org: org,
+      scope: scope
+    } do
+      {item, warehouse} = seed_pair(scope, org)
+      stock_pair(scope, org, item, warehouse, 10, 500)
+
+      so =
+        new_so(scope, org, warehouse.id, [%{item_id: item.id, qty: 2, unit_price_cents: 900}])
+        |> confirm(scope)
+
+      # The out-of-band row: inserted directly, so `Lot :create`'s flag
+      # maintenance never runs and the item still reads `lot_tracked: false`.
+      # The live EXISTS check, not the flag, must catch it.
+      out_of_band_lot!(org, item)
+      refute Ash.get!(Item, item.id, authorize?: false).lot_tracked
+
+      assert {:error, %Ash.Error.Invalid{} = error} =
+               Ash.Changeset.for_update(so, :fulfill, %{}, scope: scope)
+               |> Ash.update()
+
+      assert inspect(error) =~ "lot_tracked_requires_l1b"
+
+      # Nothing landed: no stock, invoice, COGS or SO flip.
+      assert sale_events(so.id) == []
+      assert invoices_for_org(org) == []
+      assert entries_for(so.id, "sales_order") == []
+      assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :confirmed
+
+      # The flag half: `lot_tracked: true` with NO Lot row is refused too. The
+      # Item update may set the flag true (the clear guard only blocks false),
+      # so this state is reachable without `Lot :create`.
+      {item_flagged, warehouse_flagged} = seed_pair(scope, org)
+      stock_pair(scope, org, item_flagged, warehouse_flagged, 10, 500)
+
+      item_flagged =
+        item_flagged
+        |> Ash.Changeset.for_update(:update, %{lot_tracked: true}, scope: scope)
+        |> Ash.update!()
+
+      assert item_flagged.lot_tracked
+
+      assert Lot
+             |> Ash.Query.filter(item_id == ^item_flagged.id)
+             |> Ash.read!(authorize?: false) == []
+
+      so_flagged =
+        new_so(scope, org, warehouse_flagged.id, [
+          %{item_id: item_flagged.id, qty: 2, unit_price_cents: 900}
+        ])
+        |> confirm(scope)
+
+      assert {:error, %Ash.Error.Invalid{} = flag_error} =
+               Ash.Changeset.for_update(so_flagged, :fulfill, %{}, scope: scope)
+               |> Ash.update()
+
+      assert inspect(flag_error) =~ "lot_tracked_requires_l1b"
+
+      # Nothing landed for the flag-only refusal either.
+      assert sale_events(so_flagged.id) == []
+      assert invoices_for_org(org) == []
+      assert entries_for(so_flagged.id, "sales_order") == []
+      assert Ash.get!(SalesOrder, so_flagged.id, authorize?: false).status == :confirmed
+
+      # The non-lot CONTROL still fulfills through the same path.
+      {item_ctrl, warehouse_ctrl} = seed_pair(scope, org)
+      stock_pair(scope, org, item_ctrl, warehouse_ctrl, 10, 500)
+
+      so_ctrl =
+        new_so(scope, org, warehouse_ctrl.id, [
+          %{item_id: item_ctrl.id, qty: 2, unit_price_cents: 900}
+        ])
+        |> confirm(scope)
+
+      fulfilled = fulfill(so_ctrl, scope)
+      assert fulfilled.status == :fulfilled
+      assert [event] = sale_events(so_ctrl.id)
+      assert event.qty == -2
+    end
+  end
+
   # ── helpers ──────────────────────────────────────────────────────────────────
 
   defp tenant_scope(org_id) do
@@ -1139,6 +1224,41 @@ defmodule Samen.InventorySalesOrderTest do
     |> Ash.Query.filter(org_id == ^org and key == ^key)
     |> Ash.read_one!(authorize?: false)
     |> Map.fetch!(:account_id)
+  end
+
+  # A `Lot` row written directly, bypassing `Lot :create`'s flag maintenance:
+  # the item's `lot_tracked` stays `false` — the out-of-band case the live
+  # EXISTS check (not the maintained flag) must catch.
+  defp out_of_band_lot!(org, item) do
+    cost_object =
+      CostObject
+      |> Ash.Changeset.for_create(
+        :create,
+        %{
+          org_id: org,
+          code: "CO-" <> binary_part(Ash.UUID.generate(), 0, 8),
+          name: "Lot cost object",
+          kind: :chip
+        },
+        scope: admin_scope(org)
+      )
+      |> Ash.create!()
+
+    raw_sql!(
+      """
+      INSERT INTO slt_lot
+        (slt_id, slt_org_id, slt_item_id, slt_cost_object_id, slt_code,
+         slt_inserted_at, slt_updated_at)
+      VALUES ($1, $2, $3, $4, $5, now()::timestamp, now()::timestamp)
+      """,
+      [
+        Ecto.UUID.bingenerate(),
+        Ecto.UUID.dump!(org),
+        Ecto.UUID.dump!(item.id),
+        Ecto.UUID.dump!(cost_object.id),
+        "LOT-" <> binary_part(Ash.UUID.generate(), 0, 8)
+      ]
+    )
   end
 
   defp raw_sql!(sql, params) do

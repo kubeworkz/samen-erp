@@ -4,7 +4,9 @@
   ADR's build half). On 2026-11-22 the operator RATIFIED OD-1, the L1 half of OD-2, OD-7, PF-1,
   PF-2 Option A and PF-3; OD-2's L1b half and OD-3–OD-6 remain DEFERRED and unratified. L1.1's
   migration contract (shipment resources, `lot_tracked`, scoped catalog sync/down and the
-  reversible `:expand` migration) is implemented; L1.2+ code is not authored by this plan.
+  reversible `:expand` migration) is implemented, as is L1's legacy `:fulfill` live lot refusal;
+  `ShipPosting`/`Shipment :ship`, the L1.3 surface and the remaining L1.4 tests are not authored
+  by this plan.
 - **Sizing:** one deliverable per unit, serialized by default, each phase independently
   committable and gate-able. Every phase ends with the adversarial gate: named tests flip under a
   committed sabotage patch, revert byte-exact, and the suites + verifiers stay green.
@@ -420,7 +422,7 @@ option from the migration; the named test must fail; restore the source byte-exa
 No `# ENV:` line is required because this test is not opt-in. Remove or bypass the live `Lot`
 existence check in `ShipPosting`; the named test must fail; restore the source byte-exact.
 
-**Legacy-gate sabotage header (next free patch number):**
+**Legacy-gate sabotage header (434):**
 
 ```text
 # APP: samen_core

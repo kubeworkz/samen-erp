@@ -44,6 +44,12 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
   documented P2 carry). Fulfillment is exactly-once: a second `:fulfill` is
   refused on the pre-state.
 
+  WS-LOG L1 adds one refusal to this legacy path: a line whose item is
+  lot-tracked, or whose item has any existing `Lot` row — including a row
+  written out of band while the item's flag stayed `false` — refuses the whole
+  order with `:lot_tracked_requires_l1b`, before any invoice, stock or COGS
+  write. Lot-aware movement is L1b.
+
   Every refusal is fail-honest with a distinct formatted reason.
   """
 
@@ -79,14 +85,16 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
     entry_resource = Keyword.fetch!(opts, :entry)
     posting_account_resource = Keyword.fetch!(opts, :posting_account)
     item_resource = Keyword.fetch!(opts, :item)
+    lot_resource = Keyword.fetch!(opts, :lot)
     org_fx_settings = Keyword.get(opts, :org_fx_settings)
 
     so = changeset.data
 
     with :ok <- refuse_not_confirmed(so),
          {:ok, lines} <- frozen_lines(so_line_resource, org_id, so),
+         {:ok, item_accounts, items} <- item_accounts(item_resource, org_id, lines),
+         :ok <- refuse_lot_backed(lot_resource, org_id, items, lines),
          {:ok, costs} <- moving_averages(level_resource, org_id, so.warehouse_id, lines),
-         {:ok, item_accounts} <- item_accounts(item_resource, org_id, lines),
          {:ok, cogs_account} <- posting_account(posting_account_resource, org_id, :cogs),
          {:ok, invoice} <-
            emit_invoice(invoice_resource, org_id, so, lines, org_fx_settings) do
@@ -223,21 +231,55 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
       {:ok, items} ->
         by_id = Map.new(items, &{&1.id, &1})
 
-        Enum.reduce_while(lines, {:ok, %{}}, fn line, {:ok, acc} ->
-          case Map.fetch(by_id, line.item_id) do
-            {:ok, %{default_inventory_account_id: account_id}} when is_binary(account_id) ->
-              {:cont, {:ok, Map.put(acc, line.item_id, account_id)}}
+        with {:ok, accounts} <-
+               Enum.reduce_while(lines, {:ok, %{}}, fn line, {:ok, acc} ->
+                 case Map.fetch(by_id, line.item_id) do
+                   {:ok, %{default_inventory_account_id: account_id}}
+                   when is_binary(account_id) ->
+                     {:cont, {:ok, Map.put(acc, line.item_id, account_id)}}
 
-            {:ok, _item} ->
-              {:halt, {:error, {:missing_inventory_account, line.item_id}}}
+                   {:ok, _item} ->
+                     {:halt, {:error, {:missing_inventory_account, line.item_id}}}
 
-            :error ->
-              {:halt, {:error, {:item_not_found, line.item_id}}}
-          end
-        end)
+                   :error ->
+                     {:halt, {:error, {:item_not_found, line.item_id}}}
+                 end
+               end) do
+          {:ok, accounts, by_id}
+        end
 
       {:error, reason} ->
         {:error, {:items_read_failed, reason}}
+    end
+  end
+
+  # WS-LOG L1: the legacy full-order path refuses a lot-tracked or lot-backed
+  # item before any write. The maintained flag is one half; the live `Lot` read
+  # is authoritative and catches rows written out of band (or by old writers)
+  # while the flag stayed `false`. Lot-aware movement is L1b.
+  defp refuse_lot_backed(lot_resource, org_id, items, lines) do
+    case Enum.find(lines, fn line ->
+           match?(%{lot_tracked: true}, Map.get(items, line.item_id))
+         end) do
+      %{item_id: item_id} ->
+        {:error, {:lot_tracked_requires_l1b, item_id}}
+
+      nil ->
+        existing_lots(lot_resource, org_id, lines)
+    end
+  end
+
+  defp existing_lots(lot_resource, org_id, lines) do
+    require Ash.Query
+
+    item_ids = lines |> Enum.map(& &1.item_id) |> Enum.uniq()
+
+    case lot_resource
+         |> Ash.Query.filter(org_id == ^org_id and item_id in ^item_ids)
+         |> Ash.read(authorize?: false) do
+      {:ok, []} -> :ok
+      {:ok, [lot | _]} -> {:error, {:lot_tracked_requires_l1b, lot.item_id}}
+      {:error, reason} -> {:error, {:lots_read_failed, reason}}
     end
   end
 
@@ -378,6 +420,15 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
 
   defp format(:no_lines),
     do: "the SO carries no lines — an order without lines is a data error, not an empty sale"
+
+  defp format({:lot_tracked_requires_l1b, item_id}),
+    do:
+      "item #{inspect(item_id)} is lot-tracked or has a Lot row — lot-aware movement is " <>
+        "L1b; refusing the whole fulfillment before any stock, invoice or COGS write " <>
+        "(:lot_tracked_requires_l1b)"
+
+  defp format({:lots_read_failed, reason}),
+    do: "the Lot existence read failed: #{inspect(reason)}"
 
   defp format({:lines_read_failed, reason}),
     do: "the SO's line read failed: #{inspect(reason)}"

@@ -340,6 +340,7 @@ defmodule Samen.Scopes.Inventory do
             unquote(finance_entry),
             unquote(finance_posting_account),
             unquote(item_mod),
+            unquote(lot_mod),
             unquote(finance_org_fx_settings)
           )
 

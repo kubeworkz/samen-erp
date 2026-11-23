@@ -1,0 +1,41 @@
+# SABOTAGE: Bypass the live Lot existence check in FulfillOrder so an out-of-band lot can fulfill.
+# APP: samen_core
+# TEST_FILES: test/inventory_sales_order_test.exs
+# MUST_FAIL: legacy :fulfill refuses a lot-backed item before any write
+diff --git a/samen_core/lib/samen/scopes/inventory/fulfill_order.ex b/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
+--- a/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
++++ b/samen_core/lib/samen/scopes/inventory/fulfill_order.ex
+@@ -256,29 +256,13 @@ defmodule Samen.Scopes.Inventory.FulfillOrder do
+   # WS-LOG L1: the legacy full-order path refuses a lot-tracked or lot-backed
+   # item before any write. The maintained flag is one half; the live `Lot` read
+   # is authoritative and catches rows written out of band (or by old writers)
+   # while the flag stayed `false`. Lot-aware movement is L1b.
+   defp refuse_lot_backed(lot_resource, org_id, items, lines) do
+-    case Enum.find(lines, fn line ->
+-           match?(%{lot_tracked: true}, Map.get(items, line.item_id))
+-         end) do
+-      %{item_id: item_id} ->
+-        {:error, {:lot_tracked_requires_l1b, item_id}}
+-
+-      nil ->
+-        existing_lots(lot_resource, org_id, lines)
+-    end
++    _ = {lot_resource, org_id, items, lines}
++    :ok
+   end
+ 
+   defp existing_lots(lot_resource, org_id, lines) do
+-    require Ash.Query
+-
+-    item_ids = lines |> Enum.map(& &1.item_id) |> Enum.uniq()
+-
+-    case lot_resource
+-         |> Ash.Query.filter(org_id == ^org_id and item_id in ^item_ids)
+-         |> Ash.read(authorize?: false) do
+-      {:ok, []} -> :ok
+-      {:ok, [lot | _]} -> {:error, {:lot_tracked_requires_l1b, lot.item_id}}
+-      {:error, reason} -> {:error, {:lots_read_failed, reason}}
+-    end
++    _ = {lot_resource, org_id, lines}
++    :ok
+   end
