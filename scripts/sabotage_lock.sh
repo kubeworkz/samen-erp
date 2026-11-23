@@ -16,16 +16,22 @@
 # continues. A holder that IS alive still fails closed — two runs sharing one
 # worktree corrupt each other silently.
 #
-# Sourced by scripts/sabotage.sh (the real harness) and by
-# scripts/sabotage_lock_test.sh (the DB-free regression), so the test exercises the
-# exact code the harness runs rather than a reimplementation.
+# The parallel driver uses the same claim primitive for its OWN driver lock, and its
+# `lock_held_on` predicate is what warm-seeding consults before copying a sibling's
+# cache: a lock whose holder is provably dead must neither block the next sweep nor
+# withhold a warm cache from it.
+#
+# Sourced by scripts/sabotage.sh (the real harness), scripts/sabotage_parallel.sh (the
+# driver lock + seeding guard) and scripts/sabotage_lock_test.sh (the DB-free
+# regression), so the test exercises the exact code those callers run.
 #
 # Contract: the caller sets SABOTAGE_ROOT and LOCK, provides `fail <message...>`,
 # and removes $LOCK on exit while LOCK_HELD=1.
 
-# lock_holder_pid — the PID published by the run that created the lock, or empty.
+# lock_holder_pid [lockdir] — the PID published by the run that created the lock, or
+# empty. Defaults to this run's $LOCK; the driver passes a sibling slice's lock path.
 lock_holder_pid() {
-  sed -n 's/^pid:[[:space:]]*//p' "$LOCK/holder" 2>/dev/null | head -n 1 | tr -d '[:space:]'
+  sed -n 's/^pid:[[:space:]]*//p' "${1:-$LOCK}/holder" 2>/dev/null | head -n 1 | tr -d '[:space:]'
 }
 
 # lock_pid_alive <pid> — `kill -0` is the POSIX liveness probe: success for a
@@ -37,6 +43,20 @@ lock_holder_pid() {
 lock_pid_alive() {
   [[ "${1:-}" =~ ^[1-9][0-9]*$ ]] || return 1
   kill -0 "$1" 2>/dev/null
+}
+
+# lock_held_on <lockdir> — is that lock claimed? True while the recorded holder is
+# ALIVE, and also when no holder was published: an empty holder is not PROOF of death
+# (a run that has just mkdir'd the lock has not written its pid yet), and callers that
+# may only copy from an idle slice must stay conservative. A holder that is PROVABLY
+# gone is the one case that counts as free — which is what lets warm-seeding use a
+# cache left behind by a SIGKILLed run instead of skipping it forever.
+lock_held_on() {
+  local dir="${1:?lock_held_on needs a lock directory}" pid
+  [[ -d "$dir" ]] || return 1
+  pid="$(lock_holder_pid "$dir")"
+  [[ -z "$pid" ]] && return 0
+  lock_pid_alive "$pid"
 }
 
 # lock_write_holder <script-path> — publish this run's identity inside the lock it
@@ -54,7 +74,7 @@ lock_write_holder() {
 # lock_report_in_use — the holder identity, for the fail-closed path.
 lock_report_in_use() {
   echo ""
-  echo "!! the isolated replay tree is in use by another run:"
+  echo "!! ${LOCK_SUBJECT:-the isolated replay tree} is in use by another run:"
   sed 's/^/!!   /' "$LOCK/holder" 2>/dev/null || echo "!!   (no holder information)"
   echo "!!   tree: $SHADOW"
 }
@@ -90,7 +110,7 @@ acquire_lock() {
 
   if [[ -n "$holder_pid" ]] && lock_pid_alive "$holder_pid"; then
     lock_report_in_use
-    fail "another sabotage run holds the replay tree at $SABOTAGE_ROOT (holder pid $holder_pid is still running). If that is wrong, remove $LOCK and re-run."
+    fail "another run holds ${LOCK_SUBJECT:-the isolated replay tree} at $SABOTAGE_ROOT (holder pid $holder_pid is still running). If that is wrong, remove $LOCK and re-run."
   fi
 
   # ── self-heal: the holder is gone (or never published a pid) ─────────────────
@@ -104,9 +124,9 @@ acquire_lock() {
     if [[ -n "$moved_pid" && "$moved_pid" != "$holder_pid" ]] && lock_pid_alive "$moved_pid"; then
       if [[ ! -e "$LOCK" ]]; then mv "$aside" "$LOCK" 2>/dev/null || rm -rf "$aside"; else rm -rf "$aside"; fi
       lock_report_in_use
-      fail "the replay tree was claimed by a live run while its stale lock was being reclaimed at $SABOTAGE_ROOT — nothing was replayed; re-run once that run finishes."
+      fail "${LOCK_SUBJECT:-the replay tree} was claimed by a live run while its stale lock was being reclaimed at $SABOTAGE_ROOT — nothing was replayed; re-run once that run finishes."
     fi
-    echo "    lock: reclaimed the replay-tree lock at $SABOTAGE_ROOT — recorded holder pid ${holder_pid:-<none>} is no longer running (host-level interruption, not a patch failure)"
+    echo "    lock: reclaimed the ${LOCK_NAME:-replay-tree lock} at $SABOTAGE_ROOT — recorded holder pid ${holder_pid:-<none>} is no longer running (host-level interruption, not a patch failure)"
     rm -rf "$aside"
   fi
 
@@ -117,5 +137,5 @@ acquire_lock() {
   fi
 
   lock_report_in_use
-  fail "another sabotage run holds the replay tree at $SABOTAGE_ROOT. If no run is active, remove $LOCK and re-run."
+  fail "another run holds ${LOCK_SUBJECT:-the isolated replay tree} at $SABOTAGE_ROOT. If no run is active, remove $LOCK and re-run."
 }

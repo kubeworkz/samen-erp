@@ -904,6 +904,22 @@ else
 fi
 rmdir "$SCRATCH/samen_core/lock"
 
+# A DEAD holder is not "busy": a SIGKILLed harness leaves the lock behind, and skipping that
+# sibling's cache would make the next sweep pay a cold compile for nothing. The cache is the
+# same one the busy case above withheld, so only the recorded holder's liveness differs.
+sh -c 'exit 0' & stale_pid=$!
+wait "$stale_pid" 2>/dev/null
+mkdir -p "$SCRATCH/samen_core/lock"
+printf 'pid:     %s\nhost:    test\nstarted: 2026-01-01T00:00:00Z\nscript:  test\n' "$stale_pid" > "$SCRATCH/samen_core/lock/holder"
+stale_out="$(plan "$SCRATCH")"
+if grep -qE '^    samen_core-2 +<- samen_core/build/samen_core +\[pristine\]$' <<<"$stale_out"; then
+  ok "a sibling whose lock holder is DEAD is not busy — its warm cache is still offered"
+else
+  echo "$stale_out" | grep -E 'SEED PLAN|<-|nothing to seed' | head -4
+  bad "a dead-holder lock still withheld the sibling cache (a SIGKILL would cost a cold compile)"
+fi
+rm -rf "$SCRATCH/samen_core/lock"
+
 noseed_out="$(SAMEN_SABOTAGE_PARALLEL_ROOT="$SCRATCH" bash "$DRIVER" --jobs 8 --range 197-198 --intra 2 --no-seed --list 2>&1)"
 if grep -q 'SEED PLAN: disabled (--no-seed)' <<<"$noseed_out"; then
   ok "--no-seed reports itself as disabled (each new slice compiles from scratch)"

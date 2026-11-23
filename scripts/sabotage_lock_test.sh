@@ -19,7 +19,12 @@
 #      left byte-intact — the anti-tautology control: recovery fires on liveness, not
 #      on the mere existence of a lock;
 #   4. an EMPTY holder (a kill between `mkdir` and the holder write) is reclaimed after
-#      the grace period rather than blocking forever.
+#      the grace period rather than blocking forever;
+#   5. the DRIVER-shaped lock (scripts/sabotage_parallel.sh's driver.lock, with the
+#      driver's own label) reclaims a dead holder the same way, and the driver delegates
+#      to this code rather than carrying an inline mkdir lock;
+#   6. the SEEDING predicate `lock_held_on`: an absent or provably-dead holder is free,
+#      while a live or not-yet-published holder still counts as held.
 # No DB, no replay tree, no patch: the lot runs in a few seconds.
 #
 # Usage: scripts/sabotage_lock_test.sh
@@ -164,6 +169,78 @@ else
   echo "$out4" | sed 's/^/    /'
   bad "an empty holder was not reclaimed after the grace period (exit $rc4)"
 fi
+
+# ── 5. a DRIVER-shaped lock is reclaimed with the driver's own label ──────────
+note "driver lock (a SIGKILLed driver must not block the next sweep)"
+ROOT5="$SCRATCH/driver"
+sh -c 'exit 0' & dead5=$!
+wait "$dead5" 2>/dev/null
+if lock_pid_alive "$dead5"; then
+  bad "fixture pid $dead5 still reads alive — the driver-lock case would be vacuous"
+fi
+write_holder "$ROOT5/driver.lock" "$dead5"
+out5="$(
+  SABOTAGE_ROOT="$ROOT5" LOCK="$ROOT5/driver.lock" SHADOW="$ROOT5" \
+  LOCK_NAME="parallel-driver lock" LOCK_SUBJECT="the per-slice replay-tree root" \
+  SAMEN_SABOTAGE_LOCK_GRACE=1 \
+  bash -c '
+    set -uo pipefail
+    fail() { echo "SABOTAGE HARNESS (PARALLEL): FAILED — $*"; exit 1; }
+    source "$1"
+    LOCK_HELD=0
+    acquire_lock
+    echo "ACQUIRED pid=$$"
+  ' _ "$LIB" 2>&1
+)"
+rc5=$?
+acq5="$(sed -n 's/^ACQUIRED pid=//p' <<<"$out5")"
+if [[ $rc5 -eq 0 && -n "$acq5" ]] && grep -q 'reclaimed the parallel-driver lock' <<<"$out5"; then
+  ok "the driver lock reclaims a dead holder and reports it under the parallel-driver label"
+else
+  echo "$out5" | sed 's/^/    /'
+  bad "a dead-holder driver lock was not reclaimed as the parallel-driver lock (exit $rc5)"
+fi
+if [[ -n "$acq5" && "$(holder_pid_of "$ROOT5/driver.lock")" == "$acq5" ]]; then
+  ok "the reclaimed driver lock names the new driver (pid $acq5)"
+else
+  bad "the reclaimed driver lock still names the dead driver"
+fi
+if grep -q 'source "$REPO_ROOT/scripts/sabotage_lock.sh"' "$REPO_ROOT/scripts/sabotage_parallel.sh" \
+   && grep -qx 'acquire_lock' "$REPO_ROOT/scripts/sabotage_parallel.sh"; then
+  ok "the driver's own lock goes through this library (no inline mkdir lock path)"
+else
+  bad "the driver does not delegate its driver lock to this library"
+fi
+
+# ── 6. the seeding predicate: only PROVABLY dead holders count as free ───────
+note "seeding predicate (warm-seeding may ignore a dead holder, nothing else)"
+ROOT6="$SCRATCH/seed"
+if ! lock_held_on "$ROOT6/missing"; then
+  ok "an ABSENT lock is free — nothing to protect"
+else
+  bad "an absent lock read as held"
+fi
+mkdir -p "$ROOT6/empty/lock"
+if lock_held_on "$ROOT6/empty/lock"; then
+  ok "an EMPTY holder stays held (a just-started run has not published its pid yet)"
+else
+  bad "an empty holder read as free — seeding could copy from a slice that just started"
+fi
+write_holder "$ROOT6/dead/lock" "$dead5"
+if ! lock_held_on "$ROOT6/dead/lock"; then
+  ok "a DEAD holder reads as free — a SIGKILL does not withhold the warm cache"
+else
+  bad "a dead holder still read as held (the cache would be skipped forever)"
+fi
+sleep 60 & live6=$!
+write_holder "$ROOT6/live/lock" "$live6"
+if lock_held_on "$ROOT6/live/lock"; then
+  ok "a LIVE holder reads as held (never copy a cache out from under a writer)"
+else
+  bad "a live holder read as free — a torn cache could be seeded"
+fi
+kill "$live6" 2>/dev/null || true
+wait "$live6" 2>/dev/null || true
 
 echo ""
 echo "sabotage-lock harness: $pass_count passed, $fail_count failed"

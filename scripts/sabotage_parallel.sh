@@ -93,7 +93,9 @@
 # intra-app split multiplies that by the chunk count, which is the one cost the split adds back.
 # A sibling slice of the SAME app at the SAME commit already holds those artifacts, so a new
 # slice is seeded from one: copied before anything is launched, and only from a sibling whose
-# per-slice lock is free (i.e. which nothing is writing).
+# per-slice lock is free (i.e. which nothing is writing). A lock whose recorded holder is DEAD —
+# what a SIGKILL leaves — counts as free, so the next sweep keeps its warm cache instead of
+# paying a cold compile for a run that is not there.
 #
 # WHAT THE COPY NEEDS TO BE WORTH ANYTHING: a copied cache is INVALID in a new tree until its
 # compiler manifest is repointed. Elixir's `.mix/compile.elixir` records four things keyed to WHERE
@@ -223,6 +225,12 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HARNESS="$REPO_ROOT/scripts/sabotage.sh"
 SABOTAGE_DIR="$REPO_ROOT/scripts/sabotages"
+
+# The lock claim/recovery and the "is this slice busy?" predicate are shared with
+# scripts/sabotage.sh (scripts/sabotage_lock.sh), so the driver lock and the seeding rule
+# cannot drift from the per-slice locks they reason about.
+# shellcheck source=/dev/null
+source "$REPO_ROOT/scripts/sabotage_lock.sh"
 
 PARALLEL_ROOT="${SAMEN_SABOTAGE_PARALLEL_ROOT:-$REPO_ROOT/.sabotage-parallel}"
 LOG_DIR="$PARALLEL_ROOT/logs"
@@ -1087,7 +1095,7 @@ seed_candidate() { # seed_candidate <app> <skip-id>... → "<path>\t<label>" or 
     skip=0
     for id in "$@"; do [[ "$id" == "$stem" ]] && skip=1; done
     (( skip == 1 )) && continue
-    [[ -d "$PARALLEL_ROOT/$stem/lock" ]] && continue
+    lock_held_on "$PARALLEL_ROOT/$stem/lock" && continue
     mark="$PARALLEL_ROOT/$stem/replayed-patches"
     n=0
     [[ -r "$mark" ]] && n="$(tr -dc '0-9' < "$mark" | head -c 9)"
@@ -1175,20 +1183,16 @@ if [[ $LIST_ONLY -eq 1 ]]; then
 fi
 
 # ── driver lock (the per-slice locks keep slices apart; this keeps DRIVERS apart) ──
+# Same stale-holder recovery as a slice's lock: a SIGKILLed driver leaves $DRIVER_LOCK
+# behind, and the next sweep reclaims it once the recorded holder is gone instead of
+# failing before it has launched a single slice.
+SABOTAGE_ROOT="$PARALLEL_ROOT"
+LOCK="$DRIVER_LOCK"
+SHADOW="$PARALLEL_ROOT"
+LOCK_NAME="parallel-driver lock"
+LOCK_SUBJECT="the per-slice replay-tree root"
 mkdir -p "$PARALLEL_ROOT" || fail "cannot create $PARALLEL_ROOT"
-if mkdir "$DRIVER_LOCK" 2>/dev/null; then
-  LOCK_HELD=1
-  {
-    printf 'pid:     %s\n' "$$"
-    printf 'started: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)"
-    printf 'script:  %s\n' "${BASH_SOURCE[0]}"
-  } > "$DRIVER_LOCK/holder" 2>/dev/null || true
-else
-  echo ""
-  echo "!! another parallel certification run holds the per-slice replay trees:"
-  sed 's/^/!!   /' "$DRIVER_LOCK/holder" 2>/dev/null || echo "!!   (no holder information)"
-  fail "a run is in progress at $PARALLEL_ROOT. If none is (a run killed mid-flight leaves the lock), remove $DRIVER_LOCK and re-run."
-fi
+acquire_lock
 
 mkdir -p "$LOG_DIR" || fail "cannot create $LOG_DIR"
 
