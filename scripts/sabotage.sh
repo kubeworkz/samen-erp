@@ -47,8 +47,11 @@
 #   * a fingerprint of every touched path in the MAIN checkout is taken before the
 #     replay and re-checked after it — the invariant this buys, asserted instead of
 #     assumed;
-#   * concurrent runs are excluded by a lock ($SAMEN_SABOTAGE_ROOT/lock); the failure
-#     message names the recovery command.
+#   * concurrent runs are excluded by a lock ($SAMEN_SABOTAGE_ROOT/lock). A lock whose
+#     recorded holder PID is no longer alive is RECLAIMED automatically — the same
+#     recovery the replay tree's residue gets — so a host-level kill cannot make the
+#     next run (or a parallel slice) look like a failed patch. A live holder still
+#     fails closed, and the message names the manual recovery command.
 #
 # COST. The FIRST run compiles each app's deps and code into the isolated cache
 # (measured on the reference box: ~5 min for samen_core, ~3 min for a small adapter
@@ -428,28 +431,11 @@ select_patch() {
 # Nothing below ever runs `git apply`, `checkout`, `clean` or a test against
 # $REPO_ROOT: the main checkout is read (diff/ls-files/hash) and never written.
 
-# acquire_lock — fail closed when another run holds the replay tree. The lock can
-# only survive a hard kill (the EXIT trap releases it), so the message also names
-# the recovery; two runs sharing one worktree would corrupt each other silently.
-acquire_lock() {
-  mkdir -p "$SABOTAGE_ROOT" || fail "cannot create the replay root $SABOTAGE_ROOT"
-  if mkdir "$LOCK" 2>/dev/null; then
-    LOCK_HELD=1
-    {
-      printf 'pid:     %s\n' "$$"
-      printf 'host:    %s\n' "$(hostname 2>/dev/null || echo unknown)"
-      printf 'started: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)"
-      printf 'script:  %s\n' "${BASH_SOURCE[0]}"
-    } > "$LOCK/holder" 2>/dev/null || true
-    return 0
-  fi
-  echo ""
-  echo "!! the isolated replay tree is in use by another run:"
-  sed 's/^/!!   /' "$LOCK/holder" 2>/dev/null || echo "!!   (no holder information)"
-  echo "!!   tree: $SHADOW"
-  fail "another sabotage run holds the replay tree at $SABOTAGE_ROOT. If no run is" \
-       "active (a run killed mid-flight leaves the lock behind), remove $LOCK and re-run."
-}
+# The replay-tree lock is a sourced library so scripts/sabotage_lock_test.sh can
+# prove its stale-holder recovery (a host-level kill leaves the lock behind) with
+# no DB and no replay tree, against the exact code this harness runs.
+# shellcheck source=/dev/null
+source "$REPO_ROOT/scripts/sabotage_lock.sh"
 
 # shadow_reset <head-sha> — bring the replay tree to a pristine detached checkout of
 # the main checkout's HEAD. Re-using the existing tree when it is still a worktree of

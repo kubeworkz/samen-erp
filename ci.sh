@@ -514,6 +514,19 @@ echo "==> Running sabotage-harness intra-app parallelism regression (per-slice t
 bash "$REPO_ROOT/scripts/sabotage_intra_test.sh"
 echo "==> sabotage intra-app regression: PASSED"
 
+# --- Sabotage-harness LOCK SELF-HEAL regression ---------------------------------------
+# A host-level kill (SIGKILL, a closed terminal) leaves $SABOTAGE_ROOT/lock behind with a
+# DEAD holder PID. scripts/sabotage.sh used to refuse to start, and scripts/sabotage_parallel.sh
+# reported that slice as a host-level death — the whole 416-patch sweep read as FAILED while
+# the missing patch had never been replayed (2026-11-23, samen_postmark). The lock now recovers
+# like the replay tree's residue, so scripts/sabotage_lock_test.sh pins that: a dead holder is
+# reclaimed and the run continues, a LIVE holder still fails closed and is left byte-intact,
+# and an empty holder is reclaimed after a grace period. No DB, applies no patch; a few seconds.
+echo ""
+echo "==> Running sabotage-harness lock self-heal regression (a dead holder must not masquerade as a patch failure)"
+bash "$REPO_ROOT/scripts/sabotage_lock_test.sh"
+echo "==> sabotage lock self-heal regression: PASSED"
+
 # --- Deploy-gate NARROWING regressions (scripts/ci_tiers.sh + scripts/deploy.sh) --------
 # The root gate can now be invoked with a SUBSET of its tiers (SAMEN_CI_TIERS, derived from a
 # diff by scripts/ci_tiers.sh and relied on by scripts/deploy.sh --local-gate). That is only
