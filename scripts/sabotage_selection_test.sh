@@ -32,7 +32,12 @@
 #      selector that shipped before.
 #   5. FILTERS STILL COMPOSE AS AN INTERSECTION — `--changed HEAD --range` narrows to the
 #      intersection and does not resurrect the probe patch.
-#   6. `--exclude-app` IS THE COMPLEMENT OF `--app`, AND ONLY THAT — a `samen_core` probe is
+#   6. `--touching` MATCHES A DIRECTORY ON A PATH-SEGMENT BOUNDARY — a patch deep
+#      under the directory is selected, while a patch under a SIBLING whose name
+#      extends the directory's name (`..._dir_extra`) is NOT. The trap matters: a
+#      raw `[[ $pf == $dir* ]]` prefix would wrongly select the sibling.
+#
+#   7. `--exclude-app` IS THE COMPLEMENT OF `--app`, AND ONLY THAT — a `samen_core` probe is
 #      dropped by `--exclude-app samen_core` but kept by `--exclude-app samen_web` (the
 #      positive control: an "exclude everything" implementation would pass the first half),
 #      and the banner names `except=<app>` so a narrowed run cannot be read as a full one.
@@ -54,6 +59,10 @@ PROBE_SRC="$REPO_ROOT/$PROBE_SRC_REL"
 PROBE_PATCH="$REPO_ROOT/scripts/sabotages/999-sabotage-selection-probe.patch"
 ABSENT_PATCH="$REPO_ROOT/scripts/sabotages/998-sabotage-selection-absent-probe.patch"
 ABSENT_REL="samen_core/lib/samen/__sabotage_selection_absent.ex"
+PROBE_DIR_REL="samen_core/lib/samen/__sabotage_selection_probe_dir"
+PROBE_SIBLING_REL="samen_core/lib/samen/__sabotage_selection_probe_dir_extra"
+PROBE_DIR_PATCH="$REPO_ROOT/scripts/sabotages/997-sabotage-selection-dir-probe.patch"
+PROBE_SIBLING_PATCH="$REPO_ROOT/scripts/sabotages/996-sabotage-selection-dir-sibling-probe.patch"
 
 pass_count=0
 fail_count=0
@@ -61,7 +70,8 @@ ok()  { echo "PASS: $*"; pass_count=$((pass_count + 1)); }
 bad() { echo "FAIL: $*"; fail_count=$((fail_count + 1)); }
 
 cleanup() {
-  rm -f "$PROBE_SRC" "$PROBE_PATCH" "$ABSENT_PATCH"
+  rm -f "$PROBE_SRC" "$PROBE_PATCH" "$ABSENT_PATCH" "$PROBE_DIR_PATCH" "$PROBE_SIBLING_PATCH"
+  rm -rf "$REPO_ROOT/$PROBE_DIR_REL" "$REPO_ROOT/$PROBE_SIBLING_REL"
 }
 trap cleanup EXIT INT TERM
 
@@ -93,6 +103,16 @@ printf '# probe\n' > "$PROBE_SRC"
 write_probe_patch "$PROBE_PATCH" "$PROBE_SRC_REL"
 # ...and a second probe patch touching a path that does not exist and was never changed.
 write_probe_patch "$ABSENT_PATCH" "$ABSENT_REL"
+
+# Directory-prefix probes: 997 sits DEEP under the directory; 996 sits under the
+# sibling `..._dir_extra`, whose name extends the directory's. Both directories are
+# real, so the sibling is routed through the same directory matcher rather than
+# falling back to exact-path matching.
+mkdir -p "$REPO_ROOT/$PROBE_DIR_REL/deep" "$REPO_ROOT/$PROBE_SIBLING_REL"
+printf '# probe\n' > "$REPO_ROOT/$PROBE_DIR_REL/deep/nested.ex"
+printf '# probe\n' > "$REPO_ROOT/$PROBE_SIBLING_REL/nested.ex"
+write_probe_patch "$PROBE_DIR_PATCH" "$PROBE_DIR_REL/deep/nested.ex"
+write_probe_patch "$PROBE_SIBLING_PATCH" "$PROBE_SIBLING_REL/nested.ex"
 
 listing="$(cd "$REPO_ROOT" && bash "$SABOTAGE" --changed HEAD --list 2>&1)"
 list_status=$?
@@ -175,13 +195,68 @@ else
   ok "filters still COMPOSE as an intersection (--changed HEAD --range 1-2 excludes the probe)"
 fi
 
+echo ""
+echo "== sabotage.sh --touching: DIRECTORY entries match on a path-segment prefix =="
+
+dir_listing="$(cd "$REPO_ROOT" && bash "$SABOTAGE" --touching "$PROBE_DIR_REL" --list 2>&1)"
+dir_status=$?
+if [[ $dir_status -eq 0 ]]; then
+  ok "--touching <dir> --list exited 0"
+else
+  echo "$dir_listing"
+  bad "--touching <dir> --list exited $dir_status (expected 0)"
+fi
+
+if grep -qF "997-sabotage-selection-dir-probe.patch" <<<"$dir_listing"; then
+  ok "--touching <dir> SELECTS a patch touching a file DEEP under it (path-segment prefix)"
+else
+  echo "$dir_listing"
+  bad "--touching <dir> did not select the patch under it"
+fi
+
+# BOUNDARY: the selected entry is "..._dir"; PROBE_SIBLING_REL is "..._dir_extra".
+# A raw string prefix would match the sibling; the required "<dir>/" boundary must not.
+if grep -qF "996-sabotage-selection-dir-sibling-probe.patch" <<<"$dir_listing"; then
+  echo "$dir_listing"
+  bad "BOUNDARY: <dir> matched a patch under <dir>_extra (raw string prefix, not a segment)"
+else
+  ok "BOUNDARY: <dir> does NOT match <dir>_extra/... (path-segment prefix, not raw string)"
+fi
+
+if grep -qF "touching=1 path(s)" <<<"$dir_listing"; then
+  ok "the directory selection still reports the FILTERED touched-set banner"
+else
+  bad "the directory selection lost the FILTERED touched-set banner"
+fi
+
+# Exact entries must keep exact semantics, and a trailing slash must normalize.
+exact_listing="$(cd "$REPO_ROOT" && bash "$SABOTAGE" --touching "$PROBE_DIR_REL/deep/nested.ex" --list 2>&1)"
+if grep -qF "997-sabotage-selection-dir-probe.patch" <<<"$exact_listing" \
+   && ! grep -qF "996-sabotage-selection-dir-sibling-probe.patch" <<<"$exact_listing"; then
+  ok "exact FILE selection still selects only the patch touching that file"
+else
+  echo "$exact_listing"
+  bad "exact FILE selection changed (directory or sibling leaked in)"
+fi
+
+slash_listing="$(cd "$REPO_ROOT" && bash "$SABOTAGE" --touching "$PROBE_SIBLING_REL/" --list 2>&1)"
+if grep -qF "996-sabotage-selection-dir-sibling-probe.patch" <<<"$slash_listing" \
+   && ! grep -qF "997-sabotage-selection-dir-probe.patch" <<<"$slash_listing"; then
+  ok "a trailing slash is normalized and selects only that directory's patch"
+else
+  echo "$slash_listing"
+  bad "trailing-slash directory selection is wrong"
+fi
+
 cleanup
 
 # Residue check: the probes are gone and the tree is exactly as we found it.
-if [[ -e "$PROBE_SRC" || -e "$PROBE_PATCH" || -e "$ABSENT_PATCH" ]]; then
+if [[ -e "$PROBE_SRC" || -e "$PROBE_PATCH" || -e "$ABSENT_PATCH" \
+      || -e "$PROBE_DIR_PATCH" || -e "$PROBE_SIBLING_PATCH" \
+      || -e "$REPO_ROOT/$PROBE_DIR_REL" || -e "$REPO_ROOT/$PROBE_SIBLING_REL" ]]; then
   bad "scratch residue left behind"
 else
-  ok "zero residue (probe source + both probe patches removed)"
+  ok "zero residue (probe source, four probe patches and two probe dirs removed)"
 fi
 
 echo ""

@@ -94,7 +94,11 @@
 #                             lo..∞, a lone --to is 0..hi.
 #   --touching <path>...    only patches whose touched-file set (the +++ b/…
 #   --touching-file <file>    paths) INTERSECTS the given repo-relative paths
-#                             (or the newline-separated paths in <file>).
+#                             (or the newline-separated paths in <file>). A
+#                             DIRECTORY path matches every touched file under it
+#                             on a path-segment boundary, so
+#                             `repo/migrations` does NOT match
+#                             `repo/migrations_old/...`.
 #   --changed [<ref>]       derive the touched set from the UNION of `git diff
 #                             --name-only <ref>` and `git ls-files --others
 #                             --exclude-standard` (default ref: origin/main if it
@@ -254,6 +258,21 @@ sha_files() { # sha_files <root> <listfile> <outfile>
   done < "$2"
 }
 
+# add_touch_entry <repo-relative path> — exact match by default. If the path
+# names a DIRECTORY in the checkout, it instead matches every touched file under
+# it on a path-segment boundary ("<dir>/"). Directory-ness is decided from the
+# checkout, not from a trailing slash or a guess about the extension.
+add_touch_entry() {
+  local entry="$1"
+  while [[ "$entry" == ./* ]]; do entry="${entry#./}"; done
+  if [[ -d "$REPO_ROOT/$entry" ]]; then
+    while [[ "$entry" == */ ]]; do entry="${entry%/}"; done
+    [[ -n "$entry" ]] && printf '%s\n' "$entry" >> "$TOUCH_DIRS"
+  else
+    printf '%s\n' "$entry" >> "$TOUCH_SET"
+  fi
+}
+
 # ── argument parsing ─────────────────────────────────────────────────────────
 FILTER_APP=""
 EXCLUDE_APPS=()
@@ -264,6 +283,10 @@ TOUCH_MODE=0
 TOUCH_DESC=""
 TOUCH_SET="$WORK/touch_set"
 : > "$TOUCH_SET"
+# Directory entries match on a path-segment boundary ("<dir>/..."), never as a
+# raw string prefix, so `<dir>` cannot select a patch under `<dir>_extra/...`.
+TOUCH_DIRS="$WORK/touch_dirs"
+: > "$TOUCH_DIRS"
 LIST_ONLY=0
 NO_PREFLIGHT=0
 # Per-slice test database (empty ⇒ the app's own config decides — byte-identical to before).
@@ -300,14 +323,17 @@ while [[ $# -gt 0 ]]; do
       [[ $# -gt 0 && "$1" != --* ]] || arg_err "--touching requires one or more repo-relative paths"
       local_paths=0
       while [[ $# -gt 0 && "$1" != --* ]]; do
-        printf '%s\n' "$1" >> "$TOUCH_SET"; local_paths=$((local_paths + 1)); shift
+        add_touch_entry "$1"; local_paths=$((local_paths + 1)); shift
       done
       TOUCH_MODE=1
       TOUCH_DESC="touching=${local_paths} path(s)" ;;
     --touching-file)
       shift; [[ $# -gt 0 ]] || arg_err "--touching-file requires a file"
       [[ -f "$1" ]] || arg_err "--touching-file: no such file: $1"
-      grep -v '^[[:space:]]*$' "$1" >> "$TOUCH_SET" || true
+      while IFS= read -r touch_path; do
+        [[ "$touch_path" =~ ^[[:space:]]*$ ]] && continue
+        add_touch_entry "$touch_path"
+      done < "$1"
       TOUCH_MODE=1
       TOUCH_DESC="touching-file=$(basename "$1")"; shift ;;
     --changed)
@@ -386,12 +412,17 @@ filter_label() {
   echo "${parts[*]}"
 }
 
-# patch_touches <patch> — 0 if the patch's touched set intersects $TOUCH_SET.
+# patch_touches <patch> — 0 if the patch's touched set intersects $TOUCH_SET
+# (exact paths) or lies under a directory in $TOUCH_DIRS (segment prefix).
 patch_touches() {
-  local pf
+  local pf dir
   while IFS= read -r pf; do
     [[ -n "$pf" ]] || continue
     grep -qxF "$pf" "$TOUCH_SET" && return 0
+    while IFS= read -r dir; do
+      [[ -n "$dir" ]] || continue
+      [[ "$pf" == "$dir" || "$pf" == "$dir/"* ]] && return 0
+    done < "$TOUCH_DIRS"
   done < <(touched_paths "$1")
   return 1
 }
