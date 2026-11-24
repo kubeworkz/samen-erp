@@ -492,6 +492,29 @@ bash scripts/sabotage.sh --touching samen_core/lib/samen/scopes/inventory/ship_p
 bash scripts/sabotage.sh --touching samen_core/lib/samen/scopes/inventory/fulfill_order.ex
 ```
 
+**Full-harness certification (2026-11-24, `9d046bae`).** The opt-in parallel sweep
+(`scripts/sabotage_parallel.sh --jobs 2`, the harness `ci.sh` runs when `SAMEN_SABOTAGE=1`) ran
+every committed patch: 424 of 424 flipped their named tests across 8 slices — 666 named-test
+confirmations, every patch restored sha-256 byte-exact, and every slice re-asserted the main
+checkout byte-exact. Sabotage lint and the structural preflight (residue, EOLs, applicability,
+test anchors) were clean, and the driver asserted slice coverage before the first patch ran.
+
+```text
+samen_core        207/207  ALL PASSED  (308 named-test confirmations, 207 byte-exact restores)
+samen_web         171/171  ALL PASSED  (287, 171)
+driftwood          17/17   ALL PASSED  (27, 17)
+pawchart           13/13   ALL PASSED  (20, 13)
+samenerp           11/11   ALL PASSED  (17, 11)
+demo                3/3    ALL PASSED  (4, 3)
+samen_postmark      1/1    ALL PASSED  (1, 1)
+samen_stripe        1/1    ALL PASSED  (2, 1)
+```
+
+Log: `.agent_logs/sabotage_full_424.log`. The L1.4 anchors re-flipped there: 435 (live `Lot`
+gate bypassed), 436 (remaining-quantity check dropped), 437 (COGS entry skipped), 438
+(posted-quantity re-read dropped), 439 (shipment draft-state re-read dropped) and 440 (only the
+shipment `FOR UPDATE` dropped) — each failing its named test and restoring byte-exact.
+
 **L1 acceptance:** partial shipments produce correct stock/COGS/invoices; the order's shipped +
 open equals ordered; over-ship, double-post and lot-tracked or lot-backed lines are refused before
 any write on both `Shipment :ship` and legacy `:fulfill`; the `lot_tracked` flag is maintained
