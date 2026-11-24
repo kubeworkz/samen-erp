@@ -1,7 +1,7 @@
 # SABOTAGE: Disable the L1 lot_tracked backfill so a lot-backed item stays false.
 # APP: samenerp
 # TEST_FILES: test/logistics_lot_tracked_backfill_test.exs
-# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows
+# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows and leaves non-lot items false
 diff --git a/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs b/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
 index 826a0ec4..821ecaa4 100644
 --- a/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs

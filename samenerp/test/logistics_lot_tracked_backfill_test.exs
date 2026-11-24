@@ -64,7 +64,7 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
     :ok
   end
 
-  test "the L1 migration backfills Item.lot_tracked from existing Lot rows" do
+  test "the L1 migration backfills Item.lot_tracked from existing Lot rows and leaves non-lot items false" do
     # The target version is recorded, so the flags below are read from a schema
     # this migration built — not an older head or a stale `_build` copy.
     assert @l1_version in Ecto.Migrator.migrated_versions(ScratchRepo)

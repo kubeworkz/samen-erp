@@ -279,7 +279,9 @@ lot guard is added.
   (b) `false` for the item without one; (c) the target version is recorded in `schema_migrations`
   (the real migration module ran, not a `_build` copy) and the physical
   `eni_item.eni_lot_tracked` column plus its `fld_field` row (`eni_lot_tracked` / `lot_tracked`)
-  exist. The named test is `the L1 migration backfills Item.lot_tracked from existing Lot rows`.
+  exist. The named test is `the L1 migration backfills Item.lot_tracked from existing Lot rows and
+  leaves non-lot items false`; the header carries the full name, not a prefix, so no other test in
+  the file can satisfy the anchor.
   Do **not** assert the live-`Lot` ship refusal here: that proof (a `Lot` inserted directly while
   `lot_tracked` is still `false` is refused, and the non-lot control still ships) is the core
   `samen_core/test/inventory_shipment_test.exs` named test above. A host test that also needs the
@@ -374,7 +376,7 @@ lot assertion and the non-lot control must each catch a different direction.
 # SABOTAGE: Disable the L1 lot_tracked backfill so a lot-backed item stays false.
 # APP: samenerp
 # TEST_FILES: test/logistics_lot_tracked_backfill_test.exs
-# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows
+# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows and leaves non-lot items false
 ```
 
 No `# ENV:` line is required because this test is not opt-in. Remove or disable the `UPDATE`; the
@@ -384,7 +386,7 @@ lot-backed item stays `false`; restore the migration byte-exact.
 # SABOTAGE: Drop the EXISTS predicate so every item is marked lot-tracked.
 # APP: samenerp
 # TEST_FILES: test/logistics_lot_tracked_backfill_test.exs
-# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows
+# MUST_FAIL: the L1 migration backfills Item.lot_tracked from existing Lot rows and leaves non-lot items false
 ```
 
 No `# ENV:` line is required because this test is not opt-in. Remove the `WHERE EXISTS` predicate
