@@ -1,0 +1,17 @@
+# SABOTAGE: Leave the L1 shipment tables behind when down/0 runs.
+# APP: samenerp
+# TEST_FILES: test/logistics_migration_round_trip_test.exs
+# MUST_FAIL: the L1 logistics migration round-trips down/0 and re-backfills on the next up
+diff --git a/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs b/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
+--- a/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
++++ b/samenerp/priv/repo/migrations/20261122120000_mount_inventory_logistics.exs
+@@ -297,9 +297,6 @@ defmodule Samenerp.Repo.Migrations.MountInventoryLogistics do
+     execute(@old_status_check)
+     execute(@old_state_function)
+ 
+-    drop(table(:shm_shipment_line))
+-    drop(table(:shp_shipment))
+-
+     alter table(:eni_item) do
+       remove(:eni_lot_tracked)
+     end

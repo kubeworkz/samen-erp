@@ -134,15 +134,19 @@ defmodule Samenerp.LogisticsLotTrackedBackfillTest do
       )
     end
 
-    execute(
-      """
-      INSERT INTO elt_lot
-        (elt_id, elt_org_id, elt_code, elt_stage, elt_wafer_count, elt_die_expected,
-         elt_die_actual, elt_item_id, elt_cost_object_id, elt_inserted_at, elt_updated_at)
-      VALUES ($1, $2, $3, 'design', 0, 0, 0, $4, $5, $6, $6)
-      """,
-      [uuid(), org_id, "L1-LOT-1", uuid_param(@lot_item_id), cost_object_id, now()]
-    )
+    # Two lots on ONE item: an EXISTS predicate marks the item once, while a
+    # join that assumes one lot per item would duplicate or miss the row.
+    for code <- ["L1-LOT-1", "L1-LOT-2"] do
+      execute(
+        """
+        INSERT INTO elt_lot
+          (elt_id, elt_org_id, elt_code, elt_stage, elt_wafer_count, elt_die_expected,
+           elt_die_actual, elt_item_id, elt_cost_object_id, elt_inserted_at, elt_updated_at)
+        VALUES ($1, $2, $3, 'design', 0, 0, 0, $4, $5, $6, $6)
+        """,
+        [uuid(), org_id, code, uuid_param(@lot_item_id), cost_object_id, now()]
+      )
+    end
   end
 
   defp execute(sql, params), do: Ecto.Adapters.SQL.query!(ScratchRepo, sql, params)

@@ -273,9 +273,10 @@ lot guard is added.
   logistics migration is discovered as an :expand down-check target`.
 - `samenerp/test/logistics_walkthrough_test.exs`: SO → partial shipment → invoice → second
   shipment → fulfilled, against the host mount.
-- `samenerp/test/logistics_lot_tracked_backfill_test.exs` — **the migration proof only.** Seed an
-  existing `Item` with a `Lot` row and one without before the L1 logistics migration, run the real
-  source migration directory, and assert: (a) `lot_tracked = true` for the item with a `Lot` row;
+- `samenerp/test/logistics_lot_tracked_backfill_test.exs` — **the migration proof only.** Seed
+  an existing `Item` with two `Lot` rows — an `EXISTS` predicate must mark it once, not once per
+  lot — and one without, before the L1 logistics migration; run the real source migration
+  directory, and assert: (a) `lot_tracked = true` for the item with a `Lot` row;
   (b) `false` for the item without one; (c) the target version is recorded in `schema_migrations`
   (the real migration module ran, not a `_build` copy) and the physical
   `eni_item.eni_lot_tracked` column plus its `fld_field` row (`eni_lot_tracked` / `lot_tracked`)
@@ -286,6 +287,16 @@ lot guard is added.
   `samen_core/test/inventory_shipment_test.exs` named test above. A host test that also needs the
   full Shipment/Billing/Finance fixture would let an unrelated fixture failure obscure a migration
   regression, and each sabotage anchor needs exactly one home.
+- `samenerp/test/logistics_migration_round_trip_test.exs`: the scratch-database round trip. After
+  the first `up/0`, `down/0` must remove `eni_lot_tracked`, its `fld_field` row and both shipment
+  tables; the next `up/0` must re-backfill the flag, including a `Lot` inserted after the first
+  backfill (it stays `false` until that run — the live `Lot` check, not the flag, refuses its
+  shipment). The named test is `the L1 logistics migration round-trips down/0 and re-backfills on
+  the next up`; sabotage 441 leaves the tables behind and must flip it.
+- `samenerp/test/logistics_migration_empty_schema_test.exs`: the deployment-before-data case.
+  `up/0` and `down/0` run on a schema with zero `eni_item`/`elt_lot` rows, and the column, its
+  catalog row and both shipment tables must appear and disappear. The named test is `the L1
+  logistics migration round-trips on a schema with no items or lots`.
 
 **Backfill harness (the executable seam).** `samenerp/test/test_helper.exs` boots the host schema
 to head through `Samen.TestDb.boot!(Repo)` before ExUnit starts, so a pre-migration row cannot be
@@ -352,11 +363,12 @@ org_id (uuid)                — tenant pin; the org columns below carry no FK, 
   migration, so an `UPDATE` without the `EXISTS` guard (sabotage 432) fails this test instead of
   passing vacuously.
 
-- New sabotage patches (next free number: 441; the R6 anchor is 437, the s8 re-read anchors
-  are 438/439, and the s9 lock anchor is 440): 438 drops the posted-quantity re-read and flips
-  the two-shipment s8 test; 439 drops the shipment draft-state re-read and flips the
+- New sabotage patches (next free number: 442; the R6 anchor is 437, the s8 re-read anchors
+  are 438/439, the s9 lock anchor is 440, and the `down/0` anchor is 441): 438 drops the
+  posted-quantity re-read and flips the two-shipment s8 test; 439 drops the shipment draft-state re-read and flips the
   same-shipment s8 test; 440 drops only the shipment `FOR UPDATE` lock and flips the s9
-  two-session test. One patch flips the named R6 tests (stock without invoice/COGS, and an
+  two-session test; 441 leaves the shipment tables behind on `down/0` and flips the round-trip
+  test. One patch flips the named R6 tests (stock without invoice/COGS, and an
   accepted over-ship); two are the backfill mutations below (no-op and overbroad, both
   targeting the migration with the test unchanged); one removes the
   `Lot :create` flag maintenance and must fail `Lot :create marks its Item lot_tracked`; one
@@ -392,6 +404,19 @@ No `# ENV:` line is required because this test is not opt-in. Remove the `WHERE 
 so every item becomes `true` and the non-lot control fails; restore the migration byte-exact. Both
 patches target the migration, never the test's expected values. The test reads
 `samenerp/priv/repo/migrations` directly (not a `_build` copy), so the patched source executes.
+
+**Down/0 sabotage header (441):**
+
+```text
+# SABOTAGE: Leave the L1 shipment tables behind when down/0 runs.
+# APP: samenerp
+# TEST_FILES: test/logistics_migration_round_trip_test.exs
+# MUST_FAIL: the L1 logistics migration round-trips down/0 and re-backfills on the next up
+```
+
+No `# ENV:` line is required because this test is not opt-in. Delete the two `drop(table(...))`
+calls from `down/0`; the round-trip test must fail on the surviving tables; restore the migration
+byte-exact.
 
 **Flag-maintenance sabotage headers (next free patch numbers):**
 
