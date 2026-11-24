@@ -1,0 +1,20 @@
+# SABOTAGE: Drop ShipPosting's posted-quantity re-read so a second shipment sees zero already posted.
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: two concurrent shipments on one SO cannot both pass the remaining check
+diff --git a/samen_core/lib/samen/scopes/inventory/ship_posting.ex b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+--- a/samen_core/lib/samen/scopes/inventory/ship_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+@@ -451,10 +451,6 @@ defmodule Samen.Scopes.Inventory.ShipPosting do
+   end
+ 
+   defp posted_quantities(line_resource, shipment_resource, org_id, so_lines) do
+-    Enum.reduce_while(so_lines, {:ok, %{}}, fn so_line, {:ok, acc} ->
+-      case posted_qty(line_resource, shipment_resource, org_id, so_line.id) do
+-        {:ok, qty} -> {:cont, {:ok, Map.put(acc, so_line.id, qty)}}
+-        {:error, reason} -> {:halt, {:error, reason}}
+-      end
+-    end)
++    _ = {line_resource, shipment_resource, org_id, so_lines}
++    {:ok, %{}}
+   end

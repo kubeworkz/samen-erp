@@ -1,0 +1,16 @@
+# SABOTAGE: Drop ShipPosting's shipment draft-state re-read so a shipped shipment can post again.
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: two concurrent ships of one shipment post exactly once
+diff --git a/samen_core/lib/samen/scopes/inventory/ship_posting.ex b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+--- a/samen_core/lib/samen/scopes/inventory/ship_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+@@ -355,6 +355,4 @@ defmodule Samen.Scopes.Inventory.ShipPosting do
+   defp refuse_not_draft(shipment) do
+-    case shipment.status do
+-      :draft -> :ok
+-      other -> {:error, {:not_draft, other}}
+-    end
++    _ = shipment
++    :ok
+   end
