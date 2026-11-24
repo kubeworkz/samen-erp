@@ -6,8 +6,8 @@
   migration contract (shipment resources, `lot_tracked`, scoped catalog sync/down and the
   reversible `:expand` migration) is implemented, as are L1's legacy `:fulfill` live lot refusal
   and L1.2's `ShipPosting`/`Shipment :ship` (lock/re-read/flip, frozen cost, stock/COGS/invoice)
-  plus R6's `ReconcileShipment` read; the L1.3 surface and the remaining L1.4 proofs are not
-  authored by this plan.
+  plus R6's `ReconcileShipment` read and the L1.4 concurrency/host-walkthrough proofs; the
+  L1.3 surface is not authored by this plan.
 - **Sizing:** one deliverable per unit, serialized by default, each phase independently
   committable and gate-able. Every phase ends with the adversarial gate: named tests flip under a
   committed sabotage patch, revert byte-exact, and the suites + verifiers stay green.
@@ -226,7 +226,14 @@ lot guard is added.
 - `samen_core/test/inventory_shipment_test.exs`:
   - one order ships in two partials: stock events, COGS and invoices per shipment; SO states;
   - two concurrent `:ship` calls on one shipment produce one stock/COGS/invoice set; two
-    concurrent shipments on one SO cannot both pass the remaining check (observe one conflict);
+    concurrent shipments on one SO cannot both pass the remaining check (observe one conflict).
+    `s8` runs the callers in Tasks over the shared sandbox connection: it proves action-level
+    exactly-once/serialization and the shipment-state/posted-quantity re-reads (sabotages
+    438/439). `s9` supplies the true two-session proof: committed fixtures, two unboxed
+    connections, and a third-session SO-row barrier; sabotage 440 removes only the shipment
+    `FOR UPDATE` lock (the SO lock remains the barrier) and must flip the named s9 test. The
+    cleanup deletes the test org with `session_replication_role = replica` inside one cleanup
+    transaction so the finance append-only journal triggers do not keep the fixtures behind;
   - `:apply_shipment` refuses a draft/cancelled/fulfilled SO before any write;
   - over-ship, zero-qty, unlinked item, missing level row (never stocked), and negative stock
     refused before any write (each paired with a positive control); a nil moving average is
@@ -344,9 +351,13 @@ org_id (uuid)                — tenant pin; the org columns below carry no FK, 
   migration, so an `UPDATE` without the `EXISTS` guard (sabotage 432) fails this test instead of
   passing vacuously.
 
-- New sabotage patches (next free number: 438; the R6 anchor is 437): one flips the named R6
-  tests (stock without invoice/COGS, and an accepted over-ship); two are the backfill mutations below (no-op and
-  overbroad, both targeting the migration with the test unchanged); one removes the
+- New sabotage patches (next free number: 441; the R6 anchor is 437, the s8 re-read anchors
+  are 438/439, and the s9 lock anchor is 440): 438 drops the posted-quantity re-read and flips
+  the two-shipment s8 test; 439 drops the shipment draft-state re-read and flips the
+  same-shipment s8 test; 440 drops only the shipment `FOR UPDATE` lock and flips the s9
+  two-session test. One patch flips the named R6 tests (stock without invoice/COGS, and an
+  accepted over-ship); two are the backfill mutations below (no-op and overbroad, both
+  targeting the migration with the test unchanged); one removes the
   `Lot :create` flag maintenance and must fail `Lot :create marks its Item lot_tracked`; one
   removes the `Item` clear guard and must fail `an Item cannot clear lot_tracked while a Lot
   exists`; one removes `phase: :expand` from the host migration and must fail the target

@@ -22,7 +22,15 @@ defmodule Samen.InventoryShipmentTest do
     * s6 the private `:apply_shipment` transition admits only confirmed →
       partially_fulfilled and partially_fulfilled → fulfilled;
     * s7 R6 reconciles stock, shipment lines, invoice, COGS and the SO's
-      open quantity, and names each half-landed/over-ship shape.
+      open quantity, and names each half-landed/over-ship shape;
+    * s8 concurrency (explicitly allowed sandbox connection): a concurrent second ship of
+      the same partial shipment is refused after the first posts; two
+      simultaneous shipments cannot both pass the posted-quantity check. The
+      shipment-state and posted-quantity re-reads are anchored by sabotages
+      438/439; this is not two-session `FOR UPDATE` contention;
+    * s9 true two-session contention: committed fixtures and two unboxed
+      connections under a third-session SO-row barrier; removing the shipment
+      `FOR UPDATE` lock alone lets both sessions post and fails the named test.
   """
 
   use ExUnit.Case, async: false
@@ -49,10 +57,27 @@ defmodule Samen.InventoryShipmentTest do
     ShipmentLine,
     SoLine,
     StockLedger,
+    StockLevel,
     Warehouse
   }
 
   @repo SamenCore.TestRepo
+
+  @cleanup_resources [
+    JournalLine,
+    JournalEntry,
+    StockLevel,
+    StockLedger,
+    ShipmentLine,
+    Shipment,
+    SoLine,
+    SalesOrder,
+    InvoiceMirror,
+    Item,
+    Warehouse,
+    PostingAccount,
+    Account
+  ]
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(@repo)
@@ -715,6 +740,175 @@ defmodule Samen.InventoryShipmentTest do
     end
   end
 
+  # ── s8: concurrent ships ────────────────────────────────────────────────────
+
+  describe "s8 — concurrent :ship calls serialize" do
+    # The module setup owns the manual checkout. ship_concurrently/1 explicitly
+    # allows both Tasks on that connection, so no global {:shared, _} mode can
+    # leak into s9. This block is not the two-session proof; s9 below covers
+    # FOR UPDATE contention and is anchored by sabotage 440.
+
+    test "two concurrent ships of one shipment post exactly once", %{org: org, scope: scope} do
+      {item, warehouse} = seed_pair(scope, org)
+      stock_pair(scope, org, item, warehouse, 10, 500)
+
+      so = confirmed_so(scope, org, warehouse, item, qty: 5, price: 1_000)
+      [so_line] = so_lines(so.id)
+
+      shipment = new_shipment(scope, org, so, warehouse, "SHP-RACE-ONE")
+      new_shipment_line(scope, org, shipment, so_line, 2)
+
+      results = ship_concurrently([{shipment, scope}, {shipment, scope}])
+
+      assert [{:ok, shipped}] = Enum.filter(results, &match?({:ok, _}, &1))
+      assert [{:error, %Ash.Error.Invalid{}}] = Enum.reject(results, &match?({:ok, _}, &1))
+      assert shipped.status == :shipped
+
+      assert [_] = ship_events(shipment.id)
+      assert [_] = all_invoices(org)
+      assert [_] = shipment_entries(shipment.id)
+      assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :partially_fulfilled
+
+      assert {:ok, %{on_hand: 8}} =
+               ReconcileStock.level(@repo, StockLedger, org, item.id, warehouse.id)
+    end
+
+    test "two concurrent shipments on one SO cannot both pass the remaining check", %{
+      org: org,
+      scope: scope
+    } do
+      {item, warehouse} = seed_pair(scope, org)
+      stock_pair(scope, org, item, warehouse, 10, 500)
+
+      so = confirmed_so(scope, org, warehouse, item, qty: 5, price: 1_000)
+      [so_line] = so_lines(so.id)
+
+      first = new_shipment(scope, org, so, warehouse, "SHP-RACE-SO-1")
+      new_shipment_line(scope, org, first, so_line, 3)
+
+      second = new_shipment(scope, org, so, warehouse, "SHP-RACE-SO-2")
+      new_shipment_line(scope, org, second, so_line, 3)
+
+      results = ship_concurrently([{first, scope}, {second, scope}])
+
+      assert [{:ok, shipped}] = Enum.filter(results, &match?({:ok, _}, &1))
+      assert [{:error, %Ash.Error.Invalid{}}] = Enum.reject(results, &match?({:ok, _}, &1))
+
+      loser = if shipped.id == first.id, do: second, else: first
+
+      assert Ash.get!(Shipment, loser.id, authorize?: false).status == :draft
+      assert ship_events(loser.id) == []
+      assert shipment_entries(loser.id) == []
+      assert [_] = ship_events(shipped.id)
+      assert [_] = shipment_entries(shipped.id)
+      assert [_] = all_invoices(org)
+      assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :partially_fulfilled
+
+      assert {:ok, %{on_hand: 7}} =
+               ReconcileStock.level(@repo, StockLedger, org, item.id, warehouse.id)
+    end
+  end
+
+  # ── s9: true two-session contention ────────────────────────────────────────
+
+  describe "s9 — two-session FOR UPDATE contention" do
+    setup do
+      # Leave the ExUnit sandbox and use committed rows: the two :ship calls
+      # must run on separate PostgreSQL sessions, not the shared sandbox
+      # connection. on_exit removes every committed row this test creates,
+      # bypassing the finance append-only triggers for that cleanup only.
+      :ok = Ecto.Adapters.SQL.Sandbox.checkin(@repo)
+      :ok = Ecto.Adapters.SQL.Sandbox.mode(@repo, :manual)
+      :ok = Ecto.Adapters.SQL.Sandbox.checkout(@repo, sandbox: false)
+
+      org = Ash.UUID.generate()
+      scope = tenant_scope(org)
+
+      on_exit(fn -> purge_org!(org) end)
+      :ok = seed_posting_accounts(org)
+
+      {:ok, org: org, scope: scope}
+    end
+
+    test "two sessions serialize a partial shipment and post exactly once", %{
+      org: org,
+      scope: scope
+    } do
+      {item, warehouse} = seed_pair(scope, org)
+      stock_pair(scope, org, item, warehouse, 10, 500)
+
+      so = confirmed_so(scope, org, warehouse, item, qty: 5, price: 1_000)
+      [so_line] = so_lines(so.id)
+
+      shipment = new_shipment(scope, org, so, warehouse, "SHP-TRUE-RACE")
+      new_shipment_line(scope, org, shipment, so_line, 2)
+
+      # A third session holds the SO row. With the shipment lock in place, the
+      # winner blocks on this SO row while the loser blocks on the shipment row;
+      # without that shipment lock, BOTH callers reach this SO row with the same
+      # stale draft shipment snapshot. Releasing the SO row therefore makes the
+      # lock removal observable as a second successful posting.
+      so_table = table!(SalesOrder)
+      so_id = source_column!(SalesOrder, :id)
+
+      @repo.query!("BEGIN")
+
+      %{num_rows: 1} =
+        @repo.query!(
+          "SELECT #{so_id} FROM #{so_table} WHERE #{so_id} = $1 FOR UPDATE",
+          [Ecto.UUID.dump!(so.id)]
+        )
+
+      parent = self()
+
+      tasks =
+        Enum.map(1..2, fn _ ->
+          Task.async(fn ->
+            :ok = Ecto.Adapters.SQL.Sandbox.checkout(@repo, sandbox: false)
+            %{rows: [[backend_pid]]} = @repo.query!("SELECT pg_backend_pid()")
+            send(parent, {:ready, self(), backend_pid})
+
+            try do
+              shipment
+              |> Ash.Changeset.for_update(:ship, %{}, scope: scope)
+              |> Ash.update()
+            after
+              Ecto.Adapters.SQL.Sandbox.checkin(@repo)
+            end
+          end)
+        end)
+
+      task_backends =
+        for _ <- tasks do
+          assert_receive({:ready, _pid, backend_pid}, 5_000)
+          backend_pid
+        end
+
+      try do
+        wait_for_ship_waiters!(task_backends, 2)
+        @repo.query!("COMMIT")
+
+        results = Enum.map(tasks, &Task.await(&1, 20_000))
+
+        assert [{:ok, shipped}] = Enum.filter(results, &match?({:ok, _}, &1))
+        assert [{:error, %Ash.Error.Invalid{}}] = Enum.reject(results, &match?({:ok, _}, &1))
+        assert shipped.status == :shipped
+
+        assert [_] = ship_events(shipment.id)
+        assert [_] = all_invoices(org)
+        assert [_] = shipment_entries(shipment.id)
+        assert Ash.get!(SalesOrder, so.id, authorize?: false).status == :partially_fulfilled
+
+        assert {:ok, %{on_hand: 8}} =
+                 ReconcileStock.level(@repo, StockLedger, org, item.id, warehouse.id)
+      after
+        Enum.each(tasks, &Task.shutdown(&1, :brutal_kill))
+        _ = @repo.query("ROLLBACK")
+        Ecto.Adapters.SQL.Sandbox.checkin(@repo)
+      end
+    end
+  end
+
   # ── helpers ─────────────────────────────────────────────────────────────────
 
   defp reconcile_opts do
@@ -891,6 +1085,111 @@ defmodule Samen.InventoryShipmentTest do
 
   defp ship(shipment, scope) do
     Ash.update!(Ash.Changeset.for_update(shipment, :ship, %{}, scope: scope))
+  end
+
+  # Release both `:ship` calls together so they contend. s8 explicitly allows
+  # both Tasks on this test's checked-out connection, so they serialize there.
+  defp ship_concurrently(calls) do
+    parent = self()
+    go = make_ref()
+
+    tasks =
+      Enum.map(calls, fn {shipment, scope} ->
+        Task.async(fn ->
+          send(parent, {:ready, self()})
+
+          receive do
+            {:go, ^go} ->
+              shipment
+              |> Ash.Changeset.for_update(:ship, %{}, scope: scope)
+              |> Ash.update()
+          end
+        end)
+      end)
+
+    Enum.each(tasks, &Ecto.Adapters.SQL.Sandbox.allow(@repo, parent, &1.pid))
+
+    for _ <- tasks, do: assert_receive({:ready, _}, 5_000)
+    Enum.each(tasks, &send(&1.pid, {:go, go}))
+    Enum.map(tasks, &Task.await(&1, 15_000))
+  end
+
+  defp table!(resource), do: AshPostgres.DataLayer.Info.table(resource)
+
+  defp source_column!(resource, attribute) do
+    attr = Ash.Resource.Info.attribute(resource, attribute)
+    to_string(attr.source || attr.name)
+  end
+
+  defp wait_for_ship_waiters!(task_backends, expected, attempts \\ 200) do
+    placeholders = Enum.map_join(1..length(task_backends), ",", &"$#{&1}")
+
+    %{rows: [[waiters]]} =
+      @repo.query!(
+        """
+        SELECT count(*)
+        FROM pg_stat_activity
+        WHERE pid IN (#{placeholders})
+          AND wait_event_type = 'Lock'
+        """,
+        task_backends
+      )
+
+    cond do
+      waiters >= expected ->
+        :ok
+
+      attempts > 0 ->
+        Process.sleep(25)
+        wait_for_ship_waiters!(task_backends, expected, attempts - 1)
+
+      true ->
+        %{rows: rows} =
+          @repo.query!(
+            """
+            SELECT pid, state, wait_event_type, wait_event, pg_blocking_pids(pid), query
+            FROM pg_stat_activity
+            WHERE pid IN (#{placeholders})
+            """,
+            task_backends
+          )
+
+        flunk("expected #{expected} blocked task sessions, saw #{waiters}: #{inspect(rows)}")
+    end
+  end
+
+  defp purge_org!(org) do
+    case Ecto.Adapters.SQL.Sandbox.checkout(@repo, sandbox: false) do
+      :ok -> :ok
+      {:already, :owner} -> :ok
+      other -> flunk("cleanup could not check out: #{inspect(other)}")
+    end
+
+    try do
+      # The finance fixture's posted journal lines are append-only. This is test
+      # cleanup of one committed org, not a production rewrite: bypass USER
+      # triggers for THIS transaction only, then commit the deletes.
+      @repo.query!("BEGIN")
+      @repo.query!("SET LOCAL session_replication_role = replica")
+
+      Enum.each(@cleanup_resources, fn resource ->
+        table = table!(resource)
+        org_column = source_column!(resource, :org_id)
+
+        @repo.query!(
+          "DELETE FROM #{table} WHERE #{org_column} = $1",
+          [Ecto.UUID.dump!(org)]
+        )
+      end)
+
+      @repo.query!("COMMIT")
+    rescue
+      error ->
+        _ = @repo.query("ROLLBACK")
+        reraise error, __STACKTRACE__
+    after
+      Ecto.Adapters.SQL.Sandbox.checkin(@repo)
+    end
   end
 
   defp shipment_lines(shipment_id) do

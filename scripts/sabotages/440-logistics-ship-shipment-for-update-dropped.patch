@@ -1,0 +1,28 @@
+# SABOTAGE: Drop only the shipment row's FOR UPDATE lock; keep the SalesOrder lock.
+# APP: samen_core
+# TEST_FILES: test/inventory_shipment_test.exs
+# MUST_FAIL: two sessions serialize a partial shipment and post exactly once
+diff --git a/samen_core/lib/samen/scopes/inventory/ship_posting.ex b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+--- a/samen_core/lib/samen/scopes/inventory/ship_posting.ex
++++ b/samen_core/lib/samen/scopes/inventory/ship_posting.ex
+@@ -362,8 +362,17 @@ defmodule Samen.Scopes.Inventory.ShipPosting do
+   defp lock_row(resource, org_id, id, label) do
+     require Ash.Query
+ 
+-    resource
+-    |> Ash.Query.filter(id == ^id and org_id == ^org_id)
+-    |> Ash.Query.lock(:for_update)
++    query =
++      resource
++      |> Ash.Query.filter(id == ^id and org_id == ^org_id)
++
++    query =
++      if label == :sales_order do
++        Ash.Query.lock(query, :for_update)
++      else
++        query
++      end
++
++    query
+     |> Ash.read_one(authorize?: false)
+     |> case do
