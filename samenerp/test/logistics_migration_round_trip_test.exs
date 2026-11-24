@@ -39,15 +39,17 @@ defmodule Samenerp.LogisticsMigrationRoundTripTest do
     :ok = Samen.TestDb.ensure_up!(config)
     {:ok, _} = ScratchRepo.start_link(config)
 
-    run_migrator(:up, @l1_version - 1)
-    seed_items_and_lot()
-    run_migrator(:up, @l1_version)
-
+    # Registered before the first migration: a setup failure must still drop
+    # the scratch database (a killed run can only leak it past the OS).
     on_exit(fn ->
       if Process.whereis(ScratchRepo), do: Supervisor.stop(ScratchRepo)
       _ = Ecto.Adapters.Postgres.storage_down(config)
       :ok
     end)
+
+    run_migrator(:up, @l1_version - 1)
+    seed_items_and_lot()
+    run_migrator(:up, @l1_version)
 
     :ok
   end
