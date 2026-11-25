@@ -23,6 +23,13 @@ defmodule Samenerp.DocsRoutesTest do
     4. **the rendered pages emit only live targets** — every `href` in every
        rendered doc page (index, each category, the guide, the 404) is a route
        this router serves, so the shared layout's chrome cannot rot either.
+
+  What a route table cannot prove is that the page RENDERS: this case stayed
+  green while `/erp/stock` and `/erp/ap-capture` both answered 500 (a resource
+  column that had drifted out of the dev DB, and an obsolete positional
+  `live_file_input/1`). That leg is `Samenerp.DocsRenderTest` at the bottom of
+  this file — the same guard, driven through the real router, kept to the
+  documented ERP pages because those mount from a bare org with no fixtures.
   """
 
   use ExUnit.Case, async: true
@@ -218,5 +225,132 @@ defmodule Samenerp.DocsRoutesTest do
     |> Regex.scan(html)
     |> Enum.map(fn [_, href] -> href end)
     |> Enum.uniq()
+  end
+end
+
+defmodule Samenerp.DocsRenderTest do
+  @moduledoc """
+  DOCS-RENDER — the half of the docs promise the route guard cannot reach. Every
+  path in `SamenerpWeb.Docs` resolving to a mounted route says nothing about the
+  page behind it: `/erp/stock` and `/erp/ap-capture` were both documented, both
+  mounted, and both answered 500 (a resource column that had drifted out of the
+  dev database, and an obsolete positional `live_file_input/1`). This case asks
+  the remaining question through the REAL router — does the documented page
+  actually render the page it names?
+
+  Scope is the documented **ERP** group, deliberately: every path in it mounts
+  from a bare org row with no fixtures, no `:id` and no seeded rows, so one
+  `GET` per page is the cheap proof. The other groups' detail pages need host
+  fixtures (`/crm/contacts/:id`, `/pages/:id`, …) and their list pages already
+  carry their own surface tests, so this stays a render guard, not an
+  end-to-end suite.
+  """
+
+  use Samenerp.DataCase, async: false
+
+  import Phoenix.ConnTest
+
+  alias Samenerp.Operator, as: Op
+  alias SamenerpWeb.Docs
+
+  @endpoint SamenerpWeb.Endpoint
+
+  # The root element each documented ERP page renders. The page NAME cannot be the
+  # oracle: the inherited ERP sidebar carries every surface's label on every ERP
+  # page, so a page that fell back to its not-found state would still say "Stock".
+  # The catalog/table agreement test below keeps this in step with the docs.
+  @page_ids %{
+    "/erp" => "erp-dashboard",
+    "/erp/coa" => "erp-surface",
+    "/erp/entries" => "erp-surface",
+    "/erp/journal_templates" => "erp-surface",
+    "/erp/ap_invoices" => "erp-surface",
+    "/erp/credit_notes" => "erp-surface",
+    "/erp/vendor_credits" => "erp-surface",
+    "/erp/stock" => "erp-surface",
+    "/erp/purchase_orders" => "erp-surface",
+    "/erp/goods_receipts" => "erp-surface",
+    "/erp/work_orders" => "erp-surface",
+    "/erp/ap-capture" => "erp-ap-capture",
+    "/erp/ap-payments" => "erp-ap-payments",
+    "/erp/ap-aging" => "erp-ap-aging",
+    "/erp/ap-approval" => "erp-ap-approval",
+    "/erp/ar-receipts" => "erp-ar-receipts",
+    "/erp/ar-aging" => "erp-ar-aging",
+    "/erp/ar-settings" => "erp-ar-settings",
+    "/erp/journal-approval" => "erp-journal-approval",
+    "/erp/reconciliation" => "reconciliation-workbench",
+    "/erp/payroll-mappings" => "erp-payroll-mappings"
+  }
+
+  setup do
+    start_supervised!(@endpoint)
+    :ok
+  end
+
+  test "every documented ERP page renders its own root element" do
+    org = create_org!("Docs Render QA") |> Map.fetch!(:id)
+    paths = documented_erp_paths()
+
+    # The catalog and the table are two listings of the same promise: a newly
+    # documented page cannot ship unrendered, and a removed one cannot leave a
+    # stale row that would pass vacuously.
+    assert Enum.sort(paths) == @page_ids |> Map.keys() |> Enum.sort(),
+           "the docs catalog and the render table disagree — every documented ERP page needs a " <>
+             "root element here, and every row here needs a page in the catalog " <>
+             "(catalog-only: #{inspect(paths -- Map.keys(@page_ids))}, " <>
+             "table-only: #{inspect(Map.keys(@page_ids) -- paths)})"
+
+    for path <- paths do
+      id = Map.fetch!(@page_ids, path)
+      conn = get(build_conn(), "#{path}?org=#{org}")
+
+      assert conn.status == 200,
+             "GET #{path} (documented in `SamenerpWeb.Docs`) answered #{conn.status} — a reader's " <>
+               "click from /docs lands on an error page even though the route is mounted"
+
+      assert conn.resp_body =~ ~s(id="#{id}"),
+             "GET #{path} rendered without its `##{id}` root — the route answered, but not with " <>
+               "the page the docs describe (a not-found state or a bare shell still returns 200)"
+    end
+  end
+
+  test "every docs page the catalog publishes renders through the controller" do
+    pages =
+      [{"/docs", "Documentation"}, {"/docs/getting-started", "Getting started"}] ++
+        Enum.map(Docs.groups(), fn group ->
+          {"/docs/#{group.id}", "#{group.glyph} #{group.label}"}
+        end)
+
+    for {path, heading} <- pages do
+      conn = get(build_conn(), path)
+
+      assert conn.status == 200,
+             "GET #{path} answered #{conn.status} — the docs page itself is down"
+
+      assert conn.resp_body =~ "<h1>#{heading}</h1>",
+             "GET #{path} rendered without its `<h1>#{heading}</h1>` heading"
+    end
+
+    # ANTI-TAUTOLOGY: the render leg can fail. An unknown category is a 404 page,
+    # not a 200 with some heading — so the assertions above are not satisfied by
+    # any response at all.
+    unknown = get(build_conn(), "/docs/definitely-not-a-category")
+
+    assert unknown.status == 404, "an undocumented category id must 404, not render a page"
+    assert unknown.resp_body =~ "<h1>Page not found</h1>"
+  end
+
+  defp documented_erp_paths do
+    for group <- Docs.groups(),
+        {_name, path, _note} <- group.pages,
+        String.starts_with?(path, "/erp"),
+        do: path
+  end
+
+  defp create_org!(name) do
+    Op.Org
+    |> Ash.Changeset.for_create(:create, %{name: name}, authorize?: false)
+    |> Ash.create!(authorize?: false)
   end
 end
