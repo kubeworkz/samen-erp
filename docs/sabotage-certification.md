@@ -1,14 +1,22 @@
-# Sabotage harness certification — 344 patches
+# Sabotage harness certification — 425 patches
 
 The adversarial tier's own certification record: for every patch in `scripts/sabotages/`, did its
 named tests actually FLIP under the sabotage, and did the replay tree come back byte-exact? Every
 number below comes from the harness's own per-patch output (`flip confirmed: <named test>`,
 `restore: byte-exact (sha-256 verified)`, `SABOTAGE HARNESS: ALL PASSED`), not from inspection.
 
-Raw logs are gitignored scratch under `.sabotage-parallel/logs/` (same posture as the dogfood
-campaign's `_orch/`: this doc is the tracked pointer to that evidence).
+The title tracks the harness's CURRENT size (425 patches). Two runs are recorded here:
 
-## Run: 2026-10-16 · HEAD `1174b116`
+| run | harness then | what this doc records for it |
+|---|---|---|
+| 2026-10-16 · HEAD `1174b116` | 344 patches | the full per-patch sweep: 343/344 certified, `336` unverifiable on that host (the `Run:` section below) |
+| 2026-11-24 | 425 patches | the 425-patch certification itself lives in `docs/ws-log/build-plan.md` (L1.4); this doc adds its cold-start proof after a reclaim (below) |
+
+Raw logs are scratch: slice logs under `.sabotage-parallel/logs/` (same posture as the dogfood
+campaign's `_orch/`) and driver/cold-start transcripts under `.agent_logs/` — this doc is the
+tracked pointer to that evidence, not a copy of it.
+
+## Run: 2026-10-16 · HEAD `1174b116` (344-patch sweep)
 
 `1174b116` (*fix(ci): pin the pool width wherever the intra harness asserts a LAYOUT*) on top of
 `0daa098e` (*feat(tenant): make the shared chrome structural, not a convention every page repeats* —
@@ -115,7 +123,7 @@ certification is `SAMEN_SABOTAGE=1 ./ci.sh`; the parallel sweep is
 cheap reruns: reclaim them with `rm -rf .sabotage-parallel && git worktree prune` and
 `dropdb --if-exists <app>_test_sab<N>`.
 
-### Cold start (verified 2026-11-24)
+## Cold start: 2026-11-24 (425-patch harness)
 
 A reclaim leaves nothing behind, so one cheap slice was replayed from nothing to prove the
 harness bootstraps itself: with `.sabotage-parallel/` **deleted** and `demo_test_sab1`
