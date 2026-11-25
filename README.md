@@ -184,7 +184,7 @@ re-run this pass), `--warnings-as-errors` clean; treat exact counts as direction
 | `demo` | 465 |
 | `driftwood` | 123 |
 | `pawchart` | 49 |
-| sabotage harness | 308/308 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
+| sabotage harness | 425/425 sabotages flipped their named tests; worktree-isolated replay, byte-exact restores |
 | HuggingFace AI core | 109 tests (59 unit + 50 streaming integration) |
 
 ## Getting started

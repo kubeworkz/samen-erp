@@ -6,7 +6,7 @@
 <title>Samen — the SaaS foundry where PII is masked by default and every guarantee ships with a sabotage that proves it can fail</title>
 <meta name="description" content="An Elixir · Ash · Phoenix substrate for launching many SaaS products without re-solving PII vaulting, crypto-shred erasure, two-plane operator support, or the verification that proves any of it.">
 <meta property="og:title" content="Samen — a SaaS foundry with the hard parts already solved">
-<meta property="og:description" content="PII masked by default on every plane. Reveal is second-party approved and hash-chain logged. Erasure is key destruction, not row scrubbing. 301 committed sabotages prove the tests can fail.">
+<meta property="og:description" content="PII masked by default on every plane. Reveal is second-party approved and hash-chain logged. Erasure is key destruction, not row scrubbing. 425 committed sabotages prove the tests can fail.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -522,7 +522,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
     <div class="rise d5" style="margin-top:clamp(48px,6vw,74px);border-top:1px solid var(--night-rule);padding-top:30px">
       <div class="g4">
-        <div><div class="metric">301</div><div class="metric-lab">committed sabotages,<br>each proving a test can fail</div></div>
+        <div><div class="metric">425</div><div class="metric-lab">committed sabotages,<br>each proving a test can fail</div></div>
         <div><div class="metric">24</div><div class="metric-lab">verifier tiers<br>in the gate</div></div>
         <div><div class="metric">49</div><div class="metric-lab">architecture decision<br>records</div></div>
         <div><div class="metric">0</div><div class="metric-lab">hand-edits to make a<br>generated app pass</div></div>
@@ -2841,7 +2841,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             generated tests can fail.</li>
         </ul>
         <p>That last step is the one that matters. A gate nobody has tried to break is a decoration. The whole
-          repo carries <strong>301</strong> committed sabotage patches on the principle that a test which cannot
+          repo carries <strong>425</strong> committed sabotage patches on the principle that a test which cannot
           fail is treated as a bug — and the generated app inherits that treatment rather than an exemption
           from it.</p>
       </div>
@@ -3041,7 +3041,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             share an accidental assumption. If the harness had quietly encoded one vendor&rsquo;s shape, the
             other two would not pass it.</li>
           <li><strong>A committed sabotage proves the harness can fail.</strong> This is the part that closes the
-            loop. Among the <strong>301</strong> sabotage patches in the repo are ones aimed at the ESP path:
+            loop. Among the <strong>425</strong> sabotage patches in the repo are ones aimed at the ESP path:
             apply the patch, and the <em>named</em> conformance tests must fail — not &ldquo;something
             broke&rdquo; — then revert and verify a byte-exact restore. A test that cannot fail is treated as a
             bug.</li>
@@ -3281,7 +3281,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </p>
 
     <div class="g4" style="margin-top:clamp(34px,4.4vw,52px)">
-      <div><div class="metric">301</div><div class="metric-lab">committed<br>sabotage patches</div></div>
+      <div><div class="metric">425</div><div class="metric-lab">committed<br>sabotage patches</div></div>
       <div><div class="metric">24</div><div class="metric-lab">verifier tiers<br>in the gate</div></div>
       <div><div class="metric">19</div><div class="metric-lab">step gate the<br>generated app passes</div></div>
       <div><div class="metric">49</div><div class="metric-lab">architecture<br>decision records</div></div>
@@ -3292,7 +3292,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <div class="split">
       <div class="stack">
         <h3 style="font-size:22px">The sabotage loop</h3>
-        <p class="small">For each of the 301 committed patches, the harness runs the same five steps. The step that
+        <p class="small">For each of the 425 committed patches, the harness runs the same five steps. The step that
           matters is the third: the <strong>named</strong> tests must fail. Not &ldquo;something broke&rdquo; —
           the specific test, identified by name, that is supposed to be guarding that behaviour.</p>
         <p class="small">That specificity is the whole difference between this and mutation testing that counts
@@ -3306,7 +3306,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
       <div class="figure">
         <svg viewBox="0 0 660 430" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="sab-loop-t">
-          <title id="sab-loop-t">A five-stage cycle repeated for each of 301 committed sabotage patches: SHA-256 the touched files, apply the patch, the named tests must fail, revert the patch, verify a byte-exact restore.</title>
+          <title id="sab-loop-t">A five-stage cycle repeated for each of 425 committed sabotage patches: SHA-256 the touched files, apply the patch, the named tests must fail, revert the patch, verify a byte-exact restore.</title>
           <defs>
             <marker id="sab-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0 0 L10 5 L0 10 Z" fill="#C3C9F5"/>
@@ -3353,7 +3353,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
           <!-- centre -->
           <text x="330" y="200" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing=".8" fill="#6B6E82">SAMEN_SABOTAGE=1 ./ci.sh</text>
-          <text x="330" y="248" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="38" font-weight="600" fill="#F3F2EF">301</text>
+          <text x="330" y="248" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="38" font-weight="600" fill="#F3F2EF">425</text>
           <text x="330" y="270" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" letter-spacing="1.4" fill="#6B6E82">COMMITTED PATCHES</text>
           <text x="330" y="296" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#9EA1B4">each one proving a named test can fail</text>
         </svg>
@@ -3367,7 +3367,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div><span class="c"># the red lane — every guarantee gets a patch that must break its own named test</span></div>
       <div><span class="p">$</span> SAMEN_SABOTAGE=1 ./ci.sh</div>
       <div>&nbsp;</div>
-      <div><span class="hl">[sabotage 118/301]</span> vault/decrypt_outside_chokepoint.patch</div>
+      <div><span class="hl">[sabotage 118/425]</span> vault/decrypt_outside_chokepoint.patch</div>
       <div>&nbsp;&nbsp;hash&nbsp;&nbsp;&nbsp;&nbsp;4 files &#183; sha-256 recorded</div>
       <div>&nbsp;&nbsp;apply&nbsp;&nbsp;&nbsp;ok</div>
       <div>&nbsp;&nbsp;expect&nbsp;&nbsp;SamenCore.VaultTest "refuses a decrypt outside the chokepoint"</div>
@@ -3378,7 +3378,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div>&nbsp;</div>
       <div>verifiers&nbsp;&nbsp;&nbsp;<span class="ok">24/24 tiers passed</span></div>
       <div>generated&nbsp;&nbsp;&nbsp;<span class="ok">19/19 steps passed</span> <span class="c">(gen.app &#8594; gate &#183; seed &#183; boot &#183; probe)</span></div>
-      <div>sabotages&nbsp;&nbsp;&nbsp;<span class="ok">301/301 broke their named test</span></div>
+      <div>sabotages&nbsp;&nbsp;&nbsp;<span class="ok">425/425 broke their named test</span></div>
       <div>shred&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">no plaintext PII recoverable in any tier</span></div>
       <div>&nbsp;</div>
       <div><span class="ok">ROOT CI: ALL PASSED</span></div>
@@ -3412,7 +3412,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <span class="pill"><b>pawchart</b> 49</span>
       </div>
       <p class="small" style="margin-top:14px;max-width:60ch">Counts are the least interesting number here. A suite
-        can be large and still prove nothing. The 301 is the number that carries weight, because each one is a
+        can be large and still prove nothing. The 425 is the number that carries weight, because each one is a
         commitment that a specific test can fail.</p>
     </div>
 
@@ -3429,14 +3429,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             revert produced.</li>
           <li><strong>Restore is verified, not assumed.</strong> <code>git checkout</code> succeeding is not
             evidence; a matching digest is. A mismatch fails the run rather than continuing on.</li>
-          <li><strong>It keeps the 301 independent.</strong> Because each patch starts from a tree proven
+          <li><strong>It keeps the 425 independent.</strong> Because each patch starts from a tree proven
             identical to the last one, the results compose. Without it they would only be a sequence.</li>
         </ul>
       </div>
     </details>
 
     <div class="btns" style="margin-top:clamp(30px,4vw,42px)">
-      <a class="btn btn--primary" href="https://github.com/ckluis/samen/tree/main/scripts/sabotages">Read the 301 patches &#8599;</a>
+      <a class="btn btn--primary" href="https://github.com/ckluis/samen/tree/main/scripts/sabotages">Read the 425 patches &#8599;</a>
       <a class="btn btn--ghost" href="https://github.com/ckluis/samen/blob/main/docs/claim-evidence.md">Claim &#8594; evidence map &#8599;</a>
     </div>
 
@@ -3638,7 +3638,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           </a>
 
           <a class="card" style="display:block;text-decoration:none;color:inherit;grid-column:1/-1" href="https://github.com/ckluis/samen/tree/main/scripts/sabotages">
-            <span class="card-num">301 sabotage patches ↗</span>
+            <span class="card-num">425 sabotage patches ↗</span>
             <h3>A corpus of &ldquo;here is how you prove a test can fail&rdquo;</h3>
             <p>The most portable idea in the repo, and the one that needs no Elixir to steal. Each patch breaks
               one specific behaviour; the <em>named</em> tests for that behaviour must fail — not merely
@@ -3712,7 +3712,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <div>
           <h4>Verify</h4>
           <ul>
-            <li><a href="https://github.com/ckluis/samen/tree/main/scripts/sabotages">301 sabotages</a></li>
+            <li><a href="https://github.com/ckluis/samen/tree/main/scripts/sabotages">425 sabotages</a></li>
             <li><a href="https://github.com/ckluis/samen/blob/main/SECURITY.md">Security</a></li>
             <li><a href="https://github.com/ckluis/samen/blob/main/LICENSE">MIT License</a></li>
           </ul>

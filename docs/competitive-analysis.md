@@ -246,7 +246,7 @@ kernel-only.
 1. **AI-native architecture** — tested kernel AI plane and no-PII-egress chokepoint; host AI flow is not shipped yet
 2. **Open source** — Full code access, no vendor lock-in
 3. **Modern stack** — Elixir/Phoenix, fast and scalable
-4. **Verified codebase** — 308 sabotages, generative proof
+4. **Verified codebase** — 425 sabotages, generative proof
 5. **Cost** — estimated 4x–30x lower Year 1 cost than NetSuite's reported range; not benchmarked
 6. **Self-hosted** — Full data control
 7. **Security** — Advanced PII vaulting, crypto-shred

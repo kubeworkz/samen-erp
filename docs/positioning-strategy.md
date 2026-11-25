@@ -106,12 +106,12 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 1. **Own your data** — Self-host on your infrastructure, no vendor lock-in
 2. **AI, governed by construction** — tested HuggingFace BYOK kernel and no-PII-egress chokepoint; the host key flow and in-workflow AI UI are the next milestone
 3. **Developer-friendly** — Elixir/Phoenix, modern stack, versioned JSON:API
-4. **Verify everything** — 308 sabotages and generative proof; verification, not a no-bug guarantee
+4. **Verify everything** — 425 sabotages and generative proof; verification, not a no-bug guarantee
 5. **Scale with you** — From 10 to 200 employees, free to enterprise
 
 ### Proof Points
 - Live-vs-shell claim set documented in `README.md`
-- 308 sabotage tests proving correctness
+- 425 sabotage tests proving correctness
 - OpenAPI 3.0 JSON at `/api/openapi.json` (two paths today)
 - Docker/Compose deploy files; Kubernetes guide only (no manifests)
 

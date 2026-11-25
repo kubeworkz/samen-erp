@@ -43,7 +43,7 @@ not — that is what codemunch replaces. See `driftwood/CLAUDE.md` for the full 
   `ENV: KEY=value` (repeatable) is exported to that patch's `mix test` ONLY — the seam that
   makes an OPT-IN tier replayable (the multinode Oban proof runs only when `SAMEN_MULTINODE=1`;
   without the flag the replay collects 0 tests and the harness refuses that vacuous green).
-  Default (no args) = the full 320-patch harness (unchanged). At 320 the full serial run
+  Default (no args) = the full 425-patch harness (unchanged). At 425 the full serial run
   exceeds the 600s single tool-call ceiling, so certify it **backgrounded** or in **chunks**
   via additive selection flags (they COMPOSE as an intersection; a FILTERED run certifies
   ONLY its subset — full coverage still needs a full/background run):
