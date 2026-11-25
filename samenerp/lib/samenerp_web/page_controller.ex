@@ -53,6 +53,7 @@ defmodule SamenerpWeb.PageController do
         <div class="badge">Open Source · Built with Elixir/Phoenix/Ash · AI-Native</div>
         <div style="margin-top:24px">
           <a href="/signup" style="display:inline-block;background:white;color:#0e7c5a;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:1.1em;margin-right:12px">Get Started Free</a>
+          <a href="/docs" style="display:inline-block;background:rgba(255,255,255,0.15);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:1.1em;border:1px solid rgba(255,255,255,0.3);margin-right:12px">Documentation</a>
           <a href="/login" style="display:inline-block;background:rgba(255,255,255,0.15);color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:1.1em;border:1px solid rgba(255,255,255,0.3)">Sign In</a>
         </div>
       </div>
@@ -322,9 +323,9 @@ defmodule SamenerpWeb.PageController do
               <span class="tag">DevOps</span>
             </div>
             <div class="card">
-              <h3>API Documentation</h3>
-              <p>OpenAPI 3.0 spec, auto-generated from AshJsonApi resources.</p>
-              <span class="tag">Developer</span>
+              <h3>Documentation</h3>
+              <p>Feature guides by module, grouped like the workspace sidebar, plus the OpenAPI 3.0 spec.</p>
+              <span class="tag"><a href="/docs" style="color:#065f46;text-decoration:none;font-weight:600">Read the docs →</a></span>
             </div>
             <div class="card">
               <h3>Security Hardening</h3>
@@ -350,7 +351,7 @@ defmodule SamenerpWeb.PageController do
       </div>
 
       <div class="footer">
-        <p><a href="/signup">Sign Up</a> · <a href="/login">Sign In</a> · <a href="https://github.com/kubeworkz/samen-erp">GitHub</a> · <a href="https://ckluis.github.io/samen/">Design Story</a> · <a href="https://samenerp.kubeworkz.io/healthz">Health</a></p>
+        <p><a href="/signup">Sign Up</a> · <a href="/login">Sign In</a> · <a href="/docs">Documentation</a> · <a href="https://github.com/kubeworkz/samen-erp">GitHub</a> · <a href="https://ckluis.github.io/samen/">Design Story</a> · <a href="https://samenerp.kubeworkz.io/healthz">Health</a></p>
         <p style="margin-top:8px">Samen ERP — The open-source, AI-native ERP for developer-led companies</p>
       </div>
     </body></html>

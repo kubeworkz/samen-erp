@@ -191,6 +191,13 @@ defmodule SamenerpWeb.Router do
     # API Docs (README "API Documentation" card) — the generated OpenAPI 3.0
     # spec for the `/api/v1` JSON:API surface. Static JSON, no actor/org data.
     get("/api/openapi.json", PageController, :openapi)
+
+    # The FEATURE DOCUMENTATION (landing page's "Documentation" link). Static
+    # HTML from `SamenerpWeb.Docs`, categorized by the tenant sidebar's own
+    # groups; no session, no org, no database read, so it renders even while
+    # Postgres is down.
+    get("/docs", DocsController, :index)
+    get("/docs/:id", DocsController, :show)
   end
 
   # The inherited product UI, MOUNTED from samen_web. BARE `scope "/"` (no
