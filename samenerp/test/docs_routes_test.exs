@@ -28,8 +28,9 @@ defmodule Samenerp.DocsRoutesTest do
   green while `/erp/stock` and `/erp/ap-capture` both answered 500 (a resource
   column that had drifted out of the dev DB, and an obsolete positional
   `live_file_input/1`). That leg is `Samenerp.DocsRenderTest` at the bottom of
-  this file — the same guard, driven through the real router, kept to the
-  documented ERP pages because those mount from a bare org with no fixtures.
+  this file — the same guard, driven through the real router over every
+  documented page, because the catalog links only list and landing screens (no
+  `/crm/contacts/:id`), and those all mount from a bare org row.
   """
 
   use ExUnit.Case, async: true
@@ -238,12 +239,18 @@ defmodule Samenerp.DocsRenderTest do
   the remaining question through the REAL router — does the documented page
   actually render the page it names?
 
-  Scope is the documented **ERP** group, deliberately: every path in it mounts
-  from a bare org row with no fixtures, no `:id` and no seeded rows, so one
-  `GET` per page is the cheap proof. The other groups' detail pages need host
-  fixtures (`/crm/contacts/:id`, `/pages/:id`, …) and their list pages already
-  carry their own surface tests, so this stays a render guard, not an
-  end-to-end suite.
+  Scope is every documented page, and it is cheap because the catalog links only
+  list and landing screens: `/crm/companies`, `/work`, `/files`, `/chat`,
+  `/search`, `/analytics`, `/flags` and the rest all mount from a bare org row
+  with no fixtures, no `:id` and no seeded rows, so one `GET` per page is the
+  proof. The host's DETAIL pages (`/crm/contacts/:id`, `/pages/:id`,
+  `/files/:id`, …) are not documented and are deliberately out of scope — they
+  need host fixtures — so this stays a render guard, not an end-to-end suite.
+
+  Pages that share a route prefix are additionally anchored on their root id:
+  `/crm/gallery` and `/crm/contacts` (or `/billing` and `/billing/plans`) both
+  answer 200 in the same shell, so only the id catches a docs entry that drifted
+  onto the wrong sibling. Pages with one URL need no anchor.
   """
 
   use Samenerp.DataCase, async: false
@@ -255,10 +262,16 @@ defmodule Samenerp.DocsRenderTest do
 
   @endpoint SamenerpWeb.Endpoint
 
-  # The root element each documented ERP page renders. The page NAME cannot be the
-  # oracle: the inherited ERP sidebar carries every surface's label on every ERP
-  # page, so a page that fell back to its not-found state would still say "Stock".
-  # The catalog/table agreement test below keeps this in step with the docs.
+  # Every documented path under these prefixes has a LIVE SIBLING one URL away
+  # (`/crm/gallery` vs `/crm/contacts`, `/billing` vs `/billing/plans`), so a docs
+  # entry that drifted onto the wrong one still answers 200 in the shell and only
+  # the root id can tell them apart. Pages with a single URL (`/files`, `/chat`,
+  # `/search`, …) need no anchor: status + shell is already the whole promise.
+  @paged_prefixes ["/erp", "/crm", "/billing", "/marketing", "/banking", "/work"]
+
+  # The root element each anchored page renders. Kept deliberately to the shared-prefix
+  # subset — 61 rows pinned every UI detail to the docs; these pin the one real ambiguity.
+  # The catalog/table agreement assert below keeps this in step with the docs.
   @page_ids %{
     "/erp" => "erp-dashboard",
     "/erp/coa" => "erp-surface",
@@ -280,47 +293,96 @@ defmodule Samenerp.DocsRenderTest do
     "/erp/ar-settings" => "erp-ar-settings",
     "/erp/journal-approval" => "erp-journal-approval",
     "/erp/reconciliation" => "reconciliation-workbench",
-    "/erp/payroll-mappings" => "erp-payroll-mappings"
+    "/erp/payroll-mappings" => "erp-payroll-mappings",
+    "/crm/companies" => "crm-companies",
+    "/crm/contacts" => "crm-contacts",
+    "/crm/gallery" => "crm-contacts-gallery",
+    "/crm/pipeline" => "crm-pipeline",
+    "/crm/calendar" => "crm-calendar",
+    "/crm/dashboard" => "crm-dashboard",
+    "/crm/mailbox" => "crm-mailbox",
+    "/crm/sequences" => "crm-sequences",
+    "/billing" => "billing",
+    "/billing/invoices" => "billing-invoices",
+    "/billing/dunning" => "billing-dunning",
+    "/billing/plans" => "billing-plans",
+    "/billing/settings" => "billing-settings",
+    "/marketing/campaigns" => "mkt-campaigns",
+    "/marketing/segments" => "mkt-segments",
+    "/marketing/leads" => "mkt-leads",
+    "/banking" => "banking-accounts",
+    "/banking/rules" => "banking-rules",
+    "/work" => "work",
+    "/work/projects" => "work-projects",
+    "/work/timeline" => "work-timeline"
   }
+
+  # The Calendar group's one documented path is a FILE, not a page: it answers
+  # `text/calendar` with no HTML element to anchor on, so the shell scan below
+  # skips it (it has its own test).
+  @calendar_export "/calendar.ics"
 
   setup do
     start_supervised!(@endpoint)
     :ok
   end
 
-  test "every documented ERP page renders its own root element" do
+  test "every documented page renders inside the tenant shell" do
     org = create_org!("Docs Render QA") |> Map.fetch!(:id)
-    paths = documented_erp_paths()
+    paths = documented_paths() -- [@calendar_export]
+
+    assert paths != [], "the docs catalog documents no pages — the render scan would be vacuous"
 
     # The catalog and the table are two listings of the same promise: a newly
-    # documented page cannot ship unrendered, and a removed one cannot leave a
-    # stale row that would pass vacuously.
-    assert Enum.sort(paths) == @page_ids |> Map.keys() |> Enum.sort(),
-           "the docs catalog and the render table disagree — every documented ERP page needs a " <>
-             "root element here, and every row here needs a page in the catalog " <>
-             "(catalog-only: #{inspect(paths -- Map.keys(@page_ids))}, " <>
-             "table-only: #{inspect(Map.keys(@page_ids) -- paths)})"
+    # documented page under a shared prefix cannot ship unanchored, and a removed
+    # one cannot leave a stale row that would pass vacuously.
+    anchored = Enum.filter(paths, &shared_prefix?/1)
+
+    assert Enum.sort(anchored) == @page_ids |> Map.keys() |> Enum.sort(),
+           "the docs catalog and the root-id table disagree — every documented page under " <>
+             "#{Enum.join(@paged_prefixes, ", ")} needs a root element here, and every row " <>
+             "here needs a page in the catalog (catalog-only: " <>
+             "#{inspect(anchored -- Map.keys(@page_ids))}, " <>
+             "table-only: #{inspect(Map.keys(@page_ids) -- anchored)})"
 
     for path <- paths do
-      id = Map.fetch!(@page_ids, path)
       conn = get(build_conn(), "#{path}?org=#{org}")
 
       assert conn.status == 200,
              "GET #{path} (documented in `SamenerpWeb.Docs`) answered #{conn.status} — a reader's " <>
                "click from /docs lands on an error page even though the route is mounted"
 
-      assert conn.resp_body =~ ~s(id="#{id}"),
-             "GET #{path} rendered without its `##{id}` root — the route answered, but not with " <>
-               "the page the docs describe (a not-found state or a bare shell still returns 200)"
+      # The page NAME is not the oracle: the inherited sidebar carries every
+      # surface's label on every tenant page, so even a fallback body would say
+      # "Stock". The shell is the one thing `use Samen.Web.Tenant.Live`
+      # guarantees for a page that actually rendered — and a body that skipped
+      # the page still answers 200 without it.
+      assert conn.resp_body =~ ~s(class="app"),
+             "GET #{path} answered 200 without the tenant shell — the documented page never " <>
+               "rendered through `Samen.Web.Tenant.Live`"
+
+      # Where a live sibling sits one URL away, status and shell are satisfied by
+      # the wrong page too — the root id is the only thing that tells them apart.
+      with id when is_binary(id) <- Map.get(@page_ids, path) do
+        assert conn.resp_body =~ ~s(id="#{id}"),
+               "GET #{path} rendered without `#{id}` — the docs entry points at a sibling of " <>
+                 "the page it describes (every sibling under #{Enum.join(@paged_prefixes, ", ")} " <>
+                 "answers 200 in the same shell)"
+      end
     end
   end
 
-  test "every docs page the catalog publishes renders through the controller" do
-    pages =
-      [{"/docs", "Documentation"}, {"/docs/getting-started", "Getting started"}] ++
-        Enum.map(Docs.groups(), fn group ->
-          {"/docs/#{group.id}", "#{group.glyph} #{group.label}"}
-        end)
+  # One representative category: the route guard above already proves EVERY
+  # category renders a page (`Docs.group_html/1` non-nil), so rendering all 15
+  # here would re-test the same `show/2` branch.
+  test "the docs index, the guide, a category and the 404 render through the controller" do
+    group = hd(Docs.groups())
+
+    pages = [
+      {"/docs", "Documentation"},
+      {"/docs/getting-started", "Getting started"},
+      {"/docs/#{group.id}", "#{group.glyph} #{group.label}"}
+    ]
 
     for {path, heading} <- pages do
       conn = get(build_conn(), path)
@@ -341,11 +403,27 @@ defmodule Samenerp.DocsRenderTest do
     assert unknown.resp_body =~ "<h1>Page not found</h1>"
   end
 
-  defp documented_erp_paths do
-    for group <- Docs.groups(),
-        {_name, path, _note} <- group.pages,
-        String.starts_with?(path, "/erp"),
-        do: path
+  test "the documented .ics export answers with a calendar, not a page" do
+    assert @calendar_export in documented_paths(),
+           "#{@calendar_export} is no longer a documented Calendar path — this test would be " <>
+             "asserting a URL the docs no longer promise"
+
+    org = create_org!("Docs ICS QA") |> Map.fetch!(:id)
+    conn = get(build_conn(), "#{@calendar_export}?org=#{org}")
+
+    assert conn.status == 200,
+           "GET #{@calendar_export} answered #{conn.status} — the documented Calendar export is down"
+
+    assert conn.resp_body =~ "BEGIN:VCALENDAR",
+           "GET #{@calendar_export} did not answer with a calendar body"
+  end
+
+  defp documented_paths do
+    for group <- Docs.groups(), {_name, path, _note} <- group.pages, do: path
+  end
+
+  defp shared_prefix?(path) do
+    Enum.any?(@paged_prefixes, &(path == &1 or String.starts_with?(path, &1 <> "/")))
   end
 
   defp create_org!(name) do
