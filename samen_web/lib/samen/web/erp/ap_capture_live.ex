@@ -633,7 +633,7 @@ defmodule Samen.Web.Erp.ApCaptureLive do
                 style="margin-top:10px;font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center"
               >
                 <span>or a document:</span>
-                <%= live_file_input(assigns[:uploads].document) %>
+                <.live_file_input upload={assigns[:uploads].document} />
               </div>
 
               <p

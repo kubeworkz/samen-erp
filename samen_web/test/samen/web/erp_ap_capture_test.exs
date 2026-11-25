@@ -12,7 +12,9 @@ defmodule Samen.Web.ErpApCaptureTest do
 
   The document/OCR path is covered at the module level
   (`samen_core/test/invoice_ocr_test.exs`); the headless harness mounts without a
-  LiveView endpoint, so this page renders its paste path there by design.
+  LiveView endpoint, so this page renders its paste path there by design — the one
+  test that renders the uploader feeds the `:uploads` assign by hand, because that
+  branch only runs on a real mount.
   """
   use Samen.WebTest.DataCase, async: false
 
@@ -93,6 +95,32 @@ defmodule Samen.Web.ErpApCaptureTest do
     assert html =~ "AP capture"
     assert html =~ ~s(id="ap-capture-form")
     assert html =~ ~s(id="capture-text")
+  end
+
+  test "renders the document uploader when the socket allows uploads" do
+    account!()
+
+    # `maybe_allow_upload/1` skips the uploader on a socket with no endpoint, so the
+    # file-input branch is only reachable on a real mount. Feed the assign by hand:
+    # the page renders `<.live_file_input upload={...} />`, and the positional
+    # `live_file_input(config)` form raises ArgumentError at render time.
+    upload = %Phoenix.LiveView.UploadConfig{
+      name: "document",
+      ref: "phx-upload-document",
+      accept: ".pdf,.png,.jpg,.jpeg,.txt,.csv",
+      max_entries: 1,
+      max_file_size: 5_000_000
+    }
+
+    html =
+      render_html(
+        ApCaptureLive,
+        Map.put(open().assigns, :uploads, %{document: upload})
+      )
+
+    assert html =~ "or a document:"
+    assert html =~ ~s(type="file")
+    assert html =~ ~s(data-phx-upload-ref="phx-upload-document")
   end
 
   test "pasted text becomes a reviewable draft" do
