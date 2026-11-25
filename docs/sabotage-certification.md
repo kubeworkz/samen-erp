@@ -114,3 +114,25 @@ certification is `SAMEN_SABOTAGE=1 ./ci.sh`; the parallel sweep is
 `scripts/sabotage.sh --app <app> --range <lo>-<hi>`. Per-slice trees and databases stay warm for
 cheap reruns: reclaim them with `rm -rf .sabotage-parallel && git worktree prune` and
 `dropdb --if-exists <app>_test_sab<N>`.
+
+### Cold start (verified 2026-11-24)
+
+A reclaim leaves nothing behind, so one cheap slice was replayed from nothing to prove the
+harness bootstraps itself: with `.sabotage-parallel/` **deleted** and `demo_test_sab1`
+**dropped**, `scripts/sabotage.sh --app demo --range 21-21 --test-db demo_test_sab1` (its
+`SAMEN_SABOTAGE_ROOT` pointing at the deleted path) rebuilt the replay root and build cache
+from scratch — `replay tree: first run for demo — compiling its deps and code`,
+`build/demo` 0 → 5,206 files over ~7 minutes — recreated its own database (`demo_test_sab1`
+absent before the run, ~12 MB of migrated schema after, `test_helper`'s
+`storage_down`/`storage_up`/migrate), flipped the named test (`flip confirmed: the consent
+ledger exposes no update or destroy action (append-only immutability)`) and restored
+`restore: byte-exact (sha-256 verified)` with `main checkout: byte-exact (1 touched paths
+sha-256-unchanged)`. Verdict `SABOTAGE HARNESS: ALL PASSED (1 of 425 sabotages — FILTERED:
+app=demo,range=21-21)` · `RUN_EXIT:0` · log `.agent_logs/sabotage_cold_demo_21.log`.
+
+A cold DB-backed slice costs **≈246 MiB** of tree (`258,011,136` bytes freed on `C:` when the
+resulting `.sabotage-parallel/demo` was reclaimed again, measured as the free-space delta).
+That is what the warm-tree reuse buys on every later run; the database side is separate and
+stays in Postgres's Docker image (dropping `demo_test_sab1`'s ~12 MB logical size returns no
+`C:` space until that image is compacted). Note the slice covers 1 of the 3 `demo` patches
+(`21`, `22`, `52`) — it certifies the cold-start path, not coverage.
