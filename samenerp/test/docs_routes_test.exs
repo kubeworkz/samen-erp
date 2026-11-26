@@ -225,6 +225,38 @@ defmodule Samenerp.DocsRoutesTest do
     end
   end
 
+  test "no rendered documentation page shows a literal backtick" do
+    # Notes, summaries and guide copy are plain text escaped once by `esc/1` —
+    # there is no Markdown step — so a stray Markdown tick reaches the browser as
+    # a character. This shipped: the API-reference card read "the same spec
+    # `/api/openapi.json` serves", and five notes carried their code font in
+    # backticks that rendered verbatim.
+    pages =
+      [
+        {"index", Docs.index_html()},
+        {"404", Docs.not_found_html()},
+        {"getting-started", Docs.getting_started_html()},
+        {"api-reference", Docs.api_reference_html()}
+      ] ++
+        Enum.map(Docs.groups(), fn group -> {group.id, Docs.group_html(group.id)} end)
+
+    assert length(pages) == 4 + length(Docs.groups()),
+           "the render list lost a page — the backtick scan would be partial"
+
+    for {name, html} <- pages do
+      refute html =~ "`",
+             "the #{name} page renders a literal backtick — every note, summary and guide line is " <>
+               "plain escaped text with no Markdown step, so a stray tick shows up verbatim in the " <>
+               "browser; write the words instead"
+    end
+
+    # ANTI-TAUTOLOGY: the scan is per page, so one page carrying a tick fails it
+    # (the sabotage in this file's history proves it) — and the list is asserted
+    # non-empty above, so a catalog that rendered nothing could not pass.
+    assert pages |> Enum.map(&elem(&1, 1)) |> Enum.all?(&is_binary/1),
+           "a documentation page did not render a body — the backtick scan would be vacuous"
+  end
+
   test "every href the rendered documentation pages emit is a route this host serves" do
     # The refutation below has something to catch only while the catalog carries
     # detail templates; without them it would be vacuously green.
