@@ -10,8 +10,11 @@ defmodule SamenerpWeb.Docs do
 
   Every `path` below is a route THIS host mounts
   (`samenerp/lib/samenerp_web/router.ex`); the doc pages link the live screen,
-  not an illustration of it. Content is data (`groups/0`) with one renderer, so
-  growing the docs is adding a map — no template surgery.
+  not an illustration of it. A DETAIL page is the one exception to "link it":
+  it carries the `:id` a reader arrives with, so it is listed as its route
+  template (code text, never an href) — a template URL has no record to open and
+  would land on the page's not-found state. Content is data (`groups/0`) with one
+  renderer, so growing the docs is adding a map — no template surgery.
 
   Deliberately plain HTML (the same posture as
   `SamenerpWeb.PageController.index/2`): the docs are public, static, need no
@@ -427,7 +430,9 @@ defmodule SamenerpWeb.Docs do
     <div class="hero">
       <h1>Documentation</h1>
       <p>Samen ERP's features, grouped exactly as the workspace sidebar groups them —
-         #{length(@groups)} categories, #{page_count()} pages.</p>
+         #{length(@groups)} categories, #{page_count()} pages. Every link opens the live screen;
+         detail pages are listed by their route template, because they open from a record in
+         their list rather than on their own.</p>
     </div>
 
     <div class="container">
@@ -456,10 +461,15 @@ defmodule SamenerpWeb.Docs do
       group ->
         pages =
           Enum.map_join(group.pages, "\n", fn {name, path, note} ->
+            page =
+              if template?(path),
+                do: esc(name),
+                else: ~s(<a href="#{path}">#{esc(name)}</a>)
+
             """
             <tr>
-              <td><a href="#{path}">#{esc(name)}</a></td>
-              <td><code>#{path}</code></td>
+              <td>#{page}</td>
+              <td><code>#{esc(path)}</code></td>
               <td>#{esc(note)}</td>
             </tr>
             """
@@ -474,6 +484,7 @@ defmodule SamenerpWeb.Docs do
         <div class="container">
           <section class="cat">
             <p class="sum">#{esc(group.summary)}</p>
+            #{detail_hint(group)}
             <table class="ref">
               <thead><tr><th>Page</th><th>Route</th><th>What it does</th></tr></thead>
               <tbody>#{pages}</tbody>
@@ -709,10 +720,35 @@ defmodule SamenerpWeb.Docs do
 
   defp map_get(_map, _key, default), do: default
 
+  # A detail page is reached THROUGH a record, so the catalog carries its route as
+  # a TEMPLATE. Rendering that as an href would break the page's one promise — every
+  # link opens the live screen — because `/crm/contacts/:id` without a record answers
+  # the detail page's not-found state. So a template renders as code text, naming the
+  # page it belongs to, and the href guard refutes any template that reaches an href.
   defp page_item(name, path, note) do
-    """
-    <li><a href="#{path}">#{esc(name)}</a><span>#{esc(note)}</span></li>
-    """
+    if template?(path) do
+      """
+      <li><span>#{esc(name)} — <code>#{esc(path)}</code></span><span>#{esc(note)}</span></li>
+      """
+    else
+      """
+      <li><a href="#{path}">#{esc(name)}</a><span>#{esc(note)}</span></li>
+      """
+    end
+  end
+
+  defp template?(path), do: String.contains?(path, ":id")
+
+  # Says why a detail row is not a link, instead of leaving the reader to guess.
+  defp detail_hint(group) do
+    if Enum.any?(group.pages, fn {_name, path, _note} -> template?(path) end) do
+      """
+      <p class="sum">Detail pages open from a record in their list; their routes are templates,
+         so they are shown as code rather than as links.</p>
+      """
+    else
+      ""
+    end
   end
 
   defp esc(text), do: Phoenix.HTML.html_escape(text) |> Phoenix.HTML.safe_to_string()

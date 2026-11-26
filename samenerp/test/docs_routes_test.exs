@@ -202,8 +202,20 @@ defmodule Samenerp.DocsRoutesTest do
              "the index does not name the #{group.label} category"
 
       for {name, path, _note} <- group.pages do
-        assert html =~ ~s(href="#{path}"),
-               "the index does not link #{path} (#{group.label} → #{name})"
+        if template?(path) do
+          # A template is NOT a clickable page: linking it sends the reader to the
+          # detail page's not-found state without a record id. It renders as code.
+          assert html =~ "<code>#{path}</code>",
+                 "the index does not show #{path} (#{group.label} → #{name}) as code — a detail " <>
+                   "page must be named by its route template, not linked"
+
+          refute html =~ ~s(href="#{path}"),
+                 "the index links #{path} (#{group.label} → #{name}) — a route template needs a " <>
+                   "record id, so that link opens the detail page's not-found state"
+        else
+          assert html =~ ~s(href="#{path}"),
+                 "the index does not link #{path} (#{group.label} → #{name})"
+        end
       end
     end
 
@@ -214,6 +226,13 @@ defmodule Samenerp.DocsRoutesTest do
   end
 
   test "every href the rendered documentation pages emit is a route this host serves" do
+    # The refutation below has something to catch only while the catalog carries
+    # detail templates; without them it would be vacuously green.
+    assert Enum.any?(Docs.groups(), fn group ->
+             Enum.any?(group.pages, fn {_name, path, _note} -> template?(path) end)
+           end),
+           "the catalog documents no detail templates — the template-href refutation would be vacuous"
+
     pages =
       [
         {"index", Docs.index_html()},
@@ -233,6 +252,15 @@ defmodule Samenerp.DocsRoutesTest do
                  "the #{name} page links #{href}, which is neither `/docs`, a category, nor a guide"
 
         true ->
+          # A link PROMISES the live screen. `mounted?/1` answers yes to a route
+          # template (`:id` matches any dynamic segment), but `/crm/contacts/:id`
+          # has no record behind it and answers the page's not-found state — so a
+          # template may never reach an href, whatever the matcher says.
+          refute template?(href),
+                 "the #{name} page links #{href}, a route template — without a record id it lands " <>
+                   "on that page's not-found state, and every documented link must open the live " <>
+                   "screen (render it as code text instead)"
+
           assert mounted?(href),
                  "the #{name} page links #{href}, which SamenerpWeb.Router does not serve"
       end
@@ -242,6 +270,10 @@ defmodule Samenerp.DocsRoutesTest do
   # ---- the route-table resolver (the nav guard's own matcher) ------------------
 
   defp routes, do: SamenerpWeb.Router.__routes__()
+
+  # A documented detail page carries the `:id` a reader arrives with — it is a
+  # route template, not a URL that opens a screen on its own.
+  defp template?(path), do: String.contains?(path, ":id")
 
   # A mounted path that still lands on a page. `/erp/:surface` is a WILDCARD, so the route
   # table says yes to `/erp/anything`; `Samen.Web.Erp.surface/1` is the closed allowlist the
@@ -322,11 +354,12 @@ defmodule Samenerp.DocsRenderTest do
   from a bare org row with no fixtures and no `:id`, so one `GET` per page is the proof.
   The host's DETAIL pages (`/crm/contacts/:id`, `/pages/:id`, `/files/:id`, …) are
   documented as TEMPLATES — the catalog names the shape a reader arrives at from the
-  list — and this leg renders each template with a UUID this org does not own, asserting
-  the page's OWN root id inside the shell. That proves the route is wired to that page
-  and that it answers its honest not-found state instead of crashing; the
-  fixture-dependent content behind a real record stays out of scope, so this is a render
-  guard, not an end-to-end suite.
+  list, and renders it as code text rather than a link (the href guard refutes any
+  template href: a template URL has no record to open) — and this leg renders each
+  template with a UUID this org does not own, asserting the page's OWN root id inside
+  the shell. That proves the route is wired to that page and that it answers its honest
+  not-found state instead of crashing; the fixture-dependent content behind a real
+  record stays out of scope, so this is a render guard, not an end-to-end suite.
 
   Three documented paths are not tenant pages at all: the `.ics` feed, the CSV
   export and the public `/status`. The shell scan skips them ("no tenant shell"
