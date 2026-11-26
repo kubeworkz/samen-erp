@@ -623,7 +623,7 @@ defmodule SamenerpWeb.Docs do
 
   defp server_row(server) do
     """
-    <tr><td><code>#{esc(map_get(server, :url, ""))}</code></td><td>#{esc(map_get(server, :description, ""))}</td></tr>
+    <tr><td data-label="URL"><code>#{esc(map_get(server, :url, ""))}</code></td><td data-label="Description">#{esc(map_get(server, :description, ""))}</td></tr>
     """
   end
 
@@ -661,10 +661,10 @@ defmodule SamenerpWeb.Docs do
 
     """
     <tr class="op" data-op="#{esc("#{verb} #{path}")}">
-      <td><code>#{verb}</code></td>
-      <td><code>#{esc(path)}</code></td>
-      <td><strong>#{esc(tag)}</strong><br>#{esc(summary)}#{request_body(operation)}</td>
-      <td>#{esc(responses)}</td>
+      <td data-label="Method"><code>#{verb}</code></td>
+      <td data-label="Path"><code>#{esc(path)}</code></td>
+      <td data-label="Summary"><strong>#{esc(tag)}</strong><br>#{esc(summary)}#{request_body(operation)}</td>
+      <td data-label="Responses">#{esc(responses)}</td>
     </tr>
     """
   end
@@ -704,7 +704,7 @@ defmodule SamenerpWeb.Docs do
       |> Enum.map_join(", ", fn {field, spec} -> "#{field} (#{schema_label(spec)})" end)
 
     """
-    <tr data-schema="#{esc(name)}"><td><code>#{esc(name)}</code></td><td>#{esc(fields)}</td></tr>
+    <tr data-schema="#{esc(name)}"><td data-label="Schema"><code>#{esc(name)}</code></td><td data-label="Fields">#{esc(fields)}</td></tr>
     """
   end
 
@@ -799,16 +799,21 @@ defmodule SamenerpWeb.Docs do
       @media (min-width: 700px) {
         table.ref th:first-child, table.ref td:first-child { width: 1%; white-space: nowrap; }
       }
-      /* Below 700px a three-column table cannot hold a page name, a route and a
-         paragraph: the note column collapsed to ~88px and wrapped one or two words
-         per line. Each category row becomes its own block instead — name, route,
-         then the note at full width, with no horizontal scrolling. */
+      /* Below 700px no reference table can hold its columns: the category pages' note
+         column collapsed to ~88px and wrapped one or two words per line, and the API
+         reference's two- and four-column tables were just as cramped. Every row becomes
+         its own block instead, one labelled line per cell, with no horizontal scrolling.
+         Cells that opt in with a data-label attribute show their column name as a
+         caption (the header row is hidden); the category rows read on their bold first
+         cell. */
       @media (max-width: 699px) {
-        table.ref.pages thead { display: none; }
-        table.ref.pages tr { display: block; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
-        table.ref.pages td { display: block; border: 0; padding: 0 0 4px; }
-        table.ref.pages td:first-child { font-weight: 600; padding-top: 0; }
-        table.ref.pages td:last-child { padding-bottom: 0; color: #374151; }
+        table.ref thead { display: none; }
+        table.ref tr { display: block; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
+        table.ref td { display: block; border: 0; padding: 0 0 5px; }
+        table.ref td:first-child { font-weight: 600; padding-top: 0; }
+        table.ref td[data-label]::before { content: attr(data-label); display: block; color: #6b7280; font-size: 0.74em; text-transform: uppercase; letter-spacing: 0.06em; }
+        table.ref td:last-child { padding-bottom: 0; }
+        table.ref.pages td:last-child { color: #374151; }
       }
       code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
       pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 10px 0 14px; }
