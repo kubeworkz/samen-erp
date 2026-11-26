@@ -12,10 +12,11 @@ defmodule Samenerp.DocsRoutesTest do
 
     1. **the catalog is navigable** — every `/docs/<id>` resolves to a real category
        or guide, every category renders through the controller, every feature `path`
-       resolves to a route this host declares (a detail page as its `:id` template),
-       and no path is documented twice. The resolver is refutable (a fabricated path
-       is NOT reported mounted) and the catalog is non-trivial, so no assertion here
-       can pass vacuously.
+       is rooted, every detail TEMPLATE resolves to a route this host declares (a
+       linked static page is proven mounted by leg 6, over the same catalog), and no
+       path is documented twice. The resolver is refutable (a fabricated path is NOT
+       reported mounted) and the catalog is non-trivial, so no assertion here can
+       pass vacuously.
     2. **completeness, not just soundness** — every surface the sidebar renders (one
        item per `Samen.Web.Erp.surfaces/0` entry) has a docs row carrying the
        registry's own label. The other legs are one-directional (docs ⊆ routes): they
@@ -91,9 +92,21 @@ defmodule Samenerp.DocsRoutesTest do
     for group <- Docs.groups(), {name, path, _note} <- group.pages do
       assert is_binary(path) and String.starts_with?(path, "/"),
              "#{group.id}/#{name} documents #{inspect(path)}, which is not a rooted path"
+    end
 
+    # Only the detail TEMPLATES are checked against the route table here. A page the
+    # catalog links is proven mounted by leg 6, which walks every href on the rendered
+    # index and category pages; a template can never be an href (it has no record to
+    # open), so this is the one place its route is checked.
+    templates =
+      for group <- Docs.groups(), {_name, path, _note} <- group.pages, template?(path), do: path
+
+    assert templates != [],
+           "the catalog documents no detail templates — the template mount check would be vacuous"
+
+    for group <- Docs.groups(), {name, path, _note} <- group.pages, template?(path) do
       assert live_target?(path),
-             "the docs link #{path} (#{group.label} → #{name}) has no live target in " <>
+             "the docs template #{path} (#{group.label} → #{name}) has no live target in " <>
                "SamenerpWeb.Router — either no route serves it (a Phoenix.Router.NoRouteError on " <>
                "the reader's first click), or it rides the `/erp/:surface` wildcard under a name " <>
                "`Samen.Web.Erp.surfaces/0` does not carry, in which case the surface page renders " <>
