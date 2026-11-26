@@ -60,3 +60,10 @@ _orch-*/
 # Generated documentation
 _site/
 */doc/
+
+# Agent-run artifacts: CI/gate/sabotage logs, gate HTML snapshots and the throwaway
+# worktrees the parallel driver leaves behind. Not source, and the harness keeps its
+# own record of each run — never committed.
+.agent_logs/
+samenerp/.agent_logs/
+.worktrees/
