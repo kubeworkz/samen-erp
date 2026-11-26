@@ -65,6 +65,12 @@ defmodule SamenerpWeb.Docs do
         {"AP payments", "/erp/ap-payments",
          "The payment run. A pending reversal of a payment needs a DIFFERENT admin's decision — the nav " <>
            "badge counts what is waiting on someone else."},
+        {"AP payment run", "/erp/ap-payments/:id",
+         "One immutable run record: who requested it, who approved, rejected or cancelled it and when, the " <>
+           "bill snapshot that was reviewed, and the remittance CSV stored at approval. The database trigger " <>
+           "refuses a self-approval, a rewritten snapshot and every DELETE, so this page reads evidence rather " <>
+           "than a process-memory summary. A reversal of a paid run is its own durable row, requested by one " <>
+           "admin and approved by another; a run from another org is indistinguishable from a missing one."},
         {"AP aging", "/erp/ap-aging", "Open payables bucketed by age."},
         {"AP approval", "/erp/ap-approval",
          "The AP chain's approval policy: the generic approval-policy row for `ap_invoice:approve`."},
@@ -77,6 +83,10 @@ defmodule SamenerpWeb.Docs do
         {"Payroll mappings", "/erp/payroll-mappings", "Which GL accounts a payroll run posts to."},
         {"Grants", "/grants",
          "The bounded grants index (personnel grants behind reveals) — grants never unlock the AI egress class."},
+        {"Grant report", "/grants/:id",
+         "One grant's personnel report: tenant names in the clear, operator names ••••, and the table and its " <>
+           "CSV/JSON downloads all inside the grant's org scope. Without an HR namespace the page says so and " <>
+           "shows only the bounded employment facts (employee id, effort, effective date)."},
         {"Close", "/close", "The monthly close dashboard."},
         {"Board pack", "/board", "The board-report read over the ledger: TB/WIP/headcount rollups and budget-vs-actual."}
       ]
@@ -91,6 +101,11 @@ defmodule SamenerpWeb.Docs do
           "a real ledger row.",
       pages: [
         {"Accounts", "/banking", "Statement accounts and their running balance."},
+        {"Account detail", "/banking/accounts/:id",
+         "One account with its bounded statement ledger, CSV/OFX statement import, ranked match suggestions " <>
+           "and the guarded Match action. Matching goes through the resource's own action, never a " <>
+           "surface-local write: no double match, no match to a voided entry, and the cash leg must equal " <>
+           "the statement amount within a cent. Suggestions are advisory; the user confirms through the form."},
         {"Rules", "/banking/rules", "Matching rules that turn a statement line into a proposed GL match."}
       ]
     },
@@ -103,6 +118,9 @@ defmodule SamenerpWeb.Docs do
           "timeline view. CRM timelines and CDC ride the same Task rows — there is no second activity model.",
       pages: [
         {"Tasks", "/work", "The task list, filterable by project and status."},
+        {"Task detail", "/work/tasks/:id",
+         "One task's metadata and its direct subtasks. The status select matches a bounded enum, so client " <>
+           "input never mints an atom, and write affordances are offered on the tenant plane only. No PII."},
         {"Projects", "/work/projects", "Projects that group tasks and carry the billable context."},
         {"Timeline", "/work/timeline", "Tasks on a time axis, multi-anchor."},
         {"Tree", "/work/tree",
@@ -133,7 +151,18 @@ defmodule SamenerpWeb.Docs do
           "resolve on the caller's plane — an operator without a grant sees a mask, never plaintext.",
       pages: [
         {"Companies", "/crm/companies", "Accounts you sell to, with their owners and custom fields."},
+        {"Company detail", "/crm/companies/:id",
+         "One company, with Overview, Activity and Deals tabs. The company itself carries no PII, but the " <>
+           "people sub-list on Overview resolves through PiiResolution (tenant clear, operator ••••), and the " <>
+           "activity composer is tenant-plane only — an operator does not author into a tenant's timeline. " <>
+           "Edit, and a delete behind its confirmation interlock, write through the kernel's org scope and " <>
+           "role checks."},
         {"Contacts", "/crm/contacts", "People at those companies (PII fields are vault-routed)."},
+        {"Contact detail", "/crm/contacts/:id",
+         "One contact, with Overview, Activity and Deals tabs. Full name, emails and phones are vault-routed " <>
+           "and resolved on the caller's plane: the org reads its own person in the clear, an operator " <>
+           "without a grant sees ••••, and the activity composer is hidden there. Edit submits through the " <>
+           "vault change path, never a raw column."},
         {"Gallery", "/crm/gallery", "The visual card view over the same records."},
         {"Pipeline", "/crm/pipeline", "Deals by stage."},
         {"Calendar", "/crm/calendar", "Dated CRM activity."},
@@ -162,8 +191,18 @@ defmodule SamenerpWeb.Docs do
       pages: [
         {"Customers", "/billing", "The billing overview: customers and their subscription state."},
         {"Invoices", "/billing/invoices", "Issued invoices and their payment status."},
+        {"Invoice detail", "/billing/invoices/:id",
+         "The record behind the invoices list: label, status and amount, the line items as stored, and the " <>
+           "provider's tax breakdown when one exists (absent means the provider computed no tax — never a " <>
+           "fabricated zero). Status moves only through a closed transition table the server re-checks, so a " <>
+           "hand-crafted transition event is a no-op."},
         {"Dunning", "/billing/dunning", "Failed-payment recovery runs."},
         {"Plans", "/billing/plans", "The plans a customer can be on."},
+        {"Plan detail", "/billing/plans/:id",
+         "One plan: interval, primary price, its real feature keys as chips (no default feature is " <>
+           "invented) and its price rows. Enable/disable is the same sanctioned toggle as the list row, and " <>
+           "Archive soft-archives the plan, so it leaves the live list and can be restored from the archived " <>
+           "view."},
         {"Settings", "/billing/settings", "Billing-level configuration for this org."}
       ]
     },
@@ -176,6 +215,12 @@ defmodule SamenerpWeb.Docs do
           "enforced on every read path (direct read, portal deflection, and the AI suggestion path).",
       pages: [
         {"Tickets", "/support", "The ticket queue with SLA state and assignment."},
+        {"Ticket detail", "/support/tickets/:id",
+         "The ticket's conversation thread and metadata. Message bodies and agent names are vault-routed and " <>
+           "plane-resolved; the reply composer writes through the vault change (absent on the operator plane, " <>
+           "where the write guard refuses it), and the status select matches a bounded enum, so client input " <>
+           "never mints an atom. A KB panel suggests related articles from the ticket subject — the message " <>
+           "body is not fed to the AI plane."},
         {"Knowledge base", "/support/kb", "Articles, with the public/internal visibility boundary."}
       ]
     },
@@ -188,8 +233,21 @@ defmodule SamenerpWeb.Docs do
           "chokepoint: a suppressed or unconsented address is refused at the single send seam.",
       pages: [
         {"Campaigns", "/marketing/campaigns", "Campaign definitions and their send state."},
+        {"Campaign detail", "/marketing/campaigns/:id",
+         "Compose and send against one campaign: pick a template and a segment, then send to the segment. " <>
+           "Consent and suppression are enforced at the send seam — a suppressed subscriber gets no send row " <>
+           "and no job, and the page shows that refusal per recipient. Recipient emails resolve on the " <>
+           "caller's plane, and the send itself carries only the opaque subscriber id."},
         {"Segments", "/marketing/segments", "The saved audiences a campaign targets."},
-        {"Leads", "/marketing/leads", "Captured leads feeding the CRM."}
+        {"Segment detail", "/marketing/segments/:id",
+         "One segment: its filter criteria, its subscriber count, and a bounded audience preview resolved " <>
+           "through PiiResolution. Edit and an Archive that soft-archives the row (restorable from the " <>
+           "list's archived view) are admin-gated by the kernel."},
+        {"Leads", "/marketing/leads", "Captured leads feeding the CRM."},
+        {"Lead detail", "/marketing/leads/:id",
+         "A lead IS a CRM person, so this is the leads lens's read-only twin: plane-resolved facts and a " <>
+           "jump to the full CRM contact page, where the CRUD lives. No edit modal and no delete — the lens " <>
+           "has always been read-only because those writes belong to the CRM surfaces."},
       ]
     },
     %{
@@ -202,11 +260,22 @@ defmodule SamenerpWeb.Docs do
           "`storage_key` is minted only by `Samen.Files.upload/3`).",
       pages: [
         {"Pages", "/pages", "Write and browse pages; secure bodies and blocks are vault-routed."},
+        {"Page editor", "/pages/:id",
+         "The block editor: each block is one textarea and every structural intent (split, merge, indent, " <>
+           "move) is a server event carrying a bounded token, so stored text is never HTML. Vaulted block " <>
+           "text renders as the mask on a masked plane and a masked write is refused rather than faked; every " <>
+           "write carries the revision the client last saw, so a stale tab gets a conflict banner instead of " <>
+           "overwriting, and moving text out of the vault is an admin form that posts a reason."},
         {"Trash", "/pages/trash",
          "Deleted pages, still findable once the undo notice is gone: a delete is a soft archive, and Restore brings " <>
            "the page back with its blocks, children and `[[links]]` in one transaction. An archived page in another " <>
            "org is simply absent."},
-        {"Files", "/files", "Upload and download, with the quarantine → promotion lifecycle and retention."}
+        {"Files", "/files", "Upload and download, with the quarantine → promotion lifecycle and retention."},
+        {"File preview", "/files/:id",
+         "One file: the plane-resolved filename and, for an active file on the tenant plane, an inline view " <>
+           "of images and text. A quarantined file is not previewable, and an operator cannot pull a " <>
+           "tenant's bytes without a reveal grant — the byte-serve route re-enforces both gates server-side. " <>
+           "Read-only."}
       ]
     },
     %{
@@ -216,7 +285,13 @@ defmodule SamenerpWeb.Docs do
       summary:
         "Internal conversations. Reads are org-scoped and keyset-bounded; attachments go through the same " <>
           "upload chokepoint as Files.",
-      pages: [{"Conversations", "/chat", "Channels and threads for this workspace."}]
+      pages: [
+        {"Conversations", "/chat", "Channels and threads for this workspace."},
+        {"Conversation", "/chat/:id",
+         "The realtime room. Messages broadcast as id-only envelopes and are re-read for each viewer's " <>
+           "scope, so the same broadcast renders clear for a tenant and •••• for an operator; presence tracks " <>
+           "the party and handle, never a message body."}
+      ]
     },
     %{
       id: "discover",
@@ -251,7 +326,14 @@ defmodule SamenerpWeb.Docs do
         "The AI workspace over the kernel AI plane. Prompts are masked before egress through the " <>
           "no-PII-egress chokepoint, and the model is the operator's own BYOK configuration — an " <>
           "unconfigured key refuses honestly instead of pretending to answer.",
-      pages: [{"AI workspace", "/ai", "Ask, draft and propose — writes still go through approvals."}]
+      pages: [
+        {"AI workspace", "/ai", "Ask, draft and propose — writes still go through approvals."},
+        {"Agent run", "/ai/agents/:id",
+         "One agent run: progress, the bounded turn log and the plane-resolved transcript, plus cancel and the " <>
+           "approve/reject card for a run parked awaiting approval. The card passes through to the approvals " <>
+           "engine, so the requester can never approve their own proposal, the approver must be a real member " <>
+           "of the run's org, and the card shows arg key names and a digest — never a value."}
+      ]
     },
     %{
       id: "workspace",
