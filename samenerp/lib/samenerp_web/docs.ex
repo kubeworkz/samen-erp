@@ -294,6 +294,13 @@ defmodule SamenerpWeb.Docs do
       id: "getting-started",
       title: "Getting started",
       summary: "Run samenerp locally, sign in, and find your way around the workspace."
+    },
+    %{
+      id: "api-reference",
+      title: "API reference",
+      summary:
+        "Every operation, server and schema in the OpenAPI 3.0 document, rendered — generated from the " <>
+          "same spec `/api/openapi.json` serves."
     }
   ]
 
@@ -347,8 +354,8 @@ defmodule SamenerpWeb.Docs do
         <div class="grid">
           #{guides}
           <a class="card" href="/api/openapi.json">
-            <h3>API reference</h3>
-            <p>The OpenAPI 3.0 contract for the public <code>/api/v1</code> JSON:API surface.</p>
+            <h3>Raw OpenAPI JSON</h3>
+            <p>The machine contract the rendered API reference is generated from.</p>
           </a>
         </div>
       </div>
@@ -444,6 +451,69 @@ defmodule SamenerpWeb.Docs do
     """)
   end
 
+  @doc """
+  The rendered API reference.
+
+  Built from `Samenerp.ApiDocs.generate_spec/0` — the SAME document
+  `/api/openapi.json` serves — so the readable page and the machine contract
+  cannot drift: an operation added to the spec appears here, and the guard
+  asserts this page carries every operation the spec lists.
+  """
+  def api_reference_html do
+    spec = Samenerp.ApiDocs.generate_spec()
+    info = map_get(spec, :info, %{})
+    servers = map_get(spec, :servers, [])
+    schemas = spec |> map_get(:components, %{}) |> map_get(:schemas, %{})
+
+    operations =
+      for {path, item} <- map_get(spec, :paths, %{}),
+          {method, operation} <- item,
+          method in [:get, :post, :put, :patch, :delete],
+          do: {method, path, operation}
+
+    operations = Enum.sort_by(operations, fn {method, path, _op} -> {path, method} end)
+
+    layout("API reference — Documentation", """
+    <div class="hero small">
+      <p class="crumb"><a href="/docs">Documentation</a> / API reference</p>
+      <h1>API reference</h1>
+      <p>#{esc(map_get(info, :title, "API"))} v#{esc(map_get(info, :version, "—"))} —
+         #{esc(map_get(info, :description, ""))}</p>
+    </div>
+
+    <div class="container">
+      <section class="cat">
+        <p class="sum">Generated from the same OpenAPI 3.0 document served at
+           <a href="/api/openapi.json">/api/openapi.json</a>, so this page cannot describe a
+           different API than the machine contract. Clients take the raw document from that URL.</p>
+
+        <h2 class="plain">Servers</h2>
+        <table class="ref">
+          <thead><tr><th>URL</th><th>Description</th></tr></thead>
+          <tbody>#{Enum.map_join(servers, "\n", &server_row/1)}</tbody>
+        </table>
+
+        <h2>Authentication</h2>
+        <p>#{auth_line(spec)}</p>
+
+        <h2>Operations</h2>
+        <table class="ref">
+          <thead><tr><th>Method</th><th>Path</th><th>Summary</th><th>Responses</th></tr></thead>
+          <tbody>#{Enum.map_join(operations, "\n", &operation_row/1)}</tbody>
+        </table>
+
+        <h2>Schemas</h2>
+        <table class="ref">
+          <thead><tr><th>Schema</th><th>Fields</th></tr></thead>
+          <tbody>#{Enum.map_join(Enum.sort_by(schemas, fn {name, _schema} -> name end), "\n", &schema_row/1)}</tbody>
+        </table>
+      </section>
+      <p class="back"><a href="/docs">← All documentation</a> ·
+         <a href="/api/openapi.json">raw OpenAPI JSON</a></p>
+    </div>
+    """)
+  end
+
   @doc "The 404 body for an unknown `/docs/:id`."
   def not_found_html do
     layout("Not found — Documentation", """
@@ -457,6 +527,105 @@ defmodule SamenerpWeb.Docs do
     </div>
     """)
   end
+
+  defp server_row(server) do
+    """
+    <tr><td><code>#{esc(map_get(server, :url, ""))}</code></td><td>#{esc(map_get(server, :description, ""))}</td></tr>
+    """
+  end
+
+  defp auth_line(spec) do
+    schemes = spec |> map_get(:components, %{}) |> map_get(:securitySchemes, %{})
+
+    lines =
+      Enum.map(schemes, fn {name, scheme} ->
+        "#{name}: #{map_get(scheme, :type, "?")}/#{map_get(scheme, :scheme, "?")} " <>
+          "(#{map_get(scheme, :bearerFormat, "token")})"
+      end)
+
+    case lines do
+      [] ->
+        "No security scheme is declared in the document."
+
+      lines ->
+        enc = Enum.map_join(lines, " · ", &esc/1)
+        "#{enc}. A request carries <code>Authorization: Bearer &lt;api_key&gt;</code>."
+    end
+  end
+
+  defp operation_row({method, path, operation}) do
+    verb = method |> to_string() |> String.upcase()
+    tag = operation |> map_get(:tags, []) |> List.first() || "Other"
+    summary = map_get(operation, :summary, "")
+
+    responses =
+      operation
+      |> map_get(:responses, %{})
+      |> Enum.sort_by(fn {code, _response} -> code end)
+      |> Enum.map_join(" · ", fn {code, response} ->
+        "#{code} #{map_get(response, :description, "")}"
+      end)
+
+    """
+    <tr class="op" data-op="#{esc("#{verb} #{path}")}">
+      <td><code>#{verb}</code></td>
+      <td><code>#{esc(path)}</code></td>
+      <td><strong>#{esc(tag)}</strong><br>#{esc(summary)}#{request_body(operation)}</td>
+      <td>#{esc(responses)}</td>
+    </tr>
+    """
+  end
+
+  defp request_body(operation) do
+    case map_get(operation, :requestBody, nil) do
+      nil ->
+        ""
+
+      body ->
+        required = if map_get(body, :required, false), do: " (required)", else: ""
+
+        schema =
+          body
+          |> map_get(:content, %{})
+          |> Map.values()
+          |> List.first()
+          |> case do
+            nil -> nil
+            content -> map_get(content, :schema, nil)
+          end
+
+        "<br><span class=\"muted\">body#{required}: #{esc(schema_label(schema))}</span>"
+    end
+  end
+
+  defp schema_label(nil), do: "—"
+  defp schema_label(%{"$ref" => ref}), do: ref |> String.split("/") |> List.last()
+  defp schema_label(schema) when is_map(schema), do: to_string(map_get(schema, :type, "object"))
+  defp schema_label(_schema), do: "—"
+
+  defp schema_row({name, schema}) do
+    fields =
+      schema
+      |> map_get(:properties, %{})
+      |> Enum.sort_by(fn {field, _spec} -> field end)
+      |> Enum.map_join(", ", fn {field, spec} -> "#{field} (#{schema_label(spec)})" end)
+
+    """
+    <tr data-schema="#{esc(name)}"><td><code>#{esc(name)}</code></td><td>#{esc(fields)}</td></tr>
+    """
+  end
+
+  # The spec mixes atom keys (the Elixir map) with string keys (as parsed from
+  # JSON); read either, so a spec that starts life as a decoded document still
+  # renders through the same page.
+  defp map_get(map, key, default) when is_map(map) do
+    case Map.fetch(map, key) do
+      {:ok, value} -> value
+      :error -> Map.get(map, to_string(key), default)
+    end
+  end
+
+  defp map_get(_map, _key, default), do: default
 
   defp page_item(name, path, note) do
     """
@@ -510,13 +679,14 @@ defmodule SamenerpWeb.Docs do
       .crumb { font-size: 0.85em; margin-bottom: 6px; }
       .back { margin-top: 26px; font-size: 0.9em; color: #6b7280; }
       .footer { text-align: center; padding: 22px 20px; color: #9ca3af; font-size: 0.85em; border-top: 1px solid #e5e7eb; }
+      .muted { color: #6b7280; }
     </style>
     </head>
     <body>
       #{body}
       <div class="footer">
         <p><a href="/">Samen ERP</a> · <a href="/docs">Documentation</a> ·
-           <a href="/api/openapi.json">API reference</a> · <a href="/healthz">Health</a></p>
+           <a href="/docs/api-reference">API reference</a> · <a href="/healthz">Health</a></p>
       </div>
     </body></html>
     """

@@ -18,6 +18,12 @@ defmodule SamenerpWeb.DocsController do
     html(conn, SamenerpWeb.Docs.getting_started_html())
   end
 
+  # The READABLE half of `/api/openapi.json`: rendered from the same spec, so a
+  # reader gets a page instead of a JSON document in the browser.
+  def show(conn, %{"id" => "api-reference"}) do
+    html(conn, SamenerpWeb.Docs.api_reference_html())
+  end
+
   def show(conn, %{"id" => id}) do
     case SamenerpWeb.Docs.group_html(id) do
       nil ->

@@ -160,6 +160,37 @@ defmodule Samenerp.DocsRoutesTest do
            "the catalog listed a fabricated ERP surface — the completeness scan is vacuous"
   end
 
+  test "the API reference renders every operation the spec it links carries" do
+    spec = Samenerp.ApiDocs.generate_spec()
+    html = Docs.api_reference_html()
+
+    operations =
+      for {path, item} <- spec.paths, {method, _operation} <- item, do: {method, path}
+
+    assert operations != [],
+           "the OpenAPI spec declares no operations — the render scan below would be vacuous"
+
+    for {method, path} <- operations do
+      verb = method |> to_string() |> String.upcase()
+
+      assert html =~ ~s(data-op="#{verb} #{path}"),
+             "the API reference does not render #{verb} #{path}, which /api/openapi.json serves — " <>
+               "the readable page has drifted from the machine contract"
+    end
+
+    assert length(Regex.scan(~r/data-op="/, html)) == length(operations),
+           "the page renders a different number of operations than the spec carries — an extra row " <>
+             "is an operation the contract does not have"
+
+    assert html =~ spec.info.version,
+           "the rendered version is not the spec's version — the page has its own copy of the truth"
+
+    # ANTI-TAUTOLOGY: a fabricated operation is absent, so the scan is not
+    # satisfied by markup that says nothing.
+    refute html =~ ~s(data-op="GET /api/v1/definitely-not-in-the-spec"),
+           "the reference rendered an operation the spec does not declare"
+  end
+
   test "the documentation index links every category, guide and feature page" do
     html = Docs.index_html()
 
@@ -187,7 +218,8 @@ defmodule Samenerp.DocsRoutesTest do
       [
         {"index", Docs.index_html()},
         {"404", Docs.not_found_html()},
-        {"getting-started", Docs.getting_started_html()}
+        {"getting-started", Docs.getting_started_html()},
+        {"api-reference", Docs.api_reference_html()}
       ] ++
         Enum.map(Docs.groups(), fn group -> {group.id, Docs.group_html(group.id)} end)
 
@@ -442,6 +474,7 @@ defmodule Samenerp.DocsRenderTest do
     pages = [
       {"/docs", "Documentation"},
       {"/docs/getting-started", "Getting started"},
+      {"/docs/api-reference", "API reference"},
       {"/docs/#{group.id}", "#{group.glyph} #{group.label}"}
     ]
 
@@ -512,6 +545,78 @@ defmodule Samenerp.DocsRenderTest do
 
     refute conn.resp_body =~ ~s(class="app"),
            "GET #{@status_page} answered the tenant shell — the public page must not need an org"
+  end
+
+  test "every path the API reference advertises is served by this host" do
+    # The spec is generated from the JSON:API router's own route table, but this
+    # is the proof that survives a wrong SOURCE: drive each advertised path
+    # through the real router. A mounted route answers 403 without a key (the
+    # key plug fails closed, then the policy denies); an unmounted one is 404.
+    # The old hand-written spec advertised /api/v1/auth/login and
+    # /api/v1/ai/generate, both 404 here — this scan fails on exactly that.
+    spec = Samenerp.ApiDocs.generate_spec()
+    org = create_org!("Docs API QA") |> Map.fetch!(:id)
+
+    paths = for {path, _item} <- spec.paths, do: path
+
+    assert paths != [], "the API spec advertises no paths — the 404 scan would be vacuous"
+
+    for path <- paths do
+      url = String.replace(path, ~r/:[a-z_]+/, Ecto.UUID.generate())
+      conn = get(build_conn(), "#{url}?org=#{org}")
+
+      refute conn.status == 404,
+             "the API reference advertises #{path}, which this host answers 404 — the document " <>
+               "describes an endpoint this router does not mount"
+    end
+
+    # ANTI-TAUTOLOGY: an unmounted /api/v1 path IS 404, so the refute above can fail.
+    assert get(build_conn(), "/api/v1/definitely-not-served").status == 404,
+           "an unmounted /api/v1 path did not answer 404 — the dead-endpoint scan is vacuous"
+  end
+
+  test "every route the API router's own table lists appears in the spec" do
+    # The MIRROR of the scan above: that one proves nothing the document
+    # advertises is dead, this one proves nothing the router serves is missing
+    # from it. `generate_spec/0` emits a route only if it survives a second
+    # lookup — the resource route matched back against the router's table — so a
+    # broken match would silently DROP a live route from /docs/api-reference
+    # while the host kept answering it.
+    router = SamenerpWeb.Api.Router
+    spec = Samenerp.ApiDocs.generate_spec()
+
+    # The `forward/2` target — the same mount point `generate_spec/0` prefixes
+    # with, read the same way (with the same fallback).
+    prefix =
+      Enum.find_value(SamenerpWeb.Router.__routes__(), "/api/v1", fn route ->
+        if route.plug == SamenerpWeb.Api.Endpoint, do: route.path
+      end)
+
+    mounted =
+      for %{verb: verb, path: path} <- AshJsonApi.Router.formatted_routes(router) do
+        {verb, prefix <> path}
+      end
+
+    assert mounted != [],
+           "the API router's route table is empty — the completeness scan would be vacuous"
+
+    for {verb, path} <- mounted do
+      operations = Map.get(spec.paths, path)
+
+      assert operations,
+             "the API router serves #{verb} #{path}, but the OpenAPI document omits that path — " <>
+               "/docs/api-reference would hide a live endpoint"
+
+      assert Map.has_key?(operations, verb),
+             "the API router serves #{verb} #{path}, but the document lists only " <>
+               "#{inspect(Map.keys(operations))} for that path — /docs/api-reference would hide " <>
+               "that operation"
+    end
+
+    # ANTI-TAUTOLOGY: a path the router does NOT serve is absent from the
+    # document, so the membership check above can fail.
+    refute Map.has_key?(spec.paths, prefix <> "/definitely-not-mounted"),
+           "the document lists a path the API router does not serve — the completeness scan is vacuous"
   end
 
   defp documented_paths do
