@@ -191,6 +191,69 @@ defmodule Samenerp.DocsRoutesTest do
            "the reference rendered an operation the spec does not declare"
   end
 
+  test "every API-reference cell carries the label of its hidden column header" do
+    # On a phone the API reference hides its header row and stacks each row, so a
+    # cell's `data-label` IS the column name above it. A new row helper that forgets
+    # the attribute renders a value with no idea what it is — invisible on a desktop
+    # preview, which is exactly how the category table's squeeze shipped.
+    html = Docs.api_reference_html()
+
+    tables =
+      ~r{<table class="ref">(.*?)</table>}s
+      |> Regex.scan(html, capture: :all_but_first)
+      |> List.flatten()
+
+    assert length(tables) == 3,
+           "the API reference renders #{length(tables)} reference tables — expected servers, " <>
+             "operations and schemas; the scan below would cover an unexpected page"
+
+    cell_count =
+      for {table, index} <- Enum.with_index(tables) do
+        headers =
+          ~r{<th>(.*?)</th>}s
+          |> Regex.scan(table, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.map(&String.trim/1)
+
+        assert headers != [],
+               "reference table #{index} has no header row — its cells' labels have no source"
+
+        rows =
+          ~r{<tr[^>]*>(.*?)</tr>}s
+          |> Regex.scan(table, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.reject(&(&1 =~ "<th>"))
+
+        assert rows != [], "reference table #{index} renders no body rows"
+
+        rows
+        |> Enum.map(fn row ->
+          labels =
+            ~r{<td([^>]*)>}s
+            |> Regex.scan(row, capture: :all_but_first)
+            |> Enum.map(fn [attrs] ->
+              case Regex.run(~r/data-label="([^"]+)"/, attrs, capture: :all_but_first) do
+                [label] -> label
+                _none -> nil
+              end
+            end)
+
+          assert labels == headers,
+                 "an API-reference row renders cells labelled #{inspect(labels)} under the headers " <>
+                   "#{inspect(headers)} — on a phone the headers are hidden and the label is the " <>
+                   "only column name, so every cell needs its data-label"
+
+          length(labels)
+        end)
+        |> Enum.sum()
+      end
+      |> Enum.sum()
+
+    # ANTI-TAUTOLOGY: the row scan can fail (a dropped attribute makes the label
+    # list differ from the headers), and it can only prove anything if cells exist.
+    assert cell_count > 0, "the API reference renders no cells — the label scan would be vacuous"
+  end
+
   test "the documentation index links every category, guide and feature page" do
     html = Docs.index_html()
 
