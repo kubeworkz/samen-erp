@@ -244,10 +244,28 @@ defmodule SamenerpWeb.Docs do
       label: "Workspace",
       glyph: "⚙️",
       summary:
-        "Workspace-level administration: settings (org, members, security), the automation builder, and " <>
-          "feature flags.",
+        "Workspace-level administration: the settings tabs (profile, API keys, security, invitations, the " <>
+          "two approval queues, the AI key), the automation builder, and feature flags.",
       pages: [
-        {"Settings", "/settings", "Org profile, members and their roles, and security settings."},
+        {"Settings", "/settings", "Your own profile — the one screen where you edit your own vaulted name, email and handle."},
+        {"API keys", "/settings/api-keys",
+         "Mint, list and revoke this org's API keys. The raw key is shown EXACTLY ONCE (only a token digest is " <>
+           "stored), and minted authority is capped by the minter's own role ceiling."},
+        {"Security", "/settings/security",
+         "Impersonation sessions and the reveal ledger, read-only. Host-owned auth (passwords, 2FA, login " <>
+           "sessions) renders as the identity provider's, never as a control this page does not have."},
+        {"Invitations", "/settings/invitations",
+         "Invite a teammate by email with a role, see pending/accepted/revoked/expired invites, and revoke a " <>
+           "pending one — the invite link is shown once, the token is stored only as a digest."},
+        {"Approvals", "/settings/approvals",
+         "The pending approval-policy changes an admin can decide: the AP policy update surfaced in one queue, " <>
+           "with its proposed thresholds and scope, so a distinct admin can act on it."},
+        {"Reveal approvals", "/settings/reveal-approvals",
+         "Pending PII reveal requests that a SECOND party approves (minting the time-boxed grant) or denies; " <>
+           "the read-only ledger of who unmasked what stays on Security."},
+        {"Hugging Face key", "/settings/huggingface",
+         "Bring-your-own HuggingFace key for the AI plane: connect, validate, revoke and read usage. Keys are " <>
+           "encrypted on input and never stored raw."},
         {"Automation", "/automation", "Workflow builder: triggers, conditions and actions."},
         {"Feature flags", "/flags", "Flag admin over this host's FeatureFlag rows."}
       ]
@@ -392,7 +410,8 @@ defmodule SamenerpWeb.Docs do
            <strong>Workspace</strong>. Each group has a page here with the same name and the same links.</p>
 
         <h2 class="plain">Use the API</h2>
-        <p>Keys are minted over the operator Identity mount; a request carries
+        <p>Keys are minted at <a href="/settings/api-keys">/settings/api-keys</a> (tenant plane, admin-gated)
+           over the operator Identity mount; a request carries
            <code>Authorization: Bearer &lt;api_key&gt;</code>. <code>GET /api/v1/records</code> is bounded
            (keyset pagination, <code>default_limit 50</code>, <code>max_page_size 200</code>) and
            deny-by-default serialized: a field absent from the resource's JSON:API allowlist is absent
