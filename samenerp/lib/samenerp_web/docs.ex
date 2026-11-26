@@ -104,8 +104,11 @@ defmodule SamenerpWeb.Docs do
       pages: [
         {"Tasks", "/work", "The task list, filterable by project and status."},
         {"Projects", "/work/projects", "Projects that group tasks and carry the billable context."},
-        {"Timeline", "/work/timeline", "Tasks on a time axis, multi-anchor."
-        }
+        {"Timeline", "/work/timeline", "Tasks on a time axis, multi-anchor."},
+        {"Tree", "/work/tree",
+         "The same tasks as a parent/child hierarchy over the self-referential `Task.parent_id` — depth-bounded, " <>
+           "cycle-safe and org-scoped at every level. A truncated node's `?focus=<id>` link re-roots the walk as a " <>
+           "plain GET, so it descends without JavaScript."}
       ]
     },
     %{
@@ -139,7 +142,14 @@ defmodule SamenerpWeb.Docs do
          "Two-way email sync: inbound threads anchor to the RIGHT person (matched over vaulted addresses, " <>
            "org-pinned) and outbound lands on the same timeline."},
         {"Sequences", "/crm/sequences",
-         "Multi-step outreach enrollment with honest step status — a blocked step never reads as delivered."}
+         "Multi-step outreach enrollment with honest step status — a blocked step never reads as delivered."},
+        {"CSV import", "/csv/import/company",
+         "Import rows through the resource's governed create action — every row passes the same write guard and vault " <>
+           "change as the UI, and a bad column mapping fails the whole file before any write. Deny-by-default onto " <>
+           "this host's CRM resources."},
+        {"CSV export", "/csv/export/company",
+         "Download a CSV of a CRM resource's public columns only: vaulted cells resolve on the caller's plane, so an " <>
+           "operator without a grant gets `••••` — the same pixels the UI shows. A resource outside the domain 404s."}
       ]
     },
     %{
@@ -192,6 +202,10 @@ defmodule SamenerpWeb.Docs do
           "`storage_key` is minted only by `Samen.Files.upload/3`).",
       pages: [
         {"Pages", "/pages", "Write and browse pages; secure bodies and blocks are vault-routed."},
+        {"Trash", "/pages/trash",
+         "Deleted pages, still findable once the undo notice is gone: a delete is a soft archive, and Restore brings " <>
+           "the page back with its blocks, children and `[[links]]` in one transaction. An archived page in another " <>
+           "org is simply absent."},
         {"Files", "/files", "Upload and download, with the quarantine → promotion lifecycle and retention."}
       ]
     },
@@ -267,7 +281,10 @@ defmodule SamenerpWeb.Docs do
          "Bring-your-own HuggingFace key for the AI plane: connect, validate, revoke and read usage. Keys are " <>
            "encrypted on input and never stored raw."},
         {"Automation", "/automation", "Workflow builder: triggers, conditions and actions."},
-        {"Feature flags", "/flags", "Flag admin over this host's FeatureFlag rows."}
+        {"Feature flags", "/flags", "Flag admin over this host's FeatureFlag rows."},
+        {"Status page", "/status",
+         "The public, unauthenticated fleet status page: current status only, token-blind, and empty until an app is " <>
+           "opted in to publish. Rate-limited per remote IP."}
       ]
     }
   ]

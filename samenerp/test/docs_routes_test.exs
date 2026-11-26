@@ -293,6 +293,12 @@ defmodule Samenerp.DocsRenderTest do
   `/files/:id`, …) are not documented and are deliberately out of scope — they
   need host fixtures — so this stays a render guard, not an end-to-end suite.
 
+  Three documented paths are not tenant pages at all: the `.ics` feed, the CSV
+  export and the public `/status`. The shell scan skips them ("no tenant shell"
+  is their correct shape) and each has its own test asserting what it must
+  answer instead — a calendar, a CSV download, and a public page with its own
+  title.
+
   Pages that share a route prefix are additionally anchored on their root id:
   `/crm/gallery` and `/crm/contacts` (or `/billing` and `/billing/plans`) both
   answer 200 in the same shell, so only the id catches a docs entry that drifted
@@ -363,13 +369,19 @@ defmodule Samenerp.DocsRenderTest do
     "/banking/rules" => "banking-rules",
     "/work" => "work",
     "/work/projects" => "work-projects",
-    "/work/timeline" => "work-timeline"
+    "/work/timeline" => "work-timeline",
+    "/work/tree" => "work-tree"
   }
 
-  # The Calendar group's one documented path is a FILE, not a page: it answers
-  # `text/calendar` with no HTML element to anchor on, so the shell scan below
-  # skips it (it has its own test).
+  # Documented paths that answer with something OTHER than the tenant shell: the
+  # `.ics` feed (a file), the CSV export (a download), and the PUBLIC status page
+  # (deliberately outside the tenant chrome). They are documented and must render,
+  # but the shell scan below cannot assert a shell they never had — each has its
+  # own test instead.
   @calendar_export "/calendar.ics"
+  @csv_export "/csv/export/company"
+  @status_page "/status"
+  @non_page_paths [@calendar_export, @csv_export, @status_page]
 
   setup do
     start_supervised!(@endpoint)
@@ -378,7 +390,7 @@ defmodule Samenerp.DocsRenderTest do
 
   test "every documented page renders inside the tenant shell" do
     org = create_org!("Docs Render QA") |> Map.fetch!(:id)
-    paths = documented_paths() -- [@calendar_export]
+    paths = documented_paths() -- @non_page_paths
 
     assert paths != [], "the docs catalog documents no pages — the render scan would be vacuous"
 
@@ -465,6 +477,41 @@ defmodule Samenerp.DocsRenderTest do
 
     assert conn.resp_body =~ "BEGIN:VCALENDAR",
            "GET #{@calendar_export} did not answer with a calendar body"
+  end
+
+  test "the documented CSV export answers a file, not a page" do
+    assert @csv_export in documented_paths(),
+           "#{@csv_export} is no longer a documented CRM path — this test would be asserting a URL the " <>
+             "docs no longer promise"
+
+    org = create_org!("Docs CSV QA") |> Map.fetch!(:id)
+    conn = get(build_conn(), "#{@csv_export}?org=#{org}")
+
+    assert conn.status == 200,
+           "GET #{@csv_export} answered #{conn.status} — the documented CRM export is down"
+
+    assert (Plug.Conn.get_resp_header(conn, "content-type") |> List.first()) =~ "text/csv",
+           "GET #{@csv_export} did not answer as a CSV download"
+
+    refute conn.resp_body =~ ~s(class="app"),
+           "GET #{@csv_export} answered the tenant shell — a file route must not render a page"
+  end
+
+  test "the documented status page answers publicly, outside the tenant shell" do
+    assert @status_page in documented_paths(),
+           "#{@status_page} is no longer a documented Workspace path — this test would be asserting a " <>
+             "URL the docs no longer promise"
+
+    conn = get(build_conn(), @status_page)
+
+    assert conn.status == 200,
+           "GET #{@status_page} answered #{conn.status} — the documented public status page is down"
+
+    assert conn.resp_body =~ "<h1>Samen ERP status</h1>",
+           "GET #{@status_page} rendered without its `<h1>Samen ERP status</h1>` heading"
+
+    refute conn.resp_body =~ ~s(class="app"),
+           "GET #{@status_page} answered the tenant shell — the public page must not need an org"
   end
 
   defp documented_paths do
