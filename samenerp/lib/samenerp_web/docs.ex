@@ -76,7 +76,7 @@ defmodule SamenerpWeb.Docs do
            "admin and approved by another; a run from another org is indistinguishable from a missing one."},
         {"AP aging", "/erp/ap-aging", "Open payables bucketed by age."},
         {"AP approval", "/erp/ap-approval",
-         "The AP chain's approval policy: the generic approval-policy row for `ap_invoice:approve`."},
+         "The AP chain's approval policy: the generic approval-policy row for the ap_invoice approve action."},
         {"AR receipts", "/erp/ar-receipts", "Customer receipts applied against invoices."},
         {"AR aging", "/erp/ar-aging", "Open receivables bucketed by age, sourced from this host's Billing invoices."},
         {"AR settings", "/erp/ar-settings", "The AR control row (terms and defaults)."},
@@ -127,8 +127,8 @@ defmodule SamenerpWeb.Docs do
         {"Projects", "/work/projects", "Projects that group tasks and carry the billable context."},
         {"Timeline", "/work/timeline", "Tasks on a time axis, multi-anchor."},
         {"Tree", "/work/tree",
-         "The same tasks as a parent/child hierarchy over the self-referential `Task.parent_id` — depth-bounded, " <>
-           "cycle-safe and org-scoped at every level. A truncated node's `?focus=<id>` link re-roots the walk as a " <>
+         "The same tasks as a parent/child hierarchy over the self-referential Task.parent_id — depth-bounded, " <>
+           "cycle-safe and org-scoped at every level. A truncated node's ?focus=<id> link re-roots the walk as a " <>
            "plain GET, so it descends without JavaScript."}
       ]
     },
@@ -181,7 +181,7 @@ defmodule SamenerpWeb.Docs do
            "this host's CRM resources."},
         {"CSV export", "/csv/export/company",
          "Download a CSV of a CRM resource's public columns only: vaulted cells resolve on the caller's plane, so an " <>
-           "operator without a grant gets `••••` — the same pixels the UI shows. A resource outside the domain 404s."}
+           "operator without a grant gets •••• — the same pixels the UI shows. A resource outside the domain 404s."}
       ]
     },
     %{
@@ -258,9 +258,9 @@ defmodule SamenerpWeb.Docs do
       label: "Documents",
       glyph: "📄",
       summary:
-        "Pages (the Docs scope: titled pages, untitled notes, typed blocks and `[[links]]` between them) and " <>
-          "Files (the upload chokepoint — a file is `:quarantined` until a clean scan promotes it, and " <>
-          "`storage_key` is minted only by `Samen.Files.upload/3`).",
+        "Pages (the Docs scope: titled pages, untitled notes, typed blocks and [[links]] between them) and " <>
+          "Files (the upload chokepoint — a file is quarantined until a clean scan promotes it, and " <>
+          "a storage_key is minted only by the upload seam).",
       pages: [
         {"Pages", "/pages", "Write and browse pages; secure bodies and blocks are vault-routed."},
         {"Page editor", "/pages/:id",
@@ -271,7 +271,7 @@ defmodule SamenerpWeb.Docs do
            "overwriting, and moving text out of the vault is an admin form that posts a reason."},
         {"Trash", "/pages/trash",
          "Deleted pages, still findable once the undo notice is gone: a delete is a soft archive, and Restore brings " <>
-           "the page back with its blocks, children and `[[links]]` in one transaction. An archived page in another " <>
+           "the page back with its blocks, children and [[links]] in one transaction. An archived page in another " <>
            "org is simply absent."},
         {"Files", "/files", "Upload and download, with the quarantine → promotion lifecycle and retention."},
         {"File preview", "/files/:id",
@@ -385,7 +385,7 @@ defmodule SamenerpWeb.Docs do
       title: "API reference",
       summary:
         "Every operation, server and schema in the OpenAPI 3.0 document, rendered — generated from the " <>
-          "same spec `/api/openapi.json` serves."
+          "same spec that /api/openapi.json serves."
     }
   ]
 
@@ -791,6 +791,14 @@ defmodule SamenerpWeb.Docs do
       table.ref { width: 100%; border-collapse: collapse; font-size: 0.88em; }
       table.ref th, table.ref td { text-align: left; padding: 8px 8px 8px 0; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
       table.ref th { color: #6b7280; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+      /* On a wide screen the page name is the row's label, not a sentence: "Company
+         detail" must not break into "Company / detail" while the route sits whole
+         beside it, so the first column shrinks to fit and What-it-does takes the rest.
+         Narrow screens keep the default: wrapping the name is far better than squeezing
+         the note into a column two words wide. */
+      @media (min-width: 700px) {
+        table.ref th:first-child, table.ref td:first-child { width: 1%; white-space: nowrap; }
+      }
       code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
       pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 10px 0 14px; }
       pre code { background: none; color: inherit; padding: 0; }
