@@ -243,13 +243,43 @@ fi
 log "migrations applied (db max=$DB_MAX ≥ $LATEST_VERSION) ✔"
 
 # ── 9. gate: HTTP smoke (5 surface paths must exist, never 404/500) ─────────
+# This gate runs seconds after the container is recreated, so the first request
+# can be reset while the listener is still coming up (curl exit 56 — the
+# dc1ff641 deploy aborted here on an otherwise healthy release; the same probes
+# answered 200/302 by hand immediately afterwards). A bare `curl` failure under
+# `set -e` also exited with no message at all, hiding WHICH gate died. So: retry
+# a short window on transport errors and boot-time 5xx (never a pass — only
+# 200/302 can pass), and always name the gate and the last outcome when it dies.
+SMOKE_ATTEMPTS=6
+SMOKE_RETRY_SECONDS=2
 smoke() { # path want_really (200|302)
-  local path="$1" code
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:8080$path")"
-  case "$code" in
-    200 | 302) log "smoke $path → $code ✔" ;;
-    *) die "smoke $path → $code (expected 200/302)" ;;
-  esac
+  local path="$1" code="" rc=0 attempt
+  for ((attempt = 1; attempt <= SMOKE_ATTEMPTS; attempt++)); do
+    rc=0
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:8080$path")" || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      case "$code" in
+        200 | 302)
+          log "smoke $path → $code ✔"
+          return 0
+          ;;
+        5??) : ;; # app still booting behind the proxy — retried below, never a pass
+        *) die "gate 9 (HTTP smoke): $path → $code (expected 200/302)" ;;
+      esac
+    fi
+    if [ "$attempt" -lt "$SMOKE_ATTEMPTS" ]; then
+      if [ "$rc" -ne 0 ]; then
+        log "smoke $path → curl exit $rc (attempt $attempt/$SMOKE_ATTEMPTS, listener may still be booting), retrying in ${SMOKE_RETRY_SECONDS}s"
+      else
+        log "smoke $path → $code (attempt $attempt/$SMOKE_ATTEMPTS, expected 200/302), retrying in ${SMOKE_RETRY_SECONDS}s"
+      fi
+      sleep "$SMOKE_RETRY_SECONDS"
+    fi
+  done
+  if [ "$rc" -ne 0 ]; then
+    die "gate 9 (HTTP smoke): $path → curl exit $rc after $SMOKE_ATTEMPTS attempts (expected 200/302) — nothing answered on 127.0.0.1:8080"
+  fi
+  die "gate 9 (HTTP smoke): $path → $code after $SMOKE_ATTEMPTS attempts (expected 200/302)"
 }
 smoke "/healthz"
 smoke "/crm/dashboard"
