@@ -485,7 +485,7 @@ defmodule SamenerpWeb.Docs do
           <section class="cat">
             <p class="sum">#{esc(group.summary)}</p>
             #{detail_hint(group)}
-            <table class="ref">
+            <table class="ref pages">
               <thead><tr><th>Page</th><th>Route</th><th>What it does</th></tr></thead>
               <tbody>#{pages}</tbody>
             </table>
@@ -798,6 +798,17 @@ defmodule SamenerpWeb.Docs do
          the note into a column two words wide. */
       @media (min-width: 700px) {
         table.ref th:first-child, table.ref td:first-child { width: 1%; white-space: nowrap; }
+      }
+      /* Below 700px a three-column table cannot hold a page name, a route and a
+         paragraph: the note column collapsed to ~88px and wrapped one or two words
+         per line. Each category row becomes its own block instead — name, route,
+         then the note at full width, with no horizontal scrolling. */
+      @media (max-width: 699px) {
+        table.ref.pages thead { display: none; }
+        table.ref.pages tr { display: block; padding: 12px 0; border-bottom: 1px solid #e5e7eb; }
+        table.ref.pages td { display: block; border: 0; padding: 0 0 4px; }
+        table.ref.pages td:first-child { font-weight: 600; padding-top: 0; }
+        table.ref.pages td:last-child { padding-bottom: 0; color: #374151; }
       }
       code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
       pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 10px 0 14px; }
