@@ -1,43 +1,44 @@
 defmodule Samenerp.DocsRoutesTest do
   @moduledoc """
   DOCS-REACHABILITY — `SamenerpWeb.Docs` is DATA (15 sidebar-matching groups, one
-  `{name, path, note}` row per feature), and every path in it is a promise that
-  the reader can click through to the live screen. This is the same discipline
-  `Samenerp.NavReachabilityTest` applies to the sidebar's http links, applied to
-  the docs: a path that drifts from the route macro (a renamed surface, a
-  `/conversations`-for-`/chat` slip) must fail HERE, not on a reader's first
-  click.
+  `{name, path, note}` row per feature), and every path in it is a promise: the
+  reader can click through to the live screen, or — for a detail page — the route
+  template it names is served. This is the same discipline
+  `Samenerp.NavReachabilityTest` applies to the sidebar's http links, applied to the
+  docs: a path that drifts from the route macro (a renamed surface, a
+  `/conversations`-for-`/chat` slip) must fail HERE, not on a reader's first click.
 
-  Four legs:
+  Six legs:
 
-    1. **the docs surface is mounted** — `/docs` and `/docs/:id` are declared
-       routes owned by `SamenerpWeb.DocsController` (`:index` / `:show`), so the
-       index cannot vanish while a deeper page still matches the wildcard.
-    2. **no dead links** — every `/docs/<id>` the index emits resolves to a real
-       catalog entry, and every feature `path` resolves to a route this host
-       declares. The resolver is refutable (a fabricated path is NOT reported
-       mounted) and the catalog is non-trivial, so neither assertion can pass
-       vacuously.
-    3. **reachable** — every category and guide is linked from `/docs` itself
-       (the sidebar-reachability posture: a page nothing links is an island).
-    4. **the rendered pages emit only live targets** — every `href` in every
-       rendered doc page (index, each category, the guide, the 404) is a route
-       this router serves, so the shared layout's chrome cannot rot either.
+    1. **the catalog is navigable** — every `/docs/<id>` resolves to a real category
+       or guide, every category renders through the controller, every feature `path`
+       resolves to a route this host declares (a detail page as its `:id` template),
+       and no path is documented twice. The resolver is refutable (a fabricated path
+       is NOT reported mounted) and the catalog is non-trivial, so no assertion here
+       can pass vacuously.
+    2. **completeness, not just soundness** — every surface the sidebar renders (one
+       item per `Samen.Web.Erp.surfaces/0` entry) has a docs row carrying the
+       registry's own label. The other legs are one-directional (docs ⊆ routes): they
+       stayed green while Expense Reports, Expense Categories and Corporate Cards
+       were sidebar-visible and documented nowhere, so the catalog could silently
+       fall behind the allowlist. This leg fails on a MISSING row, not a broken one.
+    3. **the API reference is the spec, rendered** — every operation the generated
+       document carries appears as a row, and every cell of those tables carries the
+       `data-label` of the header the phone layout hides.
+    4. **reachable** — every category, guide and feature page is linked from `/docs`
+       itself (the sidebar-reachability posture: a page nothing links is an island).
+    5. **the pages read cleanly** — no rendered page contains a literal backtick:
+       notes are plain escaped text, so a Markdown tick reaches the browser verbatim.
+    6. **the pages link only live screens** — every `href` in every rendered doc page
+       is a route this router serves, and a detail TEMPLATE never becomes an href: it
+       has no record to open and would land on that page's not-found state.
 
-    5. **completeness, not just soundness** — every surface the sidebar renders
-       (one item per `Samen.Web.Erp.surfaces/0` entry) has a docs row. Legs 1-4
-       are one-directional (docs ⊆ routes): they stayed green while Expense
-       Reports, Expense Categories and Corporate Cards were sidebar-visible and
-       documented nowhere, so the catalog could silently fall behind the
-       allowlist. This leg fails on a MISSING row, not a broken one.
-
-  What a route table cannot prove is that the page RENDERS: this case stayed
-  green while `/erp/stock` and `/erp/ap-capture` both answered 500 (a resource
-  column that had drifted out of the dev DB, and an obsolete positional
-  `live_file_input/1`). That leg is `Samenerp.DocsRenderTest` at the bottom of
-  this file — the same guard, driven through the real router over every
-  documented page, because the catalog links only list and landing screens (no
-  `/crm/contacts/:id`), and those all mount from a bare org row.
+  What a route table cannot prove is that the page RENDERS: this case stayed green
+  while `/erp/stock` and `/erp/ap-capture` both answered 500 (a resource column that
+  had drifted out of the dev DB, and an obsolete positional `live_file_input/1`).
+  That leg is `Samenerp.DocsRenderTest` at the bottom of this file — the same guard,
+  driven through the real router over every documented page, and the one place where
+  the static pages and the detail templates are exercised.
   """
 
   use ExUnit.Case, async: true
@@ -47,39 +48,15 @@ defmodule Samenerp.DocsRoutesTest do
   # Links a page legitimately renders that are not routes of this host.
   @inert_hrefs ["#", "", "/"]
 
-  test "the docs index and every documentation page are mounted routes" do
-    index_routes = Enum.filter(routes(), &(&1.path == "/docs"))
-
-    assert index_routes != [],
-           "SamenerpWeb.Router declares no `/docs` route — the documentation link on the landing " <>
-             "page would 404 (a bare `/docs/:id` route does NOT serve `/docs`)"
-
-    for route <- index_routes do
-      assert route.plug == SamenerpWeb.DocsController,
-             "`/docs` is served by #{inspect(route.plug)}"
-
-      assert route.plug_opts == :index, "`/docs` dispatches to #{inspect(route.plug_opts)}"
-    end
-
-    assert mounted?("/docs/:id"), "SamenerpWeb.Router declares no `/docs/:id` route"
-
-    for route <- routes(), route.path == "/docs/:id" do
-      assert route.plug == SamenerpWeb.DocsController,
-             "`/docs/:id` is served by #{inspect(route.plug)}"
-
-      assert route.plug_opts == :show, "`/docs/:id` dispatches to #{inspect(route.plug_opts)}"
-    end
-
+  test "every documentation page id is served and every documented path is accounted for" do
+    # `/docs/:id` is a WILDCARD, so the route table alone cannot tell a real
+    # category from a typo: the catalog (and its controller) is the oracle.
     assert length(Docs.groups()) > 1,
-           "the docs catalog is empty — the scan below would be vacuous"
+           "the docs catalog is empty — the scans below would be vacuous"
 
     assert is_binary(Docs.getting_started_html()),
            "the getting-started guide renders no page"
-  end
 
-  test "every documentation page id is served and every feature path is mounted" do
-    # `/docs/:id` is a wildcard, so the route table alone cannot tell a real
-    # category from a typo: the catalog (and its controller) is the oracle.
     for group <- Docs.groups() do
       assert Docs.group(group.id) == group,
              "the catalog does not resolve its own group #{group.id}"
@@ -102,6 +79,14 @@ defmodule Samenerp.DocsRoutesTest do
              Docs.groups() |> Enum.map(&length(&1.pages)) |> Enum.sum()
 
     assert Docs.page_count() > 0, "the catalog documents no feature pages"
+
+    documented = for group <- Docs.groups(), {_name, path, _note} <- group.pages, do: path
+
+    # Two rows for one path would double-link the index and inflate the computed
+    # page count: the catalog is a list of pages, not of mentions.
+    assert documented == Enum.uniq(documented),
+           "the catalog documents the same path twice: " <>
+             "#{inspect(documented -- Enum.uniq(documented))}"
 
     for group <- Docs.groups(), {name, path, _note} <- group.pages do
       assert is_binary(path) and String.starts_with?(path, "/"),
@@ -160,7 +145,13 @@ defmodule Samenerp.DocsRoutesTest do
            "the catalog listed a fabricated ERP surface — the completeness scan is vacuous"
   end
 
-  test "the API reference renders every operation the spec it links carries" do
+  test "the API reference renders the spec's operations, each cell labelled by its column" do
+    # The page renders `generate_spec/0` — the document `/api/openapi.json` also
+    # serves — and on a phone its header row is hidden, so each cell's
+    # `data-label` IS the only column name above it. Both halves read the same
+    # rendered HTML: an operation that is missing, duplicated, or rendered in a
+    # table whose cells lost their label is the same failure mode (a reader
+    # cannot tell what they are looking at).
     spec = Samenerp.ApiDocs.generate_spec()
     html = Docs.api_reference_html()
 
@@ -189,14 +180,8 @@ defmodule Samenerp.DocsRoutesTest do
     # satisfied by markup that says nothing.
     refute html =~ ~s(data-op="GET /api/v1/definitely-not-in-the-spec"),
            "the reference rendered an operation the spec does not declare"
-  end
 
-  test "every API-reference cell carries the label of its hidden column header" do
-    # On a phone the API reference hides its header row and stacks each row, so a
-    # cell's `data-label` IS the column name above it. A new row helper that forgets
-    # the attribute renders a value with no idea what it is — invisible on a desktop
-    # preview, which is exactly how the category table's squeeze shipped.
-    html = Docs.api_reference_html()
+    # ---- the label half ----------------------------------------------------
 
     tables =
       ~r{<table class="ref">(.*?)</table>}s
@@ -249,8 +234,6 @@ defmodule Samenerp.DocsRoutesTest do
       end
       |> Enum.sum()
 
-    # ANTI-TAUTOLOGY: the row scan can fail (a dropped attribute makes the label
-    # list differ from the headers), and it can only prove anything if cells exist.
     assert cell_count > 0, "the API reference renders no cells — the label scan would be vacuous"
   end
 
@@ -293,7 +276,8 @@ defmodule Samenerp.DocsRoutesTest do
     # there is no Markdown step — so a stray Markdown tick reaches the browser as
     # a character. This shipped: the API-reference card read "the same spec
     # `/api/openapi.json` serves", and five notes carried their code font in
-    # backticks that rendered verbatim.
+    # backticks that rendered verbatim. The inline <style> block counts too: it is
+    # part of the page a reader receives.
     pages =
       [
         {"index", Docs.index_html()},
@@ -444,28 +428,29 @@ defmodule Samenerp.DocsRenderTest do
   the remaining question through the REAL router — does the documented page
   actually render the page it names?
 
-  Scope is every documented page. The list and landing screens (`/crm/companies`,
-  `/work`, `/files`, `/chat`, `/search`, `/analytics`, `/flags` and the rest) all mount
-  from a bare org row with no fixtures and no `:id`, so one `GET` per page is the proof.
-  The host's DETAIL pages (`/crm/contacts/:id`, `/pages/:id`, `/files/:id`, …) are
-  documented as TEMPLATES — the catalog names the shape a reader arrives at from the
-  list, and renders it as code text rather than a link (the href guard refutes any
-  template href: a template URL has no record to open) — and this leg renders each
-  template with a UUID this org does not own, asserting the page's OWN root id inside
-  the shell. That proves the route is wired to that page and that it answers its honest
-  not-found state instead of crashing; the fixture-dependent content behind a real
-  record stays out of scope, so this is a render guard, not an end-to-end suite.
+  One scan, two kinds of target. The list and landing screens (`/crm/companies`,
+  `/work`, `/files`, `/chat`, `/search`, `/analytics`, `/flags` and the rest) mount
+  from a bare org row with no fixtures and no `:id`, so one `GET` per page is the
+  proof. The host's DETAIL pages (`/crm/contacts/:id`, `/pages/:id`, `/files/:id`,
+  …) are documented as TEMPLATES — the catalog names the shape a reader arrives at
+  from the list, and renders it as code text rather than a link (the href guard
+  refutes any template href: a template URL has no record to open). The same scan
+  renders each template with a UUID this org does not own and asserts the page's OWN
+  root id inside the shell: the route is wired to that page and answers its honest
+  not-found state instead of crashing. Fixture-dependent content stays out of scope,
+  so this is a render guard, not an end-to-end suite.
 
   Three documented paths are not tenant pages at all: the `.ics` feed, the CSV
-  export and the public `/status`. The shell scan skips them ("no tenant shell"
-  is their correct shape) and each has its own test asserting what it must
-  answer instead — a calendar, a CSV download, and a public page with its own
-  title.
+  export and the public `/status`. The shell scan skips them ("no tenant shell" is
+  their correct shape) and one table-driven test asserts what each must answer
+  instead.
 
-  Pages that share a route prefix are additionally anchored on their root id:
-  `/crm/gallery` and `/crm/contacts` (or `/billing` and `/billing/plans`) both
-  answer 200 in the same shell, so only the id catches a docs entry that drifted
-  onto the wrong sibling. Pages with one URL need no anchor.
+  `@anchors` is the one table both kinds of page are checked against: a page under a
+  shared prefix — or any detail template — needs its own root id here, because
+  `/crm/gallery` and `/crm/contacts` (or `/billing` and `/billing/plans`) both answer
+  200 in the same shell and only the id catches a docs entry that drifted onto the
+  wrong sibling. Pages with one URL (`/files`, `/chat`, `/search`, …) need no anchor:
+  status + shell is already the whole promise.
   """
 
   use Samenerp.DataCase, async: false
@@ -480,14 +465,14 @@ defmodule Samenerp.DocsRenderTest do
   # Every documented path under these prefixes has a LIVE SIBLING one URL away
   # (`/crm/gallery` vs `/crm/contacts`, `/billing` vs `/billing/plans`), so a docs
   # entry that drifted onto the wrong one still answers 200 in the shell and only
-  # the root id can tell them apart. Pages with a single URL (`/files`, `/chat`,
-  # `/search`, …) need no anchor: status + shell is already the whole promise.
+  # the root id can tell them apart.
   @paged_prefixes ["/erp", "/crm", "/billing", "/marketing", "/banking", "/work"]
 
-  # The root element each anchored page renders. Kept deliberately to the shared-prefix
-  # subset — 61 rows pinned every UI detail to the docs; these pin the one real ambiguity.
-  # The catalog/table agreement assert below keeps this in step with the docs.
-  @page_ids %{
+  # Every anchored page → the root element it renders. Static pages under a
+  # shared prefix and EVERY detail template (whose URL cannot be opened without a
+  # record) live here; the agreement assertion below keeps this table and the
+  # catalog in step in both directions.
+  @anchors %{
     "/erp" => "erp-dashboard",
     "/erp/coa" => "erp-surface",
     "/erp/entries" => "erp-surface",
@@ -533,16 +518,9 @@ defmodule Samenerp.DocsRenderTest do
     "/work" => "work",
     "/work/projects" => "work-projects",
     "/work/timeline" => "work-timeline",
-    "/work/tree" => "work-tree"
-  }
-
-  # Documented DETAIL pages, as templates, mapped to the root id each page owns.
-  # A template cannot be rendered bare — `:id` is not a record — so the scan
-  # substitutes a UUID this org does not own and anchors on the id: the route
-  # answers 200 in the shell *because that page handled it*, not because a
-  # sibling or a fallback did. Writes and record content need fixtures and stay
-  # out of scope.
-  @detail_pages %{
+    "/work/tree" => "work-tree",
+    # Detail templates: a template cannot be rendered bare, so the scan substitutes
+    # a UUID and anchors on the id this page owns.
     "/crm/companies/:id" => "crm-company",
     "/crm/contacts/:id" => "crm-contact",
     "/billing/invoices/:id" => "billing-invoice",
@@ -561,42 +539,61 @@ defmodule Samenerp.DocsRenderTest do
     "/grants/:id" => "grant-personnel-report"
   }
 
-  # Documented paths that answer with something OTHER than the tenant shell: the
-  # `.ics` feed (a file), the CSV export (a download), and the PUBLIC status page
-  # (deliberately outside the tenant chrome). They are documented and must render,
-  # but the shell scan below cannot assert a shell they never had — each has its
-  # own test instead.
+  # Documented paths that answer with something OTHER than the tenant shell, and what
+  # each must answer instead: the `.ics` feed (a file), the CSV export (a download),
+  # and the PUBLIC status page (deliberately outside the tenant chrome). The shell
+  # scan skips them and this table is the promise they do keep.
   @calendar_export "/calendar.ics"
   @csv_export "/csv/export/company"
   @status_page "/status"
-  @non_page_paths [@calendar_export, @csv_export, @status_page]
+
+  @non_page_routes [
+    {@calendar_export, :body, ~r/BEGIN:VCALENDAR/, "an iCalendar feed"},
+    {@csv_export, :header, ~r/text\/csv/, "a CSV download"},
+    {@status_page, :body, ~r{<h1>Samen ERP status</h1>}, "the public status page"}
+  ]
+
+  @non_page_paths Enum.map(@non_page_routes, &elem(&1, 0))
 
   setup do
     start_supervised!(@endpoint)
     :ok
   end
 
-  test "every documented page renders inside the tenant shell" do
+  test "every documented page renders its own screen inside the tenant shell" do
     org = create_org!("Docs Render QA") |> Map.fetch!(:id)
-    documented = documented_paths() -- @non_page_paths
-    paths = Enum.reject(documented, &detail_template?/1)
+    paths = documented_paths() -- @non_page_paths
 
     assert paths != [], "the docs catalog documents no pages — the render scan would be vacuous"
 
-    # The catalog and the table are two listings of the same promise: a newly
-    # documented page under a shared prefix cannot ship unanchored, and a removed
-    # one cannot leave a stale row that would pass vacuously.
-    anchored = Enum.filter(paths, &shared_prefix?/1)
+    # The catalog and the anchor table are two listings of the same promise: a page
+    # under a shared prefix, or a detail template, cannot ship unanchored, and a row
+    # here cannot outlive its catalog entry. Without this the render below would pass
+    # on a sibling's shell for a page the docs do not promise.
+    anchored = Enum.filter(paths, &(shared_prefix?(&1) or detail_template?(&1)))
 
-    assert Enum.sort(anchored) == @page_ids |> Map.keys() |> Enum.sort(),
-           "the docs catalog and the root-id table disagree — every documented page under " <>
-             "#{Enum.join(@paged_prefixes, ", ")} needs a root element here, and every row " <>
-             "here needs a page in the catalog (catalog-only: " <>
-             "#{inspect(anchored -- Map.keys(@page_ids))}, " <>
-             "table-only: #{inspect(Map.keys(@page_ids) -- anchored)})"
+    assert Enum.sort(anchored) == @anchors |> Map.keys() |> Enum.sort(),
+           "the docs catalog and the anchor table disagree — every documented page under " <>
+             "#{Enum.join(@paged_prefixes, ", ")} and every detail template needs a root element " <>
+             "here, and every row here needs a page in the catalog (catalog-only: " <>
+             "#{inspect(anchored -- Map.keys(@anchors))}, table-only: " <>
+             "#{inspect(Map.keys(@anchors) -- anchored)})"
+
+    templates = Enum.filter(paths, &detail_template?/1)
+
+    assert templates != [],
+           "the docs catalog documents no detail pages — the template half of the scan would be vacuous"
+
+    assert templates |> Enum.map(&Map.fetch!(@anchors, &1)) |> Enum.uniq() |> length() ==
+             length(templates),
+           "two detail pages claim the same root id — the anchor could not tell them apart"
 
     for path <- paths do
-      conn = get(build_conn(), "#{path}?org=#{org}")
+      # A template is not a URL: substitute a record id this org does not own, so a
+      # detail page must answer its OWN honest not-found state, never a fabricated
+      # record. That is the whole promise a template can make without a fixture.
+      url = String.replace(path, ":id", Ecto.UUID.generate())
+      conn = get(build_conn(), "#{url}?org=#{org}")
 
       assert conn.status == 200,
              "GET #{path} (documented in `SamenerpWeb.Docs`) answered #{conn.status} — a reader's " <>
@@ -613,62 +610,14 @@ defmodule Samenerp.DocsRenderTest do
 
       # Where a live sibling sits one URL away, status and shell are satisfied by
       # the wrong page too — the root id is the only thing that tells them apart.
-      with id when is_binary(id) <- Map.get(@page_ids, path) do
+      with id when is_binary(id) <- Map.get(@anchors, path) do
         assert conn.resp_body =~ ~s(id="#{id}"),
                "GET #{path} rendered without `#{id}` — the docs entry points at a sibling of " <>
                  "the page it describes (every sibling under #{Enum.join(@paged_prefixes, ", ")} " <>
-                 "answers 200 in the same shell)"
+                 "answers 200 in the same shell, and a template that cannot open still renders " <>
+                 "its own not-found state)"
       end
     end
-  end
-
-  # One representative category: the route guard above already proves EVERY
-  # category renders a page (`Docs.group_html/1` non-nil), so rendering all 15
-  # here would re-test the same `show/2` branch.
-  test "every documented detail template renders its own page inside the shell" do
-    org = create_org!("Docs Detail QA") |> Map.fetch!(:id)
-    templates = Enum.filter(documented_paths(), &detail_template?/1)
-
-    assert templates != [],
-           "the docs catalog documents no detail pages — the template scan would be vacuous"
-
-    # Two listings of the same promise again: a template in the catalog without
-    # a root id here would render unanchored (a sibling would pass it), and a row
-    # here without a catalog entry would pin a page /docs does not promise.
-    assert Enum.sort(templates) == @detail_pages |> Map.keys() |> Enum.sort(),
-           "the docs catalog and the detail-page table disagree (catalog-only: " <>
-             "#{inspect(templates -- Map.keys(@detail_pages))}, " <>
-             "table-only: #{inspect(Map.keys(@detail_pages) -- templates)})"
-
-    assert templates |> Enum.map(&Map.fetch!(@detail_pages, &1)) |> Enum.uniq() |> length() ==
-             length(templates),
-           "two detail pages claim the same root id — the anchor could not tell them apart"
-
-    for template <- templates do
-      # A record id this org does not own: the detail page must answer its OWN
-      # honest not-found state (inside the chrome), never a fabricated record and
-      # never a crash. That is the whole promise a template can make without a
-      # fixture.
-      conn = get(build_conn(), "#{String.replace(template, ":id", Ecto.UUID.generate())}?org=#{org}")
-      root_id = Map.fetch!(@detail_pages, template)
-
-      assert conn.status == 200,
-             "GET #{template} (documented in `SamenerpWeb.Docs`) answered #{conn.status} — a " <>
-               "reader's click from /docs lands on an error page even though the route is mounted"
-
-      assert conn.resp_body =~ ~s(class="app"),
-             "GET #{template} answered 200 without the tenant shell — the documented detail page " <>
-               "never rendered through `Samen.Web.Tenant.Live`"
-
-      assert conn.resp_body =~ ~s(id="#{root_id}"),
-             "GET #{template} rendered without `#{root_id}` — the docs entry points at a sibling of " <>
-               "the page it describes, or the page no longer exists"
-    end
-
-    # ANTI-TAUTOLOGY: the scan is per-template, so a path the catalog does not
-    # carry is not in it — a template-shaped fabricated row cannot pass.
-    refute "/crm/contacts/:id/definitely-not-documented" in templates,
-           "the detail scan accepted a path the catalog does not carry"
   end
 
   # One representative category: the route guard above already proves EVERY
@@ -703,54 +652,28 @@ defmodule Samenerp.DocsRenderTest do
     assert unknown.resp_body =~ "<h1>Page not found</h1>"
   end
 
-  test "the documented .ics export answers with a calendar, not a page" do
-    assert @calendar_export in documented_paths(),
-           "#{@calendar_export} is no longer a documented Calendar path — this test would be " <>
-             "asserting a URL the docs no longer promise"
+  test "the documented non-page routes answer their own shape, not the tenant shell" do
+    # Three shapes the tenant chrome cannot host, asserted from one table: a reader
+    # who follows /docs to the calendar feed, the CRM export or the status page gets
+    # that thing, not a page.
+    documented = documented_paths()
+    org = create_org!("Docs Non-page QA") |> Map.fetch!(:id)
 
-    org = create_org!("Docs ICS QA") |> Map.fetch!(:id)
-    conn = get(build_conn(), "#{@calendar_export}?org=#{org}")
+    for {path, kind, expected, shape} <- @non_page_routes do
+      assert path in documented,
+             "#{path} is no longer documented — this test would be asserting a URL the docs no " <>
+               "longer promise"
 
-    assert conn.status == 200,
-           "GET #{@calendar_export} answered #{conn.status} — the documented Calendar export is down"
+      conn = get(build_conn(), "#{path}?org=#{org}")
 
-    assert conn.resp_body =~ "BEGIN:VCALENDAR",
-           "GET #{@calendar_export} did not answer with a calendar body"
-  end
+      assert conn.status == 200,
+             "GET #{path} answered #{conn.status} — the documented #{shape} is down"
 
-  test "the documented CSV export answers a file, not a page" do
-    assert @csv_export in documented_paths(),
-           "#{@csv_export} is no longer a documented CRM path — this test would be asserting a URL the " <>
-             "docs no longer promise"
+      assert served(conn, kind) =~ expected, "GET #{path} did not answer #{shape}"
 
-    org = create_org!("Docs CSV QA") |> Map.fetch!(:id)
-    conn = get(build_conn(), "#{@csv_export}?org=#{org}")
-
-    assert conn.status == 200,
-           "GET #{@csv_export} answered #{conn.status} — the documented CRM export is down"
-
-    assert (Plug.Conn.get_resp_header(conn, "content-type") |> List.first()) =~ "text/csv",
-           "GET #{@csv_export} did not answer as a CSV download"
-
-    refute conn.resp_body =~ ~s(class="app"),
-           "GET #{@csv_export} answered the tenant shell — a file route must not render a page"
-  end
-
-  test "the documented status page answers publicly, outside the tenant shell" do
-    assert @status_page in documented_paths(),
-           "#{@status_page} is no longer a documented Workspace path — this test would be asserting a " <>
-             "URL the docs no longer promise"
-
-    conn = get(build_conn(), @status_page)
-
-    assert conn.status == 200,
-           "GET #{@status_page} answered #{conn.status} — the documented public status page is down"
-
-    assert conn.resp_body =~ "<h1>Samen ERP status</h1>",
-           "GET #{@status_page} rendered without its `<h1>Samen ERP status</h1>` heading"
-
-    refute conn.resp_body =~ ~s(class="app"),
-           "GET #{@status_page} answered the tenant shell — the public page must not need an org"
+      refute conn.resp_body =~ ~s(class="app"),
+             "GET #{path} answered the tenant shell — a non-page route must not render a page"
+    end
   end
 
   test "every path the API reference advertises is served by this host" do
@@ -835,6 +758,13 @@ defmodule Samenerp.DocsRenderTest do
 
   defp shared_prefix?(path) do
     Enum.any?(@paged_prefixes, &(path == &1 or String.starts_with?(path, &1 <> "/")))
+  end
+
+  # A CSV export's shape is a response header, the other two answer in their body.
+  defp served(conn, :body), do: conn.resp_body
+
+  defp served(conn, :header) do
+    conn |> Plug.Conn.get_resp_header("content-type") |> List.first()
   end
 
   defp create_org!(name) do
