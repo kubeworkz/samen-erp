@@ -24,6 +24,13 @@ defmodule Samenerp.DocsRoutesTest do
        rendered doc page (index, each category, the guide, the 404) is a route
        this router serves, so the shared layout's chrome cannot rot either.
 
+    5. **completeness, not just soundness** — every surface the sidebar renders
+       (one item per `Samen.Web.Erp.surfaces/0` entry) has a docs row. Legs 1-4
+       are one-directional (docs ⊆ routes): they stayed green while Expense
+       Reports, Expense Categories and Corporate Cards were sidebar-visible and
+       documented nowhere, so the catalog could silently fall behind the
+       allowlist. This leg fails on a MISSING row, not a broken one.
+
   What a route table cannot prove is that the page RENDERS: this case stayed
   green while `/erp/stock` and `/erp/ap-capture` both answered 500 (a resource
   column that had drifted out of the dev DB, and an obsolete positional
@@ -122,6 +129,37 @@ defmodule Samenerp.DocsRoutesTest do
            "mounted?/1 matched a two-segment path against the one-segment `/docs/:id` route"
   end
 
+  test "every surface the sidebar renders is documented, under the registry's own label" do
+    # `Samen.UI.Nav.module_nav/1` renders one ERP item per
+    # `Samen.Web.Erp.surfaces/0` entry, so the sidebar's surface list IS the
+    # catalog's floor. The legs above are soundness only (docs ⊆ routes): they
+    # stayed green while the three E31 expense surfaces rendered in the sidebar
+    # and appeared nowhere in `/docs`, because a missing row breaks no link.
+    documented = for group <- Docs.groups(), {_name, path, _note} <- group.pages, do: path
+
+    for surface <- Samen.Web.Erp.surfaces() do
+      path = "/erp/#{surface}"
+      label = Samen.Web.Erp.label(surface)
+
+      assert path in documented,
+             "#{label} (#{surface}) renders in the sidebar but /docs links no #{path} — add it to " <>
+               "the ERP group in `SamenerpWeb.Docs`"
+
+      # A row that survives a registry rename under the old name documents a
+      # screen the sidebar no longer calls that: the label is the sidebar's, so
+      # the catalog cites the same one ("grouped exactly as the sidebar" must
+      # be true of the text, not only of the count).
+      assert documented_label(path) == label,
+             "/docs lists #{path} as #{inspect(documented_label(path))} but the sidebar renders it " <>
+               "as #{inspect(label)} — the docs row drifted from `Samen.Web.Erp.label/1`"
+    end
+
+    # ANTI-TAUTOLOGY: the completeness scan can fail, so it is not satisfied by
+    # any path at all. A surface-shaped path outside the allowlist is absent.
+    refute "/erp/definitely-not-a-surface" in documented,
+           "the catalog listed a fabricated ERP surface — the completeness scan is vacuous"
+  end
+
   test "the documentation index links every category, guide and feature page" do
     html = Docs.index_html()
 
@@ -192,6 +230,14 @@ defmodule Samenerp.DocsRoutesTest do
     path = href |> String.split("?") |> hd()
 
     Enum.any?(routes(), fn route -> path_matches?(route.path, path) end)
+  end
+
+  defp documented_label(path) do
+    Enum.find_value(Docs.groups(), fn group ->
+      Enum.find_value(group.pages, fn {name, documented_path, _note} ->
+        if documented_path == path, do: name
+      end)
+    end)
   end
 
   defp docs_page?("/docs"), do: true
@@ -284,6 +330,9 @@ defmodule Samenerp.DocsRenderTest do
     "/erp/purchase_orders" => "erp-surface",
     "/erp/goods_receipts" => "erp-surface",
     "/erp/work_orders" => "erp-surface",
+    "/erp/expense_reports" => "erp-surface",
+    "/erp/expense_categories" => "erp-surface",
+    "/erp/corporate_cards" => "erp-surface",
     "/erp/ap-capture" => "erp-ap-capture",
     "/erp/ap-payments" => "erp-ap-payments",
     "/erp/ap-aging" => "erp-ap-aging",

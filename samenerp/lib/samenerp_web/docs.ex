@@ -53,6 +53,14 @@ defmodule SamenerpWeb.Docs do
          "The one-transaction chokepoint: a receipt posts stock AND the GL entry together, or neither."},
         {"Work Orders", "/erp/work_orders",
          "Manufacturing over BOMs — consume, produce and log agree exactly once; a BOM cycle is refused."},
+        {"Expense Reports", "/erp/expense_reports",
+         "Employee claims with their totals and status; submit → approve → settle is the report's own " <>
+           "gated chain."},
+        {"Expense Categories", "/erp/expense_categories",
+         "The policy rows a claim is filed under: the account it posts to, whether a receipt is " <>
+           "required, and the per-claim cap."},
+        {"Corporate Cards", "/erp/corporate_cards",
+         "The card register behind card claims: name, last four digits, cardholder and active flag."},
         {"AP capture", "/erp/ap-capture", "Capture an incoming invoice document into an AP invoice."},
         {"AP payments", "/erp/ap-payments",
          "The payment run. A pending reversal of a payment needs a DIFFERENT admin's decision — the nav " <>
