@@ -19,9 +19,18 @@ defmodule Samenerp.HomepageRouteTest do
   404'd `/api/openapi.json`. The health checks are also what the deploy gate
   probes, so a route regression here is a release regression.
 
+  A third leg guards the LINK graph, because the artifact comparison above is
+  blind to it: a copy edit that swaps `/signup` for `#`, or restores the
+  production-only `https://samenerp.kubeworkz.io/docs` CTA, still serves the
+  artifact byte for byte. The page must keep linking this host's `/docs`,
+  `/signup` and `/login` routes, and must not reach for the production origin
+  again — while the repository link stays external, since GitHub is not a route
+  here.
+
   Refutability: replacing `index/2`'s body with the old scaffold (or emptying the
   artifact) fails the first leg by name; unmounting any neighbour route fails the
-  second. Both were flipped and restored byte-exact when this file landed.
+  second; pointing a signup CTA at `#`, or restoring one absolute production
+  link, fails the third. Each was flipped and restored byte-exact.
   """
 
   use Samenerp.DataCase, async: false
@@ -91,6 +100,49 @@ defmodule Samenerp.HomepageRouteTest do
 
     refute conn.resp_body =~ "47 modules",
            "GET / rendered the retired scaffold's '47 modules' hero"
+  end
+
+  # The routes this host owns that the homepage must advertise. A copy edit may
+  # relabel the links or add more rooms to the page; it may not stop linking the
+  # pages a visitor needs to start using the product.
+  @internal_routes ["/docs", "/signup", "/login"]
+
+  test "GET / links this host's docs and account routes, never an absolute site origin" do
+    conn = get(build_conn(), "/")
+
+    hrefs =
+      conn.resp_body
+      |> then(&Regex.scan(~r/href="([^"]+)"/, &1, capture: :all_but_first))
+      |> List.flatten()
+
+    # ANTI-TAUTOLOGY: if the extraction ever stops matching (a switch to
+    # single-quoted attributes, a templating rewrite), the three assertions below
+    # would pass on an empty list and report nothing. The page carries far more
+    # links than this floor.
+    assert length(hrefs) > 20,
+           "only #{length(hrefs)} hrefs parsed from GET / — the link scan below is vacuous"
+
+    for route <- @internal_routes do
+      assert route in hrefs,
+             "GET / no longer links #{route} — the app-relative route was dropped from the " <>
+               "page (hrefs: #{inspect(Enum.uniq(hrefs))})"
+    end
+
+    # The rewiring's whole point: production is not the only host this page is
+    # served from (preview, self-host, a self-hoster's domain, the test endpoint),
+    # so an absolute samenerp.kubeworkz.io CTA sends those readers somewhere they
+    # did not ask to go.
+    absolute = Enum.filter(hrefs, &String.contains?(&1, "samenerp.kubeworkz.io"))
+
+    assert absolute == [],
+           "GET / links the production origin again (#{Enum.join(absolute, ", ")}) — the " <>
+             "homepage must resolve docs and auth against whatever host is serving it"
+
+    # The inverse of the rule above: GitHub is NOT a route on this host, so the
+    # repository CTA must stay absolute rather than be "fixed" into a local path
+    # that would 404.
+    assert Enum.any?(hrefs, &String.starts_with?(&1, "https://github.com/")),
+           "GET / no longer links the repository — the external GitHub link was dropped"
   end
 
   test "the liveness, readiness and OpenAPI endpoints still answer beside the homepage" do
