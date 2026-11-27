@@ -49,7 +49,13 @@ if config_env() == :prod do
       port: port
     ],
     secret_key_base: secret_key_base,
-    server: true,
+    # PHX_SERVER=false starts the endpoint with NO listener. The container
+    # entrypoint needs that for its migration/seed phases: seeding boots this
+    # application, so without the explicit false the container binds :4050 and
+    # answers /healthz while the schema is still being created — a green probe
+    # on a database that is not ready. Unset (or any other value) still listens,
+    # so `bin/samenerp start` behaves exactly as before.
+    server: System.get_env("PHX_SERVER") != "false",
     # Allow WebSocket connections from production domains
     check_origin: ["//#{host}", "//65.109.232.89"]
 
