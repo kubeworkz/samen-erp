@@ -29,9 +29,11 @@ if ! /app/samenerp/bin/samenerp eval "Samenerp.Release.migrate()"; then
 fi
 
 # Seeding uses the Ash domains, so it runs with the app started — now that the
-# schema exists.
+# schema exists. PHX_SERVER=false keeps that started app QUIET: no listener, so
+# nothing answers /healthz until the real `start` below. Without it the container
+# serves a green probe while the seed is still running.
 echo "Seeding..."
-if ! /app/samenerp/bin/samenerp eval "
+if ! PHX_SERVER=false /app/samenerp/bin/samenerp eval "
   {:ok, _} = Application.ensure_all_started(:samenerp)
   Samenerp.Seeds.seed!()
   IO.puts(\"Migration and seed complete.\")
