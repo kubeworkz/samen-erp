@@ -75,12 +75,15 @@ h2.display{font-family:var(--display);font-weight:500;font-size:clamp(30px,4.2vw
 .btn-green:hover{background:var(--green-800)}
 .btn-ghost{border-color:var(--rule);color:var(--ink);background:#fff}
 .btn-ghost:hover{border-color:#cfd3cb}
+.btn-quiet{color:var(--muted);padding:10px 12px}
+.btn-quiet:hover{color:var(--ink)}
 .btn-night{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.28)}
 .btn-night:hover{background:rgba(255,255,255,.18)}
 .btn-light{background:#fff;color:var(--green-800)}
 .btn-light:hover{background:var(--green-50)}
 .btn-lg{padding:13px 24px;font-size:14.5px}
 @media(max-width:860px){.nav-links{display:none}}
+@media(max-width:640px){.nav-cta .btn-ghost{display:none}}
 
 /* ---------- hero ---------- */
 .hero{position:relative;overflow:hidden;background:
@@ -103,6 +106,7 @@ h1 em{font-style:italic;color:var(--green-300)}
 .hero-note{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--mono);font-size:11.5px;color:#9db2a9}
 .hero-note span::before{content:"·";margin-right:8px;color:var(--green-300)}
 .hero-note span:first-child::before{content:none;margin:0}
+.hero-note a{color:var(--green-100);text-decoration:underline;text-underline-offset:2px}
 
 /* hero proof panel */
 .proof{position:relative;border:1px solid rgba(209,250,229,.2);border-radius:12px;background:rgba(6,24,18,.55);backdrop-filter:blur(6px);box-shadow:0 30px 60px -30px rgba(0,0,0,.7);overflow:hidden}
@@ -266,11 +270,12 @@ footer{background:var(--night);color:var(--night-muted);padding:44px 0 36px;font
 .foot-brand{max-width:28ch}
 .foot-brand .brand{color:#fff}
 .foot-brand p{margin-top:10px;color:var(--night-faint);font-size:12px;line-height:1.6}
-.foot-links{display:grid;grid-template-columns:repeat(3,auto);gap:32px}
+.foot-links{display:grid;grid-template-columns:repeat(4,auto);gap:32px}
 .foot-links h4{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#fff;margin-bottom:10px}
 .foot-links a{display:block;padding:3px 0;color:var(--night-muted)}
 .foot-links a:hover{color:#fff}
 .foot-bottom{margin-top:34px;padding-top:18px;border-top:1px solid var(--night-rule);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;color:var(--night-faint)}
+@media(max-width:640px){.foot-links{grid-template-columns:repeat(2,auto);gap:24px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto;transition:none}}
 </style>
 </head>
@@ -295,8 +300,10 @@ footer{background:var(--night);color:var(--night-muted);padding:44px 0 36px;font
       <a href="#open-source">Open source</a>
     </nav>
     <div class="nav-cta">
-      <a class="btn btn-ghost" href="https://samenerp.kubeworkz.io/docs">Docs</a>
-      <a class="btn btn-green" href="https://github.com/kubeworkz/samen-erp">GitHub</a>
+      <a class="btn btn-quiet" href="/login">Sign in</a>
+      <a class="btn btn-ghost" href="/docs">Docs</a>
+      <a class="btn btn-ghost" href="https://github.com/kubeworkz/samen-erp">GitHub</a>
+      <a class="btn btn-green" href="/signup">Sign up</a>
     </div>
   </div>
 </header>
@@ -310,13 +317,15 @@ footer{background:var(--night);color:var(--night-muted);padding:44px 0 36px;font
         <h1>Bend it to your business. <em>It won't break.</em></h1>
         <p class="lede">SamenERP is an open-source ERP with a design-flexible core, a ledger that refuses to be wrong, integrated AI, and enterprise shape from the first commit — not from an upgrade tier.</p>
         <div class="hero-actions">
-          <a class="btn btn-light btn-lg" href="https://samenerp.kubeworkz.io/docs">Read the docs</a>
+          <a class="btn btn-light btn-lg" href="/signup">Get started free</a>
+          <a class="btn btn-night btn-lg" href="/docs">Read the docs</a>
           <a class="btn btn-night btn-lg" href="https://github.com/kubeworkz/samen-erp">Browse the source</a>
         </div>
         <div class="hero-note">
           <span>Self-host it</span>
           <span>Fork it</span>
           <span>Read every line that touches your P&amp;L</span>
+          <span><a href="/login">Already have an account? Sign in</a></span>
         </div>
       </div>
 
@@ -653,8 +662,9 @@ $ SAMEN_SABOTAGE=1 ./ci.sh</div>
       <h2>An ERP you can read, bend, and keep.</h2>
       <p>Clone it, run the gate, and point the AI at your own schema. If a guarantee on this page does not hold, there is a test and a sabotage that says so in the repository.</p>
       <div class="actions">
-        <a class="btn btn-green btn-lg" href="https://github.com/kubeworkz/samen-erp">Star on GitHub</a>
-        <a class="btn btn-ghost btn-lg" href="https://samenerp.kubeworkz.io/docs">Explore the docs</a>
+        <a class="btn btn-green btn-lg" href="/signup">Create an account</a>
+        <a class="btn btn-ghost btn-lg" href="/docs">Explore the docs</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/kubeworkz/samen-erp">Star on GitHub</a>
       </div>
     </div>
   </section>
@@ -683,8 +693,13 @@ $ SAMEN_SABOTAGE=1 ./ci.sh</div>
           <a href="#enterprise">Enterprise</a>
         </div>
         <div>
+          <h4>Account</h4>
+          <a href="/signup">Sign up free</a>
+          <a href="/login">Sign in</a>
+        </div>
+        <div>
           <h4>Docs</h4>
-          <a href="https://samenerp.kubeworkz.io/docs">Documentation</a>
+          <a href="/docs">Documentation</a>
           <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/guides/getting-started.md">Getting started</a>
           <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/claim-evidence.md">Claim evidence</a>
           <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/README.md">Docs index</a>
