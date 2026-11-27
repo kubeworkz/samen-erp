@@ -223,7 +223,7 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 [ -n "$MIG_OK" ] \
-  || die "entrypoint did not reach 'Migration and seed complete' — migrate/seed failed (entrypoint swallows the error: check 'docker logs $CONTAINER')"
+  || die "entrypoint did not reach 'Migration and seed complete' — migrate/seed failed (it aborts the boot rather than swallowing it; check 'docker logs $CONTAINER')"
 log "migrate/seed marker seen ✔"
 
 LATEST_FILE="$(ls "$APP_DIR/priv/repo/migrations"/*.exs | sort | tail -1)"
