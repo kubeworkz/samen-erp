@@ -208,11 +208,15 @@ done
 log "container healthy ✔"
 
 # ── 8. gate: migrations actually applied ─────────────────────────────────────
-# POLL instead of grepping once: the healthcheck answers /healthz from inside the
-# entrypoint's migrate/seed eval (the endpoint boots before the eval prints its
-# marker), so "healthy" can precede the marker — a single instant grep lost that
-# race in run 35957261969 (green at +10s, marker a moment later → spurious
-# rollback). Capture the log to avoid pipefail/SIGPIPE quirks with `grep -q`.
+# POLL instead of grepping once. Historically the entrypoint's migrate/seed eval
+# booted the endpoint, so the healthcheck answered /healthz from inside that eval
+# BEFORE its marker was printed: "healthy" could precede the marker, and a single
+# instant grep lost that race in run 35957261969 (green at +10s, marker a moment
+# later → spurious rollback). The entrypoint now runs that eval with
+# PHX_SERVER=false (no listener until the real start), so the marker precedes
+# health by construction — the poll stays as defence in depth rather than being
+# re-derived from an ordering guarantee that a future edit could quietly drop.
+# Capture the log to avoid pipefail/SIGPIPE quirks with `grep -q`.
 log "waiting for 'Migration and seed complete' in the app log (max 120s) ..."
 MIG_OK=""
 for _ in $(seq 1 60); do
