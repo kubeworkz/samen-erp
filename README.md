@@ -261,7 +261,7 @@ MIX_ENV=dev mix harbor.seed
 mix phx.server
 ```
 
-Then open `http://localhost:4050` (the landing page links every mounted surface; `/healthz`
+Then open `http://localhost:4050` (the marketing homepage, served from `samenerp/priv/homepage.html`; `/docs` lists every mounted surface, and `/healthz`
 is the liveness probe).
 
 To run the whole foundry gate (spikes + kernel + both generative probes + framework + all

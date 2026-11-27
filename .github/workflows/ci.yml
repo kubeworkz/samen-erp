@@ -140,6 +140,18 @@ jobs:
         working-directory: samenerp
         run: mix deps.get --quiet
 
+      # The fixture starts the server with `mix run --no-halt`, which compiles the
+      # project first. Without a warm build here that compile runs INSIDE the
+      # fixture's 120s waitForServer window: the cold test-env build of
+      # samen_core -> samen_web (310 files) -> samenerp outlives it, the fetch
+      # never connects, and the job fails as "browser fixture timed out: fetch
+      # failed" on every branch (and on main) regardless of the diff.
+      - name: Compile for the browser fixture
+        working-directory: samenerp
+        env:
+          MIX_ENV: test
+        run: mix compile
+
       - name: Detect Chrome
         id: chrome
         run: |

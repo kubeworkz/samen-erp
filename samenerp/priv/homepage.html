@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SamenERP — bend it to your business. It won't break.</title>
+<meta name="description" content="SamenERP is an open-source ERP with a design-flexible core, a ledger that refuses to be wrong, integrated AI, and enterprise shape from the first commit. MIT licensed, self-hostable, Elixir / Ash / Phoenix.">
+<meta property="og:title" content="SamenERP — design flexibility and durability, open source">
+<meta property="og:description" content="Compose scopes instead of patching a monolith. Double-entry rules that refuse a bad entry by construction. Integrated AI grounded in your schema. Enterprise shape from the first commit.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green-900:#08402e;
+  --green-800:#0a5c42;
+  --green-700:#0e7c5a;
+  --green-300:#7fd3b4;
+  --green-100:#d1fae5;
+  --green-50:#ecfdf5;
+  --amber-700:#b4690e;
+  --amber-500:#d08a1c;
+  --amber-100:#fdf3e3;
+  --amber-line:#efd5a8;
+  --paper:#f7f6f3;
+  --card:#ffffff;
+  --ink:#14171a;
+  --muted:#5a6169;
+  --faint:#8a9099;
+  --rule:#e4e6e1;
+  --rule-soft:#eef0eb;
+  --night:#08130f;
+  --night-2:#0d1c17;
+  --night-3:#122620;
+  --night-rule:#22362e;
+  --night-ink:#f1f4f1;
+  --night-muted:#9db2a9;
+  --night-faint:#6e857c;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --display:'Fraunces',Georgia,'Times New Roman',serif;
+  --body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --gut:clamp(20px,5vw,40px);
+  --max:1140px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+::selection{background:var(--green-700);color:#fff}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{font-family:var(--body);background:var(--paper);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+img,svg{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--amber-500);outline-offset:3px;border-radius:3px}
+.skip{position:absolute;left:-9999px;top:0;background:#fff;color:var(--ink);padding:10px 16px;z-index:100}
+.skip:focus{left:12px;top:12px}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 var(--gut)}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--green-700)}
+.section-label{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.section-label span:first-child{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase}
+.section-label .bar{flex:0 0 34px;height:1px;background:var(--rule)}
+h2.display{font-family:var(--display);font-weight:500;font-size:clamp(30px,4.2vw,46px);line-height:1.12;letter-spacing:-.015em;max-width:19ch}
+.lede{font-size:clamp(15px,1.5vw,17.5px);color:var(--muted);max-width:62ch;margin-top:16px}
+
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:50;background:rgba(247,246,243,.86);backdrop-filter:blur(14px);border-bottom:1px solid var(--rule)}
+.nav-in{max-width:var(--max);margin:0 auto;padding:0 var(--gut);height:64px;display:flex;align-items:center;gap:28px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px;letter-spacing:-.01em}
+.brand svg{width:26px;height:26px}
+.brand .erp{color:var(--green-700)}
+.nav-links{display:flex;gap:22px;margin-left:auto;font-size:13.5px;color:var(--muted)}
+.nav-links a:hover{color:var(--ink)}
+.nav-cta{display:flex;gap:10px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;padding:10px 18px;border-radius:6px;border:1px solid transparent;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+.btn:active{transform:translateY(1px)}
+.btn-green{background:var(--green-700);color:#fff}
+.btn-green:hover{background:var(--green-800)}
+.btn-ghost{border-color:var(--rule);color:var(--ink);background:#fff}
+.btn-ghost:hover{border-color:#cfd3cb}
+.btn-quiet{color:var(--muted);padding:10px 12px}
+.btn-quiet:hover{color:var(--ink)}
+.btn-night{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.28)}
+.btn-night:hover{background:rgba(255,255,255,.18)}
+.btn-light{background:#fff;color:var(--green-800)}
+.btn-light:hover{background:var(--green-50)}
+.btn-lg{padding:13px 24px;font-size:14.5px}
+@media(max-width:860px){.nav-links{display:none}}
+@media(max-width:640px){.nav-cta .btn-ghost{display:none}}
+
+/* ---------- hero ---------- */
+.hero{position:relative;overflow:hidden;background:
+  radial-gradient(1100px 520px at 78% -10%,rgba(14,124,90,.55),transparent 62%),
+  radial-gradient(700px 420px at 8% 108%,rgba(180,105,14,.22),transparent 66%),
+  linear-gradient(160deg,#0a5c42 0%,#08402e 46%,#061d16 100%);
+  color:var(--night-ink)}
+.hero::before{content:"";position:absolute;inset:0;background-image:
+  linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
+  background-size:56px 56px;mask-image:radial-gradient(120% 90% at 50% 0%,#000 30%,transparent 82%)}
+.hero-in{position:relative;padding:clamp(56px,8vw,92px) 0 clamp(40px,6vw,64px);display:grid;grid-template-columns:1.15fr .85fr;gap:clamp(36px,5vw,64px);align-items:center}
+@media(max-width:980px){.hero-in{grid-template-columns:1fr}}
+.hero-badge{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--green-100);border:1px solid rgba(209,250,229,.28);background:rgba(209,250,229,.07);padding:7px 13px;border-radius:999px}
+.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green-300);box-shadow:0 0 0 3px rgba(127,211,180,.18)}
+h1{font-family:var(--display);font-weight:500;font-size:clamp(38px,5.6vw,62px);line-height:1.04;letter-spacing:-.022em;margin:22px 0 0;max-width:16ch}
+h1 em{font-style:italic;color:var(--green-300)}
+.hero p.lede{color:#c9dcd4;margin-top:22px;max-width:50ch;font-size:clamp(15px,1.6vw,17px)}
+.hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.hero-note{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--mono);font-size:11.5px;color:#9db2a9}
+.hero-note span::before{content:"·";margin-right:8px;color:var(--green-300)}
+.hero-note span:first-child::before{content:none;margin:0}
+.hero-note a{color:var(--green-100);text-decoration:underline;text-underline-offset:2px}
+
+/* hero proof panel */
+.proof{position:relative;border:1px solid rgba(209,250,229,.2);border-radius:12px;background:rgba(6,24,18,.55);backdrop-filter:blur(6px);box-shadow:0 30px 60px -30px rgba(0,0,0,.7);overflow:hidden}
+.proof-top{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(209,250,229,.14);font-family:var(--mono);font-size:11px;color:#a8c4b8;letter-spacing:.04em}
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:rgba(209,250,229,.12);color:var(--green-100);border:1px solid rgba(209,250,229,.24)}
+.pill.amber{background:rgba(208,138,28,.14);color:#f5d9a8;border-color:rgba(239,213,168,.3)}
+.je{padding:6px 16px 0}
+.je-row{display:grid;grid-template-columns:1fr 92px 92px;gap:8px;padding:9px 0;border-bottom:1px solid rgba(209,250,229,.1);font-family:var(--mono);font-size:12px;color:#dbe9e2}
+.je-row.head{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#7e9c90;border-bottom-color:rgba(209,250,229,.18)}
+.je-row .num{text-align:right;color:#f1f4f1}
+.je-row .num.zero{color:#7e9c90}
+.je-row.acct{font-family:var(--body);font-size:12.5px;font-weight:500;color:#eaf2ee}
+.je-row.acct .sub{display:block;font-weight:400;font-size:11px;color:#8faa9e;font-family:var(--mono)}
+.je-foot{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;font-family:var(--mono);font-size:11px;color:#9db2a9;background:rgba(209,250,229,.04)}
+.je-foot b{color:var(--green-100);font-weight:500}
+.chain{margin:0 16px 16px;padding:11px 12px;border:1px dashed rgba(209,250,229,.2);border-radius:8px;font-family:var(--mono);font-size:10.5px;color:#93aea2;line-height:1.7;word-break:break-all}
+.chain b{color:#cfe6db;font-weight:500}
+
+/* ---------- stat bar ---------- */
+.stats{background:var(--card);border-bottom:1px solid var(--rule)}
+.stats-in{max-width:var(--max);margin:0 auto;padding:0 var(--gut);display:grid;grid-template-columns:repeat(4,1fr)}
+.stat{padding:24px 20px 24px 0;border-right:1px solid var(--rule-soft)}
+.stat:last-child{border-right:none}
+.stat .n{font-family:var(--display);font-size:clamp(24px,2.6vw,31px);font-weight:500;line-height:1.1;letter-spacing:-.02em;color:var(--green-800)}
+.stat .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:5px}
+@media(max-width:720px){.stats-in{grid-template-columns:repeat(2,1fr)}.stat{padding:20px 16px 20px 0}.stat:nth-child(2n){border-right:none}.stat:nth-child(-n+2){border-bottom:1px solid var(--rule-soft)}}
+
+/* ---------- generic section ---------- */
+.section{padding:clamp(56px,8vw,96px) 0}
+.section.alt{background:var(--card);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:40px;margin-bottom:clamp(28px,4vw,44px);flex-wrap:wrap}
+.section-head .lede{margin-top:14px}
+
+/* ---------- flexibility ---------- */
+.flex-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}
+@media(max-width:900px){.flex-grid{grid-template-columns:1fr}}
+.tile{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:clamp(20px,2.6vw,30px);position:relative;transition:border-color .18s ease,box-shadow .18s ease}
+.tile:hover{border-color:#d7dbd2;box-shadow:0 18px 40px -34px rgba(8,64,46,.5)}
+.tile .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--amber-700)}
+.tile h3{font-family:var(--display);font-weight:500;font-size:clamp(19px,2vw,23px);line-height:1.22;margin:12px 0 9px;letter-spacing:-.01em}
+.tile p{font-size:14px;color:var(--muted)}
+.tile.dark{background:linear-gradient(155deg,var(--green-800),var(--green-900));border-color:transparent;color:#eaf2ee}
+.tile.dark .k{color:var(--amber-500)}
+.tile.dark h3{color:#fff}
+.tile.dark p{color:#bcd3c8}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+.chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;padding:4px 8px;border-radius:4px;border:1px solid var(--rule);background:var(--paper);color:#4b5359}
+.tile.dark .chip{border-color:rgba(209,250,229,.22);background:rgba(209,250,229,.07);color:#d6e8df}
+.code{margin-top:18px;background:#0b1712;border:1px solid rgba(209,250,229,.16);border-radius:7px;padding:13px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.85;color:#cfe6db;overflow-x:auto;white-space:pre}
+.code .p{color:var(--green-300)}
+.code .c{color:#6e857c}
+.stack-visual{display:grid;gap:7px;margin-top:18px}
+.layer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:6px;border:1px solid rgba(209,250,229,.16);background:rgba(209,250,229,.05);font-family:var(--mono);font-size:11px;color:#cfe6db}
+.layer span:last-child{color:#8faa9e;font-size:10px}
+.layer.mid{border-color:rgba(239,213,168,.32);background:rgba(208,138,28,.1);color:#f5e2c2}
+
+/* ---------- durability ---------- */
+.night{background:var(--night);color:var(--night-ink);position:relative;overflow:hidden}
+.night::before{content:"";position:absolute;inset:0;background:radial-gradient(800px 380px at 88% 0%,rgba(14,124,90,.22),transparent 70%)}
+.night .wrap{position:relative}
+.night .section-label span:first-child{color:var(--night-faint)}
+.night .section-label .bar{background:var(--night-rule)}
+.night h2.display{color:#fff}
+.night .lede{color:var(--night-muted)}
+.durability-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--night-rule);border:1px solid var(--night-rule);border-radius:10px;overflow:hidden;margin-top:clamp(28px,4vw,44px)}
+@media(max-width:900px){.durability-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.durability-grid{grid-template-columns:1fr}}
+.dcard{background:var(--night-2);padding:24px 22px;position:relative}
+.dcard .rule{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--amber-500);text-transform:uppercase}
+.dcard h3{font-size:15.5px;font-weight:600;line-height:1.35;margin:9px 0 7px;color:#f1f4f1;letter-spacing:-.005em}
+.dcard p{font-size:13px;color:var(--night-muted);line-height:1.62}
+.proof-strip{margin-top:20px;border:1px solid var(--night-rule);border-radius:10px;background:var(--night-3);padding:clamp(20px,3vw,28px);display:grid;grid-template-columns:.9fr 1.1fr;gap:28px;align-items:center}
+@media(max-width:800px){.proof-strip{grid-template-columns:1fr}}
+.proof-strip h3{font-family:var(--display);font-weight:500;font-size:clamp(20px,2.3vw,27px);line-height:1.22;letter-spacing:-.01em;color:#fff}
+.proof-strip p{font-size:13.5px;color:var(--night-muted);margin-top:10px}
+.loop{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;counter-reset:step}
+@media(max-width:620px){.loop{grid-template-columns:1fr 1fr}}
+.loop div{border:1px solid var(--night-rule);border-radius:7px;padding:11px 10px;font-family:var(--mono);font-size:10.5px;line-height:1.5;color:#c6d8d0;background:rgba(255,255,255,.02)}
+.loop div::before{counter-increment:step;content:"0" counter(step);display:block;color:var(--amber-500);margin-bottom:5px;letter-spacing:.08em}
+
+/* ---------- ai ---------- */
+.ai-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,5vw,64px);align-items:start}
+@media(max-width:900px){.ai-grid{grid-template-columns:1fr}}
+.ai-points{display:grid;gap:0;margin-top:8px}
+.ai-point{padding:17px 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:84px 1fr;gap:18px}
+.ai-point:last-child{border-bottom:1px solid var(--rule)}
+.ai-point .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--green-700);padding-top:3px}
+.ai-point h3{font-size:15px;font-weight:600;margin-bottom:4px;letter-spacing:-.005em}
+.ai-point p{font-size:13.5px;color:var(--muted)}
+.status-card{background:var(--card);border:1px solid var(--rule);border-radius:10px;overflow:hidden;box-shadow:0 24px 50px -44px rgba(8,64,46,.6)}
+.status-top{padding:14px 18px;border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--faint);text-transform:uppercase}
+.status-body{padding:6px 18px 16px}
+.srow{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--rule-soft);font-size:13px}
+.srow:last-child{border-bottom:none}
+.srow .mark{flex:0 0 auto;margin-top:2px;width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:700}
+.srow.ok .mark{background:var(--green-50);color:var(--green-700);border:1px solid #c6ecd8}
+.srow.no .mark{background:var(--amber-100);color:var(--amber-700);border:1px solid var(--amber-line)}
+.srow .txt strong{display:block;font-weight:600;color:var(--ink);font-size:13px}
+.srow .txt span{display:block;color:var(--faint);font-size:11.5px;margin-top:1px}
+.status-foot{padding:12px 18px;background:var(--paper);border-top:1px solid var(--rule);font-family:var(--mono);font-size:10.5px;color:var(--faint);line-height:1.6}
+
+/* ---------- enterprise ---------- */
+.planes{display:grid;grid-template-columns:1fr 120px 1fr;gap:14px;align-items:stretch;margin-bottom:clamp(28px,4vw,42px)}
+@media(max-width:860px){.planes{grid-template-columns:1fr}}
+.plane{border:1px solid var(--rule);border-radius:10px;padding:20px;background:var(--card)}
+.plane.operator{background:linear-gradient(150deg,#fff, #f4faf7)}
+.plane .k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.plane h3{font-family:var(--display);font-weight:500;font-size:19px;margin:8px 0 6px}
+.plane p{font-size:13px;color:var(--muted)}
+.plane .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:13px}
+.plane .tags span{font-family:var(--mono);font-size:10px;padding:3px 7px;border-radius:3px;background:var(--green-50);color:var(--green-800);border:1px solid #d6f0e3}
+.shared{display:flex;flex-direction:column;justify-content:center;gap:10px;align-items:center;text-align:center}
+.shared div{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--green-800);background:var(--green-50);border:1px solid #d6f0e3;border-radius:999px;padding:6px 10px;line-height:1.3}
+.shared .line{width:1px;flex:1;background:var(--rule);min-height:10px}
+.ent-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+@media(max-width:900px){.ent-grid{grid-template-columns:repeat(2,1fr)}}
+.ent{background:var(--card);padding:16px 18px}
+.ent .n{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.08em}
+.ent h4{font-size:13.5px;font-weight:600;margin:5px 0 3px}
+.ent p{font-size:11.5px;color:var(--faint);line-height:1.5}
+
+/* ---------- open source ---------- */
+.open{background:linear-gradient(140deg,var(--green-700),var(--green-800) 55%,var(--green-900));color:#fff;position:relative;overflow:hidden}
+.open::before{content:"";position:absolute;inset:0;background:radial-gradient(700px 320px at 85% 110%,rgba(208,138,28,.22),transparent 70%)}
+.open .wrap{position:relative;display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(32px,5vw,60px);align-items:center}
+@media(max-width:900px){.open .wrap{grid-template-columns:1fr}}
+.open h2{font-family:var(--display);font-weight:500;font-size:clamp(30px,4vw,44px);line-height:1.1;letter-spacing:-.018em}
+.open p{color:#cfe2d9;margin-top:16px;max-width:52ch;font-size:15px}
+.open .mini{display:grid;gap:10px;margin-top:22px}
+.open .mini div{display:flex;gap:10px;font-size:13.5px;color:#d9ebe2;align-items:flex-start}
+.open .mini div::before{content:"→";color:var(--amber-500);font-family:var(--mono);flex:0 0 auto}
+.license-card{background:rgba(4,20,14,.42);border:1px solid rgba(209,250,229,.22);border-radius:12px;padding:24px;backdrop-filter:blur(6px)}
+.license-card .top{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#a8c4b8}
+.license-card .wordmark{font-family:var(--display);font-size:26px;margin:16px 0 4px}
+.license-card .sub{font-family:var(--mono);font-size:11px;color:#9db2a9}
+.license-card .code{margin-top:18px;border-color:rgba(209,250,229,.2)}
+.license-card .meta{display:flex;gap:16px;margin-top:14px;font-family:var(--mono);font-size:10px;color:#9db2a9;flex-wrap:wrap}
+
+/* ---------- honesty ---------- */
+.honest{background:var(--paper)}
+.honest-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:clamp(24px,3vw,34px)}
+@media(max-width:900px){.honest-grid{grid-template-columns:1fr}}
+.honest-col{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:20px 20px 16px}
+.honest-col h3{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.honest-col h3 .dot{width:7px;height:7px;border-radius:50%;background:var(--green-700)}
+.honest-col.warn h3 .dot{background:var(--amber-700)}
+.honest-col.stop h3 .dot{background:#9aa0a6}
+.honest-col ul{list-style:none;display:grid;gap:8px}
+.honest-col li{font-size:12.5px;color:var(--muted);line-height:1.5;padding-left:14px;position:relative}
+.honest-col li::before{content:"";position:absolute;left:0;top:7px;width:5px;height:1px;background:#c3c8c0}
+.honest-foot{margin-top:18px;font-size:12.5px;color:var(--faint)}
+.honest-foot a{color:var(--green-700);text-decoration:underline;text-underline-offset:2px}
+
+/* ---------- final cta + footer ---------- */
+.final{padding:clamp(56px,8vw,88px) 0;text-align:center;background:var(--card);border-top:1px solid var(--rule)}
+.final h2{font-family:var(--display);font-weight:500;font-size:clamp(28px,4vw,42px);line-height:1.12;letter-spacing:-.018em;max-width:22ch;margin:0 auto}
+.final p{color:var(--muted);margin:16px auto 0;max-width:54ch;font-size:15px}
+.final .actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:28px}
+footer{background:var(--night);color:var(--night-muted);padding:44px 0 36px;font-size:12.5px}
+.foot-in{display:flex;justify-content:space-between;gap:32px;flex-wrap:wrap;align-items:flex-start}
+.foot-brand{max-width:28ch}
+.foot-brand .brand{color:#fff}
+.foot-brand p{margin-top:10px;color:var(--night-faint);font-size:12px;line-height:1.6}
+.foot-links{display:grid;grid-template-columns:repeat(4,auto);gap:32px}
+.foot-links h4{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#fff;margin-bottom:10px}
+.foot-links a{display:block;padding:3px 0;color:var(--night-muted)}
+.foot-links a:hover{color:#fff}
+.foot-bottom{margin-top:34px;padding-top:18px;border-top:1px solid var(--night-rule);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;color:var(--night-faint)}
+@media(max-width:640px){.foot-links{grid-template-columns:repeat(2,auto);gap:24px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto;transition:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="#" aria-label="SamenERP home">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="7" fill="#0e7c5a"/>
+        <path d="M9 21.5c1.7 1.6 4 2.5 6.6 2.5 3.6 0 6-1.7 6-4.2 0-2.4-1.6-3.5-5.1-4.3l-1.9-.4c-1.7-.4-2.4-.9-2.4-1.8 0-1 1-1.7 2.7-1.7 1.7 0 3.2.6 4.5 1.7l2.1-2.6C20.1 9.4 17.9 8.6 15 8.6c-3.5 0-5.9 1.7-5.9 4.2 0 2.3 1.5 3.4 4.9 4.2l1.9.4c1.8.4 2.6.9 2.6 1.9 0 1.1-1.1 1.8-2.9 1.8-1.9 0-3.6-.7-5-1.9z" fill="#fff"/>
+        <circle cx="24.5" cy="9.5" r="2" fill="#d08a1c"/>
+      </svg>
+      <span>Samen<span class="erp">ERP</span></span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#flexibility">Flexibility</a>
+      <a href="#durability">Durability</a>
+      <a href="#ai">AI</a>
+      <a href="#enterprise">Enterprise</a>
+      <a href="#open-source">Open source</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-quiet" href="/login">Sign in</a>
+      <a class="btn btn-ghost" href="/docs">Docs</a>
+      <a class="btn btn-ghost" href="https://github.com/kubeworkz/samen-erp">GitHub</a>
+      <a class="btn btn-green" href="/signup">Sign up</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div>
+        <span class="hero-badge"><span class="dot"></span>Open source · MIT · Elixir / Ash / Phoenix</span>
+        <h1>Bend it to your business. <em>It won't break.</em></h1>
+        <p class="lede">SamenERP is an open-source ERP with a design-flexible core, a ledger that refuses to be wrong, integrated AI, and enterprise shape from the first commit — not from an upgrade tier.</p>
+        <div class="hero-actions">
+          <a class="btn btn-light btn-lg" href="/signup">Get started free</a>
+          <a class="btn btn-night btn-lg" href="/docs">Read the docs</a>
+          <a class="btn btn-night btn-lg" href="https://github.com/kubeworkz/samen-erp">Browse the source</a>
+        </div>
+        <div class="hero-note">
+          <span>Self-host it</span>
+          <span>Fork it</span>
+          <span>Read every line that touches your P&amp;L</span>
+          <span><a href="/login">Already have an account? Sign in</a></span>
+        </div>
+      </div>
+
+      <div class="proof" aria-label="Example journal entry, balanced by construction">
+        <div class="proof-top">
+          <span>journal_entry · JE-2026-1042</span>
+          <span class="pill">balanced</span>
+        </div>
+        <div class="je">
+          <div class="je-row head"><span>Account</span><span class="num" style="text-align:right">Debit</span><span class="num" style="text-align:right">Credit</span></div>
+          <div class="je-row acct">Cash — Operating<span class="sub">1000 · asset</span></div>
+          <div class="je-row"><span></span><span class="num">12,400.00</span><span class="num zero">—</span></div>
+          <div class="je-row acct">Accounts Receivable<span class="sub">1100 · asset</span></div>
+          <div class="je-row"><span></span><span class="num">8,600.00</span><span class="num zero">—</span></div>
+          <div class="je-row acct">Revenue — Subscriptions<span class="sub">4000 · revenue</span></div>
+          <div class="je-row"><span></span><span class="num zero">—</span><span class="num">18,900.00</span></div>
+          <div class="je-row acct">Sales Tax Payable<span class="sub">2200 · liability</span></div>
+          <div class="je-row" style="border-bottom:none"><span></span><span class="num zero">—</span><span class="num">2,100.00</span></div>
+        </div>
+        <div class="je-foot"><span>Σ debits − Σ credits</span><span><b>0.00</b> — posted, not reconciled later</span></div>
+        <div class="chain"><b>audit</b> h(n) = sha256(h(n−1) ‖ event)<br>trigger: UPDATE/DELETE on chain → refused<br>reveal #4481 · approved by a second party · expires 15:00</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stats-in">
+      <div class="stat"><div class="n">2,715</div><div class="l">Kernel tests</div></div>
+      <div class="stat"><div class="n">1,711</div><div class="l">Framework tests</div></div>
+      <div class="stat"><div class="n">308</div><div class="l">Committed sabotages</div></div>
+      <div class="stat"><div class="n">109</div><div class="l">AI core tests</div></div>
+    </div>
+  </div>
+
+  <!-- FLEXIBILITY -->
+  <section class="section" id="flexibility">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="section-label"><span>01 — Design flexibility</span><span class="bar"></span></div>
+          <h2 class="display">Shaped like your business, not like a vendor's template.</h2>
+          <p class="lede">Most ERPs make you choose between changing your process and forking the product. Samen is built the other way round: the pieces are scopes and declared types you compose, and the surfaces are generated from the same catalog that grounds the AI.</p>
+        </div>
+      </div>
+
+      <div class="flex-grid">
+        <article class="tile">
+          <div class="k">Compose, don't patch</div>
+          <h3>A capability is a scope you mount — not a monolith you hot-fix.</h3>
+          <p>Finance, inventory, procurement, support, CRM and the rest mount into a host with a domain module and a router line. The ERP proof app mounts all of them at roughly zero authored lines of its own.</p>
+          <div class="stack-visual" aria-hidden="true">
+            <div class="layer"><span>your product surfaces</span><span>authored by you</span></div>
+            <div class="layer mid"><span>finance · inventory · procurement · support</span><span>mounted</span></div>
+            <div class="layer"><span>samen_web — planes, masking, UI kit</span><span>framework</span></div>
+            <div class="layer"><span>samen_core — vault, audit, policies, generators</span><span>kernel</span></div>
+          </div>
+        </article>
+
+        <article class="tile">
+          <div class="k">Fields on a Tuesday</div>
+          <h3>Add the field your business actually needs, at runtime.</h3>
+          <p>Custom fields live in a validated JSON bag with bounded types — string, integer, number, boolean, date, enum, money, url, phone, email, address. Vaulted values are validated and normalised on the write path, not on a hope.</p>
+          <div class="chips" aria-label="Custom field types">
+            <span class="chip">string</span><span class="chip">integer</span><span class="chip">number</span>
+            <span class="chip">boolean</span><span class="chip">date</span><span class="chip">enum</span>
+            <span class="chip">money</span><span class="chip">url</span><span class="chip">phone</span>
+            <span class="chip">email</span><span class="chip">address</span>
+          </div>
+          <p style="margin-top:16px;font-size:12.5px;color:var(--faint)">Plus declared rich types: Money, Percent, Score, Duration, Priority, URL, Email, Phone, Address.</p>
+        </article>
+
+        <article class="tile dark">
+          <div class="k">Generate a vertical</div>
+          <h3>One command emits a running product — and it passes its own gate first run.</h3>
+          <p>The generator produces the web UI, JSON:API, seeds, observability, tests and a 19-step verifier gate. No hand edits, no scaffolding graveyard.</p>
+          <div class="code"><span class="c"># emit a new vertical</span>
+$ mix samen.gen.app <span class="p">--module</span> Harbor <span class="p">--prefix</span> hb <span class="p">--abbrev</span> hrb
+
+<span class="c"># it boots, serves every mounted route,</span>
+<span class="c"># and its verifier gate is green on the first run</span></div>
+        </article>
+
+        <article class="tile">
+          <div class="k">One catalog, every surface</div>
+          <h3>The schema is the source of truth for your app, your API and your assistant.</h3>
+          <p>A machine-readable catalog describes every model and field. It renders the in-product documentation, keeps the OpenAPI surface honest, and grounds LLM tooling in your real schema instead of a plausible-sounding guess.</p>
+          <div class="chips">
+            <span class="chip">catalog → /docs</span><span class="chip">catalog → JSON:API</span><span class="chip">catalog → LLM grounding</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- DURABILITY -->
+  <section class="section night" id="durability">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="section-label"><span>02 — Durability</span><span class="bar"></span></div>
+          <h2 class="display">Durability is a property of the ledger, not a line in the brochure.</h2>
+          <p class="lede">A flexible ERP is only worth having if it holds under a bad Tuesday. These are structural refusals, not settings: the wrong thing cannot be recorded in the first place.</p>
+        </div>
+      </div>
+
+      <div class="durability-grid">
+        <div class="dcard">
+          <div class="rule">R1 · General ledger</div>
+          <h3>An unbalanced entry cannot be posted.</h3>
+          <p>Double entry refuses it by construction — not a validation flag somebody can turn off before month-end.</p>
+        </div>
+        <div class="dcard">
+          <div class="rule">R3 · Stock</div>
+          <h3>Stock cannot go negative.</h3>
+          <p>The append-only stock ledger is the source of truth and the on-hand rollup is derived from it. The red path fails closed.</p>
+        </div>
+        <div class="dcard">
+          <div class="rule">R5 · Procurement</div>
+          <h3>A receipt posts stock and the GL together.</h3>
+          <p>One transaction, three-way match enforced. A half-posted goods receipt cannot exist to be cleaned up later.</p>
+        </div>
+        <div class="dcard">
+          <div class="rule">Audit</div>
+          <h3>The audit chain cannot be quietly edited.</h3>
+          <p>Hash-chained and append-only, with a database trigger that refuses UPDATE and DELETE — and the tenant can read the chain the operator writes to.</p>
+        </div>
+        <div class="dcard">
+          <div class="rule">Erasure</div>
+          <h3>Erasure is key destruction, not row scrubbing.</h3>
+          <p>Shred a subject's key material and their vaulted PII is unrecoverable across every tier — attested by a separate-process destruction oracle.</p>
+        </div>
+        <div class="dcard">
+          <div class="rule">Integrations</div>
+          <h3>Adapters fail honestly.</h3>
+          <p>An unconfigured integration returns <span style="font-family:var(--mono);font-size:12px;color:#f5e2c2">:not_configured</span>, never success. Billing and email adapters cannot claim work they did not do.</p>
+        </div>
+      </div>
+
+      <div class="proof-strip">
+        <div>
+          <h3>Every guarantee ships with a sabotage that proves its test can fail.</h3>
+          <p>A test that cannot fail is treated as a bug in this codebase. 308 committed patches replay against the tree, each one required to break the exact test that claims the guarantee — then the tree is restored and checked byte for byte.</p>
+        </div>
+        <div class="loop" aria-label="Sabotage harness steps">
+          <div>apply the patch in a throwaway worktree</div>
+          <div>the named test must fail</div>
+          <div>revert the patch</div>
+          <div>verify a byte-exact restore</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section class="section" id="ai">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="section-label"><span>03 — Integrated AI</span><span class="bar"></span></div>
+          <h2 class="display">AI that reads your schema, not a screenshot of it.</h2>
+          <p class="lede">The AI plane is part of the kernel, not a chat box bolted onto a settings tab. It is bring-your-own-key, grounded in the catalog, and bound by the same vault rules as every other surface.</p>
+        </div>
+      </div>
+
+      <div class="ai-grid">
+        <div class="ai-points">
+          <div class="ai-point">
+            <div class="k">BYOK</div>
+            <div>
+              <h3>Your key, encrypted at rest.</h3>
+              <p>HuggingFace as the BYOK provider, with AES-256-GCM key encryption and token validation. No Samen account in the middle of your inference bill.</p>
+            </div>
+          </div>
+          <div class="ai-point">
+            <div class="k">Streaming</div>
+            <div>
+              <h3>SSE streaming, not a spinner.</h3>
+              <p>Token streaming and usage analytics are covered by 109 tests — 59 on the core and 50 on streaming integration.</p>
+            </div>
+          </div>
+          <div class="ai-point">
+            <div class="k">Grounding</div>
+            <div>
+              <h3>The catalog is the context.</h3>
+              <p>Assistants reason over the machine-readable schema dictionary, so “add a PO for that vendor” maps to real resources and real policies.</p>
+            </div>
+          </div>
+          <div class="ai-point">
+            <div class="k">Privacy</div>
+            <div>
+              <h3>Masked stays masked.</h3>
+              <p>PII resolves through the vault plane. Agent and support surfaces render <span style="font-family:var(--mono);font-size:12px">••••</span> unless a scoped, second-party-approved reveal grant exists — and every reveal lands in the audit chain.</p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="status-card" aria-label="AI plane status">
+          <div class="status-top"><span>AI plane · status</span><span class="pill amber" style="font-size:9.5px">honest</span></div>
+          <div class="status-body">
+            <div class="srow ok"><span class="mark">✓</span><span class="txt"><strong>Key storage, validation, completion, SSE</strong><span>Tested kernel, runs keyless in CI</span></span></div>
+            <div class="srow ok"><span class="mark">✓</span><span class="txt"><strong>Usage analytics over supplied logs</strong><span>Tested against hermetic fakes</span></span></div>
+            <div class="srow ok"><span class="mark">✓</span><span class="txt"><strong>Catalog grounding + masked rendering</strong><span>Same plane rules as the rest of the app</span></span></div>
+            <div class="srow no"><span class="mark">!</span><span class="txt"><strong>Host settings key flow</strong><span>Not wired — connect/validate only display a message</span></span></div>
+            <div class="srow no"><span class="mark">!</span><span class="txt"><strong>Embeddings</strong><span>Returns <span style="font-family:var(--mono)">:not_implemented</span></span></span></div>
+          </div>
+          <div class="status-foot">We publish this card because a marketing page that outruns its code is just a future incident report.</div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ENTERPRISE -->
+  <section class="section alt" id="enterprise">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="section-label"><span>04 — Enterprise</span><span class="bar"></span></div>
+          <h2 class="display">Two planes, governed reveals, and a vendor-free kernel.</h2>
+          <p class="lede">Enterprise features here are architecture, not an upsell. The tenant product plane and the operator control plane are both masked by default, and every disclosure is a second-party decision with an expiry and a receipt.</p>
+        </div>
+      </div>
+
+      <div class="planes">
+        <div class="plane">
+          <div class="k">Plane 01</div>
+          <h3>Tenant product plane</h3>
+          <p>Your team's workspace: finance, procurement, inventory, support, CRM, billing, work.</p>
+          <div class="tags"><span>RBAC</span><span>org scoping</span><span>approvals</span><span>audit-on-write</span></div>
+        </div>
+        <div class="shared" aria-hidden="true">
+          <div class="line"></div>
+          <div>PII vault</div>
+          <div>hash-chained audit</div>
+          <div class="line"></div>
+        </div>
+        <div class="plane operator">
+          <div class="k">Plane 02</div>
+          <h3>Operator control plane</h3>
+          <p>Support and operations, masked by default — including impersonation sessions.</p>
+          <div class="tags"><span>impersonation</span><span>reveal grants</span><span>kill switches</span><span>aggregates</span></div>
+        </div>
+      </div>
+
+      <div class="ent-grid">
+        <div class="ent"><div class="n">Reveal</div><h4>Second-party by construction</h4><p>A distinct approver, enforced in policy and by a database CHECK. Grants expire and cannot be renewed in place.</p></div>
+        <div class="ent"><div class="n">Privacy</div><h4>PII vaulted on both planes</h4><p>One vault chokepoint, <span style="font-family:var(--mono);font-size:11px">vt_</span> tokens at rest, masked rendering everywhere.</p></div>
+        <div class="ent"><div class="n">Audit</div><h4>An impersonated write without an audit row is impossible</h4><p>Audit-on-write has the impersonation context as its mandatory first client.</p></div>
+        <div class="ent"><div class="n">Billing</div><h4>Stripe as an adapter, not a dependency</h4><p>The kernel names zero Stripe strings; the adapter lives in a sibling package with hosted checkout and fail-closed webhooks.</p></div>
+        <div class="ent"><div class="n">Email</div><h4>One behaviour, three vendors</h4><p>Postmark, SES and Resend satisfy the same conformance harness. PII-safe rendering with a no-leak gate.</p></div>
+        <div class="ent"><div class="n">Identity</div><h4>Self-serve spine included</h4><p>Signup, verification, reset, sessions, invites, OIDC with TOTP step-up, and onboarding — generated, not stubbed.</p></div>
+        <div class="ent"><div class="n">Lifecycle</div><h4>Approvals you can point at</h4><p>A general approve/reject engine with requester ≠ approver, plus archival and versioning on the same substrate.</p></div>
+        <div class="ent"><div class="n">Ops</div><h4>Deploy like software</h4><p>Docker and Compose, a Fly / ECS / Kubernetes guide, health and readiness probes, and a gated release path.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- OPEN SOURCE -->
+  <section class="section open" id="open-source">
+    <div class="wrap">
+      <div>
+        <div class="section-label"><span style="color:#a8c4b8">05 — Open source</span><span class="bar" style="background:rgba(209,250,229,.25)"></span></div>
+        <h2>All of it. MIT, no asterisk.</h2>
+        <p>The kernel, the web layer, the generators and the ERP are in one repository you can clone right now. Every claim on this page links to a test, a verifier, a probe or a checked-in artifact — and the claims we cannot prove are listed as unwired, not quietly rounded up.</p>
+        <div class="mini">
+          <div>Self-host on your own infrastructure, with your own Postgres.</div>
+          <div>Fork the ledger instead of building a workaround beside it.</div>
+          <div>Contribute a scope: the framework is where capability belongs.</div>
+        </div>
+      </div>
+
+      <div class="license-card">
+        <div class="top"><span>license</span><span class="pill">MIT</span></div>
+        <div class="wordmark">Samen<span style="color:var(--green-300)">ERP</span></div>
+        <div class="sub">Elixir · Ash · Phoenix · PostgreSQL</div>
+        <div class="code"><span class="c"># clone the whole foundry</span>
+$ git clone https://github.com/kubeworkz/samen-erp
+$ cd samen-erp && bash ci.sh
+
+<span class="c"># prove the guarantees can fail</span>
+$ SAMEN_SABOTAGE=1 ./ci.sh</div>
+        <div class="meta"><span>49 ADRs</span><span>claim-evidence map</span><span>19-step verifier gate</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HONESTY -->
+  <section class="section honest">
+    <div class="wrap">
+      <div class="section-label"><span>06 — The claim set</span><span class="bar"></span></div>
+      <h2 class="display" style="font-size:clamp(24px,3.2vw,34px)">What's live, what's a shell, and what we refuse to claim.</h2>
+      <p class="lede" style="margin-top:12px">The same discipline that writes the tests writes the marketing. This is the short version; the long version is the README's claim table.</p>
+
+      <div class="honest-grid">
+        <div class="honest-col">
+          <h3><span class="dot"></span>Live and tested</h3>
+          <ul>
+            <li>PII vault, masked rendering on both planes, crypto-shred erasure with a destruction oracle</li>
+            <li>Second-party reveal grants and the hash-chained, tenant-readable audit log</li>
+            <li>Identity spine: signup, verification, reset, sessions, invites, OIDC + TOTP, 2FA</li>
+            <li>Finance GL, AP/AR, stock ledger, procurement, manufacturing, HR/leave, expenses, banking, multi-currency, statements</li>
+            <li>Stripe billing and Postmark / SES / Resend delivery behind one behaviour</li>
+            <li>HuggingFace BYOK AI core: encrypted keys, validation, completion, SSE, usage analytics</li>
+          </ul>
+        </div>
+        <div class="honest-col warn">
+          <h3><span class="dot"></span>Shell, not wired</h3>
+          <ul>
+            <li>HuggingFace settings key flow and the daily credential sweep</li>
+            <li>SSO / SAML production assertion validation</li>
+            <li>Monitoring, automated backups and PITR</li>
+            <li>Plan-based API and AI rate limits</li>
+            <li>Customer audit-log export, data residency, white-label branding</li>
+            <li>Warehouse transfers and landed-cost posting workflows</li>
+          </ul>
+        </div>
+        <div class="honest-col stop">
+          <h3><span class="dot"></span>Kept out on purpose</h3>
+          <ul>
+            <li>“Run support without ever seeing PII” — retired as false by construction</li>
+            <li>“Complete API reference” — the served OpenAPI covers two paths today</li>
+            <li>Trial Balance as a live statement — deleted rather than decorated</li>
+            <li>Compliance certification — we describe controls, we do not claim an audit</li>
+          </ul>
+        </div>
+      </div>
+      <p class="honest-foot">Full mapping: <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/claim-evidence.md">claim evidence</a> · <a href="https://github.com/kubeworkz/samen-erp#readme">README claim set</a> · <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/compliance-story.md">compliance story</a></p>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final">
+    <div class="wrap">
+      <h2>An ERP you can read, bend, and keep.</h2>
+      <p>Clone it, run the gate, and point the AI at your own schema. If a guarantee on this page does not hold, there is a test and a sabotage that says so in the repository.</p>
+      <div class="actions">
+        <a class="btn btn-green btn-lg" href="/signup">Create an account</a>
+        <a class="btn btn-ghost btn-lg" href="/docs">Explore the docs</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/kubeworkz/samen-erp">Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-in">
+      <div class="foot-brand">
+        <a class="brand" href="#">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="1" y="1" width="30" height="30" rx="7" fill="#0e7c5a"/>
+            <path d="M9 21.5c1.7 1.6 4 2.5 6.6 2.5 3.6 0 6-1.7 6-4.2 0-2.4-1.6-3.5-5.1-4.3l-1.9-.4c-1.7-.4-2.4-.9-2.4-1.8 0-1 1-1.7 2.7-1.7 1.7 0 3.2.6 4.5 1.7l2.1-2.6C20.1 9.4 17.9 8.6 15 8.6c-3.5 0-5.9 1.7-5.9 4.2 0 2.3 1.5 3.4 4.9 4.2l1.9.4c1.8.4 2.6.9 2.6 1.9 0 1.1-1.1 1.8-2.9 1.8-1.9 0-3.6-.7-5-1.9z" fill="#fff"/>
+            <circle cx="24.5" cy="9.5" r="2" fill="#d08a1c"/>
+          </svg>
+          <span>Samen<span style="color:var(--green-300)">ERP</span></span>
+        </a>
+        <p>Open-source, developer-first ERP. Built with Elixir, Ash and Phoenix. AI-authored under human direction, adversarially gated.</p>
+      </div>
+      <div class="foot-links">
+        <div>
+          <h4>Product</h4>
+          <a href="#flexibility">Design flexibility</a>
+          <a href="#durability">Durability</a>
+          <a href="#ai">Integrated AI</a>
+          <a href="#enterprise">Enterprise</a>
+        </div>
+        <div>
+          <h4>Account</h4>
+          <a href="/signup">Sign up free</a>
+          <a href="/login">Sign in</a>
+        </div>
+        <div>
+          <h4>Docs</h4>
+          <a href="/docs">Documentation</a>
+          <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/guides/getting-started.md">Getting started</a>
+          <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/claim-evidence.md">Claim evidence</a>
+          <a href="https://github.com/kubeworkz/samen-erp/blob/main/docs/README.md">Docs index</a>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <a href="https://github.com/kubeworkz/samen-erp">GitHub</a>
+          <a href="https://github.com/kubeworkz/samen-erp/blob/main/LICENSE">MIT license</a>
+          <a href="https://github.com/kubeworkz/samen-erp/blob/main/SECURITY.md">Security</a>
+          <a href="https://ckluis.github.io/samen/">Design story</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>SamenERP · MIT © 2026 Chris Kluis</span>
+      <span>Every claim links to a test · every test has a sabotage</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
