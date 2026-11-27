@@ -1,0 +1,23 @@
+# SABOTAGE: samenerp-homepage-scaffold-fallback MED
+# GET / is a marketing artifact (samenerp/priv/homepage.html) served verbatim by
+# SamenerpWeb.PageController.index/2. This patch reintroduces the retired
+# controller-owned scaffold — the "47 modules, 697 tests" module grid — which is
+# the exact regression the byte-for-byte route test exists for: nothing crashes
+# and every other suite stays green, the page simply stops being the marketing
+# page. The named test must fail on the artifact comparison, not on an error.
+# APP: samenerp
+# TEST_FILES: test/homepage_route_test.exs
+# MUST_FAIL: GET / serves priv/homepage.html verbatim, not the scaffolded module grid
+diff --git a/samenerp/lib/samenerp_web/page_controller.ex b/samenerp/lib/samenerp_web/page_controller.ex
+index 930bb02d..21b64c3c 100644
+--- a/samenerp/lib/samenerp_web/page_controller.ex
++++ b/samenerp/lib/samenerp_web/page_controller.ex
+@@ -26,7 +26,7 @@ defmodule SamenerpWeb.PageController do
+   @homepage "homepage.html"
+ 
+   def index(conn, _params) do
+-    html(conn, homepage!())
++    html(conn, "<h1>Inherited from Samen Web</h1><p>47 modules, 697 tests</p>")
+   end
+ 
+   def healthz(conn, _params) do
