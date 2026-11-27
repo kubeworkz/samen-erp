@@ -9,10 +9,13 @@ defmodule Samenerp.HomepageRouteTest do
   The regression this file exists for is silent, not loud: a revert to a
   controller-owned string, a typo in the priv path, or a fallback to an empty 200
   would leave every other test green while `/` quietly stopped being the
-  marketing page. So the oracle is the ARTIFACT, not a phrase — the response must
-  equal the bytes of `priv/homepage.html`, and the scaffold's own fingerprints
-  (`47 modules`, `Inherited from Samen Web`) must be absent, which no future
-  marketing copy will accidentally satisfy.
+  marketing page. So the oracle is the CHECKED-IN ARTIFACT, not a phrase: the
+  response must equal the bytes of `samenerp/priv/homepage.html` read from the
+  source tree, and the scaffold's own fingerprints (`47 modules`, `Inherited from
+  Samen Web`) must be absent, which no future marketing copy will accidentally
+  satisfy. Reading the source rather than `Application.app_dir/2` is deliberate —
+  the latter is the `_build` copy Mix makes, so a stale or unbuilt artifact would
+  compare stale-to-stale and pass.
 
   The second leg pins the neighbours that share this controller: serving a
   beautiful homepage is not a trade for a dark `/healthz`, a lying `/readyz` or a
@@ -39,18 +42,26 @@ defmodule Samenerp.HomepageRouteTest do
 
   @endpoint SamenerpWeb.Endpoint
 
-  # The artifact the controller reads, relative to this app's priv dir — the same
-  # resolution `PageController.homepage!/0` performs at request time.
-  @homepage "priv/homepage.html"
+  # The CHECKED-IN artifact, read from THIS repo's source tree — not the path
+  # `PageController.homepage!/0` serves at request time. Serving reads
+  # `_build/<env>/lib/samenerp/priv`, which Mix COPIES rather than symlinks on a
+  # Windows checkout, so comparing the response against app_dir would let an edit
+  # that was never rebuilt pass stale-to-stale. Reading `samenerp/priv` makes a
+  # stale or missing build copy fail here instead.
+  @homepage Path.expand("../priv/homepage.html", __DIR__)
 
   setup do
     start_supervised!(@endpoint)
     :ok
   end
 
-  defp homepage_bytes do
-    Application.app_dir(:samenerp, @homepage) |> File.read!()
-  end
+  defp homepage_bytes, do: File.read!(@homepage)
+
+  # Line endings are checkout business, not content: `.gitattributes` hands this
+  # Windows worktree CRLF while the blob (and the build copy Mix derives from it)
+  # is LF. Normalising both sides keeps the comparison pinned to CONTENT, which is
+  # what the route promises.
+  defp normalize_eol(body), do: String.replace(body, "\r\n", "\n")
 
   # The readiness contract the route must mirror, computed the same way `readyz/2`
   # computes it — the oracle is the check, not this environment's verdict.
@@ -80,10 +91,12 @@ defmodule Samenerp.HomepageRouteTest do
 
     assert conn.status == 200, "GET / answered #{conn.status} — the marketing homepage is down"
 
-    assert conn.resp_body == artifact,
-           "GET / did not serve priv/homepage.html verbatim: the response is " <>
-             "#{byte_size(conn.resp_body)} bytes against the artifact's #{byte_size(artifact)}. " <>
-             "A controller-owned page (the retired scaffold) or a stale copy is serving instead"
+    assert normalize_eol(conn.resp_body) == normalize_eol(artifact),
+           "GET / did not serve the checked-in priv/homepage.html: the response is " <>
+             "#{byte_size(conn.resp_body)} bytes against the source artifact's " <>
+             "#{byte_size(artifact)}. A controller-owned page (the retired scaffold) is serving " <>
+             "instead, or the _build copy is stale — Mix copies priv, so an HTML edit needs a " <>
+             "`mix compile` before the route can serve it"
 
     # The verifiable shape of the page, so a failure names what is missing rather
     # than only "bytes differ".
