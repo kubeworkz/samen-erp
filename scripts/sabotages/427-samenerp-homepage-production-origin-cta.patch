@@ -1,0 +1,22 @@
+# SABOTAGE: samenerp-homepage-production-origin-cta MED
+# The homepage's own docs CTA points at /docs so the page works on whatever host
+# serves it (preview, self-host, a self-hoster's domain, the test endpoint). This
+# patch restores the production-only absolute CTA: the page still matches its
+# artifact byte for byte and every route still answers, but a visitor on any other
+# host is handed off to samenerp.kubeworkz.io. Only the link leg can see it.
+# APP: samenerp
+# TEST_FILES: test/homepage_route_test.exs
+# MUST_FAIL: GET / links this host's docs and account routes, never an absolute site origin
+diff --git a/samenerp/priv/homepage.html b/samenerp/priv/homepage.html
+index fb00b21f..8e23002b 100644
+--- a/samenerp/priv/homepage.html
++++ b/samenerp/priv/homepage.html
+@@ -301,7 +301,7 @@ footer{background:var(--night);color:var(--night-muted);padding:44px 0 36px;font
+     </nav>
+     <div class="nav-cta">
+       <a class="btn btn-quiet" href="/login">Sign in</a>
+-      <a class="btn btn-ghost" href="/docs">Docs</a>
++      <a class="btn btn-ghost" href="https://samenerp.kubeworkz.io/docs">Docs</a>
+       <a class="btn btn-ghost" href="https://github.com/kubeworkz/samen-erp">GitHub</a>
+       <a class="btn btn-green" href="/signup">Sign up</a>
+     </div>
