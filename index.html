@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Samen — the SaaS foundry where PII is masked by default and every guarantee ships with a sabotage that proves it can fail</title>
+<title>Samen - the SaaS foundry where PII is masked by default and every guarantee ships with a sabotage that proves it can fail</title>
 <meta name="description" content="An Elixir · Ash · Phoenix substrate for launching many SaaS products without re-solving PII vaulting, crypto-shred erasure, two-plane operator support, or the verification that proves any of it.">
-<meta property="og:title" content="Samen — a SaaS foundry with the hard parts already solved">
+<meta property="og:title" content="Samen - a SaaS foundry with the hard parts already solved">
 <meta property="og:description" content="PII masked by default on every plane. Reveal is second-party approved and hash-chain logged. Erasure is key destruction, not row scrubbing. 425 committed sabotages prove the tests can fail.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,7 +65,7 @@ h3{font-family:var(--body);font-weight:600;font-size:18px;line-height:1.35;lette
 h1 em,h2 em{font-style:italic;font-weight:400;color:var(--accent-deep)}
 .kicker{font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--accent-deep);letter-spacing:.1em;text-transform:uppercase}
 .sec-label{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin-bottom:18px;display:block}
-.sec-label::before{content:"— ";color:var(--accent)}
+.sec-label::before{content:"- ";color:var(--accent)}
 .lede{font-size:clamp(18px,2.1vw,21px);line-height:1.58;color:var(--muted);max-width:60ch}
 .lede strong{color:var(--ink);font-weight:600}
 .act .lede strong{color:var(--night-ink)}
@@ -370,7 +370,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 .ms-tag.operator { color: var(--accent-deep); }
 .ms-tag.operator .ms-d { background: var(--accent-deep); }
 .ms-tag b { color: var(--ink); font-weight: 600; }
-/* ---- the AI agent loop (ADR-047) — run + propose-then-approve decision card ---- */
+/* ---- the AI agent loop (ADR-047) - run + propose-then-approve decision card ---- */
   .ui-frame .ui-ag { display: grid; grid-template-columns: 1fr 336px; gap: 12px; align-items: start; }
 .ui-frame .ui-ag-run { border: 1px solid var(--uc-line2); border-radius: 12px; background: var(--uc-card); overflow: hidden; }
 .ui-frame .ui-ag-rh { display: flex; align-items: center; gap: 11px; padding: 13px 16px; border-bottom: 1px solid var(--uc-line); }
@@ -426,7 +426,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
   }
 
 
-/* ================== PLANE SIMULATOR — CSS-only actor switch ==================
+/* ================== PLANE SIMULATOR - CSS-only actor switch ==================
    Radio inputs + :checked sibling selectors. No JavaScript. Keyboard accessible:
    the labels are real <label for>, so arrow keys move between actors. */
 .sim{position:relative;left:50%;transform:translateX(-50%);width:min(1240px,calc(100vw - 32px));margin-top:34px}
@@ -507,7 +507,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
   <div aria-hidden="true" style="position:absolute;inset:0;background:radial-gradient(900px 460px at 12% -8%,rgba(59,76,202,.20),transparent 62%),radial-gradient(700px 380px at 92% 8%,rgba(124,134,232,.10),transparent 58%)"></div>
   <div class="wrap" style="position:relative">
     <p class="kicker rise d1" style="color:#8E98EE">Elixir · Ash · Phoenix &nbsp;·&nbsp; MIT &nbsp;·&nbsp; an AI-authored codebase</p>
-    <h1 class="rise d2" style="margin-top:26px;max-width:17ch">The hard 80% of a SaaS, solved once — <em>and adversarially proven.</em></h1>
+    <h1 class="rise d2" style="margin-top:26px;max-width:17ch">The hard 80% of a SaaS, solved once - <em>and adversarially proven.</em></h1>
     <p class="lede rise d3" style="margin-top:30px;max-width:62ch;color:#B9BCCB">
       Samen is a substrate for one builder, or a small studio, to launch <strong>many</strong> products without
       re-solving the parts that are genuinely hard: <strong>PII vaulting and masking</strong>, <strong>crypto-shred erasure</strong>,
@@ -548,7 +548,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <div class="callout callout--honest">
           <strong>What we deliberately do not claim.</strong> An earlier version of this page said
           &ldquo;run support without ever seeing PII.&rdquo; It sounded better and it was false by construction,
-          so it was retired. Support <em>can</em> see PII — through a grant a second person approved,
+          so it was retired. Support <em>can</em> see PII - through a grant a second person approved,
           that expires on its own, and that the tenant can audit without asking permission.
         </div>
         <p class="small">That retraction is the shortest honest summary of how this repo is built. Every claim
@@ -564,7 +564,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
   <div class="wrap">
 
     <span class="sec-label">The problem</span>
-    <h2 style="max-width:19ch">Every product rebuilds the same 80% — and <em>rebuilds the leak with it.</em></h2>
+    <h2 style="max-width:19ch">Every product rebuilds the same 80% - and <em>rebuilds the leak with it.</em></h2>
 
     <div class="split" style="margin-top:clamp(30px,4vw,48px)">
 
@@ -591,7 +591,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
         <p>Every one of those surfaces is also a place customer data comes <em>out</em>. The support desk
           renders it. The CSV export writes it into a file somebody then emails. The logs catch it in
-          passing. The admin impersonation view sees everything, by design — that is what it is for.
+          passing. The admin impersonation view sees everything, by design - that is what it is for.
           Add a surface and you have not added one feature; you have added another door onto the same
           data, each with its own idea of who may open it and whether anyone finds out.</p>
 
@@ -669,7 +669,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             <text x="15" y="255.5">plaintext, in the clear</text>
             <text x="200" y="255.5">masked by default</text>
           </g>
-          <text x="0" y="276" font-family="'JetBrains Mono',ui-monospace,monospace" font-size="9" fill="#8A8C99">…plus notifications, files, settings, search — each a new door</text>
+          <text x="0" y="276" font-family="'JetBrains Mono',ui-monospace,monospace" font-size="9" fill="#8A8C99">…plus notifications, files, settings, search - each a new door</text>
         </svg>
         <p class="figcap">Six data surfaces &times; three products = eighteen places a rule has to be
           remembered. Consolidating them does not help unless the consolidated version changes what
@@ -683,12 +683,12 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <div class="split">
       <div>
         <span class="kicker">The turn</span>
-        <p style="font-family:var(--display);font-size:clamp(21px,2.7vw,30px);line-height:1.3;font-weight:500;letter-spacing:-.016em;color:var(--ink);margin-top:16px;max-width:19ch">Samen solves the 80% once, at the substrate — and makes masking <em style="font-style:italic;font-weight:400;color:var(--accent-deep)">the default state of a field</em>, not a feature someone remembers to add.</p>
+        <p style="font-family:var(--display);font-size:clamp(21px,2.7vw,30px);line-height:1.3;font-weight:500;letter-spacing:-.016em;color:var(--ink);margin-top:16px;max-width:19ch">Samen solves the 80% once, at the substrate - and makes masking <em style="font-style:italic;font-weight:400;color:var(--accent-deep)">the default state of a field</em>, not a feature someone remembers to add.</p>
       </div>
       <div class="stack">
         <p>A field declared as PII does not hold plaintext anywhere at rest. The row carries a
           <span class="tok">vt_&#8230;</span> token; the value lives in a per-subject-keyed vault; and what
-          every reader gets back — the desk, the JSON API, the CSV writer, the log line — is
+          every reader gets back - the desk, the JSON API, the CSV writer, the log line - is
           <span class="mask">&#8226;&#8226;&#8226;&#8226;</span> unless a grant a second person approved says
           otherwise, and even then only until it expires.</p>
         <div class="callout callout--honest">
@@ -696,7 +696,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           support-desk library across three products gives you one implementation of the desk. It does
           not give you one place where the decision to show a customer&rsquo;s phone number is made.
           Reuse alone just means you copied the leak forward with tidier code. What has to be shared is
-          the field&rsquo;s default, the single decrypt path, and the audit record — not the CRUD.
+          the field&rsquo;s default, the single decrypt path, and the audit record - not the CRUD.
         </div>
       </div>
     </div>
@@ -713,7 +713,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:20ch">Six idioms, applied to <em>every object, in every scope.</em></h2>
 
     <p class="lede" style="max-width:64ch">The interesting word is not <em>six</em>. It is <strong>every</strong>.
-      A masking rule that the support desk honours and the CSV writer forgets is not a masking rule — it is a
+      A masking rule that the support desk honours and the CSV writer forgets is not a masking rule - it is a
       convention, and conventions fail at the exact moment someone is shipping under pressure. So these six
       hold at the substrate, for every resource, on both planes, in code nobody has to remember to call.
       <strong>A guarantee that holds in most places is not a guarantee.</strong></p>
@@ -724,7 +724,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <span class="card-num">Idiom 01</span>
         <h3>Self-qualifying storage</h3>
         <p>You write <code>attribute :name</code>. A compile-time transformer projects it to
-          <code>com_name</code> — the same qualified name in the database, in CDC, in logs, and in the
+          <code>com_name</code> - the same qualified name in the database, in CDC, in logs, and in the
           catalog. Abbrevs are permanent, like a ticker: once <code>com_</code> means company, it means
           company everywhere, forever.</p>
       </div>
@@ -744,7 +744,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <p>Declaring a <code>pii_attribute</code> routes the value into a per-subject-keyed vault; the row
           keeps only a <span class="tok">vt_&#8230;</span> token, and plaintext is nowhere at rest. Masking
           is the field&rsquo;s <em>normal</em> value: <code>%Masked{}</code> renders as
-          <span class="mask">&#8226;&#8226;&#8226;&#8226;</span> in UI, JSON, CSV and logs alike — CSV masks
+          <span class="mask">&#8226;&#8226;&#8226;&#8226;</span> in UI, JSON, CSV and logs alike - CSV masks
           by omission. There is exactly one decrypt chokepoint.</p>
       </div>
 
@@ -762,8 +762,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <h3>A malleability ladder</h3>
         <p>Customer-specific shape has four rungs, in order of blast radius: Tier-0 config rows, Tier-1
           jsonb custom fields validated at write, Tier-2 tenant-defined objects, Tier-3 builder
-          code-composition. Types are declared, not stringly — Money, Percent, Score, Duration, Priority,
-          URL, Email, Phone, Address — and the vault write path re-runs each type&rsquo;s
+          code-composition. Types are declared, not stringly - Money, Percent, Score, Duration, Priority,
+          URL, Email, Phone, Address - and the vault write path re-runs each type&rsquo;s
           <code>cast_input</code>, so a value is validated and normalized <em>before</em> it is tokenized.</p>
       </div>
 
@@ -772,8 +772,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <h3>Two planes, one core</h3>
         <p>The tenant plane and the operator plane are two front doors onto one kernel, not two codebases
           that drift apart. Your staff read the same <code>%Masked{}</code> values your customers&rsquo;
-          users do. Seeing plaintext takes a grant that a <em>distinct</em> party approved — enforced in
-          policy and by a database <code>CHECK</code> — that expires on its own and lands in a
+          users do. Seeing plaintext takes a grant that a <em>distinct</em> party approved - enforced in
+          policy and by a database <code>CHECK</code> - that expires on its own and lands in a
           hash-chained log the tenant can read without asking.</p>
       </div>
 
@@ -793,7 +793,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <li><strong>The projection is compile-time, not convention.</strong> You write
             <code>attribute :name</code> on a company resource; a transformer rewrites it to
             <code>com_name</code> for storage, for the CDC stream, for log fields, and for the catalog
-            entry — one derivation, four consumers, no second place to keep in sync.</li>
+            entry - one derivation, four consumers, no second place to keep in sync.</li>
           <li><strong>Abbrevs are permanent, like a ticker symbol.</strong> An abbrev is allocated once and
             never reassigned. That is what lets a column name be a durable identifier across renames,
             extracts, and downstream systems that saw it years ago.</li>
@@ -802,7 +802,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             and forget to register it, and you cannot register a field that does not exist.</li>
           <li><strong>This is what makes the rest mechanical.</strong> Once every field is qualified and
             catalogued, &ldquo;which fields hold PII&rdquo; stops being tribal knowledge and becomes a
-            query — which is exactly what the vault, the masking renderers, and
+            query - which is exactly what the vault, the masking renderers, and
             <code>mix samen.verify.no_plaintext_pii</code> run against.</li>
         </ul>
       </div>
@@ -824,8 +824,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         </div>
 
         <p class="lede">
-          You write <code>pii_attribute :email, :string</code>. A compile-time path routes that field —
-          every write, every read, every export — through <strong>one vault chokepoint</strong> to a
+          You write <code>pii_attribute :email, :string</code>. A compile-time path routes that field -
+          every write, every read, every export - through <strong>one vault chokepoint</strong> to a
           <strong>per-subject key</strong>. The domain row stores a token, <span class="tok">vt_9f2c…</span>.
           The ciphertext lives in the vault. <strong>Plaintext is nowhere at rest.</strong>
         </p>
@@ -835,7 +835,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           is what the field already returns, <em>forgetting</em> to mask is not a mistake available to you.
           There is no un-masked default waiting to leak through a new template, a new serializer, a hurried
           <code>inspect/1</code>, or a log line someone added at 2am. To get plaintext you have to
-          <em>ask</em> — and asking is the thing that writes the audit record.
+          <em>ask</em> - and asking is the thing that writes the audit record.
         </div>
 
         <div class="pills">
@@ -846,7 +846,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         </div>
 
         <p class="small measure">
-          CSV is the interesting one. It masks <strong>by omission</strong> — the column is not in the file
+          CSV is the interesting one. It masks <strong>by omission</strong> - the column is not in the file
           at all. A masked export cannot be un-masked by staring at it, because there is nothing in the
           bytes to stare at. Downstream tooling receives a schema without the field, not a field it might
           one day try to un-redact.
@@ -854,8 +854,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
         <div class="callout callout--honest">
           <strong>What this costs you.</strong> The guarantee is exactly as strong as key custody.
-          Destroying a subject's key material destroys their data everywhere — that is precisely how
-          erasure works here — which means a lost key is an accidental erasure, not a recoverable
+          Destroying a subject's key material destroys their data everywhere - that is precisely how
+          erasure works here - which means a lost key is an accidental erasure, not a recoverable
           incident. Samen makes that trade on purpose and does not pretend it is free.
         </div>
       </div>
@@ -874,16 +874,16 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             </marker>
           </defs>
 
-          <!-- 1 — the declaration -->
+          <!-- 1 - the declaration -->
           <rect x="4" y="6" width="372" height="68" rx="10" fill="#FFFFFF" stroke="#E5E3DD"/>
           <text x="22" y="31" font-size="13" letter-spacing="0.7" fill="#8A8C99">YOU DECLARE</text>
           <text x="22" y="57" font-size="15" fill="#15161C">pii_attribute :email</text>
 
-          <!-- 2 — the walls of the gate -->
+          <!-- 2 - the walls of the gate -->
           <polygon points="4,140 166,204 166,240 4,240" fill="#EEF0FD" stroke="#3B4CCA" stroke-width="1.2" stroke-linejoin="round"/>
           <polygon points="376,140 214,204 214,240 376,240" fill="#EEF0FD" stroke="#3B4CCA" stroke-width="1.2" stroke-linejoin="round"/>
 
-          <!-- 3 — every path converges on the slot -->
+          <!-- 3 - every path converges on the slot -->
           <text x="70"  y="94" font-size="13" fill="#8A8C99" text-anchor="middle">write</text>
           <text x="190" y="94" font-size="13" fill="#8A8C99" text-anchor="middle">read</text>
           <text x="310" y="94" font-size="13" fill="#8A8C99" text-anchor="middle">export</text>
@@ -897,11 +897,11 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="296" y="202" font-size="13" letter-spacing="0.7" fill="#2A37A0" text-anchor="middle">ONE DECRYPT</text>
           <text x="296" y="219" font-size="13" letter-spacing="0.7" fill="#2A37A0" text-anchor="middle">PATH</text>
 
-          <!-- 4 — out of the slot -->
+          <!-- 4 - out of the slot -->
           <path d="M190,208 V258" stroke="#3B4CCA" stroke-width="2" fill="none" marker-end="url(#vkArrowInk)"/>
           <text x="190" y="276" font-size="13" fill="#565866" text-anchor="middle">cast_input → encrypt → tokenize</text>
 
-          <!-- 5 — the row keeps a token, the vault keeps the ciphertext -->
+          <!-- 5 - the row keeps a token, the vault keeps the ciphertext -->
           <path d="M190,282 V298 H92 V310"  stroke="#3B4CCA" stroke-width="1.4" fill="none" marker-end="url(#vkArrowInk)"/>
           <path d="M190,282 V298 H288 V310" stroke="#3B4CCA" stroke-width="1.4" fill="none" marker-end="url(#vkArrowInk)"/>
 
@@ -919,7 +919,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="226" y="392" font-size="13" fill="#565866">a7f3…9c1e</text>
           <text x="216" y="413" font-size="12.5" fill="#1B7A5A">ciphertext only</text>
 
-          <!-- 6 — the default return value -->
+          <!-- 6 - the default return value -->
           <path d="M92,420 V440 H190"  stroke="#8A8C99" stroke-width="1.3" fill="none"/>
           <path d="M288,420 V440 H190" stroke="#8A8C99" stroke-width="1.3" fill="none"/>
           <path d="M190,440 V452"      stroke="#8A8C99" stroke-width="1.3" fill="none" marker-end="url(#vkArrow)"/>
@@ -927,7 +927,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="190" y="483" font-size="13" letter-spacing="0.7" fill="#2A37A0" text-anchor="middle">EVERY READ RETURNS, BY DEFAULT</text>
           <text x="190" y="510" font-size="16.5" fill="#15161C" text-anchor="middle">%Masked{} → ••••</text>
 
-          <!-- 7 — four surfaces, same value -->
+          <!-- 7 - four surfaces, same value -->
           <path d="M190,524 V722" stroke="#C3C9F5" stroke-width="1.4" fill="none"/>
           <path d="M190,600 H178" stroke="#C3C9F5" stroke-width="1.4" fill="none" marker-end="url(#vkArrowInk)"/>
           <path d="M190,600 H202" stroke="#C3C9F5" stroke-width="1.4" fill="none" marker-end="url(#vkArrowInk)"/>
@@ -956,7 +956,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="222" y="719" font-size="13" fill="#565866">com_email=••••</text>
           <text x="222" y="743" font-size="12.5" fill="#8A8C99">subject=vt_9f2c…</text>
 
-          <!-- 8 — the closing line -->
+          <!-- 8 - the closing line -->
           <text x="190" y="800" font-size="14" letter-spacing="0.4" fill="#1B7A5A" text-anchor="middle">Plaintext is nowhere at rest.</text>
         </svg>
         <div class="figcap">One declaration. One chokepoint. One decrypt path. Four surfaces that all
@@ -986,20 +986,20 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       </div>
 
       <div class="term">
-        <span class="c"># JSON:API — no per-endpoint masking rule exists</span><br>
+        <span class="c"># JSON:API - no per-endpoint masking rule exists</span><br>
         <span class="p">$</span> curl -s .../customers/8812 | jq .data.attributes<br>
         &nbsp;&nbsp;{ "name": "Ada Whitfield", "email": <span class="hl">"••••"</span>, "phone": <span class="hl">"••••"</span> }<br><br>
-        <span class="c"># CSV — masks by omission; the column is not emitted</span><br>
+        <span class="c"># CSV - masks by omission; the column is not emitted</span><br>
         <span class="p">$</span> head -1 export.csv<br>
         &nbsp;&nbsp;id,name,created_at&nbsp;&nbsp;<span class="c"># no email, no phone</span><br><br>
-        <span class="c"># logs and CDC — same field, same default</span><br>
+        <span class="c"># logs and CDC - same field, same default</span><br>
         <span class="p">$</span> tail -1 log/prod.log<br>
         &nbsp;&nbsp;event=customer.updated com_email=<span class="hl">••••</span> subject=<span class="hl">vt_9f2c…</span>
       </div>
     </div>
 
     <details class="drawer">
-      <summary>Why there is exactly one chokepoint — and what runs on the write path before tokenization</summary>
+      <summary>Why there is exactly one chokepoint - and what runs on the write path before tokenization</summary>
       <div class="drawer-body">
         <p><strong>One decrypt path is not an aesthetic preference. It is what makes the guarantee
         checkable.</strong> If plaintext can be produced at forty call sites, then &ldquo;no plaintext
@@ -1008,11 +1008,11 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         answer: <em>who called it, under what grant, and was it recorded?</em></p>
         <ul>
           <li><strong>The verifier can point at it.</strong> <code>mix samen.verify.no_plaintext_pii</code>
-            runs as a <strong>separate OS process</strong> — it does not share the application's memory or
-            its assumptions — and attests that no tier holds plaintext: domain rows, the vault, audit
+            runs as a <strong>separate OS process</strong> - it does not share the application's memory or
+            its assumptions - and attests that no tier holds plaintext: domain rows, the vault, audit
             events, rollups, Oban args, the KMS store.</li>
           <li><strong>The write path validates before it tokenizes, not after.</strong> Samen ships rich
-            declared types — Money, Percent, Score, Duration, Priority, URL, Email, Phone, Address. The
+            declared types - Money, Percent, Score, Duration, Priority, URL, Email, Phone, Address. The
             vault write path <strong>re-runs each declared type's <code>cast_input</code></strong>, so the
             value is validated and normalized <em>before</em> it becomes ciphertext. Get that order wrong
             and you have stored a malformed value you can no longer inspect, and normalization becomes a
@@ -1021,8 +1021,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             It is stable enough to join, group and audit on, and it says nothing about the value behind
             it. Analytics can use it; analytics cannot resolve it.</li>
           <li><strong>Masking is a value, not a formatter.</strong> <code>%Masked{}</code> is what the
-            field returns. Every surface that renders it — HEEx, JSON:API serializers, CSV writers, the
-            logger, CDC — is rendering an ordinary value, which is why none of them had to be taught
+            field returns. Every surface that renders it - HEEx, JSON:API serializers, CSV writers, the
+            logger, CDC - is rendering an ordinary value, which is why none of them had to be taught
             about PII.</li>
         </ul>
       </div>
@@ -1044,14 +1044,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         </div>
 
         <p class="lede">
-          A dispatcher is on the phone with a customer whose address bounced. She needs the address —
+          A dispatcher is on the phone with a customer whose address bounced. She needs the address -
           the actual string, not <span class="mask">••••</span>. Pretending otherwise only pushes the
           real work into a shared spreadsheet nobody audits. Samen keeps the exception inside the system
           and charges for it.
         </p>
 
         <p>
-          Before the grant, the field reads <span class="mask">••••</span> — on every surface, for
+          Before the grant, the field reads <span class="mask">••••</span> - on every surface, for
           everyone. For the life of the grant, and only for this subject, and only for the fields named
           in it, it reads <span class="plain">14 Wharf Rd, Bristol</span>. When
           <code>expires_at</code> passes it reads <span class="mask">••••</span> again, and nobody had
@@ -1076,7 +1076,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <svg viewBox="0 0 380 660" width="100%" preserveAspectRatio="xMidYMid meet" role="img"
              style="display:block;height:auto"
              font-family="'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace">
-          <title>Four-step reveal flow: request, second-party approval gated by a database CHECK constraint that refuses self-approval, a time-boxed reveal, and a hash-chained audit entry — after which the field returns to masked with no one acting.</title>
+          <title>Four-step reveal flow: request, second-party approval gated by a database CHECK constraint that refuses self-approval, a time-boxed reveal, and a hash-chained audit entry - after which the field returns to masked with no one acting.</title>
           <defs>
             <marker id="rvArrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,1 L9,5 L0,9 z" fill="#8A8C99"/>
@@ -1089,14 +1089,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             </marker>
           </defs>
 
-          <!-- STEP 01 — request -->
+          <!-- STEP 01 - request -->
           <rect x="4" y="6" width="372" height="84" rx="10" fill="#FFFFFF" stroke="#E5E3DD"/>
           <text x="22" y="33" font-size="12.5" letter-spacing="0.7" fill="#3B4CCA">STEP 01 · REQUEST</text>
           <text x="22" y="58" font-size="16" fill="#15161C" font-family="Inter,-apple-system,BlinkMacSystemFont,sans-serif">An operator asks for a field</text>
           <text x="22" y="79" font-size="12.5" fill="#8A8C99">field · subject · stated reason</text>
           <path d="M190,90 V114" stroke="#8A8C99" stroke-width="1.3" fill="none" marker-end="url(#rvArrow)"/>
 
-          <!-- STEP 02 — the gate, enforced by the table -->
+          <!-- STEP 02 - the gate, enforced by the table -->
           <rect x="4" y="114" width="372" height="124" rx="10" fill="#FFFFFF" stroke="#3B4CCA" stroke-width="1.4"/>
           <text x="22" y="141" font-size="12.5" letter-spacing="0.7" fill="#3B4CCA">STEP 02 · THE GATE</text>
           <text x="22" y="166" font-size="16" fill="#15161C" font-family="Inter,-apple-system,BlinkMacSystemFont,sans-serif">A different party approves</text>
@@ -1114,7 +1114,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="290" y="292" font-size="12.5" letter-spacing="0.4" fill="#B4690E" text-anchor="middle">✕ SELF-APPROVAL</text>
           <text x="290" y="309" font-size="12.5" fill="#B4690E" text-anchor="middle">refused by Postgres</text>
 
-          <!-- STEP 03 — time-boxed reveal -->
+          <!-- STEP 03 - time-boxed reveal -->
           <rect x="4" y="316" width="372" height="100" rx="10" fill="#FFFFFF" stroke="#E5E3DD"/>
           <text x="22" y="343" font-size="12.5" letter-spacing="0.7" fill="#3B4CCA">STEP 03 · TIME-BOXED REVEAL</text>
           <text x="22" y="368" font-size="16" fill="#15161C" font-family="Inter,-apple-system,BlinkMacSystemFont,sans-serif">Plaintext, this subject only</text>
@@ -1122,7 +1122,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="22" y="409" font-size="12.5" fill="#565866">auto-revoke enqueued in the same txn</text>
           <path d="M190,416 V440" stroke="#8A8C99" stroke-width="1.3" fill="none" marker-end="url(#rvArrow)"/>
 
-          <!-- STEP 04 — chained audit -->
+          <!-- STEP 04 - chained audit -->
           <rect x="4" y="440" width="372" height="100" rx="10" fill="#FFFFFF" stroke="#E5E3DD"/>
           <text x="22" y="467" font-size="12.5" letter-spacing="0.7" fill="#3B4CCA">STEP 04 · CHAINED AUDIT</text>
           <text x="22" y="492" font-size="16" fill="#15161C" font-family="Inter,-apple-system,BlinkMacSystemFont,sans-serif">The tenant reads the record</text>
@@ -1132,7 +1132,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <!-- expiry, with nobody acting -->
           <path d="M190,540 V566" stroke="#8A8C99" stroke-width="1.3" fill="none" stroke-dasharray="4 4" marker-end="url(#rvArrow)"/>
           <rect x="4" y="570" width="372" height="76" rx="10" fill="none" stroke="#E5E3DD" stroke-dasharray="4 4"/>
-          <text x="190" y="599" font-size="12.5" letter-spacing="0.7" fill="#8A8C99" text-anchor="middle">AT expires_at — WITH NO ONE ACTING</text>
+          <text x="190" y="599" font-size="12.5" letter-spacing="0.7" fill="#8A8C99" text-anchor="middle">AT expires_at - WITH NO ONE ACTING</text>
           <text x="190" y="626" font-size="14" fill="#15161C" text-anchor="middle">the field returns to ••••</text>
         </svg>
         <div class="figcap">The refused path is not a form validation. It is a table constraint: a row
@@ -1144,25 +1144,25 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
     <div class="g2">
       <div class="card">
-        <span class="card-num">Property 01 — second-party</span>
+        <span class="card-num">Property 01 - second-party</span>
         <h3>The requester cannot approve</h3>
         <p>Two people, always. The policy layer checks it, and so does the table:
           <code>CHECK (granted_by &lt;&gt; requestor_id)</code>. Application code is the part most likely
-          to be wrong, and the part a hurried change touches. The constraint holds anyway — from a
+          to be wrong, and the part a hurried change touches. The constraint holds anyway - from a
           console session, a migration, a background job, or a refactor nobody reviewed carefully.</p>
       </div>
 
       <div class="card">
-        <span class="card-num">Property 02 — time-boxed</span>
+        <span class="card-num">Property 02 - time-boxed</span>
         <h3>It ends whether or not anyone remembers</h3>
         <p>Every grant carries <code>expires_at</code> and <strong>cannot be renewed in place</strong>.
-          The Oban auto-revoke job is enqueued <strong>in the same transaction as the approval</strong> —
+          The Oban auto-revoke job is enqueued <strong>in the same transaction as the approval</strong> -
           so the revocation is already durable before the grant is usable. There is no window in which a
           live grant exists with no scheduled end.</p>
       </div>
 
       <div class="card">
-        <span class="card-num">Property 03 — logged, tenant-side</span>
+        <span class="card-num">Property 03 - logged, tenant-side</span>
         <h3>Written where the tenant can read it</h3>
         <p>The record lands in a hash-chained, append-only, <strong>tenant-readable</strong> log. A
           database trigger refuses <code>UPDATE</code> and <code>DELETE</code> on the chain. The operator
@@ -1171,7 +1171,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       </div>
 
       <div class="card">
-        <span class="card-num">Property 04 — scoped</span>
+        <span class="card-num">Property 04 - scoped</span>
         <h3>Specific fields, specific subject</h3>
         <p>A grant reveals <em>these fields</em> for <em>this subject</em>. It is not a role that gets
           unmasked, not a session that gets elevated, and not a support tier that sees more. Two
@@ -1215,14 +1215,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <text x="200" y="173" font-size="12.5" letter-spacing="0.7" fill="#B4690E" text-anchor="middle">DB TRIGGER: UPDATE / DELETE REFUSED</text>
       </svg>
       <div class="figcap">Each entry carries the hash of the one before it, so removing or editing an
-        entry breaks every entry after it — and the trigger refuses the edit in the first place.</div>
+        entry breaks every entry after it - and the trigger refuses the edit in the first place.</div>
     </div>
 
     <details class="drawer">
-      <summary>Why the database CHECK matters more than the policy check — and why a grant can never be renewed in place</summary>
+      <summary>Why the database CHECK matters more than the policy check - and why a grant can never be renewed in place</summary>
       <div class="drawer-body">
         <p><strong>The policy check and the constraint are not redundant. They fail differently.</strong>
-        A policy check lives in code — the layer that gets refactored, mocked in tests, bypassed by a
+        A policy check lives in code - the layer that gets refactored, mocked in tests, bypassed by a
         seed script, and reached through paths nobody enumerated. A
         <code>CHECK (granted_by &lt;&gt; requestor_id)</code> lives in the table definition. It does not
         care which code path, console session, migration or future rewrite produced the insert: the row
@@ -1231,7 +1231,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <ul>
           <li><strong>&ldquo;Cannot be renewed in place&rdquo; prevents the standing grant.</strong> A
             grant with a renew button becomes permanent the first afternoon someone puts it on a
-            schedule. Extending access here means a new request and a new second-party approval — so
+            schedule. Extending access here means a new request and a new second-party approval - so
             every extension is a separate, separately-approved entry in the chain. The log shows
             <em>how many times</em> access was granted, not one row with a date that keeps moving.</li>
           <li><strong>The auto-revoke is enqueued in the approval's transaction.</strong> Not after it,
@@ -1239,7 +1239,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             commit. The end of the access is durable before the access begins.</li>
           <li><strong>Cross-tenant analytics is a different actor entirely.</strong> Aggregate work runs
             as a <strong>token-blind actor</strong> over resources that carry <strong>no
-            <code>pii_*</code> columns at all</strong> — there is no masked field to unmask, because
+            <code>pii_*</code> columns at all</strong> - there is no masked field to unmask, because
             there is no field. The reveal path refuses that actor <em>structurally</em>, before any grant
             lookup or vault check is consulted. The two paths are therefore mutually exclusive by
             construction: an actor that can reveal cannot run cross-tenant, and an actor that runs
@@ -1265,7 +1265,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:19ch">Your admin tool is the biggest leak in the company. <em>Unless it is the same app.</em></h2>
     <p class="lede" style="margin-top:26px">
       Every product built on samen runs two planes over the <strong>same resources</strong>: a tenant product plane
-      and an operator control plane. The operator plane is not a second application with its own queries &#8212; it is the
+      and an operator control plane. The operator plane is not a second application with its own queries - it is the
       same objects rendered through a different actor. Support sees the real UI, the real layout, the real workflow,
       the real bug. The PII inside it renders <span class="mask">&#8226;&#8226;&#8226;&#8226;</span>.
     </p>
@@ -1276,10 +1276,10 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     
 
     <p class="small" style="margin-top:22px;max-width:70ch;color:#9EA1B4">
-      Same route, same left nav, same breadcrumb, same tabs, same six rows in the same order, same non-PII values &#8212;
+      Same route, same left nav, same breadcrumb, same tabs, same six rows in the same order, same non-PII values -
       <span class="mono" style="color:#F3F2EF">LD-40277</span>, the hours-of-service clock, the dispatch status.
       This is not a redacted screenshot of a different screen. It is <em>the</em> screen, rendered for an actor whose
-      PII fields resolve to <code>%Masked{}</code>. The operator can reproduce the bug without reproducing the disclosure &#8212;
+      PII fields resolve to <code>%Masked{}</code>. The operator can reproduce the bug without reproducing the disclosure -
       and still has enough left on the row to work the ticket.
     </p>
 
@@ -1289,7 +1289,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <span class="sec-label">One resource definition, three actors</span>
     <h2 style="max-width:20ch">The third actor cannot be granted anything, <em>because there is nothing there.</em></h2>
     <p class="lede" style="margin-top:22px">
-      Cross-tenant work &#8212; MRR, queues, cohorts, backlog health &#8212; runs as a <strong>token-blind actor</strong> over
+      Cross-tenant work - MRR, queues, cohorts, backlog health - runs as a <strong>token-blind actor</strong> over
       resources that carry no <code>pii_*</code> attributes at all. Not filtered at query time. Not masked at render
       time. <strong>Structurally absent from the schema.</strong> The reveal path refuses that actor before it ever
       reaches a grant check or the vault.
@@ -1318,7 +1318,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="454" y="251" font-size="11.5" fill="#6B6E82" text-anchor="end">nothing to reveal</text>
         </g>
       </svg>
-      <div class="figcap">Masking is a property of the actor, not of a screen. The third lane has no plaintext path to refuse &#8212; the columns are not in its schema.</div>
+      <div class="figcap">Masking is a property of the actor, not of a screen. The third lane has no plaintext path to refuse - the columns are not in its schema.</div>
     </div>
 
     <div class="g3" style="margin-top:30px">
@@ -1339,7 +1339,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <span class="card-num">Actor 03 &#183; Aggregate</span>
         <h3>Token-blind, and empty of PII</h3>
         <p>Cross-tenant analytics run over resources with no <code>pii_*</code> attributes. The reveal path
-          structurally refuses this actor <em>before</em> any grant lookup or vault call &#8212; there is no
+          structurally refuses this actor <em>before</em> any grant lookup or vault call - there is no
           <span class="tok">vt_&hellip;</span> in reach to exchange.</p>
       </div>
     </div>
@@ -1353,7 +1353,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </div>
 
     <details class="drawer">
-      <summary>Why the operator plane is built from the same objects &#8212; and why a separate admin app is the leak</summary>
+      <summary>Why the operator plane is built from the same objects - and why a separate admin app is the leak</summary>
       <div class="drawer-body">
         <p>The usual shape is a second application: an internal console, its own controllers, its own queries,
           its own serializers, written faster and reviewed less than the product. It is the same database with
@@ -1364,16 +1364,16 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             returns the column, and nothing in the system objects.</li>
           <li><strong>Divergence is silent.</strong> The product adds a field; the admin app does not learn it is
             sensitive. The leak is introduced by a change that looked local.</li>
-          <li><strong>Audit coverage does not transfer.</strong> The reveal grant, the hash chain, the expiry &#8212;
+          <li><strong>Audit coverage does not transfer.</strong> The reveal grant, the hash chain, the expiry -
             those are properties of the product's reveal path. A separate app that reads the row directly
             produces no audit record at all, so the tenant cannot see that it happened.</li>
         </ul>
         <p>Building the operator plane from the same resources inverts that. There is one decrypt chokepoint,
           so there is one place to gate, one place to log, and one place a reviewer has to read. The operator
-          UI cannot drift from the product UI because it <em>is</em> the product UI with a different actor &#8212;
+          UI cannot drift from the product UI because it <em>is</em> the product UI with a different actor -
           which is also why impersonation is useful for support: the reproduction is real.</p>
         <p>The cost is honest and worth naming: the operator plane is constrained by what the resource layer
-          exposes. There is no escape hatch to "just run a query" &#8212; by design, because that escape hatch is the
+          exposes. There is no escape hatch to "just run a query" - by design, because that escape hatch is the
           thing being removed.</p>
       </div>
     </details>
@@ -1382,7 +1382,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 </section>
 
 <!-- 06c-simulator -->
-<!-- ============== THE SIMULATOR — one screen, three actors (CSS only) ============== -->
+<!-- ============== THE SIMULATOR - one screen, three actors (CSS only) ============== -->
 <section class="act" id="simulator">
   <div class="wrap">
 
@@ -1390,11 +1390,11 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:20ch">Same route, same rows, three actors. <em>What you can see is a property of you, not of the page.</em></h2>
 
     <p class="lede" style="margin-top:26px">
-      One Postgres, one driver table, one Phoenix route. Below, that route is resolved three times &mdash; by the
+      One Postgres, one driver table, one Phoenix route. Below, that route is resolved three times - by the
       tenant&rsquo;s own dispatcher, by an operator sitting inside a masked impersonation session, and by a
       token-blind actor that reports on the same business. <strong>No markup changes between them.</strong> The
       template is the same template; the difference is which actor asked. Switch the actor and watch the same screen
-      answer differently &mdash; then look at what the third one is missing.
+      answer differently - then look at what the third one is missing.
     </p>
 
     <!-- ===================== THE SIMULATOR ===================== -->
@@ -1471,7 +1471,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
                 <div class="ui-tb-bar">
                   <div class="ui-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
-                  <div class="ui-tx"><b>Own-org read.</b> Rosa&rsquo;s key belongs to this tenant, so every <code style="font-family:var(--mono);font-size:11.5px">pii_*</code> attribute on <code style="font-family:var(--mono);font-size:11.5px">Fleet.Driver</code> resolves in the clear. No grant, no vault ceremony, no banner &mdash; this is the ordinary case.</div>
+                  <div class="ui-tx"><b>Own-org read.</b> Rosa&rsquo;s key belongs to this tenant, so every <code style="font-family:var(--mono);font-size:11.5px">pii_*</code> attribute on <code style="font-family:var(--mono);font-size:11.5px">Fleet.Driver</code> resolves in the clear. No grant, no vault ceremony, no banner - this is the ordinary case.</div>
                   <div class="ui-chip">actor: tenant_key &middot; org blue_ridge</div>
                 </div>
 
@@ -1570,7 +1570,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                             <td style="white-space:nowrap"><span class="ui-mono" style="color:var(--uc-muted)">c.okafor@brl.example</span></td>
                             <td><span class="ui-mono">(216) 555-0138</span></td>
                             <td><div class="ui-prog"><div class="ui-track"><div class="ui-fill" style="width:0%;background:#D6D6DC"></div></div><span class="ui-pct">0h 00m</span></div></td>
-                            <td><span class="ui-mono" style="color:var(--uc-faint)">&mdash;</span></td>
+                            <td><span class="ui-mono" style="color:var(--uc-faint)">-</span></td>
                             <td><span class="ui-pill mut"><span class="ui-d"></span>Off duty</span></td>
                           </tr>
                           <tr>
@@ -1705,7 +1705,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
                 <div class="ui-mask-bar">
                   <div class="ui-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
-                  <div class="ui-tx"><b>Masked impersonation.</b> Same route, same template, same eight rows. This session carries no reveal grant, so each <code style="font-family:var(--mono);font-size:11.5px">pii_*</code> attribute resolves to <code style="font-family:var(--mono);font-size:11.5px">%Masked{}</code> and renders four fixed bullets &mdash; fixed, so the mask does not leak the length of the value behind it. <b>Request reveal</b> opens a request; it does not unmask anything by itself.</div>
+                  <div class="ui-tx"><b>Masked impersonation.</b> Same route, same template, same eight rows. This session carries no reveal grant, so each <code style="font-family:var(--mono);font-size:11.5px">pii_*</code> attribute resolves to <code style="font-family:var(--mono);font-size:11.5px">%Masked{}</code> and renders four fixed bullets - fixed, so the mask does not leak the length of the value behind it. <b>Request reveal</b> opens a request; it does not unmask anything by itself.</div>
                   <div class="ui-chip">ticket #7781 &middot; 27m left</div>
                 </div>
 
@@ -1810,7 +1810,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                             <td><span class="ui-mono ui-masked">&bull;&bull;&bull;&bull;</span></td>
                             <td><span class="ui-mono ui-masked">&bull;&bull;&bull;&bull;</span></td>
                             <td><div class="ui-prog"><div class="ui-track"><div class="ui-fill" style="width:0%;background:#D6D6DC"></div></div><span class="ui-pct">0h 00m</span></div></td>
-                            <td><span class="ui-mono" style="color:var(--uc-faint)">&mdash;</span></td>
+                            <td><span class="ui-mono" style="color:var(--uc-faint)">-</span></td>
                             <td><span class="ui-pill mut"><span class="ui-d"></span>Off duty</span></td>
                           </tr>
                           <tr>
@@ -1952,7 +1952,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                   <div style="width:30px;height:30px;border-radius:8px;background:#fff;border:1px solid #E1D6F7;display:grid;place-items:center;color:var(--uc-violet);flex-shrink:0">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 19V9m6 10V5m6 14v-7"/></svg>
                   </div>
-                  <div style="font-size:12.5px;color:#4B3B78;line-height:1.45"><b style="font-weight:650;color:#38295C">Nothing here is masked, because nothing here is maskable.</b> This actor resolves <code style="font-family:var(--mono);font-size:11.5px">Analytics.ShipperCohort</code>, whose attribute list contains no <code style="font-family:var(--mono);font-size:11.5px">pii_*</code> entry at all. The seven columns on the roster tab are not hidden from this screen &mdash; they do not exist on the resource this screen reads.</div>
+                  <div style="font-size:12.5px;color:#4B3B78;line-height:1.45"><b style="font-weight:650;color:#38295C">Nothing here is masked, because nothing here is maskable.</b> This actor resolves <code style="font-family:var(--mono);font-size:11.5px">Analytics.ShipperCohort</code>, whose attribute list contains no <code style="font-family:var(--mono);font-size:11.5px">pii_*</code> entry at all. The seven columns on the roster tab are not hidden from this screen - they do not exist on the resource this screen reads.</div>
                   <div style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--uc-violet);background:#fff;border:1px solid #E1D6F7;border-radius:7px;padding:5px 9px;white-space:nowrap">pii_* count: 0</div>
                 </div>
 
@@ -2040,12 +2040,12 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                     </div>
                   </div>
 
-                  <div class="ui-gtitle"><h4>Cohorts by shipper segment</h4><span class="ui-n">5</span><span class="ui-lane">&middot; 42 accounts rolled up &mdash; no row here is a person</span></div>
+                  <div class="ui-gtitle"><h4>Cohorts by shipper segment</h4><span class="ui-n">5</span><span class="ui-lane">&middot; 42 accounts rolled up - no row here is a person</span></div>
 
                   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 2px 13px">
                     <span class="ui-btn"><svg class="ui-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Period: Aug 2025</span>
                     <span class="ui-btn">Grain: segment</span>
-                    <span class="ui-btn" style="border-color:#DCD1F4;color:var(--uc-violet)"><svg class="ui-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--uc-violet)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>Columns &middot; 6 &mdash; 0 identity</span>
+                    <span class="ui-btn" style="border-color:#DCD1F4;color:var(--uc-violet)"><svg class="ui-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--uc-violet)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>Columns &middot; 6 - 0 identity</span>
                     <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--uc-faint)">5 of 5 rows</span>
                   </div>
 
@@ -2140,7 +2140,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                       <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--uc-violet);border:1px dashed #DCD1F4;border-radius:7px;padding:4px 8px;background:var(--uc-violet-wash);opacity:.75">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M6.5 6.5l11 11"/></svg>Request reveal
                       </span>
-                      <span style="font-size:11.5px;color:var(--uc-muted)">Refused on the actor, before any grant lookup and before the vault is touched &mdash; there is no ciphertext on this path to decrypt.</span>
+                      <span style="font-size:11.5px;color:var(--uc-muted)">Refused on the actor, before any grant lookup and before the vault is touched - there is no ciphertext on this path to decrypt.</span>
                     </div>
                     <div class="ui-oc-foot" style="color:var(--uc-violet)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 19V9m6 10V5m6 14v-7"/></svg>
@@ -2157,9 +2157,9 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       </div>
 
       <div class="sim-note">
-        <span class="sim-cap sim-cap--tenant">Rosa is signed in to her own org, so <b>every attribute resolves in the clear</b> &mdash; a tenant key reading its own rows needs no grant and no ceremony.</span>
-        <span class="sim-cap sim-cap--operator">Same route, same component tree, the same eight rows in the same order with the same ids, clocks, load numbers and status pills &mdash; only the four <b>pii_*</b> attributes differ, because with no reveal grant on the session they resolve to <b>%Masked{}</b>, and getting a real one back means opening a request that a second person approves.</span>
-        <span class="sim-cap sim-cap--analytics">Nothing is masked here because <b>there is nothing to mask</b>: this actor resolves a cohort resource that carries no <b>pii_*</b> columns at all, and the reveal path refuses the actor outright &mdash; before any grant lookup, before any vault key is loaded.</span>
+        <span class="sim-cap sim-cap--tenant">Rosa is signed in to her own org, so <b>every attribute resolves in the clear</b> - a tenant key reading its own rows needs no grant and no ceremony.</span>
+        <span class="sim-cap sim-cap--operator">Same route, same component tree, the same eight rows in the same order with the same ids, clocks, load numbers and status pills - only the four <b>pii_*</b> attributes differ, because with no reveal grant on the session they resolve to <b>%Masked{}</b>, and getting a real one back means opening a request that a second person approves.</span>
+        <span class="sim-cap sim-cap--analytics">Nothing is masked here because <b>there is nothing to mask</b>: this actor resolves a cohort resource that carries no <b>pii_*</b> columns at all, and the reveal path refuses the actor outright - before any grant lookup, before any vault key is loaded.</span>
       </div>
     </div>
 
@@ -2180,7 +2180,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           actor and a reveal are mutually exclusive by construction, so there is no ordering of grants, approvals or
           expiries that can put them together.</p>
         <p>Two claims, two strengths. The operator pane says <em>we did not give it to you</em>. The analytics pane
-          says <em>we never had it to give</em>. Only the second one survives a mistake in the code above it &mdash;
+          says <em>we never had it to give</em>. Only the second one survives a mistake in the code above it -
           which is the whole reason reporting runs on its own resources instead of on a filtered view of the real ones.</p>
       </div>
     </details>
@@ -2189,7 +2189,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 </section>
 
 <!-- 06b-flagship -->
-<!-- ===================== THE FLAGSHIP — CROSS-PLANE CHAT ===================== -->
+<!-- ===================== THE FLAGSHIP - CROSS-PLANE CHAT ===================== -->
 <section class="stage" id="flagship" style="background:linear-gradient(180deg,var(--accent-wash) 0%,transparent 42%)">
   <div class="wrap">
 
@@ -2199,8 +2199,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <p class="lede" style="margin-top:26px">
       This feature exists because both planes are <strong>one substrate</strong>. The SaaS company and every tenant
       share a single Postgres of catalogued objects and a single Phoenix PubSub, so a realtime thread that crosses
-      the operator&#8596;tenant boundary is almost free to build. Paste any object id &mdash;
-      <code>samen:&lt;resource&gt;:&lt;id&gt;</code> &mdash; and it unfurls into a live card that is
+      the operator&#8596;tenant boundary is almost free to build. Paste any object id -
+      <code>samen:&lt;resource&gt;:&lt;id&gt;</code> - and it unfurls into a live card that is
       <strong>masking-aware per viewer</strong>, resolved through that viewer&rsquo;s own scope. Below is one message,
       one set of refs, rendered twice.
     </p>
@@ -2209,7 +2209,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
       <!-- ---------- tenant plane ---------- -->
       <div class="ms-col">
-        <div class="ms-tag tenant"><span class="ms-d"></span><b>Blue Ridge (tenant)</b> &mdash; /chat/&lt;id&gt; &middot; tenant plane &middot; own org, clear</div>
+        <div class="ms-tag tenant"><span class="ms-d"></span><b>Blue Ridge (tenant)</b> - /chat/&lt;id&gt; &middot; tenant plane &middot; own org, clear</div>
         <div class="ui-frame">
           <div class="ui-chat-head">
             <div class="ui-oc-ic person" style="width:30px;height:30px;border-radius:8px">
@@ -2224,7 +2224,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
               <div class="ui-mav" style="background:#DDE7F5;color:#28306B">CK</div>
               <div class="ui-mbody">
                 <div class="ui-mmeta"><b>SaaS support</b><span class="ui-hnd">driftwood-desk</span><span>&middot; 10:24</span></div>
-                <div class="ui-bubble">Confirming the rate on <span class="ui-inref">samen:crm.person:0f00&hellip;aa</span> and the assigned driver <span class="ui-inref">samen:freight.driver:0f00&hellip;cc</span> &mdash; both look good on our side.</div>
+                <div class="ui-bubble">Confirming the rate on <span class="ui-inref">samen:crm.person:0f00&hellip;aa</span> and the assigned driver <span class="ui-inref">samen:freight.driver:0f00&hellip;cc</span> - both look good on our side.</div>
               </div>
             </div>
 
@@ -2275,7 +2275,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
       <!-- ---------- operator plane ---------- -->
       <div class="ms-col">
-        <div class="ms-tag operator"><span class="ms-d"></span><b>Driftwood Ops (operator)</b> &mdash; /operator/desk-chat/&lt;id&gt; &middot; operator plane &middot; masked</div>
+        <div class="ms-tag operator"><span class="ms-d"></span><b>Driftwood Ops (operator)</b> - /operator/desk-chat/&lt;id&gt; &middot; operator plane &middot; masked</div>
         <div class="ui-frame">
           <div class="ui-chat-head">
             <div class="ui-oc-ic" style="width:30px;height:30px;border-radius:8px;background:linear-gradient(150deg,#3B4CCA,#5B6BE0)">
@@ -2290,7 +2290,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
               <div class="ui-mav" style="background:#DDE7F5;color:#28306B">CK</div>
               <div class="ui-mbody">
                 <div class="ui-mmeta"><b>You (SaaS support)</b><span class="ui-hnd">driftwood-desk</span><span>&middot; 10:24</span></div>
-                <div class="ui-bubble">Confirming the rate on <span class="ui-inref">samen:crm.person:0f00&hellip;aa</span> and the assigned driver <span class="ui-inref">samen:freight.driver:0f00&hellip;cc</span> &mdash; both look good on our side.</div>
+                <div class="ui-bubble">Confirming the rate on <span class="ui-inref">samen:crm.person:0f00&hellip;aa</span> and the assigned driver <span class="ui-inref">samen:freight.driver:0f00&hellip;cc</span> - both look good on our side.</div>
               </div>
             </div>
 
@@ -2342,8 +2342,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </div>
 
     <div class="ui-caption" style="position:relative;left:50%;transform:translateX(-50%);width:min(1180px,calc(100vw - 40px))">
-      <span><b>Read both columns side by side</b> &mdash; one thread, one message, one pair of refs, rendered per viewer&rsquo;s plane</span>
-      <span>title &middot; CDL state &middot; ELD &middot; status &middot; lifecycle stay clear on both sides &mdash; support can still work the load</span>
+      <span><b>Read both columns side by side</b> - one thread, one message, one pair of refs, rendered per viewer&rsquo;s plane</span>
+      <span>title &middot; CDL state &middot; ELD &middot; status &middot; lifecycle stay clear on both sides - support can still work the load</span>
     </div>
 
     <div class="stack" style="margin-top:46px;max-width:72ch">
@@ -2353,14 +2353,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           Broadcasting a message publishes its id and nothing else. Every subscriber then re-reads that message
           through <em>its own</em> scope before rendering a single character. A masked operator session cannot
           receive plaintext by subscribing to the topic, because the topic never carried plaintext to begin with
-          &mdash; the read that produced the text on your screen was your read, under your actor.
+          - the read that produced the text on your screen was your read, under your actor.
         </p>
       </div>
       <div>
         <h3>2. The unfurl resolver composes two kernel gates that did not change.</h3>
         <p style="margin-top:9px;color:var(--muted);line-height:1.6">
           A pasted ref is resolved by running the host&rsquo;s own resource through <code>OrgScope</code> and then
-          <code>PiiResolution</code> &mdash; the same two gates every other page uses. No code path in the chat
+          <code>PiiResolution</code> - the same two gates every other page uses. No code path in the chat
           feature reads a column directly, unwraps a <code>%Masked{}</code>, or calls <code>Vault.reveal</code>.
           And this is a framework capability rather than a chat trick: a catalog-driven default card renders
           <strong>any</strong> catalogued resource, so a new vertical&rsquo;s new object unfurls the day it is
@@ -2377,17 +2377,17 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           adds a field.</p>
         <ul>
           <li><strong>There is one renderer.</strong> <code>Samen.Web.ObjectRef</code> is a standalone module: it takes
-            a ref and an actor and returns a card. Chat is its first consumer, not its owner &mdash; a CRM detail page
+            a ref and an actor and returns a card. Chat is its first consumer, not its owner - a CRM detail page
             can unfurl a related object, an audit entry can unfurl its subject, a notification can unfurl its target.
             The two columns above call the identical function with two different actors.</li>
           <li><strong>The difference lives in the actor, not the template.</strong> Masking is the field&rsquo;s normal
-            value, so the operator column is not a redacted copy of the tenant column &mdash; it is what the resource
+            value, so the operator column is not a redacted copy of the tenant column - it is what the resource
             layer returns when the reader is an operator. There is no branch in the card that says
             <code>if operator</code>.</li>
           <li><strong>Cross-plane visibility is the impersonation bridge, reused.</strong> The thread is owned by the
             tenant org; the SaaS participant reaches it carrying the target <code>org_id</code> from a grant, so
             <code>OrgScope</code> is satisfied for both parties with no new policy and no upward escalation. An
-            operator whose session targets a different org sees the thread as <strong>zero rows</strong> &mdash;
+            operator whose session targets a different org sees the thread as <strong>zero rows</strong> -
             cross-plane access is a grant that expires, not a standing door.</li>
           <li><strong>Identity is masked by default.</strong> A tenant participant can opt in per conversation, and a
             tenant admin can set a disclosure override for the whole org. The default is the safe one, and turning it
@@ -2400,7 +2400,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </details>
 
     <p class="mono" style="margin-top:20px;font-size:12px;color:var(--faint);line-height:1.6">
-      Evidence &mdash; gated GO under ADR-012 &middot; <code>chat_unfurl_masking_test.exs</code> &middot; id-only PubSub envelope &middot; live operator DOM scanned <strong style="color:var(--accent-deep);font-weight:600">0 leaks, 7&times; &bull;&bull;&bull;&bull;</strong>
+      Evidence - gated GO under ADR-012 &middot; <code>chat_unfurl_masking_test.exs</code> &middot; id-only PubSub envelope &middot; live operator DOM scanned <strong style="color:var(--accent-deep);font-weight:600">0 leaks, 7&times; &bull;&bull;&bull;&bull;</strong>
     </p>
 
   </div>
@@ -2422,7 +2422,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
     <div class="callout" style="margin-top:26px;max-width:70ch">
       <strong>Erasure is key destruction.</strong> The subject's PII lives as ciphertext behind per-subject key
-      material. Destroy the key and the ciphertext everywhere becomes permanently unreadable at once — including in
+      material. Destroy the key and the ciphertext everywhere becomes permanently unreadable at once - including in
       the tiers you forgot you had.
     </div>
 
@@ -2540,7 +2540,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             </g>
           </g>
         </svg>
-        <div class="figcap">Nothing was walked, scrubbed, or rewritten. One destruction, and every tier — including tiers no migration ever touched — is unreadable at the same instant.</div>
+        <div class="figcap">Nothing was walked, scrubbed, or rewritten. One destruction, and every tier - including tiers no migration ever touched - is unreadable at the same instant.</div>
       </div>
 
     </div>
@@ -2554,12 +2554,12 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <h2 style="max-width:16ch">The attestation runs as <em>a separate OS process.</em></h2>
         <div class="stack" style="margin-top:24px">
           <p class="small"><code>mix samen.verify.no_plaintext_pii</code> is one of the 24 verifier tiers. It walks
-            every tier — domain rows, vault, audit events, rollups, Oban args, the KMS store — and attests that the
+            every tier - domain rows, vault, audit events, rollups, Oban args, the KMS store - and attests that the
             subject is unrecoverable.</p>
           <p class="small">The separate-process detail is the whole point. An in-process check can be satisfied by the
             same memory that produced the data: a cached struct, a warm decrypt, a connection that still holds a key.
             A fresh OS process sees only committed state, so what it attests is what actually persists.</p>
-          <p class="small"><strong>driftwood</strong> — the deepest vertical — regenerates the subject and re-runs the
+          <p class="small"><strong>driftwood</strong> - the deepest vertical - regenerates the subject and re-runs the
             whole shred game-day on <strong>every CI run</strong>. The proof is not a one-time report filed in a
             compliance folder; it is a build step that can go red.</p>
         </div>
@@ -2570,7 +2570,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 <span class="c"># driftwood · crypto-shred game-day, re-run on every CI run</span><br>
 <span class="p">$</span> mix samen.verify.no_plaintext_pii --subject drv_8821<br>
 <span class="c">&nbsp;&nbsp;spawning verifier in a separate OS process</span><br>
-<span class="c">&nbsp;&nbsp;reading committed state only — no app caches, no warm keys</span><br>
+<span class="c">&nbsp;&nbsp;reading committed state only - no app caches, no warm keys</span><br>
 <br>
 &nbsp;&nbsp;domain rows&nbsp;&nbsp;&nbsp;<span class="ok">unreadable</span><br>
 &nbsp;&nbsp;pii vault&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ok">unreadable</span><br>
@@ -2595,7 +2595,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <div class="callout callout--honest" style="margin-top:30px;max-width:72ch">
       <strong>Scope, stated plainly.</strong> The verifier tier ships for any generated app, but the full
       regenerate-and-shred game-day is currently exercised end-to-end in <code>driftwood</code>, the deepest vertical.
-      Erasure also cannot reach a system samen never wrote to — a copy exported to a spreadsheet, or a downstream
+      Erasure also cannot reach a system samen never wrote to - a copy exported to a spreadsheet, or a downstream
       consumer that decrypted and stored plaintext of its own, is outside the boundary and this page will not pretend
       otherwise.
     </div>
@@ -2607,13 +2607,13 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <ul>
           <li><strong>Row-scrubbing asks you to prove a negative over an unbounded set.</strong> &ldquo;No copy of this
             value survives anywhere&rdquo; ranges over every table, every derived rollup, every queued job, every log
-            line, every replica, every backup, and every downstream consumer — including the ones added last week by
+            line, every replica, every backup, and every downstream consumer - including the ones added last week by
             someone who did not know the value was sensitive. There is no finite list to check, so there is no test
             that can be written for it. What ships instead is a migration and a hope.</li>
           <li><strong>Key destruction asks you to prove a positive over a finite set.</strong> The claim is: this key
             material does not exist, and every tier that could hold ciphertext for this subject holds only ciphertext.
-            Both halves are enumerable. The tiers are named — domain rows, vault, audit events, rollups, Oban args, the
-            KMS store — so a verifier can walk them and a sabotage patch can make the walk fail.</li>
+            Both halves are enumerable. The tiers are named - domain rows, vault, audit events, rollups, Oban args, the
+            KMS store - so a verifier can walk them and a sabotage patch can make the walk fail.</li>
           <li><strong>It fails loudly instead of quietly.</strong> If a new tier appears that stores plaintext, the
             oracle finds plaintext where it expected ciphertext and CI goes red. A scrub-based approach has no
             equivalent signal: the new tier simply is not in the migration, and nothing notices.</li>
@@ -2622,7 +2622,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             a shredded subject would require the key, and the key is the thing that was destroyed.</li>
         </ul>
         <p>The honest limit: this bounds recovery to systems inside samen's write boundary. It says nothing about a
-          plaintext copy that left through a legitimate reveal grant — which is why grants are second-party approved,
+          plaintext copy that left through a legitimate reveal grant - which is why grants are second-party approved,
           time-boxed, and logged where the tenant can read them.</p>
       </div>
     </details>
@@ -2638,8 +2638,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:19ch">One command, and a <em>whole new vertical</em> is already running.</h2>
     <p class="lede" style="margin-top:24px">
       The proof that a substrate is real is generative. <code>mix samen.gen.app</code> does not hand you a
-      folder of TODOs to fill in. It emits a product — web UI, JSON:API, seeds, observability, tests, and its
-      own verifier gate — and that app passes its <strong>19-step</strong> gate on the first run with
+      folder of TODOs to fill in. It emits a product - web UI, JSON:API, seeds, observability, tests, and its
+      own verifier gate - and that app passes its <strong>19-step</strong> gate on the first run with
       <strong>zero hand-edits</strong>. Not a scaffold you then fix. A thing you can boot.
     </p>
 
@@ -2648,7 +2648,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <h3>Generate it, then make it prove itself</h3>
         <p class="small measure">
           You give it three things: a module name, a table prefix, and a permanent abbreviation. The abbrev is
-          permanent the way a stock ticker is permanent — every table and column the app ever creates is
+          permanent the way a stock ticker is permanent - every table and column the app ever creates is
           projected through it, so storage stays self-qualifying from the first migration.
         </p>
         <p class="small measure">
@@ -2696,7 +2696,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div class="card">
         <span class="card-num">Ships 01</span>
         <h3>A Billing scope, mounted</h3>
-        <p>Plans, subscriptions, invoices and the checkout surface arrive as a framework scope mounted as-is —
+        <p>Plans, subscriptions, invoices and the checkout surface arrive as a framework scope mounted as-is -
           not copied into your tree.</p>
       </div>
       <div class="card">
@@ -2714,13 +2714,13 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div class="card">
         <span class="card-num">Ships 04</span>
         <h3>Notifications</h3>
-        <p>The send path wired through the single chokepoint, with PII-safe rendering — configured or not,
+        <p>The send path wired through the single chokepoint, with PII-safe rendering - configured or not,
           it behaves honestly.</p>
       </div>
       <div class="card">
         <span class="card-num">Ships 05</span>
         <h3>Feature flags</h3>
-        <p>Tenant-scoped toggles as config rows — Tier-0 of the malleability ladder, available on day one.</p>
+        <p>Tenant-scoped toggles as config rows - Tier-0 of the malleability ladder, available on day one.</p>
       </div>
       <div class="card">
         <span class="card-num">Ships 06</span>
@@ -2731,7 +2731,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div class="card">
         <span class="card-num">Ships 07</span>
         <h3>A deny-by-default API</h3>
-        <p><code>/api/v1</code> as JSON:API, where a resource is not exposed until it is explicitly allowed —
+        <p><code>/api/v1</code> as JSON:API, where a resource is not exposed until it is explicitly allowed -
           absence of a decision is a denial.</p>
       </div>
       <div class="card">
@@ -2744,14 +2744,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
     <div class="callout" style="margin-top:clamp(28px,3.5vw,38px)">
       <strong>Where capability lands.</strong> Framework capability lands once, in <code>samen_core</code> and
-      <code>samen_web</code>. A vertical adopts it with a router call or a macro — roughly zero authored lines
+      <code>samen_web</code>. A vertical adopts it with a router call or a macro - roughly zero authored lines
       for a surface that is already tested upstream. That is the whole point of a substrate: the second product
       costs less than the first.
     </div>
 
     <div class="callout callout--honest" style="margin-top:18px">
       <strong>The size of that claim, measured honestly.</strong> In <code>pawchart</code>, our veterinary
-      vertical, the four scope-mount files total roughly <strong>188 authored lines</strong> — that is genuinely
+      vertical, the four scope-mount files total roughly <strong>188 authored lines</strong> - that is genuinely
       all it takes to mount framework surfaces as-is. But pawchart as a whole is a real, hand-built product of
       about <strong>3,900 authored lines</strong>. An earlier version of this page quoted the mount-file total
       as if it were the app&rsquo;s total size. It was not, the overclaim was corrected, and the honest reading
@@ -2771,10 +2771,10 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         </p>
         <p class="small measure">
           Tier-0 and Tier-1 keep the full guarantee: custom jsonb fields are validated at write against rich
-          declared types — Money, Percent, Score, Duration, Priority, URL, Email, Phone, Address. The vault
+          declared types - Money, Percent, Score, Duration, Priority, URL, Email, Phone, Address. The vault
           write path re-runs each type&rsquo;s <code>cast_input</code>, so a value is validated and normalized
           <em>before</em> it is tokenized. Tier-2 hands tenants their own objects. Tier-3 is code, composed by a
-          builder — and code is reviewed, not guaranteed.
+          builder - and code is reviewed, not guaranteed.
         </p>
       </div>
 
@@ -2827,14 +2827,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           The steps fall into five groups:</p>
         <ul>
           <li><strong>It builds clean.</strong> Compile with warnings as errors, formatter check, static
-            analysis, dependency and license audit — a generated app is held to the same lint bar as the kernel.</li>
+            analysis, dependency and license audit - a generated app is held to the same lint bar as the kernel.</li>
           <li><strong>It is internally consistent.</strong> Every table and column the app created must appear in
             the machine catalog (<code>tam_table</code> / <code>fld_field</code>), written inside the migration
             transaction. A reference to an uncatalogued column does not compile.</li>
-          <li><strong>Its storage self-qualifies.</strong> The abbrev projection is verified end to end — DB,
+          <li><strong>Its storage self-qualifies.</strong> The abbrev projection is verified end to end - DB,
             CDC, logs and catalog must agree on the same physical names.</li>
           <li><strong>Its PII posture holds.</strong> <code>mix samen.verify.no_plaintext_pii</code> runs as a
-            <em>separate OS process</em> and attests that no plaintext PII sits at rest anywhere it should not —
+            <em>separate OS process</em> and attests that no plaintext PII sits at rest anywhere it should not -
             domain rows, vault, audit events, rollups, Oban args, the KMS store.</li>
           <li><strong>It actually runs.</strong> Migrations apply, seeds load, the server boots, and the routes
             answer over HTTP. Then the sabotage harness is pointed at the generated gate to confirm the
@@ -2842,7 +2842,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         </ul>
         <p>That last step is the one that matters. A gate nobody has tried to break is a decoration. The whole
           repo carries <strong>425</strong> committed sabotage patches on the principle that a test which cannot
-          fail is treated as a bug — and the generated app inherits that treatment rather than an exemption
+          fail is treated as a bug - and the generated app inherits that treatment rather than an exemption
           from it.</p>
       </div>
     </details>
@@ -2858,7 +2858,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:20ch">Every SaaS bills and mails. Most frameworks <em>marry a vendor</em> to do it.</h2>
     <p class="lede" style="margin-top:24px;max-width:60ch">
       Payments and email are the two things a B2B product cannot avoid, and they are exactly where a framework
-      quietly hard-codes a provider — a webhook signature here, a customer id there — until leaving costs a
+      quietly hard-codes a provider - a webhook signature here, a customer id there - until leaving costs a
       quarter. In Samen the kernel names <strong>zero</strong> Stripe strings. Adapters live in sibling
       packages: <code>samen_stripe</code>, <code>samen_postmark</code>, <code>samen_ses</code>,
       <code>samen_resend</code>.
@@ -2929,7 +2929,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <g transform="translate(14 14)" opacity="0.62">
             <rect x="228" y="234" width="170" height="56" rx="12" fill="#161822" stroke="#6B6E82" stroke-width="1.5" stroke-dasharray="5 5"/>
             <text x="242" y="258" font-family="JetBrains Mono, monospace" font-size="12.5" fill="#F3F2EF">samen_stripe</text>
-            <text x="242" y="276" font-family="Inter, sans-serif" font-size="11" fill="#9EA1B4">lifted away &#8212; nothing breaks</text>
+            <text x="242" y="276" font-family="Inter, sans-serif" font-size="11" fill="#9EA1B4">lifted away - nothing breaks</text>
           </g>
           <text x="412" y="240" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#6B6E82">BILLING</text>
         </svg>
@@ -2944,7 +2944,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:20ch">Three genuinely different auth models, <em>behind one seam.</em></h2>
     <p class="lede" style="margin-top:20px;max-width:58ch">
       A seam is only proven by vendors that disagree with each other. These three disagree at the most awkward
-      layer there is — how they authenticate an inbound webhook — and each satisfies the same shared,
+      layer there is - how they authenticate an inbound webhook - and each satisfies the same shared,
       <strong>non-vacuous</strong> conformance harness.
     </p>
 
@@ -2958,7 +2958,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div class="card">
         <span class="card-num">ESP 02</span>
         <h3>samen_ses</h3>
-        <p>SNS with RSA signature verification — asynchronous notification topics and a certificate chain to
+        <p>SNS with RSA signature verification - asynchronous notification topics and a certificate chain to
           validate, not a header to compare.</p>
       </div>
       <div class="card">
@@ -2979,14 +2979,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <span class="card-num">Rendering</span>
         <h3>PII-safe by construction</h3>
         <p>Template rendering resolves through the vault plane, and the no-leak gate is fail-closed and
-          non-skippable — a template that would put plaintext PII on the wire does not get to send.</p>
+          non-skippable - a template that would put plaintext PII on the wire does not get to send.</p>
       </div>
     </div>
 
     <hr class="hr">
 
     <span class="sec-label">Billing · the vendor you most want to be able to leave</span>
-    <h2 style="max-width:20ch">A subscription lifecycle you can reason about — and <em>no PAN column that can compile.</em></h2>
+    <h2 style="max-width:20ch">A subscription lifecycle you can reason about - and <em>no PAN column that can compile.</em></h2>
     <p class="lede" style="margin-top:20px;max-width:58ch">
       Card data is not stored, and not merely by policy: payment methods are hosted-only, so there is no column
       for a primary account number to land in. The rest is the unglamorous, correctness-shaped part of billing.
@@ -3019,7 +3019,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       Dispatch is proven against hermetic fakes and injected-transport cassettes. <strong style="color:#E5A44A">No
       host wires a live provider.</strong> Every generated app boots with billing and ESP unconfigured and says
       so plainly, with a <code>:not_configured</code> empty state rather than a silent failure or a fake success.
-      The live lanes — real Stripe keys, real Postmark or SES or Resend credentials — are documented, but they
+      The live lanes - real Stripe keys, real Postmark or SES or Resend credentials - are documented, but they
       are not in CI, and nothing on this page should be read as a claim that they are.
     </div>
 
@@ -3030,20 +3030,20 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           considered an implementation of the behaviour. It is what turns &ldquo;we have an interface&rdquo; into
           &ldquo;we have a seam&rdquo;: a new ESP is not integrated by editing the kernel, it is integrated by
           passing the suite.</p>
-        <p>The failure mode is a harness that every adapter passes because it asserts almost nothing — an
+        <p>The failure mode is a harness that every adapter passes because it asserts almost nothing - an
           interface-shaped test that would go green against an empty module. That harness proves nothing, and it
           proves nothing <em>quietly</em>, which is worse.</p>
         <ul>
           <li><strong>It exercises the awkward parts.</strong> Signature verification, rejection of a bad
             signature, replay handling, delivery and bounce events, and the mapping back onto the kernel&rsquo;s
-            own vocabulary — not just &ldquo;send returned :ok&rdquo;.</li>
+            own vocabulary - not just &ldquo;send returned :ok&rdquo;.</li>
           <li><strong>Three disagreeing vendors keep it honest.</strong> Basic-Auth, SNS-RSA and Svix-HMAC cannot
             share an accidental assumption. If the harness had quietly encoded one vendor&rsquo;s shape, the
             other two would not pass it.</li>
           <li><strong>A committed sabotage proves the harness can fail.</strong> This is the part that closes the
             loop. Among the <strong>425</strong> sabotage patches in the repo are ones aimed at the ESP path:
-            apply the patch, and the <em>named</em> conformance tests must fail — not &ldquo;something
-            broke&rdquo; — then revert and verify a byte-exact restore. A test that cannot fail is treated as a
+            apply the patch, and the <em>named</em> conformance tests must fail - not &ldquo;something
+            broke&rdquo; - then revert and verify a byte-exact restore. A test that cannot fail is treated as a
             bug.</li>
         </ul>
         <p>So the seam claim has two halves, and both are executable: delete the adapters and the kernel still
@@ -3063,7 +3063,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <h2 style="max-width:19ch">An agent near customer data is <em>a governance problem</em> before it is a feature.</h2>
     <p class="lede" style="margin-top:22px">
       So the design starts at authority, not capability. The agent <strong>proposes</strong>. A human
-      <strong>approves</strong>. The approved write executes carrying the <strong>approver's</strong> authority —
+      <strong>approves</strong>. The approved write executes carrying the <strong>approver's</strong> authority -
       never the agent's. The agent never holds a credential that can write on its own.
     </p>
 
@@ -3089,7 +3089,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                 <div class="ui-ag-tn">1</div>
                 <div class="ui-ag-tb" style="min-width:0">
                   <div class="ui-kind">catalog_lookup <span class="ui-ktag read">read</span></div>
-                  <div class="ui-tr" style="overflow-wrap:anywhere">resolves <code>load</code> and <code>driver</code> against the machine catalog &#8212; <code>schema.dict.json</code>, backed by <code>tam_table</code> / <code>fld_field</code>. The agent reads declared schema; it does not guess field names.</div>
+                  <div class="ui-tr" style="overflow-wrap:anywhere">resolves <code>load</code> and <code>driver</code> against the machine catalog - <code>schema.dict.json</code>, backed by <code>tam_table</code> / <code>fld_field</code>. The agent reads declared schema; it does not guess field names.</div>
                 </div>
                 <div class="ui-ag-ts"><span class="ui-pill ok"><span class="ui-d"></span>done</span></div>
               </div>
@@ -3098,7 +3098,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                 <div class="ui-ag-tn">2</div>
                 <div class="ui-ag-tb" style="min-width:0">
                   <div class="ui-kind">fetch_record <span class="ui-ktag read">read</span></div>
-                  <div class="ui-tr" style="overflow-wrap:anywhere">driver <code>DRV-8821</code> &#183; name <span class="ui-masked">&#8226;&#8226;&#8226;&#8226;</span> &#183; phone <span class="ui-masked">&#8226;&#8226;&#8226;&#8226;</span> &#183; CDL <span class="ui-masked">&#8226;&#8226;&#8226;&#8226;</span> &#183; hours of service <b>6h 12m left</b> &#183; load <code>LD-40277</code> <b>in transit</b> <span style="color:var(--uc-faint)">&#8212; the agent is an actor like any other: no grant, no plaintext</span></div>
+                  <div class="ui-tr" style="overflow-wrap:anywhere">driver <code>DRV-8821</code> &#183; name <span class="ui-masked">&#8226;&#8226;&#8226;&#8226;</span> &#183; phone <span class="ui-masked">&#8226;&#8226;&#8226;&#8226;</span> &#183; CDL <span class="ui-masked">&#8226;&#8226;&#8226;&#8226;</span> &#183; hours of service <b>6h 12m left</b> &#183; load <code>LD-40277</code> <b>in transit</b> <span style="color:var(--uc-faint)">- the agent is an actor like any other: no grant, no plaintext</span></div>
                 </div>
                 <div class="ui-ag-ts"><span class="ui-pill ok"><span class="ui-d"></span>done</span></div>
               </div>
@@ -3117,7 +3117,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
               <div class="ui-ag-dh">
                 <span class="ui-dl"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>the human gate</span>
                 <b>Approve this agent write?</b>
-                <span>The agent has no credential that can perform it. If you approve, the write runs &#8212; and it runs <strong>as you</strong>.</span>
+                <span>The agent has no credential that can perform it. If you approve, the write runs - and it runs <strong>as you</strong>.</span>
               </div>
 
               <div class="ui-ag-prov">
@@ -3126,26 +3126,26 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
                 <div class="ui-ag-pr"><span class="ui-pk">subject_ref</span><span class="ui-pv digest">samen:atn:6f2a-t3</span></div>
                 <div class="ui-ag-pr"><span class="ui-pk">Turn</span><span class="ui-pv">#3 &#183; reassign_load</span></div>
                 <div class="ui-ag-pr"><span class="ui-pk">Arg values</span><span class="ui-pv noval">masked in transcript</span></div>
-                <div class="ui-ag-pr"><span class="ui-pk">Agent authority</span><span class="ui-pv noval">none &#8212; cannot write</span></div>
+                <div class="ui-ag-pr"><span class="ui-pk">Agent authority</span><span class="ui-pv noval">none - cannot write</span></div>
                 <div class="ui-ag-pr"><span class="ui-pk">Executes as</span><span class="ui-pv">A. Reyes &#183; dispatcher (you)</span></div>
               </div>
 
-              <div class="ui-ag-note"><b>Authority enters here.</b> Before this row the proposal carries none. On approve, the write executes under <b>A. Reyes</b>'s actor &#8212; the approver's, never the agent's.</div>
+              <div class="ui-ag-note"><b>Authority enters here.</b> Before this row the proposal carries none. On approve, the write executes under <b>A. Reyes</b>'s actor - the approver's, never the agent's.</div>
 
               <div class="ui-ag-acts">
-                <span class="ui-ab approve" role="img" aria-label="Approve, runs as A. Reyes"><svg class="ui-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:currentColor" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Approve &#8212; runs as me</span>
+                <span class="ui-ab approve" role="img" aria-label="Approve, runs as A. Reyes"><svg class="ui-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:currentColor" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Approve - runs as me</span>
                 <span class="ui-ab" role="img" aria-label="Reject"><svg class="ui-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>Reject</span>
               </div>
 
-              <div class="ui-ag-guard" style="overflow-wrap:anywhere">on approve, the record reads &#8212; actor <b>A. Reyes (approver)</b> &#183; origin <b>agent</b> &#183; kind <b>"ai_agent_write"</b> &#183; subject_ref <b>samen:atn:6f2a-t3</b> &#183; agent actor: absent. An agent-originated write stays a distinguishable class at the gate rather than flattening into ordinary traffic.</div>
+              <div class="ui-ag-guard" style="overflow-wrap:anywhere">on approve, the record reads - actor <b>A. Reyes (approver)</b> &#183; origin <b>agent</b> &#183; kind <b>"ai_agent_write"</b> &#183; subject_ref <b>samen:atn:6f2a-t3</b> &#183; agent actor: absent. An agent-originated write stays a distinguishable class at the gate rather than flattening into ordinary traffic.</div>
             </div>
 
           </div>
         </div>
       </div>
       <div class="ui-caption">
-        <span><b>Tenant plane &#183; /ai/agents</b> &#8212; reads masked like every actor, the one write parked for a human</span>
-        <span>designed and gated (ADR-047) &#8212; the implementing batches are filed, not built</span>
+        <span><b>Tenant plane &#183; /ai/agents</b> - reads masked like every actor, the one write parked for a human</span>
+        <span>designed and gated (ADR-047) - the implementing batches are filed, not built</span>
       </div>
     </div>
 
@@ -3161,7 +3161,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           </marker>
         </defs>
 
-        <text x="6" y="22" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="1.4" fill="#8A8C99">THE APPROVED PATH — AUTHORITY TRANSFERS AT STEP 02</text>
+        <text x="6" y="22" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="1.4" fill="#8A8C99">THE APPROVED PATH - AUTHORITY TRANSFERS AT STEP 02</text>
 
         <!-- STEP 01 -->
         <rect x="6" y="40" width="182" height="122" rx="11" fill="#FFFFFF" stroke="#E5E3DD"/>
@@ -3195,7 +3195,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <rect x="470" y="118" width="150" height="28" rx="7" fill="#3B4CCA" stroke="#3B4CCA"/>
         <text x="545" y="136" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#FFFFFF">authority: approver</text>
 
-        <text x="321" y="186" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#3B4CCA">registered by kind &#8212; kind: "ai_agent_write"</text>
+        <text x="321" y="186" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11.5" fill="#3B4CCA">registered by kind - kind: "ai_agent_write"</text>
         <text x="321" y="204" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" fill="#8A8C99">an agent-originated write is its own class at the gate, not a service account</text>
 
         <line x1="6" y1="226" x2="634" y2="226" stroke="#E5E3DD"/>
@@ -3215,22 +3215,22 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <text x="352" y="299" font-family="Inter, sans-serif" font-size="12" fill="#565866">no credential that writes on its own</text>
       </svg>
       <p class="figcap">The approval is the authority transfer. Before it, the agent carries none; after it, the write
-        carries the approver's — and it is recorded as an agent-originated write, not as an ordinary one.</p>
+        carries the approver's - and it is recorded as an agent-originated write, not as an ordinary one.</p>
     </div>
 
     <div class="g2" style="margin-top:clamp(26px,3.2vw,38px)">
       <div class="card">
         <span class="card-num">Grounding</span>
         <h3>The agent reads the catalog, not tea leaves</h3>
-        <p>It works against the machine catalog — <code>schema.dict.json</code>, backed by <code>tam_table</code>
-          and <code>fld_field</code> — so a proposal is written against declared schema rather than guessed at.
+        <p>It works against the machine catalog - <code>schema.dict.json</code>, backed by <code>tam_table</code>
+          and <code>fld_field</code> - so a proposal is written against declared schema rather than guessed at.
           A reference to an uncatalogued column does not compile.</p>
       </div>
       <div class="card">
         <span class="card-num">Erasure</span>
         <h3>The transcript is inside the envelope</h3>
         <p>An agent conversation about a subject is subject data. It lives inside the erasure envelope, so when
-          that subject's key material is destroyed the transcript goes with them — the same crypto-shred, not a
+          that subject's key material is destroyed the transcript goes with them - the same crypto-shred, not a
           separate cleanup job someone has to remember.</p>
       </div>
     </div>
@@ -3239,7 +3239,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <summary>Why "runs as the approver, not the requester" is the load-bearing clause</summary>
       <div class="drawer-body">
         <p>Approval workflows usually get this backwards. The agent asks, a human clicks yes, and the write then
-          executes under the <strong>agent's</strong> identity — because that is the process already holding a
+          executes under the <strong>agent's</strong> identity - because that is the process already holding a
           connection. That design launders the agent's permissions through a human click: the human approved one
           write, but the credential that performed it can perform every other write too, and the audit trail
           records a service account.</p>
@@ -3256,7 +3256,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </details>
 
     <div class="callout callout--honest" style="margin-top:20px">
-      <strong>Filed, not shipped.</strong> The AI plane is designed and gated — ADR-047 fixes the propose /
+      <strong>Filed, not shipped.</strong> The AI plane is designed and gated - ADR-047 fixes the propose /
       approve / execute-as-approver contract, and ADR-048 ratifies the compaction contract that keeps agent
       transcripts inside the erasure envelope. The build is a later phase. Treat this section as the decision
       that has been made, not a capability you can run today. The panel above is a picture of that contract, not
@@ -3293,7 +3293,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
       <div class="stack">
         <h3 style="font-size:22px">The sabotage loop</h3>
         <p class="small">For each of the 425 committed patches, the harness runs the same five steps. The step that
-          matters is the third: the <strong>named</strong> tests must fail. Not &ldquo;something broke&rdquo; —
+          matters is the third: the <strong>named</strong> tests must fail. Not &ldquo;something broke&rdquo; -
           the specific test, identified by name, that is supposed to be guarding that behaviour.</p>
         <p class="small">That specificity is the whole difference between this and mutation testing that counts
           breakage. A patch that removes the decrypt chokepoint must break the chokepoint test. If it breaks
@@ -3333,7 +3333,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <text x="439" y="171" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#F3F2EF">Apply the</text>
           <text x="439" y="187" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#F3F2EF">committed patch</text>
 
-          <!-- 03 fail — emphasized -->
+          <!-- 03 fail - emphasized -->
           <rect x="352" y="326" width="164" height="76" rx="12" fill="#3B4CCA" stroke="#3B4CCA"/>
           <text x="370" y="348" font-family="JetBrains Mono, monospace" font-size="10" letter-spacing="1.2" fill="#EEF0FD">03 &#183; THE POINT</text>
           <text x="370" y="368" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">The named tests</text>
@@ -3364,14 +3364,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </div>
 
     <div class="term" style="margin-top:clamp(28px,3.4vw,40px)">
-      <div><span class="c"># the red lane — every guarantee gets a patch that must break its own named test</span></div>
+      <div><span class="c"># the red lane - every guarantee gets a patch that must break its own named test</span></div>
       <div><span class="p">$</span> SAMEN_SABOTAGE=1 ./ci.sh</div>
       <div>&nbsp;</div>
       <div><span class="hl">[sabotage 118/425]</span> vault/decrypt_outside_chokepoint.patch</div>
       <div>&nbsp;&nbsp;hash&nbsp;&nbsp;&nbsp;&nbsp;4 files &#183; sha-256 recorded</div>
       <div>&nbsp;&nbsp;apply&nbsp;&nbsp;&nbsp;ok</div>
       <div>&nbsp;&nbsp;expect&nbsp;&nbsp;SamenCore.VaultTest "refuses a decrypt outside the chokepoint"</div>
-      <div>&nbsp;&nbsp;result&nbsp;&nbsp;<span class="no">FAILED</span> <span class="ok">&#8212; as required</span></div>
+      <div>&nbsp;&nbsp;result&nbsp;&nbsp;<span class="no">FAILED</span> <span class="ok">- as required</span></div>
       <div>&nbsp;&nbsp;revert&nbsp;&nbsp;<span class="ok">byte-exact restore verified</span></div>
       <div>&nbsp;</div>
       <div><span class="c"># ...</span></div>
@@ -3390,20 +3390,20 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <h3>The gate does not test the substrate. It builds a product and tests that.</h3>
         <p>The root <code>./ci.sh</code> generates a fresh app with <code>mix samen.gen.app</code>, runs that
           app's entire 19-step gate, seeds it, boots it, HTTP-probes its routes, and then drives sabotages
-          against the <strong>generated</strong> gate — so the generated app's tests are proven non-vacuous too,
+          against the <strong>generated</strong> gate - so the generated app's tests are proven non-vacuous too,
           not just the kernel's. It must end <code>ROOT CI: ALL PASSED</code>.</p>
       </div>
       <div class="card">
         <span class="card-num">The destruction oracle</span>
         <h3>A separate process attests that a shredded subject is unrecoverable.</h3>
-        <p><code>mix samen.verify.no_plaintext_pii</code> runs as its own OS process — outside the application
-          that did the erasing — and sweeps every tier: domain rows, vault, audit events, rollups, Oban args,
+        <p><code>mix samen.verify.no_plaintext_pii</code> runs as its own OS process - outside the application
+          that did the erasing - and sweeps every tier: domain rows, vault, audit events, rollups, Oban args,
           the KMS store. <code>driftwood</code> re-runs the crypto-shred game-day on every CI run.</p>
       </div>
     </div>
 
     <div style="margin-top:clamp(24px,3vw,34px)">
-      <p class="tiny" style="margin-bottom:12px">TEST COUNTS &#8212; DIRECTIONAL, THEY MOVE WITH THE TREE</p>
+      <p class="tiny" style="margin-bottom:12px">TEST COUNTS - DIRECTIONAL, THEY MOVE WITH THE TREE</p>
       <div class="pills">
         <span class="pill"><b>samen_core</b> 2606</span>
         <span class="pill"><b>samen_web</b> 1711</span>
@@ -3419,8 +3419,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     <details class="drawer">
       <summary>Why a byte-exact restore is part of the loop, not a courtesy</summary>
       <div class="drawer-body">
-        <p>A sabotage harness edits the working tree on purpose. If a revert leaves residue — a stray line, a
-          reordered file, a changed timestamp baked into a fixture — every result <strong>after</strong> that
+        <p>A sabotage harness edits the working tree on purpose. If a revert leaves residue - a stray line, a
+          reordered file, a changed timestamp baked into a fixture - every result <strong>after</strong> that
           patch is run against a tree nobody described. Failures start looking like flakes, and the harness
           quietly becomes a random number generator that reports green.</p>
         <ul>
@@ -3454,7 +3454,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <h2 style="max-width:16ch">What this is <em>not</em>, stated as precisely as what it is.</h2>
       </div>
       <p class="lede">A repository that can draw its own boundary is one whose other claims you can price.
-        Everything below is a limit that a reviewer could have found and used against the project — so it is
+        Everything below is a limit that a reviewer could have found and used against the project - so it is
         written down here, in the same words it is written down in the tree.</p>
     </div>
 
@@ -3462,11 +3462,11 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
       <div class="callout callout--honest">
         <strong>01 · Everything runs on the keyless lane.</strong>
-        Billing and ESP dispatch are proven against hermetic fakes and injected-transport cassettes — a real
+        Billing and ESP dispatch are proven against hermetic fakes and injected-transport cassettes - a real
         conformance harness, but never a real vendor. <strong>No host in this repo wires a live provider.</strong>
         Every generated app boots with billing and ESP unconfigured and says so: a <code>:not_configured</code>
         empty state, not a pretend-success that would look green in a demo and fail in production. The live
-        lanes — <code>STRIPE_TEST_KEY</code>, <code>SAMEN_POSTMARK_SMOKE</code>, <code>SAMEN_ESP_LIVE</code> —
+        lanes - <code>STRIPE_TEST_KEY</code>, <code>SAMEN_POSTMARK_SMOKE</code>, <code>SAMEN_ESP_LIVE</code> -
         are documented and runnable by hand. They are not in CI, so nothing on this page rests on them.
       </div>
 
@@ -3477,8 +3477,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <h3>Support can see PII.</h3>
           <p>The claim was never &ldquo;never.&rdquo; It is: reveal is grant-gated, approved by a second and
             distinct party, time-boxed with an auto-revoke job, and readable by the tenant in a hash-chained
-            log they do not need permission to open. The stronger-sounding version — support that never sees
-            plaintext at all — was retired because it was false by construction, and the retraction is in the
+            log they do not need permission to open. The stronger-sounding version - support that never sees
+            plaintext at all - was retired because it was false by construction, and the retraction is in the
             repo rather than in a footnote.</p>
         </div>
 
@@ -3495,8 +3495,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <div class="card">
           <span class="card-num">Scope 04</span>
           <h3>The AI plane is designed and gated, not shipped.</h3>
-          <p>ADR-047&rsquo;s agent loop — the agent proposes, a human approves, the write executes carrying the
-            approver&rsquo;s authority — and ADR-048&rsquo;s compaction contract are both ratified decisions. The
+          <p>ADR-047&rsquo;s agent loop - the agent proposes, a human approves, the write executes carrying the
+            approver&rsquo;s authority - and ADR-048&rsquo;s compaction contract are both ratified decisions. The
             implementing batches are filed as work items, not merged as code. Read them as a design you can
             argue with, not a feature you can call.</p>
         </div>
@@ -3513,7 +3513,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <div class="card">
           <span class="card-num">Scope 06</span>
           <h3>Suite counts are directional.</h3>
-          <p>samen_core 2606, samen_web 1711, demo 465, driftwood 123, pawchart 49 — accurate when written and
+          <p>samen_core 2606, samen_web 1711, demo 465, driftwood 123, pawchart 49 - accurate when written and
             stale by the next phase, because they grow every phase. Rather than ask you to trust a printed
             number, the page hands you the command: <code>mix test</code> per package, and
             <code>ls scripts/sabotages/*.patch | wc -l</code> for the sabotage count. Run them against the tree
@@ -3524,7 +3524,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <span class="card-num">How this list stays true</span>
           <h3>An overclaim gets retracted in the repo, not softened on the page.</h3>
           <p style="color:var(--accent-deep)">This section is maintained the same way the code is. When a
-            reviewer finds a claim that outruns its evidence, the fix is a commit — the claim comes out of the
+            reviewer finds a claim that outruns its evidence, the fix is a commit - the claim comes out of the
             docs, the correction goes into the tree, and the retraction stays visible. Two of the six items
             above exist only because that happened. A boundary you can read is worth more than a promise you
             cannot check.</p>
@@ -3539,14 +3539,14 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             <strong>vendor reality</strong>.</p>
           <ul>
             <li><strong>Proven on the keyless lane.</strong> One ESP behaviour with three vendor
-              implementations — Postmark Basic-Auth, SES SNS-RSA, Resend Svix-HMAC — driven against a shared
+              implementations - Postmark Basic-Auth, SES SNS-RSA, Resend Svix-HMAC - driven against a shared
               conformance harness that is non-vacuous: signature verification, replay handling and failure
               mapping all have to actually happen, and a sabotage patch exists to prove each assertion can
               fail. Transports are injected, so the code under test is the code that would ship.</li>
             <li><strong>Not proven, and not claimed.</strong> That a live Stripe account, a live Postmark
               domain or a live SES identity behaves the way the cassette says on the day you wire it. Vendor
               behaviour drifts; a recorded interaction does not.</li>
-            <li><strong>Why it is built this way.</strong> The kernel names zero Stripe strings — you can
+            <li><strong>Why it is built this way.</strong> The kernel names zero Stripe strings - you can
               delete all four adapter packages and <code>samen_core</code> plus <code>samen_web</code> still
               pass. Keeping live keys out of CI is what keeps that property honest instead of aspirational.</li>
           </ul>
@@ -3575,7 +3575,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <span class="card-num">Path A · Use it</span>
         <h3 style="font-size:22px">Generate an app and make it prove itself.</h3>
         <p class="small">You need Elixir 1.20 on OTP 29, and a local PostgreSQL that trusts <code>$USER</code>
-          on localhost. Nothing else — no Docker, no API keys, no accounts.</p>
+          on localhost. Nothing else - no Docker, no API keys, no accounts.</p>
 
         <pre class="term"><span class="c"># prerequisites: Elixir 1.20 / OTP 29
 # local PostgreSQL trusting $USER on localhost</span>
@@ -3591,7 +3591,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
         <p class="small">The point of that last line is the word <strong>first</strong>: the generated app is
           expected to clear all 19 steps of its own gate on the first run, with zero hand-edits. If it needs a
-          fix from you to go green, the generator is broken — not your setup.</p>
+          fix from you to go green, the generator is broken - not your setup.</p>
 
         <div class="pills">
           <span class="pill"><b>--module</b> Lighthouse</span>
@@ -3612,7 +3612,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <a class="card" style="display:block;text-decoration:none;color:inherit" href="https://github.com/ckluis/samen/tree/main/docs/adr">
             <span class="card-num">49 ADRs ↗</span>
             <h3>The decisions, with their losers</h3>
-            <p>Every architectural choice written down while it was still arguable — including the ones that
+            <p>Every architectural choice written down while it was still arguable - including the ones that
               were later overturned.</p>
           </a>
 
@@ -3633,7 +3633,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
           <a class="card" style="display:block;text-decoration:none;color:inherit" href="https://github.com/ckluis/samen/blob/main/docs/guides/getting-started.md">
             <span class="card-num">guides/getting-started.md ↗</span>
             <h3>Zero to first feature</h3>
-            <p>From an empty directory to a resource you wrote, catalogued, vaulted and served — with the
+            <p>From an empty directory to a resource you wrote, catalogued, vaulted and served - with the
               generator commands in between.</p>
           </a>
 
@@ -3641,8 +3641,8 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
             <span class="card-num">425 sabotage patches ↗</span>
             <h3>A corpus of &ldquo;here is how you prove a test can fail&rdquo;</h3>
             <p>The most portable idea in the repo, and the one that needs no Elixir to steal. Each patch breaks
-              one specific behaviour; the <em>named</em> tests for that behaviour must fail — not merely
-              &ldquo;something broke&rdquo; — then the patch reverts to a byte-exact restore. Read ten of them
+              one specific behaviour; the <em>named</em> tests for that behaviour must fail - not merely
+              &ldquo;something broke&rdquo; - then the patch reverts to a byte-exact restore. Read ten of them
               and you will start writing different tests in whatever language you use.</p>
           </a>
 
@@ -3665,7 +3665,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
         <p class="tiny" style="text-transform:uppercase;letter-spacing:.11em">On authorship</p>
         <p class="small">Every commit in this repository was written by Claude under human direction and marked
           <code>Co-Authored-By: Claude</code>. A human operator set the direction, reviewed the work, and gated
-          it adversarially — the sabotage harness, the verifier tiers and the ADR record exist largely because
+          it adversarially - the sabotage harness, the verifier tiers and the ADR record exist largely because
           an AI-authored codebase has to be checkable by someone who did not type it. Some readers will find
           that the most interesting fact on this page. It is stated here because it is true, not because it is
           a selling point.</p>
@@ -3674,7 +3674,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
 
     <blockquote style="margin-top:clamp(40px,5vw,60px);font-family:var(--display);font-size:clamp(20px,2.6vw,30px);line-height:1.36;font-weight:500;letter-spacing:-.015em;border-left:3px solid var(--accent);padding-left:24px;color:var(--ink);max-width:34ch">
       This is not finished, and finished was never the claim. The claim is that nothing here is asserted
-      without something attached to it that could go red — and you can run every one of them yourself.
+      without something attached to it that could go red - and you can run every one of them yourself.
     </blockquote>
 
   </div>
@@ -3721,7 +3721,7 @@ code:not(.term code){font-family:var(--mono);font-size:.9em;background:var(--rul
     </div>
     <div style="margin-top:clamp(40px,5vw,60px);padding-top:26px;border-top:1px solid var(--night-rule);display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;font-family:var(--mono);font-size:11.5px;color:var(--night-faint)">
       <span>github.com/ckluis/samen</span>
-      <span>Counts on this page are live against the tree — <code style="background:var(--night-3);color:var(--night-muted)">ls scripts/sabotages/*.patch | wc -l</code></span>
+      <span>Counts on this page are live against the tree - <code style="background:var(--night-3);color:var(--night-muted)">ls scripts/sabotages/*.patch | wc -l</code></span>
     </div>
   </div>
 </footer>
