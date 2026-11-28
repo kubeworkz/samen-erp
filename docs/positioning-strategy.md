@@ -37,11 +37,12 @@ Samen ERP is an open-source ERP with an AI-native kernel, designed for developer
 
 ### Live vs shell (AI and enterprise)
 
-- **Live:** kernel BYOK AES-256-GCM key storage, token validation, completion/SSE and
-  usage analytics over supplied logs; PII vault, crypto-shred, hash-chained audit and
-  audit-on-write.
-- **Not live:** the `/settings/huggingface` key flow, daily credential sweep,
-  `PromptLog` writes, HuggingFace embeddings provider, and in-workflow AI UI.
+- **Live:** kernel BYOK AES-256-GCM key storage, token validation, completion/SSE,
+  the `/settings/huggingface` connect/validate/revoke flow, the daily credential
+  sweep, and usage analytics over supplied logs; PII vault, crypto-shred,
+  hash-chained audit and audit-on-write.
+- **Not live:** `PromptLog` writes, HuggingFace embeddings provider, and in-workflow
+  AI UI.
 - **Enterprise shells:** SSO/SAML, monitoring, backups/PITR, plan-based API/AI limits,
   customer audit-log export, data residency and white-label branding.
 

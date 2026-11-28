@@ -7,13 +7,15 @@
 > (`Samen.Scopes.Ai.Client`), SSE streaming (`Samen.Scopes.Ai.Streamer`), the
 > `ApiKey`/`PromptLog` resources, usage analytics (`Samen.Scopes.Ai.Analytics`),
 > and the `Samen.AI.Provider.HuggingFace` adapter (`complete/2` only; `embed/2`
-> returns `{:error, :not_implemented}`). **Not wired:** the
-> `/settings/huggingface` LiveView (connect/validate/revoke only show success
-> messages; no key is validated, encrypted, persisted or loaded, and usage is
-> hard-coded zero) and the daily `VerifyCredentialsWorker` sweep
-> (`get_tenants_with_hf_keys/0` returns `[]`). Every `MyApp.*` snippet below is
-> illustrative: the shipped modules use `Samen.Scopes.Ai.HttpAdapter` and Ash
-> resources, not Req/Finch/Ecto.
+> returns `{:error, :not_implemented}`). **Wired:** `/settings/huggingface`
+> validates keys through `TokenValidator`, encrypts and persists them as `ApiKey`
+> rows, reloads them with aggregated usage, and revokes on demand; the daily
+> `VerifyCredentialsWorker` sweeps active rows, clears revoked secrets, and
+> broadcasts the revocation to the tenant settings topic. **Still not wired:**
+> nothing writes `PromptLog` rows, so usage shows only supplied logs, and the
+> HuggingFace embeddings provider remains unimplemented. Every `MyApp.*` snippet
+> below is illustrative: the shipped modules use `Samen.Scopes.Ai.HttpAdapter`
+> and Ash resources, not Req/Finch/Ecto.
 
 Tenants are **bringing their own Hugging Face API keys**, your application acts as an agent executing AI tasks on their behalf using their infrastructure and quota. This drastically reduces your operational costs and shifts liability, but it requires highly secure credential management and robust validation.
 
@@ -883,10 +885,10 @@ end
 Even though tenants pay Hugging Face directly for raw compute through their keys, your system should track their usage profiles. This lets you spot failing tenant loops, calculate total throughput, and display usage telemetry graphs.
 
 > **Shipped:** the `PromptLog` resource and `Samen.Scopes.Ai.Analytics`
-> aggregations exist and are unit-tested, but nothing writes prompt-log rows:
+> aggregations exist and are unit-tested, and the settings LiveView aggregates
+> whatever rows exist. Nothing writes prompt-log rows yet:
 > `Client.generate_text/4` and `Streamer.stream_with_metrics/5` return metrics
-> without persisting them, and the settings LiveView does not query logs. The
-> telemetry below is blueprint.
+> without persisting them. The telemetry below is blueprint.
 
 **1. The Metrics Table Schema**
 

@@ -296,7 +296,7 @@ defmodule SamenerpWeb.Router do
     #     honest placeholders to the REAL session list/revoke + 2FA enrollment.
     samen_settings_routes(:settings, Samenerp.Operator,
       repo: Samenerp.Repo,
-      labels: @current_org_labels,
+      labels: Map.put(@current_org_labels, :pubsub, Samenerp.PubSub),
       spine_totp: true,
       spine_sessions: true
     )

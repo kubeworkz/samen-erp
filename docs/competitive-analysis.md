@@ -85,8 +85,8 @@ Manufacturing, HR and CRM/Billing/Support are live; eCommerce is not a shipped s
 | AI Usage Tracking | ⚠️ Needs PromptLog writes | ❌ | ❌ | ❌ |
 
 **Verdict: Kernel lead, host gap** — the tested AI plane (BYOK crypto, token validation,
-completion/SSE, no-PII-egress chokepoint, kernel verbs) is real, but the
-`/settings/huggingface` key flow, daily sweep, prompt-log writes, HF embeddings and
+the `/settings/huggingface` key flow, the daily sweep, completion/SSE, no-PII-egress
+chokepoint, kernel verbs) is real, but prompt-log writes, HF embeddings and
 in-workflow UI are not wired. Not a shipping AI feature yet.
 
 ### 3. Deployment Options

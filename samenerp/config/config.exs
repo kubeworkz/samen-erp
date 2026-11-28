@@ -323,6 +323,11 @@ config :samen_core, :samen_ai_agent_kill_repo, Samenerp.Repo
 config :samen_core, :samen_ai_assistant_repo, Samenerp.Repo
 config :samen_core, :samen_ai_assistant_conversation_repo, Samenerp.Repo
 
+# HuggingFace BYOK — the persisted key rows + prompt logs the settings surface
+# and the daily credential sweep operate on live in the host's own repo.
+config :samen_core, :samen_ai_api_key_repo, Samenerp.Repo
+config :samen_core, :samen_ai_prompt_log_repo, Samenerp.Repo
+
 # Phase 7 (ADR-047 A5/A6 §5.3) — the APPROVER-MEMBERSHIP seam. `Identity.Membership`
 # is materialized INTO the host namespace (ADR-004), so samen_core cannot name it;
 # the host does. At decision time the clicking principal is resolved against a REAL
@@ -435,6 +440,10 @@ config :samen_core, Samen.Notifications.Engine,
   broadcaster: Samen.Web.Notifications.PubSubBroadcaster
 
 config :samen_web, Samen.Web.Notifications.PubSubBroadcaster, pubsub: Samenerp.PubSub
+
+# HuggingFace BYOK revocation broadcasts ride the same host PubSub. The settings
+# LiveView gets it from its mount label; the Oban sweep (kernel code) reads it here.
+config :samen_core, :pubsub, Samenerp.PubSub
 
 config :phoenix, :json_library, Jason
 

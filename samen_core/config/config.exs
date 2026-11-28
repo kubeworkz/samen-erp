@@ -84,6 +84,14 @@ config :samen_core, :samen_ai_agent_kill_repo, SamenCore.TestRepo
 config :samen_core, :samen_ai_assistant_repo, SamenCore.TestRepo
 config :samen_core, :samen_ai_assistant_conversation_repo, SamenCore.TestRepo
 
+# HuggingFace BYOK: the repo backing the `Samen.Scopes.Ai.ApiKey` /
+# `Samen.Scopes.Ai.PromptLog` resources the `/settings/huggingface` surface and
+# the daily credential sweep read. Same compile_env seam as the AI-plane
+# resources above; hosts configure their own (the legacy default is the kernel
+# test repo).
+config :samen_core, :samen_ai_api_key_repo, SamenCore.TestRepo
+config :samen_core, :samen_ai_prompt_log_repo, SamenCore.TestRepo
+
 config :ash, disable_async?: true
 
 # T145: quiet Ash's benign `[warning] Missed N notifications` runtime log noise. The AI

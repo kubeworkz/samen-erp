@@ -54,6 +54,12 @@ config :samen_core, :samen_ai_agent_kill_repo, Samen.WebTest.Repo
 config :samen_core, :samen_ai_assistant_repo, Samen.WebTest.Repo
 config :samen_core, :samen_ai_assistant_conversation_repo, Samen.WebTest.Repo
 
+# HuggingFace BYOK — the scratch host carries the `aik_api_key` /
+# `ail_prompt_log` tables so the settings surface and credential sweep exercise
+# real persistence against `Samen.WebTest.Repo`.
+config :samen_core, :samen_ai_api_key_repo, Samen.WebTest.Repo
+config :samen_core, :samen_ai_prompt_log_repo, Samen.WebTest.Repo
+
 config :phoenix, :json_library, Jason
 
 # Oban base config (the vault/erasure machinery references it). Manual in test.

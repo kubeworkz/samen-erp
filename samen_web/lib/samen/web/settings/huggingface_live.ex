@@ -25,13 +25,23 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
 
   alias Samen.Web.Crumbs
   alias Samen.Web.CurrentOrg
+  alias Samen.Web.Mount
+  alias Samen.Scopes.Ai.ApiKey
   alias Samen.Scopes.Ai.Crypto
+  alias Samen.Scopes.Ai.PromptLog
+  alias Samen.Scopes.Ai.TokenValidator
+
+  require Ash.Query
 
   @impl true
   def mount(params, session, socket) do
     socket = Samen.Web.Live.assign_mount(socket, session)
     mount = socket.assigns[:samen_mount]
     org_id = CurrentOrg.resolve(mount, params, session)
+
+    if connected?(socket) and is_binary(org_id) do
+      subscribe(mount, org_id)
+    end
 
     {:ok,
      socket
@@ -47,7 +57,20 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
 
   @impl true
   def handle_params(params, uri, socket) do
+    mount = socket.assigns[:samen_mount]
     org_id = Samen.Web.CurrentOrg.reresolve(socket, params)
+
+    if connected?(socket) do
+      old = socket.assigns[:org_id]
+
+      if is_binary(old) and old != org_id do
+        unsubscribe(mount, old)
+      end
+
+      if is_binary(org_id) do
+        subscribe(mount, org_id)
+      end
+    end
 
     {:noreply,
      socket
@@ -55,17 +78,22 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
      |> load(org_id)}
   end
 
+  @impl true
+  def handle_info({:tenant_updated, %{hf_status: :revoked}}, socket) do
+    {:noreply, load(socket, socket.assigns[:org_id])}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
   @doc false
   def load(socket, org_id) do
-    mount = socket.assigns.samen_mount
-    socket = assign(socket, org_id: org_id, api_keys: [], usage_stats: nil)
+    socket = assign(socket, org_id: org_id, api_keys: [], usage_stats: default_usage_stats())
 
     if is_nil(org_id) do
       socket
     else
-      # Load existing HuggingFace keys for this tenant
-      api_keys = load_api_keys(mount, org_id)
-      usage_stats = calculate_usage_stats(api_keys)
+      api_keys = load_api_keys(org_id)
+      usage_stats = calculate_usage_stats(org_id)
 
       socket
       |> assign(api_keys: api_keys)
@@ -78,9 +106,10 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
     %{samen_mount: mount, org_id: org_id} = socket.assigns
 
     if operator_plane?(mount) do
-      {:noreply, assign(socket, connect_error: "HuggingFace keys are managed on the tenant plane.")}
+      {:noreply,
+       assign(socket, connect_error: "HuggingFace keys are managed on the tenant plane.")}
     else
-      do_connect(socket, mount, org_id, raw_key)
+      do_connect(socket, org_id, raw_key)
     end
   end
 
@@ -90,7 +119,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
     if operator_plane?(mount) do
       {:noreply, socket}
     else
-      do_validate_key(socket, mount, org_id, key_id)
+      do_validate_key(socket, org_id, key_id)
     end
   end
 
@@ -100,7 +129,7 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
     if operator_plane?(mount) do
       {:noreply, socket}
     else
-      do_revoke_key(socket, mount, org_id, key_id)
+      do_revoke_key(socket, org_id, key_id)
     end
   end
 
@@ -112,12 +141,10 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
 
   @impl Samen.Web.Tenant.Live
   def tenant_assigns(assigns) do
-    assigns =
-      assigns
-      |> assign_new(:connect_error, fn -> nil end)
-      |> assign_new(:connect_success, fn -> nil end)
-      |> assign_new(:validating, fn -> false end)
     assigns
+    |> assign_new(:connect_error, fn -> nil end)
+    |> assign_new(:connect_success, fn -> nil end)
+    |> assign_new(:validating, fn -> false end)
   end
 
   @impl Samen.Web.Tenant.Live
@@ -287,74 +314,325 @@ defmodule Samen.Web.Settings.HuggingFaceLive do
 
   # -- private -----------------------------------------------------------------
 
-  defp do_connect(socket, _mount, _org_id, raw_key) do
-    if Crypto.valid_hf_key?(raw_key) do
-      # In production, this would:
-      # 1. Validate key against HuggingFace API
-      # 2. Encrypt key with AES-256-GCM
-      # 3. Store encrypted key in database
+  defp do_connect(socket, org_id, raw_key) do
+    cond do
+      not Crypto.valid_hf_key?(raw_key) ->
+        {:noreply,
+         assign(socket,
+           connect_error:
+             "Invalid HuggingFace API key format. Keys must start with 'hf_' and be at least 10 characters.",
+           connect_success: nil
+         )}
 
-      # For now, show success message
-      prefix = String.slice(raw_key, 0, min(8, byte_size(raw_key)))
+      true ->
+        case TokenValidator.verify_key(raw_key) do
+          {:ok, _meta} ->
+            iv = Crypto.generate_iv()
 
-      {:noreply,
-       socket
-       |> assign(
-         connect_success: "Key #{prefix}… validated and encrypted successfully!",
-         connect_error: nil
-       )
-       |> load(socket.assigns.org_id)}
-    else
-      {:noreply,
-       assign(socket,
-         connect_error: "Invalid HuggingFace API key format. Keys must start with 'hf_' and be at least 10 characters.",
-         connect_success: nil
-       )}
+            case Crypto.encrypt(raw_key, iv) do
+              {:ok, ciphertext} ->
+                key_prefix = String.slice(raw_key, 0, min(8, byte_size(raw_key)))
+
+                attrs = %{
+                  org_id: org_id,
+                  tenant_id: org_id,
+                  name: "HuggingFace Key",
+                  encrypted_key: ciphertext,
+                  encryption_iv: iv,
+                  key_prefix: key_prefix,
+                  status: :active,
+                  validated_at: DateTime.utc_now()
+                }
+
+                case ApiKey
+                     |> Ash.Changeset.for_create(:create, attrs)
+                     |> Ash.create(authorize?: false) do
+                  {:ok, _row} ->
+                    {:noreply,
+                     socket
+                     |> assign(
+                       connect_success:
+                         "Key #{key_prefix}… validated and encrypted successfully!",
+                       connect_error: nil
+                     )
+                     |> load(org_id)}
+
+                  {:error, _reason} ->
+                    {:noreply,
+                     assign(socket,
+                       connect_error: "Failed to store the key. Please try again.",
+                       connect_success: nil
+                     )}
+                end
+
+              {:error, reason} ->
+                {:noreply,
+                 assign(socket,
+                   connect_error: "Encryption failed: #{inspect(reason)}",
+                   connect_success: nil
+                 )}
+            end
+
+          {:error, reason} ->
+            {:noreply,
+             assign(socket,
+               connect_error: connect_error_message(reason),
+               connect_success: nil
+             )}
+        end
     end
   end
 
-  defp do_validate_key(socket, _mount, _org_id, _key_id) do
-    # In production, this would:
-    # 1. Fetch encrypted key from database
-    # 2. Decrypt key in memory
-    # 3. Validate against HuggingFace API
-    # 4. Update validation timestamp
+  defp do_validate_key(socket, org_id, key_id) do
+    socket = assign(socket, validating: true)
 
-    {:noreply,
-     socket
-     |> assign(validating: false, connect_success: "Key validated successfully!")
-     |> load(socket.assigns.org_id)}
+    case fetch_key(org_id, key_id) do
+      nil ->
+        {:noreply,
+         socket
+         |> assign(validating: false, connect_error: "Key not found.")
+         |> load(org_id)}
+
+      key ->
+        case decrypt_and_verify(key) do
+          :ok ->
+            key
+            |> Ash.Changeset.for_update(:record_validation, %{})
+            |> Ash.update(authorize?: false)
+
+            {:noreply,
+             socket
+             |> assign(
+               validating: false,
+               connect_success: "Key validated successfully!",
+               connect_error: nil
+             )
+             |> load(org_id)}
+
+          {:error, :revoked} ->
+            case revoke_key_row(key) do
+              :ok ->
+                broadcast_revocation(socket.assigns.samen_mount, org_id)
+
+                {:noreply,
+                 socket
+                 |> assign(
+                   validating: false,
+                   connect_success: nil,
+                   connect_error: "Key was revoked by HuggingFace."
+                 )
+                 |> load(org_id)}
+
+              {:error, _reason} ->
+                {:noreply,
+                 socket
+                 |> assign(
+                   validating: false,
+                   connect_success: nil,
+                   connect_error:
+                     "HuggingFace revoked the key, but the local key could not be cleared. Retry revoke."
+                 )
+                 |> load(org_id)}
+            end
+
+          {:error, reason} ->
+            key
+            |> Ash.Changeset.for_update(:update, %{
+              error_count: (key.error_count || 0) + 1,
+              last_error: to_string(reason)
+            })
+            |> Ash.update(authorize?: false)
+
+            {:noreply,
+             socket
+             |> assign(
+               validating: false,
+               connect_error: "Validation failed: #{reason}",
+               connect_success: nil
+             )
+             |> load(org_id)}
+        end
+    end
   end
 
-  defp do_revoke_key(socket, _mount, _org_id, _key_id) do
-    # In production, this would:
-    # 1. Fetch key from database
-    # 2. Clear encrypted key and IV
-    # 3. Set status to :revoked
-    # 4. Broadcast revocation event
+  defp do_revoke_key(socket, org_id, key_id) do
+    case fetch_key(org_id, key_id) do
+      nil ->
+        {:noreply, socket |> assign(connect_error: "Key not found.") |> load(org_id)}
 
-    {:noreply,
-     socket
-     |> assign(connect_success: "Key revoked successfully.")
-     |> load(socket.assigns.org_id)}
+      key ->
+        case revoke_key_row(key) do
+          :ok ->
+            broadcast_revocation(socket.assigns.samen_mount, org_id)
+
+            {:noreply,
+             socket
+             |> assign(connect_success: "Key revoked successfully.", connect_error: nil)
+             |> load(org_id)}
+
+          {:error, _reason} ->
+            {:noreply,
+             socket
+             |> assign(
+               connect_success: nil,
+               connect_error: "Could not revoke the key locally. Please try again."
+             )
+             |> load(org_id)}
+        end
+    end
   end
 
-  defp load_api_keys(_mount, _org_id) do
-    # In production, this would query the database for tenant's HuggingFace keys
-    # For now, return empty list
-    []
+  # -- helpers -----------------------------------------------------------------
+
+  defp fetch_key(org_id, key_id) do
+    ApiKey
+    |> Ash.Query.filter(tenant_id == ^org_id and id == ^key_id)
+    |> Ash.read!(authorize?: false)
+    |> List.first()
+  rescue
+    _ -> nil
   end
 
-  defp calculate_usage_stats(_api_keys) do
-    # In production, this would aggregate PromptLog records
-    # For now, return default stats
+  defp load_api_keys(org_id) do
+    ApiKey
+    |> Ash.Query.filter(tenant_id == ^org_id)
+    |> Ash.Query.sort(inserted_at: :desc)
+    |> Ash.read!(authorize?: false)
+  rescue
+    _ -> []
+  end
+
+  defp calculate_usage_stats(org_id) do
+    logs =
+      try do
+        PromptLog
+        |> Ash.Query.filter(tenant_id == ^org_id)
+        |> Ash.read!(authorize?: false)
+      rescue
+        _ -> []
+      end
+
+    total_calls = length(logs)
+
+    total_tokens =
+      Enum.reduce(logs, 0, fn l, acc -> acc + (l.input_tokens || 0) + (l.output_tokens || 0) end)
+
+    durations = logs |> Enum.map(& &1.duration_ms) |> Enum.filter(&is_integer/1)
+    avg_duration_ms = if durations == [], do: 0, else: div(Enum.sum(durations), length(durations))
+    success = Enum.count(logs, fn l -> l.status == :success end)
+    success_rate = if total_calls == 0, do: 100.0, else: success / total_calls * 100.0
+
     %{
-      total_calls: 0,
-      total_tokens: 0,
-      avg_duration_ms: 0,
-      success_rate: 100.0
+      total_calls: total_calls,
+      total_tokens: total_tokens,
+      avg_duration_ms: avg_duration_ms,
+      success_rate: success_rate
     }
   end
+
+  defp default_usage_stats do
+    %{total_calls: 0, total_tokens: 0, avg_duration_ms: 0, success_rate: 100.0}
+  end
+
+  defp decrypt_and_verify(key) do
+    if is_binary(key.encrypted_key) and is_binary(key.encryption_iv) do
+      try do
+        decrypted = Crypto.decrypt(key.encrypted_key, key.encryption_iv)
+
+        case TokenValidator.verify_key(decrypted) do
+          {:ok, _meta} ->
+            :ok
+
+          {:error, reason} when reason in [:invalid_token, :insufficient_permissions] ->
+            {:error, :revoked}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      rescue
+        _ -> {:error, :decryption_failed}
+      after
+        :erlang.garbage_collect()
+      end
+    else
+      {:error, :no_key}
+    end
+  end
+
+  defp revoke_key_row(key) do
+    key
+    |> Ash.Changeset.for_update(:update, %{
+      encrypted_key: nil,
+      encryption_iv: nil,
+      key_prefix: nil,
+      status: :revoked
+    })
+    |> Ash.update(authorize?: false)
+    |> case do
+      {:ok, _key} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp subscribe(mount, org_id) do
+    maybe_pubsub(fn pubsub -> Phoenix.PubSub.subscribe(pubsub, tenant_topic(org_id)) end, mount)
+  end
+
+  defp unsubscribe(mount, org_id) do
+    maybe_pubsub(fn pubsub -> Phoenix.PubSub.unsubscribe(pubsub, tenant_topic(org_id)) end, mount)
+  end
+
+  defp broadcast_revocation(mount, org_id) do
+    maybe_pubsub(
+      fn pubsub ->
+        Phoenix.PubSub.broadcast(
+          pubsub,
+          tenant_topic(org_id),
+          {:tenant_updated, %{hf_status: :revoked}}
+        )
+      end,
+      mount
+    )
+  end
+
+  # Realtime is optional: the settings mount may not carry a `:pubsub` label and the
+  # framework cannot assume a host PubSub module exists. A missing/stopped server is
+  # a no-op, never a mount crash; the durable key row is still written.
+  defp maybe_pubsub(fun, mount) do
+    pubsub =
+      case mount do
+        %Mount{} -> Mount.label(mount, :pubsub, Application.get_env(:samen_core, :pubsub))
+        _ -> Application.get_env(:samen_core, :pubsub)
+      end
+
+    if pubsub do
+      try do
+        fun.(pubsub)
+      rescue
+        _ -> :ok
+      end
+    end
+
+    :ok
+  end
+
+  defp tenant_topic(org_id), do: "tenant_settings:#{org_id}"
+
+  defp connect_error_message(:invalid_token),
+    do: "HuggingFace rejected the key (401). Check the token and try again."
+
+  defp connect_error_message(:insufficient_permissions),
+    do: "This token lacks the required scopes (read)."
+
+  defp connect_error_message(:huggingface_rate_limited),
+    do: "HuggingFace is rate-limiting requests. Try again shortly."
+
+  defp connect_error_message(:timeout), do: "Timed out reaching HuggingFace. Try again."
+
+  defp connect_error_message(:network_failure),
+    do: "Could not reach HuggingFace. Check your connection."
+
+  defp connect_error_message(reason), do: "Validation failed: #{inspect(reason)}"
 
   defp status_class(:active), do: "status-pill status-active"
   defp status_class(:pending_validation), do: "status-pill status-pending"

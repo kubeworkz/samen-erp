@@ -46,7 +46,7 @@ Build a **lean, governed AI assistant** inside Samen — streaming chat + file-g
 - **Embeddings** pgvector REQUIRED (M3), `Samen.AI.Embeddings` org-scoped HNSW, `Embedder.Deterministic` for CI, `ai_prompt_masking` verifier cross-check.
 - **Verbs** `Samen.AI.Verbs` (6) + `Samen.AI.Prompt` versioned resource — `Server.run_verb` already behind `Samen.Web.AI.Server`.
 - **Agent loop** `Samen.AI.Agent` (checkpoint-per-turn, batch-per-job via `TurnWorker` + `agent_turn_due` watchdog, `next_turn_at` never-nil, transcript vault-routed under run DEK, budgets fail-honest, breaker/kill-switch, write via `Approvals.Gate` requester≠approver).
-- **HF BYOK core (shipped, tested)** `samen_core/lib/samen/scopes/ai/{api_key,crypto,client,streamer,token_validator,verify_credentials_worker}` — AES-256-GCM, SSE and `TokenValidator` validation; `analytics` aggregates supplied logs. **Not wired:** the `/settings/huggingface` LiveView is a success-message shell, the daily sweep's `get_tenants_with_hf_keys/0` returns `[]`, and nothing writes `PromptLog` rows (P1 prerequisites; §10).
+- **HF BYOK core (shipped, tested)** `samen_core/lib/samen/scopes/ai/{api_key,crypto,client,streamer,token_validator,verify_credentials_worker}` — AES-256-GCM, SSE and `TokenValidator` validation; `analytics` aggregates supplied logs. **Wired:** the `/settings/huggingface` LiveView validates, encrypts, persists, reloads and revokes `ApiKey` rows, and the daily sweep queries active rows, clears revoked secrets and broadcasts revocation. **Still missing:** nothing writes `PromptLog` rows (P1 prerequisite; §10).
 - **Mount/router** `Samen.Web.Mount` + `Samen.Web.Router.samen_ai_routes/3` (currently mounts 6 AI surfaces: verbs/search/crm/analytics/support/agent) — existing `Samen.Web.AI.AgentLive` (`/ai/agents`) proves the `samen_ai_routes` adoption pattern (`driftwood` ≈0 LOC, `gate_a6_agent_slice_test.exs`).
 - **Files/Search** primitives + `Samen.UI`.
 
@@ -152,7 +152,7 @@ Model IDs: HF text-generation `meta-llama/Llama-3.1-8B-Instruct`, `mistralai/Mis
 
 **P1 — MVP chat (no agent loop) — target: samenerp can chat streaming**
 - Tasks: `Assistant` resource + seed General + `AssistantConversation/Message` + `AssistantLive` (list/chat, streaming, history, title auto) + HF provider adapter + file-drop grounding + model picker + honest empty states.
-- Prerequisite: the host key flow is **not** live today (§4/§10). P1 also wires `/settings/huggingface` connect/validate/revoke to `TokenValidator` + `ApiKey` persistence, makes the sweep query tenants, and writes `PromptLog` rows; otherwise the assistant can only be exercised with a core-API key.
+- Prerequisite: the host key flow and sweep are wired (§4/§10); P1 still needs to write `PromptLog` rows so assistant usage is real. Until then the assistant can be exercised with a persisted BYOK key but its usage dashboard has no writes.
 - Accept: `mix compile --warnings-as-errors` (3 apps) + `mix samen.verify.ai_prompt_masking` green + `MaskingCase` 3-proof on transcript (tenant clear→masked, `vt_*` refusal) + streaming integration test (Fake recording, no live key) + settings key-flow test (validate → persist → revoke) + `templates_parity` still green (no new macro drift).
 - Loc: ~400-500 LOC (2 resources, 1 LiveView, 1 Server func, 1 provider adapter, 1 migration).
 
